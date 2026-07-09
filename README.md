@@ -1,12 +1,31 @@
-# ocean-watch
+<p align="center">
+  <img src="https://avatars.githubusercontent.com/u/277389313?s=200&v=4" width="128" height="128" alt="westng">
+</p>
 
-> Organization: westng
-> Project: ocean-watch
-> Skill: ads-plan-monitor
+<h1 align="center">ocean-watch</h1>
 
-巨量引擎盯盘助手，一个面向 Codex 的开源 Skill。它让 Codex 可以通过巨量引擎官方 Ocean Engine Marketing API 完成广告计划创建、素材查询、素材报表汇总和盯盘策略分析。
+<p align="center">
+  巨量引擎盯盘助手
+</p>
 
-`ocean-watch` 不是网页后台，也不是第三方投放平台。它是一个可安装到 Codex 的自动化技能包，适合投手、运营和增长团队在本机安全地调用官方 API。
+<p align="center">
+  面向 Codex 的开源 Skill，通过官方 Ocean Engine Marketing API 完成计划创建、素材查询、报表汇总与盯盘策略分析
+</p>
+
+<p align="center">
+  <a href="SKILL.md"><img src="https://img.shields.io/badge/Codex-Skill-111827" alt="Codex Skill"></a>
+  <a href="scripts/"><img src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white" alt="Python 3"></a>
+  <a href="references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-API-1677FF" alt="Ocean Engine API"></a>
+  <a href="docs/configuration.md"><img src="https://img.shields.io/badge/OAuth-local-10B981" alt="Local OAuth"></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Credentials-local%20store-6B7280" alt="Local credential store"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
+</p>
+
+中文默认
+
+`ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Skill。它通过官方 Ocean Engine Marketing API，在本机完成 OAuth 授权、广告计划创建、素材查询、素材维度报表汇总和盯盘策略分析，适合投手、运营和增长团队在本地安全调用官方 API。
+
+`ocean-watch` 不是网页后台，也不是第三方投放平台；它不接管广告账户，不存储云端业务数据，真实配置和 OAuth 凭据都保留在使用者自己的电脑上。
 
 ## What It Does
 
