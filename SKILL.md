@@ -5,7 +5,7 @@ description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and 
 
 # Ads Plan Monitor
 
-> Organization: 每日博士
+> Organization: westng
 > Project: ocean-watch
 > Skill: ads-plan-monitor
 

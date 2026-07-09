@@ -1,6 +1,6 @@
 # 项目结构
 
-> Organization: 每日博士
+> Organization: westng
 > Project: ocean-watch
 > Skill: ads-plan-monitor
 

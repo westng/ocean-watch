@@ -1,6 +1,6 @@
 # Contributing
 
-> Organization: 每日博士
+> Organization: westng
 > Project: ocean-watch
 > Skill: ads-plan-monitor
 
