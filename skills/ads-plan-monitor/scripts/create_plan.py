@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+import argparse
+import copy
+import datetime as dt
+import json
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import token_manager
+
+
+PLACEHOLDER_PREFIX = "REPLACE_WITH"
+TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
+
+
+def is_missing(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return not stripped or stripped.startswith(PLACEHOLDER_PREFIX)
+    if isinstance(value, list):
+        return len(value) == 0
+    return False
+
+
+def get_path(data, dotted, default=None):
+    current = data
+    for part in dotted.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return default
+        current = current[part]
+    return current
+
+
+def deep_merge(base, override):
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        return copy.deepcopy(override)
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def apply_plan_template(config, template_name=None):
+    effective = copy.deepcopy(config)
+    templates = config.get("plan_templates") or {}
+    selected = template_name or config.get("active_plan_template")
+    if not selected:
+        effective["_selected_plan_template"] = None
+        return effective
+    if selected not in templates:
+        available = ", ".join(sorted(templates)) or "<none>"
+        raise ValueError(f"unknown plan template: {selected}; available: {available}")
+
+    template = templates[selected]
+    for section in TEMPLATE_SECTIONS:
+        if section in template:
+            effective[section] = deep_merge(effective.get(section, {}), template[section] or {})
+    if "titles" in template:
+        effective["titles"] = copy.deepcopy(template["titles"])
+
+    effective["_selected_plan_template"] = {
+        "name": selected,
+        "display_name": template.get("display_name", selected),
+    }
+    return effective
+
+
+def material_date_for_yesterday(now=None):
+    now = now or dt.datetime.now()
+    yesterday = now.date() - dt.timedelta(days=1)
+    return f"{yesterday.month}.{yesterday.day}"
+
+
+def render_template(template, values):
+    result = template
+    for key, value in values.items():
+        result = result.replace("{" + key + "}", str(value))
+    return result
+
+
+def build_payloads(config, args):
+    defaults = config["defaults"]
+    advertiser_id = args.advertiser_id or get_path(config, "account.advertiser_id")
+    material_date = args.material_date or material_date_for_yesterday()
+    product_name = args.product_name or defaults["product_name"]
+    product_id = args.product_id or defaults["product_id"]
+    budget = args.budget if args.budget is not None else defaults["daily_budget"]
+    cpa_bid = args.bid if args.bid is not None else defaults.get("cpa_bid")
+    videos = args.video_id or get_path(config, "materials.video_ids", [])
+
+    names = {
+        "material_date": material_date,
+        "product_name": product_name,
+    }
+    project_name = args.project_name or render_template(defaults["project_name_template"], names)
+    promotion_name = args.promotion_name or render_template(defaults["promotion_name_template"], names)
+
+    related_product = {
+        "product_setting": "SINGLE",
+    }
+    product_platform_id = get_path(config, "resolved_ids.product_platform_id")
+    unique_product_id = get_path(config, "resolved_ids.unique_product_id")
+    if not is_missing(unique_product_id):
+        related_product["unique_product_id"] = unique_product_id
+    elif not is_missing(product_id) and not is_missing(product_platform_id):
+        related_product["products"] = [
+            {
+                "product_id": product_id,
+                "product_platform_id": product_platform_id,
+            }
+        ]
+    elif not is_missing(product_id):
+        related_product["product_id"] = product_id
+    if is_missing(unique_product_id) and not is_missing(product_platform_id):
+        related_product["product_platform_id"] = product_platform_id
+
+    audience = {
+        "district": defaults["district"],
+        "region_version": defaults["region_version"],
+        "city": get_path(config, "resolved_ids.city_ids", []),
+        "location_type": defaults["location_type"],
+        "gender": defaults["gender"],
+    }
+    ages = defaults.get("ages")
+    if not is_missing(ages):
+        audience["age"] = ages
+    hide_if_converted = defaults.get("hide_if_converted")
+    if not is_missing(hide_if_converted):
+        if hide_if_converted == "UNLIMITED":
+            hide_if_converted = "NO_EXCLUDE"
+        audience["hide_if_converted"] = hide_if_converted
+
+    delivery_setting = {
+        "schedule_type": defaults["schedule_type"],
+        "budget_mode": defaults["budget_mode"],
+        "budget": budget,
+        "bid_type": defaults.get("bid_type", "CUSTOM"),
+        "pricing": defaults["pricing"],
+    }
+    deep_external_action = defaults.get("deep_external_action")
+    deep_bid_type = defaults.get("deep_bid_type")
+    if cpa_bid is not None:
+        delivery_setting["cpa_bid"] = cpa_bid
+    if deep_bid_type != "DEEP_BID_DEFAULT" and defaults.get("roi_goal") is not None:
+        delivery_setting["roi_goal"] = defaults["roi_goal"]
+    if deep_bid_type:
+        delivery_setting["deep_bid_type"] = deep_bid_type
+
+    optimize_goal = {}
+    external_action = defaults.get("external_action")
+    if external_action:
+        optimize_goal["external_action"] = external_action
+    if deep_external_action:
+        optimize_goal["deep_external_action"] = deep_external_action
+    asset_ids = get_path(config, "resolved_ids.event_asset_ids", [])
+    if asset_ids:
+        optimize_goal["asset_ids"] = asset_ids
+
+    project_payload = {
+        "advertiser_id": advertiser_id,
+        "name": project_name,
+        "operation": defaults["operation"],
+        "delivery_mode": defaults["delivery_mode"],
+        "landing_type": defaults["landing_type"],
+        "asset_type": defaults.get("asset_type", "THIRDPARTY"),
+        "marketing_goal": defaults["marketing_goal"],
+        "ad_type": defaults["ad_type"],
+        "related_product": related_product,
+        "delivery_range": {
+            "inventory_catalog": "UNIVERSAL_SMART"
+        },
+        "delivery_setting": delivery_setting,
+        "optimize_goal": optimize_goal,
+        "audience": audience,
+        "track_url_setting": {
+            "track_url": get_path(config, "tracking_urls.track_url", []),
+            "action_track_url": get_path(config, "tracking_urls.action_track_url", []),
+        },
+    }
+
+    product_info = {
+        "titles": [product_name],
+        "selling_points": ["每日博士五重蛋白粉"],
+    }
+    product_info_defaults = defaults.get("product_info", {})
+    product_name_type = product_info_defaults.get("product_name_type")
+    product_image_type = product_info_defaults.get("product_image_type")
+    product_selling_point_type = product_info_defaults.get("product_selling_point_type")
+    if product_name_type:
+        product_info["product_name_type"] = product_name_type
+        if product_name_type == "DPA":
+            product_info.pop("titles", None)
+    if product_image_type:
+        product_info["product_image_type"] = product_image_type
+    if product_selling_point_type:
+        product_info["product_selling_point_type"] = product_selling_point_type
+        if product_selling_point_type == "DPA":
+            product_info.pop("selling_points", None)
+
+    product_image_ids = get_path(config, "resolved_ids.product_image_ids", [])
+    if product_image_type == "DPA":
+        product_info["product_image_fields"] = product_info_defaults.get("product_image_fields", ["product_image"])
+    elif product_image_ids:
+        product_info["image_ids"] = product_image_ids
+    if product_name_type == "DPA":
+        product_info["product_name_fields"] = product_info_defaults.get("product_name_fields", ["name"])
+    if product_selling_point_type == "DPA":
+        product_info["product_selling_point_fields"] = product_info_defaults.get("product_selling_point_fields", ["selling_points"])
+
+    video_cover_ids = get_path(config, "materials.video_cover_ids", [])
+    if isinstance(video_cover_ids, dict):
+        video_cover_ids_by_id = video_cover_ids
+        video_cover_ids = []
+    else:
+        video_cover_ids_by_id = {}
+
+    video_material_list = []
+    for index, video_id in enumerate(videos):
+        video_material = {
+            "video_id": video_id,
+            "image_mode": defaults["video_image_mode"],
+        }
+        video_cover_id = video_cover_ids_by_id.get(str(video_id))
+        if not video_cover_id and index < len(video_cover_ids):
+            video_cover_id = video_cover_ids[index]
+        if not is_missing(video_cover_id):
+            video_material["video_cover_id"] = video_cover_id
+        video_material_list.append(video_material)
+
+    promotion_materials = {
+        "video_material_list": video_material_list,
+        "title_material_list": [{"title": title} for title in config["titles"]],
+        "external_url_material_list": [get_path(config, "links.landing_page_url", "")],
+        "open_url_type": defaults.get("open_url_type", "CUSTOM"),
+        "open_url": get_path(config, "links.open_url", ""),
+        "component_material_list": [],
+        "product_info": product_info,
+    }
+    call_to_action_buttons = defaults.get("call_to_action_buttons", [])
+    if call_to_action_buttons:
+        promotion_materials["call_to_action_buttons"] = call_to_action_buttons
+
+    brand_info = get_path(config, "resolved_ids.brand_info", {})
+    clean_brand_info = {k: v for k, v in brand_info.items() if not is_missing(v)}
+
+    promotion_payload = {
+        "advertiser_id": advertiser_id,
+        "project_id": args.project_id or "{{project_id}}",
+        "name": promotion_name,
+        "operation": defaults["operation"],
+        "source": defaults["source"],
+        "promotion_materials": promotion_materials,
+    }
+    if not is_missing(unique_product_id):
+        promotion_payload["promotion_related_product"] = [
+            {
+                "unique_product_id": unique_product_id,
+            }
+        ]
+    if clean_brand_info:
+        promotion_payload["brand_info"] = clean_brand_info
+
+    return project_payload, promotion_payload
+
+
+def missing_fields(config, project_payload, promotion_payload, submit):
+    missing = []
+    api_token = get_path(config, "api.access_token")
+    if submit and is_missing(api_token):
+        missing.append("api.access_token")
+    if is_missing(project_payload.get("advertiser_id")):
+        missing.append("advertiser_id")
+    if is_missing(project_payload["track_url_setting"]["track_url"]):
+        missing.append("tracking_urls.track_url")
+    if is_missing(project_payload["track_url_setting"]["action_track_url"]):
+        missing.append("tracking_urls.action_track_url")
+    if is_missing(project_payload["audience"]["city"]):
+        missing.append("resolved_ids.city_ids")
+    if is_missing(get_path(config, "resolved_ids.product_platform_id")):
+        missing.append("resolved_ids.product_platform_id")
+    if is_missing(promotion_payload["promotion_materials"]["video_material_list"]):
+        missing.append("materials.video_ids")
+    product_image_type = get_path(config, "defaults.product_info.product_image_type")
+    if product_image_type != "DPA" and is_missing(get_path(config, "resolved_ids.product_image_ids")):
+        missing.append("resolved_ids.product_image_ids")
+    if is_missing(get_path(config, "links.landing_page_url")):
+        missing.append("links.landing_page_url")
+    if is_missing(get_path(config, "links.open_url")):
+        missing.append("links.open_url")
+    return missing
+
+
+def post_json(base_url, access_token, path, payload):
+    url = base_url.rstrip("/") + path
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Access-Token": access_token,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        text = exc.read().decode("utf-8", errors="replace")
+        return {"code": exc.code, "message": text}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--advertiser-id", type=int)
+    parser.add_argument("--budget", type=float)
+    parser.add_argument("--bid", type=float)
+    parser.add_argument("--video-id", action="append")
+    parser.add_argument("--material-date")
+    parser.add_argument("--product-name")
+    parser.add_argument("--product-id")
+    parser.add_argument("--project-name")
+    parser.add_argument("--promotion-name")
+    parser.add_argument("--project-id")
+    parser.add_argument("--plan-template")
+    parser.add_argument("--promotion-only", action="store_true")
+    parser.add_argument("--submit", action="store_true")
+    parser.add_argument("--out")
+    args = parser.parse_args()
+
+    config_path = Path(args.config)
+    raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    if args.submit:
+        raw_config = token_manager.ensure_access_token(config_path, raw_config)
+    try:
+        config = apply_plan_template(raw_config, args.plan_template)
+    except ValueError as exc:
+        print(json.dumps({
+            "mode": "submit" if args.submit else "dry_run",
+            "config": str(config_path),
+            "error": str(exc),
+            "available_plan_templates": sorted((raw_config.get("plan_templates") or {}).keys()),
+        }, ensure_ascii=False, indent=2))
+        return 2
+    project_payload, promotion_payload = build_payloads(config, args)
+    missing = missing_fields(config, project_payload, promotion_payload, args.submit)
+
+    delivery_setting = project_payload["delivery_setting"]
+    preflight_summary = {
+        "advertiser_id": project_payload["advertiser_id"],
+        "project_name": project_payload["name"],
+        "promotion_name": promotion_payload["name"],
+        "budget": delivery_setting.get("budget"),
+        "cpa_bid": delivery_setting.get("cpa_bid"),
+        "city_count": len(project_payload["audience"].get("city") or []),
+        "video_count": len(promotion_payload["promotion_materials"].get("video_material_list") or []),
+        "operation": project_payload["operation"],
+    }
+    if delivery_setting.get("roi_goal") is not None:
+        preflight_summary["roi_goal"] = delivery_setting["roi_goal"]
+
+    result = {
+        "mode": "submit" if args.submit else "dry_run",
+        "selected_plan_template": config.get("_selected_plan_template"),
+        "project_endpoint": "/v3.0/project/create/",
+        "promotion_endpoint": "/v3.0/promotion/create/",
+        "project_payload": project_payload,
+        "promotion_payload": promotion_payload,
+        "missing_fields": missing,
+        "preflight_summary": preflight_summary,
+    }
+
+    if args.submit:
+        blocking = missing_fields(config, project_payload, promotion_payload, True)
+        if blocking:
+            result["submit_blocked"] = True
+            result["blocking_fields"] = blocking
+        else:
+            base_url = get_path(config, "api.base_url")
+            access_token = get_path(config, "api.access_token")
+            if args.promotion_only:
+                project_id = args.project_id
+                if not project_id or project_id == "{{project_id}}":
+                    result["submit_blocked"] = True
+                    result["blocking_fields"] = ["project_id"]
+                    project_id = None
+            else:
+                project_rsp = post_json(base_url, access_token, "/v3.0/project/create/", project_payload)
+                result["project_response"] = project_rsp
+                project_id = get_path(project_rsp, "data.project_id")
+            if project_id:
+                promotion_payload["project_id"] = project_id
+                promotion_rsp = post_json(base_url, access_token, "/v3.0/promotion/create/", promotion_payload)
+                result["promotion_payload"] = promotion_payload
+                result["promotion_response"] = promotion_rsp
+
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output + "\n", encoding="utf-8")
+    print(output)
+    return 1 if args.submit and result.get("submit_blocked") else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

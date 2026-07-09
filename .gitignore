@@ -1,0 +1,17 @@
+config/ads-plan-monitor/config.json
+runs/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local credential fallback/cache files. Real tokens should live in the OS
+# credential store, not in this project.
+credentials.json
+credentials.dpapi
+.token.lock
+
+# Local logs and temporary output.
+*.log
+*.tmp
+tmp/

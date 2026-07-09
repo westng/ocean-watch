@@ -1,0 +1,16 @@
+{
+  "material_date": "7.1",
+  "start_date": "2026-07-03",
+  "product_name": "多莓蛋白粉",
+  "product_id": "7563545512968814601",
+  "daily_budget": 1000,
+  "roi_goal": 1.3,
+  "operation": "ENABLE",
+  "videos": [
+    {
+      "name": "7.1-刘念-蛋白粉-1",
+      "video_id": "REPLACE_WITH_VIDEO_ID",
+      "video_cover_id": "REPLACE_WITH_COVER_ID_IF_REQUIRED"
+    }
+  ]
+}
