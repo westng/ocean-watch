@@ -1,32 +1,11 @@
 # 项目结构
 
-`ocean-watch` 是一个 Codex Skill 仓库。根目录面向开发者和开源用户，`skills/ads-plan-monitor` 面向 Codex 运行时。
+`ocean-watch` 是单 Skill 仓库：仓库根目录本身就是 Codex 可安装的 `ads-plan-monitor` Skill。
 
-## 根目录
+## 仓库结构
 
 ```text
 .
-├── README.md
-├── CONTRIBUTING.md
-├── SECURITY.md
-├── LICENSE
-├── docs/
-└── skills/
-```
-
-| 路径 | 说明 |
-| --- | --- |
-| `README.md` | 项目入口，说明定位、快速开始和文档导航 |
-| `CONTRIBUTING.md` | 贡献规范、开发原则、提交前检查 |
-| `SECURITY.md` | 密钥、运行产物和敏感信息处理 |
-| `LICENSE` | 开源许可证 |
-| `docs/` | 给人看的安装、配置、命令和结构文档 |
-| `skills/` | Codex Skill 包 |
-
-## Skill 包
-
-```text
-skills/ads-plan-monitor/
 ├── SKILL.md
 ├── agents/
 │   └── openai.yaml
@@ -36,32 +15,46 @@ skills/ads-plan-monitor/
 ├── references/
 │   ├── current-template-notes.md
 │   └── official-api-notes.md
-└── scripts/
-    ├── credential_store.py
-    ├── oauth_local_authorize.py
-    ├── token_manager.py
-    ├── first_run.py
-    ├── validate_config.py
-    ├── create_plan.py
-    ├── batch_create_from_today_videos.py
-    ├── query_active_materials_report.py
-    ├── query_custom_report.py
-    ├── query_report_config.py
-    ├── query_videos.py
-    └── ...
+├── scripts/
+│   ├── credential_store.py
+│   ├── oauth_local_authorize.py
+│   ├── token_manager.py
+│   ├── first_run.py
+│   ├── validate_config.py
+│   ├── create_plan.py
+│   ├── batch_create_from_today_videos.py
+│   ├── query_active_materials_report.py
+│   ├── query_custom_report.py
+│   ├── query_report_config.py
+│   ├── query_videos.py
+│   └── ...
+├── docs/
+│   ├── configuration.md
+│   ├── commands.md
+│   └── project-structure.md
+├── README.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+└── LICENSE
 ```
 
-| 路径 | 说明 |
-| --- | --- |
-| `SKILL.md` | Codex 触发 Skill 后读取的主指令。保持精炼，不放用户手册。 |
-| `agents/openai.yaml` | Skill 在 Codex UI 中的展示信息。 |
-| `assets/` | 示例配置和输入模板。必须脱敏，只能放占位符。 |
-| `references/` | Codex 按需读取的业务规则和 API 笔记。 |
-| `scripts/` | 授权、查询、创建、批量创建等确定性脚本。 |
+## 目录职责
+
+| 路径 | 面向对象 | 职责 |
+| --- | --- | --- |
+| `SKILL.md` | Codex | Skill 触发后的核心工作指令 |
+| `agents/` | Codex UI | Skill 展示名称、简介和默认提示 |
+| `assets/` | 用户和脚本 | 示例配置、输入模板；只能放占位符 |
+| `references/` | Codex | 按需读取的 API 笔记和模板规则 |
+| `scripts/` | 用户和 Codex | 授权、查询、创建、批量创建等确定性脚本 |
+| `docs/` | 人类用户 | 安装、配置、命令和结构说明 |
+| `README.md` | 人类用户 | 项目首页和快速开始 |
+| `SECURITY.md` | 维护者和用户 | 密钥、运行产物和敏感信息处理 |
+| `CONTRIBUTING.md` | 贡献者 | 开发原则和提交前检查 |
 
 ## 本地私有目录
 
-这些目录用于本机运行，不应进入 Git：
+这些目录可能在开发或使用时出现，但不属于开源包：
 
 ```text
 config/
@@ -72,15 +65,17 @@ runs/
 | 路径 | 说明 |
 | --- | --- |
 | `config/` | 真实广告账户、商品模板、落地页、监测链接、素材 ID 等业务配置 |
-| `runs/` | API 请求/响应、dry-run 结果、报表导出、调试文件 |
+| `runs/` | API 请求/响应、dry-run 结果、报表导出和调试文件 |
 | `.venv/` | Python 虚拟环境 |
 
 ## 设计边界
 
-- 人类用户文档放在根目录和 `docs/`。
-- Codex 运行时规则放在 `SKILL.md` 和 `references/`。
-- 示例文件用占位符，真实配置只在本地 `config/`。
-- API 流程尽量放脚本，避免让 Codex 每次重新拼接复杂请求。
+- 仓库根目录即 Skill 根目录，安装时直接链接整个仓库。
+- 人类文档放 `README.md` 和 `docs/`。
+- Codex 运行时规则放 `SKILL.md` 和 `references/`。
+- 真实业务配置只放本地 `config/`，不进入 Git。
+- 示例配置必须脱敏，只保留结构和占位符。
+- API 流程放 `scripts/`，减少手工拼接请求导致的错误。
 - 写操作默认先 dry-run 或 payload 预览，用户明确要求后再提交。
 
 ## 提交前结构检查

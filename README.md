@@ -21,14 +21,14 @@
 
 ```bash
 mkdir -p ~/.codex/skills
-ln -s "$(pwd)/skills/ads-plan-monitor" ~/.codex/skills/ads-plan-monitor
+ln -s "$(pwd)" ~/.codex/skills/ads-plan-monitor
 ```
 
 创建本地配置：
 
 ```bash
 mkdir -p config/ads-plan-monitor
-cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/config.json
+cp assets/config.example.json config/ads-plan-monitor/config.json
 ```
 
 编辑 `config/ads-plan-monitor/config.json`，填入广告账户、商品模板、落地页、监测链接、城市、素材等业务字段。不要把 OAuth secret 或 token 写进这个文件。
@@ -36,7 +36,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 保存 App ID 和 Secret 到本机凭据仓库：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/credential_store.py \
+python3 scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
   --set-app
 ```
@@ -44,14 +44,14 @@ python3 skills/ads-plan-monitor/scripts/credential_store.py \
 完成官方 OAuth 授权：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
+python3 scripts/oauth_local_authorize.py \
   --config config/ads-plan-monitor/config.json
 ```
 
 检查配置和授权状态：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/first_run.py \
+python3 scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 ```
 
@@ -74,21 +74,16 @@ python3 skills/ads-plan-monitor/scripts/first_run.py \
 
 ```text
 .
-├── README.md                         # 项目首页：定位、快速开始、文档入口
-├── CONTRIBUTING.md                   # 贡献规范和提交前检查
-├── SECURITY.md                       # 密钥、运行产物和敏感信息处理
-├── LICENSE                           # 开源许可证
-├── docs/
-│   ├── configuration.md              # 配置文件、OAuth 和凭据存储
-│   ├── commands.md                   # 常用脚本命令
-│   └── project-structure.md          # 仓库结构和 Skill 包结构
-└── skills/
-    └── ads-plan-monitor/
-        ├── SKILL.md                  # Codex 读取的技能指令
-        ├── agents/openai.yaml        # Codex UI 元数据
-        ├── assets/                   # 示例配置和输入模板
-        ├── references/               # 运行时按需读取的规则和 API 笔记
-        └── scripts/                  # API 调用、授权、查询和创建脚本
+├── SKILL.md                  # Codex 读取的技能指令
+├── agents/                   # Codex UI 元数据
+├── assets/                   # 示例配置和输入模板
+├── references/               # 运行时按需读取的规则和 API 笔记
+├── scripts/                  # API 调用、授权、查询和创建脚本
+├── docs/                     # 给人看的安装、配置、命令和结构文档
+├── README.md                 # 项目首页
+├── CONTRIBUTING.md           # 贡献规范
+├── SECURITY.md               # 安全说明
+└── LICENSE                   # 开源许可证
 ```
 
 不会进入仓库的本地目录：
@@ -121,9 +116,9 @@ runs/                                 # API 运行产物和调试输出
 ## Development Checks
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/ads-plan-monitor/scripts/*.py
-python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/tmp/ocean-watch-config-check.json
-python3 -m json.tool skills/ads-plan-monitor/assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/*.py
+python3 -m json.tool assets/config.example.json >/tmp/ocean-watch-config-check.json
+python3 -m json.tool assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
 git diff --check
 ```
 

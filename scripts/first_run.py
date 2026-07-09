@@ -18,7 +18,7 @@ def skill_root():
 
 
 def project_root():
-    return skill_root().parents[1]
+    return skill_root()
 
 
 def default_project_config():

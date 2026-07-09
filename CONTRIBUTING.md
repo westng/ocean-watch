@@ -4,18 +4,18 @@
 
 ## 开发原则
 
-- `skills/ads-plan-monitor/SKILL.md` 只放 Codex 执行任务所需的核心指令。
-- 详细规则放在 `skills/ads-plan-monitor/references/`。
-- 可重复、容易出错的 API 流程放在 `skills/ads-plan-monitor/scripts/`。
+- `SKILL.md` 只放 Codex 执行任务所需的核心指令。
+- 详细规则放在 `references/`。
+- 可重复、容易出错的 API 流程放在 `scripts/`。
 - 示例文件必须使用占位符，不要放真实账户、商品、品牌、投放链接或 token。
 - 默认只读查询；写操作必须由用户明确要求。
 
 ## 提交前检查
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/ads-plan-monitor/scripts/*.py
-python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/tmp/ocean-watch-config-check.json
-python3 -m json.tool skills/ads-plan-monitor/assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/*.py
+python3 -m json.tool assets/config.example.json >/tmp/ocean-watch-config-check.json
+python3 -m json.tool assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
 git diff --check
 git status --short --ignored
 ```

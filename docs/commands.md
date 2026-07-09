@@ -5,13 +5,13 @@
 ## 初始化和检查
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/first_run.py \
+python3 scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 
-python3 skills/ads-plan-monitor/scripts/validate_config.py \
+python3 scripts/validate_config.py \
   config/ads-plan-monitor/config.json
 
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
+python3 scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
   --status
 ```
@@ -21,7 +21,7 @@ python3 skills/ads-plan-monitor/scripts/token_manager.py \
 查询今天上传的视频素材：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_videos.py \
+python3 scripts/query_videos.py \
   --config config/ads-plan-monitor/config.json \
   --mode library-get \
   --date today \
@@ -31,17 +31,17 @@ python3 skills/ads-plan-monitor/scripts/query_videos.py \
 按日期查询：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_videos.py \
+python3 scripts/query_videos.py \
   --config config/ads-plan-monitor/config.json \
   --mode library-get \
-  --date 2026-07-09 \
+  --date YYYY-MM-DD \
   --fetch-all
 ```
 
 校验视频能否用于广告投放：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_videos.py \
+python3 scripts/query_videos.py \
   --config config/ads-plan-monitor/config.json \
   --mode ad-get \
   --video-id REPLACE_WITH_VIDEO_ID
@@ -50,7 +50,7 @@ python3 skills/ads-plan-monitor/scripts/query_videos.py \
 获取视频封面建议：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_videos.py \
+python3 scripts/query_videos.py \
   --config config/ads-plan-monitor/config.json \
   --mode cover-suggest \
   --video-id REPLACE_WITH_VIDEO_ID
@@ -61,27 +61,27 @@ python3 skills/ads-plan-monitor/scripts/query_videos.py \
 查询当前账户今天的单元素材表现：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_active_materials_report.py \
+python3 scripts/query_active_materials_report.py \
   --config config/ads-plan-monitor/config.json
 ```
 
 查询指定日期：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_active_materials_report.py \
+python3 scripts/query_active_materials_report.py \
   --config config/ads-plan-monitor/config.json \
-  --start-date 2026-07-09 \
-  --end-date 2026-07-09
+  --start-date YYYY-MM-DD \
+  --end-date YYYY-MM-DD
 ```
 
 只看某个项目或单元：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_active_materials_report.py \
+python3 scripts/query_active_materials_report.py \
   --config config/ads-plan-monitor/config.json \
   --project-id REPLACE_WITH_PROJECT_ID
 
-python3 skills/ads-plan-monitor/scripts/query_active_materials_report.py \
+python3 scripts/query_active_materials_report.py \
   --config config/ads-plan-monitor/config.json \
   --promotion-id REPLACE_WITH_PROMOTION_ID
 ```
@@ -96,7 +96,7 @@ python3 skills/ads-plan-monitor/scripts/query_active_materials_report.py \
 ## 发现报表字段
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_report_config.py \
+python3 scripts/query_report_config.py \
   --config config/ads-plan-monitor/config.json \
   --data-topic MATERIAL_DATA
 ```
@@ -104,15 +104,15 @@ python3 skills/ads-plan-monitor/scripts/query_report_config.py \
 ## 自定义报表
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_custom_report.py \
+python3 scripts/query_custom_report.py \
   --config config/ads-plan-monitor/config.json \
   --data-topic MATERIAL_DATA \
   --dimension material_id \
   --dimension cdp_promotion_id \
   --metric stat_cost \
   --metric click_cnt \
-  --start-date 2026-07-09 \
-  --end-date 2026-07-09
+  --start-date YYYY-MM-DD \
+  --end-date YYYY-MM-DD
 ```
 
 ## 创建计划
@@ -120,7 +120,7 @@ python3 skills/ads-plan-monitor/scripts/query_custom_report.py \
 先预览 payload：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/create_plan.py \
+python3 scripts/create_plan.py \
   --config config/ads-plan-monitor/config.json \
   --plan-template "平台-CID-商品名-商品ID" \
   --video-id REPLACE_WITH_VIDEO_ID
@@ -129,7 +129,7 @@ python3 skills/ads-plan-monitor/scripts/create_plan.py \
 确认后提交：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/create_plan.py \
+python3 scripts/create_plan.py \
   --config config/ads-plan-monitor/config.json \
   --plan-template "平台-CID-商品名-商品ID" \
   --video-id REPLACE_WITH_VIDEO_ID \
@@ -151,7 +151,7 @@ python3 skills/ads-plan-monitor/scripts/create_plan.py \
 按当天视频素材分组，每 5 条素材一个单元，先 dry-run：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
+python3 scripts/batch_create_from_today_videos.py \
   --config config/ads-plan-monitor/config.json \
   --date today \
   --videos-per-unit 5
@@ -160,7 +160,7 @@ python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
 确认后提交：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
+python3 scripts/batch_create_from_today_videos.py \
   --config config/ads-plan-monitor/config.json \
   --date today \
   --videos-per-unit 5 \
@@ -170,7 +170,7 @@ python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
 多账户并发：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
+python3 scripts/batch_create_from_today_videos.py \
   --config config/ads-plan-monitor/config.json \
   --accounts 1111111111111111,2222222222222222 \
   --date today \
@@ -185,7 +185,7 @@ python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
 查询项目：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_projects.py \
+python3 scripts/query_projects.py \
   --config config/ads-plan-monitor/config.json \
   --name REPLACE_WITH_NAME
 ```
@@ -193,7 +193,7 @@ python3 skills/ads-plan-monitor/scripts/query_projects.py \
 查询单元：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_promotions.py \
+python3 scripts/query_promotions.py \
   --config config/ads-plan-monitor/config.json \
   --project-id REPLACE_WITH_PROJECT_ID
 ```
@@ -201,7 +201,7 @@ python3 skills/ads-plan-monitor/scripts/query_promotions.py \
 查询商品：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_products.py \
+python3 scripts/query_products.py \
   --config config/ads-plan-monitor/config.json \
   --name REPLACE_WITH_PRODUCT_NAME
 ```
@@ -209,14 +209,14 @@ python3 skills/ads-plan-monitor/scripts/query_products.py \
 查询图片素材：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/query_images.py \
+python3 scripts/query_images.py \
   --config config/ads-plan-monitor/config.json
 ```
 
 解析城市 ID：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/resolve_city_ids.py \
+python3 scripts/resolve_city_ids.py \
   --config config/ads-plan-monitor/config.json \
   --city-csv path/to/cities.csv
 ```

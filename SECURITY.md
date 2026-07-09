@@ -22,7 +22,7 @@ git status --short --ignored
 
 ## 凭据存储
 
-OAuth App ID、Secret、Access Token 和 Refresh Token 不应写入项目配置。脚本会通过 `skills/ads-plan-monitor/scripts/credential_store.py` 存储在本机凭据仓库：
+OAuth App ID、Secret、Access Token 和 Refresh Token 不应写入项目配置。脚本会通过 `scripts/credential_store.py` 存储在本机凭据仓库：
 
 - macOS: Keychain
 - Windows: DPAPI 保护的用户本地文件

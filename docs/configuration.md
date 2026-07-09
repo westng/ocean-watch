@@ -11,7 +11,7 @@
 
 ```bash
 mkdir -p config/ads-plan-monitor
-cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/config.json
+cp assets/config.example.json config/ads-plan-monitor/config.json
 ```
 
 `config/` 已被 `.gitignore` 排除。这个目录用于保存每个使用者自己的真实广告账户和模板信息。
@@ -60,7 +60,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 首次使用前，把巨量引擎开放平台 App ID 和 Secret 保存到本机凭据仓库：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/credential_store.py \
+python3 scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
   --set-app
 ```
@@ -80,7 +80,7 @@ http://127.0.0.1:8787/oauth/callback
 启动授权：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
+python3 scripts/oauth_local_authorize.py \
   --config config/ads-plan-monitor/config.json
 ```
 
@@ -96,7 +96,7 @@ python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
 ## 检查状态
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
+python3 scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
   --status
 ```
@@ -106,10 +106,10 @@ python3 skills/ads-plan-monitor/scripts/token_manager.py \
 ## 配置校验
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/first_run.py \
+python3 scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 
-python3 skills/ads-plan-monitor/scripts/validate_config.py \
+python3 scripts/validate_config.py \
   config/ads-plan-monitor/config.json
 ```
 

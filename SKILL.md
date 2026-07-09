@@ -21,7 +21,7 @@ Treat "创建计划" as a two-step API workflow:
 
 Default to generating and validating payloads first. Submit to the API only after the user explicitly asks to create online plans and the local config is complete.
 
-When the user asks about skill structure, explain that `ads-plan-monitor` is one skill with internal branches, currently implemented as project-local files under `skills/ads-plan-monitor`.
+When the user asks about skill structure, explain that `ads-plan-monitor` is one skill with internal branches, and this repository root is the skill root.
 
 ## Required References
 
