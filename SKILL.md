@@ -5,6 +5,10 @@ description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and 
 
 # Ads Plan Monitor
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 ## Purpose
 
 Use this as one complete `ads-plan-monitor` skill, not as separate create/query/strategy skills. Route each request to one of these internal branches:

@@ -1,5 +1,9 @@
 # 常用命令
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 下面命令默认从 `config/ads-plan-monitor/config.json` 读取业务配置，并从本机凭据仓库读取 OAuth token。
 
 ## 初始化和检查

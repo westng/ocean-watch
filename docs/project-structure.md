@@ -1,5 +1,9 @@
 # 项目结构
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 `ocean-watch` 是单 Skill 仓库：仓库根目录本身就是 Codex 可安装的 `ads-plan-monitor` Skill。
 
 ## 仓库结构

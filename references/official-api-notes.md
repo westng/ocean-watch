@@ -1,5 +1,9 @@
 # Official API Notes
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 Official docs:
 
 - Project create: https://open.oceanengine.com/labels/34/docs/1740868093375503?origin=left_nav

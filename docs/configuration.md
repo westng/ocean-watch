@@ -1,5 +1,9 @@
 # 配置与授权
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 `ocean-watch` 把业务配置和 OAuth 凭据分开保存：
 
 - 业务配置：项目本地 `config/ads-plan-monitor/config.json`

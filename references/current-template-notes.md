@@ -1,5 +1,9 @@
 # Template Notes
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 Use this reference for the active plan template and reusable template rules.
 Do not infer behavior from experiments, historical run files, or user-specific local config.
 

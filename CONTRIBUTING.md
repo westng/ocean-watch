@@ -1,5 +1,9 @@
 # Contributing
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 欢迎改进 `ocean-watch`。这个仓库维护的是 Codex Skill，请尽量让变更保持小而清楚。
 
 ## 开发原则

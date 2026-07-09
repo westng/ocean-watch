@@ -1,5 +1,9 @@
 # ocean-watch
 
+> Organization: 每日博士
+> Project: ocean-watch
+> Skill: ads-plan-monitor
+
 巨量引擎盯盘助手，一个面向 Codex 的开源 Skill。它让 Codex 可以通过巨量引擎官方 Ocean Engine Marketing API 完成广告计划创建、素材查询、素材报表汇总和盯盘策略分析。
 
 `ocean-watch` 不是网页后台，也不是第三方投放平台。它是一个可安装到 Codex 的自动化技能包，适合投手、运营和增长团队在本机安全地调用官方 API。
