@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and internal branches for first-run setup, local OAuth token authorization, creating single or batch ad plans from configurable templates, querying account unit/material performance, and strategy/monitoring analysis. Use when the user asks to 初始化配置, 第一次使用, 配置技能, 本地授权, 获取token, 刷新token, create 巨量计划, 新建计划, 批量创建计划, 按今天素材创建, 多账户并发创建, 查询素材数据, 素材维度数据, 消耗前十, 汇总数据, 盯盘数据, 逻辑策略, build project/promotion payloads, validate official API fields, configure plan templates such as 天猫-CID-蛋白粉-7563545512968814601, diagnose missing fields, or analyze ad performance through official Ocean Engine APIs.
+description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and internal branches for first-run setup, local OAuth token authorization, creating single or batch ad plans from configurable templates, querying account unit/material performance, and strategy/monitoring analysis. Use when the user asks to 初始化配置, 第一次使用, 配置技能, 本地授权, 获取token, 刷新token, create 巨量计划, 新建计划, 批量创建计划, 按今天素材创建, 多账户并发创建, 查询素材数据, 素材维度数据, 消耗前十, 汇总数据, 盯盘数据, 逻辑策略, build project/promotion payloads, validate official API fields, configure plan templates following 平台-CID-商品名-商品ID, diagnose missing fields, or analyze ad performance through official Ocean Engine APIs.
 ---
 
 # Ads Plan Monitor
@@ -71,10 +71,6 @@ Creation parameters are organized by product/platform plan templates. Template n
 
 `平台-CID-商品名-商品ID`
 
-The current default creation template is:
-
-`天猫-CID-蛋白粉-7563545512968814601`
-
 Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Template data lives under `plan_templates.<模板名>` and can override these sections: `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`. Keep root-level sections as shared fallback defaults for backward compatibility.
 
 ## Workflow
@@ -104,12 +100,7 @@ Load config, apply `active_plan_template` or the user-selected plan template, th
 - city names or city IDs
 - material selection rule
 
-Current default product template:
-
-- template name: `天猫-CID-蛋白粉-7563545512968814601`
-- category name: `食品饮料/普通膳食营养食品/蛋白粉/氨基酸/胶原蛋白`
-- brand name: `MEIDABOSHILY/每日博士`
-- deep optimization: `净成交ROI`, represented by `deep_bid_type: NET_ORDER_ROI`
+The default public example template is only a placeholder. Use the real product template from local config. For ROI flows, deep optimization `净成交ROI` is represented by `deep_bid_type: NET_ORDER_ROI`.
 
 When `deep_bid_type` is not `DEEP_BID_DEFAULT`, include `roi_goal` in the project payload. When `deep_bid_type` is `DEEP_BID_DEFAULT`, do not include `roi_goal`.
 

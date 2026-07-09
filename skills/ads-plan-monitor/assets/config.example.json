@@ -7,19 +7,20 @@
   },
   "defaults": {
     "operation": "ENABLE",
-    "project_name_template": "{material_date}_混剪素材roi_详情页",
-    "promotion_name_template": "自动投放单元_{product_name}_{material_date}日_混剪",
-    "product_name": "多莓蛋白粉",
-    "product_id": "7563545512968814601",
+    "project_name_template": "{material_date}_{product_name}_roi_详情页",
+    "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
+    "product_name": "REPLACE_WITH_PRODUCT_NAME",
+    "product_id": "REPLACE_WITH_PRODUCT_ID",
     "daily_budget": 300,
     "cpa_bid": 100,
     "roi_goal": 1.5,
-    "source": "每日博士",
+    "source": "REPLACE_WITH_SOURCE_NAME",
     "landing_type": "SHOP",
+    "asset_type": "THIRDPARTY",
     "marketing_goal": "VIDEO_AND_IMAGE",
     "delivery_mode": "PROCEDURAL",
     "ad_type": "ALL",
-    "gender": "GENDER_FEMALE",
+    "gender": "NONE",
     "ages": [],
     "location_type": "CURRENT",
     "district": "REGION",
@@ -32,7 +33,15 @@
     "deep_bid_type": "NET_ORDER_ROI",
     "deep_bid_type_name": "净成交ROI",
     "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
-    "max_videos_per_project": 5
+    "max_videos_per_project": 5,
+    "call_to_action_buttons": [
+      "立即购买"
+    ],
+    "product_info": {
+      "product_name_type": "CUSTOM",
+      "product_image_type": "CUSTOM",
+      "product_selling_point_type": "CUSTOM"
+    }
   },
   "materials": {
     "video_ids": [],
@@ -46,8 +55,8 @@
       "ecom_brand_id": null,
       "cdp_brand_id": null
     },
-    "category_name": "食品饮料/普通膳食营养食品/蛋白粉/氨基酸/胶原蛋白",
-    "brand_name": "MEIDABOSHILY/每日博士",
+    "category_name": "REPLACE_WITH_CATEGORY_NAME",
+    "brand_name": "REPLACE_WITH_BRAND_NAME",
     "product_platform_id": null,
     "unique_product_id": null,
     "event_asset_ids": [],
@@ -56,51 +65,45 @@
   },
   "tracking_urls": {
     "track_url": [
-      "https://wcp.taobao.com/adstrack/track.json?channel=2200803434013&taskId=942096489&app=31&recoverTag=1a6b9e15586e4f75abbd80b1ef64dd26&action=1&adid=__PROMOTION_ID__&cid=77777&idfa=__IDFA__&macMd5=__MAC__&mac1Md5=__MAC1__&os=__OS__&timestamp=__TS__&callbackUrl=__CALLBACK_URL__&imeiMd5=__IMEI__&csite=__CSITE__&ctype=__CTYPE__&ip=__IP__&convertId=__CONVERT_ID__&androidIdMd5=__ANDROIDID__&oaid=__OAID__&oaidMd5=__OAID_MD5__&adName=__PROMOTION_NAME__&advertiserId=__ADVERTISER_ID__&creativeName=77777&groupId=__PROJECT_ID__&groupName=__PROJECT_NAME__&requestId=__REQUEST_ID__&ua=__UA__&geo=__GEO__&callbackParam=__CALLBACK_PARAM__&dpaId=__OUTERID__&rtaId=__RTAID__&unionSite=__UNION_SITE__&caid=__CAID__&vid=__RTA_VID__&mid1=__MID1__&mid2=__MID2__&mid3=__MID3__&promotionId=__PROMOTION_ID__&projectId=__PROJECT_ID__"
+      "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
     ],
     "action_track_url": [
-      "https://wcp.taobao.com/adstrack/track.json?channel=2200803434013&taskId=942096489&app=31&recoverTag=1a6b9e15586e4f75abbd80b1ef64dd26&action=2&adid=__PROMOTION_ID__&cid=77777&idfa=__IDFA__&macMd5=__MAC__&mac1Md5=__MAC1__&os=__OS__&timestamp=__TS__&callbackUrl=__CALLBACK_URL__&imeiMd5=__IMEI__&csite=__CSITE__&ctype=__CTYPE__&ip=__IP__&convertId=__CONVERT_ID__&androidIdMd5=__ANDROIDID__&oaid=__OAID__&oaidMd5=__OAID_MD5__&adName=__PROMOTION_NAME__&advertiserId=__ADVERTISER_ID__&creativeName=77777&groupId=__PROJECT_ID__&groupName=__PROJECT_NAME__&requestId=__REQUEST_ID__&ua=__UA__&geo=__GEO__&callbackParam=__CALLBACK_PARAM__&dpaId=__OUTERID__&rtaId=__RTAID__&unionSite=__UNION_SITE__&caid=__CAID__&vid=__RTA_VID__&mid1=__MID1__&mid2=__MID2__&mid3=__MID3__&promotionId=__PROMOTION_ID__&projectId=__PROJECT_ID__"
+      "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
     ]
   },
   "links": {
-    "landing_page_url": "https://gateway.alihealth.taobao.com/act/vZKPCKLrhQn?ckid=__CLICKID__&pid=__PROMOTION_ID__&requestId=__REQID__&prid=__PROJECT_ID__&cid=__CID__&adid=__AID__&advId=__ADVERTISER_ID__&trackId=__TRACK_ID__&csite=__CSITE__&JKid=wttoutiao_01_01_1a6b9e15586e4f75abbd80b1ef64dd26&projectid=__PROJECT_ID__&promotionid=__PROMOTION_ID__&creativetype=__CTYPE__&clickid=__CLICKID__",
-    "open_url": "tbopen://m.taobao.com/tbopen/index.html?source=auto&action=ali.open.nav&module=h5&bootImage=0&spm=2014.ugdhh.2200803435172.0-1818840-402080011&bc_fl_src=growth_dhh_2200803435172_0-1818840-402080011-__CID__-null-null-__AID__-__ADVERTISER_ID__&materialid=0&backURL=__back_url__&h5Url=https%3A%2F%2Fgateway.alihealth.taobao.com%2Fact%2FvZKPCKLrhQn%3Fckid%3D__CLICKID__%26pid%3D__PROMOTION_ID__%26requestId%3D__REQID__%26prid%3D__PROJECT_ID__%26cid%3D__CID__%26adid%3D__AID__%26advId%3D__ADVERTISER_ID__%26trackId%3D__TRACK_ID__%26csite%3D__CSITE__%26JKid%3Dwttoutiao_01_01_1a6b9e15586e4f75abbd80b1ef64dd26"
+    "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
+    "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
   },
   "titles": [
-    "与其花一小时准备高蛋白餐，不如花一分钟摇一杯营养满分的美味。把时间留给更重要的事！！！",
-    "打工人的作弊神器！！！",
-    "每日博士五重快慢蛋白粉推荐女性蛋白蔓越莓接骨木巴西莓粉",
-    "【限时优惠】早晚一袋，真是我的好帮手",
-    "爆了！爆了！又卖爆了！每日博士五重蛋白赶紧薅#每日博士#每日博士五重蛋白",
-    "早晚一袋，真是我的好帮手！！！！！",
-    "早晚一袋，真是我的好帮手！！！！",
-    "蛋白粉，补充营养，健康，营养的好，你值得拥有！",
-    "给它一次机会，真的特别不一样#每日博士蛋白粉",
-    "每日博士蛋白粉真不一样，爱了爱了"
+    "这里填写第一条广告标题",
+    "这里填写第二条广告标题",
+    "这里填写第三条广告标题"
   ],
-  "active_plan_template": "天猫-CID-蛋白粉-7563545512968814601",
+  "active_plan_template": "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID",
   "plan_templates": {
-    "天猫-CID-蛋白粉-7563545512968814601": {
-      "display_name": "天猫-CID-蛋白粉-7563545512968814601",
-      "platform": "天猫",
+    "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID": {
+      "display_name": "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID",
+      "platform": "示例平台",
       "traffic_source": "CID",
-      "product_label": "蛋白粉",
-      "product_id": "7563545512968814601",
+      "product_label": "示例商品",
+      "product_id": "REPLACE_WITH_PRODUCT_ID",
       "defaults": {
         "operation": "ENABLE",
-        "project_name_template": "{material_date}_混剪素材roi_详情页",
-        "promotion_name_template": "自动投放单元_{product_name}_{material_date}日_混剪",
-        "product_name": "多莓蛋白粉",
-        "product_id": "7563545512968814601",
+        "project_name_template": "{material_date}_{product_name}_roi_详情页",
+        "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
+        "product_name": "REPLACE_WITH_PRODUCT_NAME",
+        "product_id": "REPLACE_WITH_PRODUCT_ID",
         "daily_budget": 300,
         "cpa_bid": 100,
         "roi_goal": 1.5,
-        "source": "每日博士",
+        "source": "REPLACE_WITH_SOURCE_NAME",
         "landing_type": "SHOP",
+        "asset_type": "THIRDPARTY",
         "marketing_goal": "VIDEO_AND_IMAGE",
         "delivery_mode": "PROCEDURAL",
         "ad_type": "ALL",
-        "gender": "GENDER_FEMALE",
+        "gender": "NONE",
         "ages": [],
         "location_type": "CURRENT",
         "district": "REGION",
@@ -113,7 +116,15 @@
         "deep_bid_type": "NET_ORDER_ROI",
         "deep_bid_type_name": "净成交ROI",
         "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
-        "max_videos_per_project": 5
+        "max_videos_per_project": 5,
+        "call_to_action_buttons": [
+          "立即购买"
+        ],
+        "product_info": {
+          "product_name_type": "CUSTOM",
+          "product_image_type": "CUSTOM",
+          "product_selling_point_type": "CUSTOM"
+        }
       },
       "materials": {
         "video_ids": [],
@@ -127,8 +138,8 @@
           "ecom_brand_id": null,
           "cdp_brand_id": null
         },
-        "category_name": "食品饮料/普通膳食营养食品/蛋白粉/氨基酸/胶原蛋白",
-        "brand_name": "MEIDABOSHILY/每日博士",
+        "category_name": "REPLACE_WITH_CATEGORY_NAME",
+        "brand_name": "REPLACE_WITH_BRAND_NAME",
         "product_platform_id": null,
         "unique_product_id": null,
         "event_asset_ids": [],
@@ -136,28 +147,21 @@
         "landing_page_asset_id": null
       },
       "links": {
-        "landing_page_url": "https://gateway.alihealth.taobao.com/act/vZKPCKLrhQn?ckid=__CLICKID__&pid=__PROMOTION_ID__&requestId=__REQID__&prid=__PROJECT_ID__&cid=__CID__&adid=__AID__&advId=__ADVERTISER_ID__&trackId=__TRACK_ID__&csite=__CSITE__&JKid=wttoutiao_01_01_1a6b9e15586e4f75abbd80b1ef64dd26&projectid=__PROJECT_ID__&promotionid=__PROMOTION_ID__&creativetype=__CTYPE__&clickid=__CLICKID__",
-        "open_url": "tbopen://m.taobao.com/tbopen/index.html?source=auto&action=ali.open.nav&module=h5&bootImage=0&spm=2014.ugdhh.2200803435172.0-1818840-402080011&bc_fl_src=growth_dhh_2200803435172_0-1818840-402080011-__CID__-null-null-__AID__-__ADVERTISER_ID__&materialid=0&backURL=__back_url__&h5Url=https%3A%2F%2Fgateway.alihealth.taobao.com%2Fact%2FvZKPCKLrhQn%3Fckid%3D__CLICKID__%26pid%3D__PROMOTION_ID__%26requestId%3D__REQID__%26prid%3D__PROJECT_ID__%26cid%3D__CID__%26adid%3D__AID__%26advId%3D__ADVERTISER_ID__%26trackId%3D__TRACK_ID__%26csite%3D__CSITE__%26JKid%3Dwttoutiao_01_01_1a6b9e15586e4f75abbd80b1ef64dd26"
+        "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
+        "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
       },
       "tracking_urls": {
         "track_url": [
-          "https://wcp.taobao.com/adstrack/track.json?channel=2200803434013&taskId=942096489&app=31&recoverTag=1a6b9e15586e4f75abbd80b1ef64dd26&action=1&adid=__PROMOTION_ID__&cid=77777&idfa=__IDFA__&macMd5=__MAC__&mac1Md5=__MAC1__&os=__OS__&timestamp=__TS__&callbackUrl=__CALLBACK_URL__&imeiMd5=__IMEI__&csite=__CSITE__&ctype=__CTYPE__&ip=__IP__&convertId=__CONVERT_ID__&androidIdMd5=__ANDROIDID__&oaid=__OAID__&oaidMd5=__OAID_MD5__&adName=__PROMOTION_NAME__&advertiserId=__ADVERTISER_ID__&creativeName=77777&groupId=__PROJECT_ID__&groupName=__PROJECT_NAME__&requestId=__REQUEST_ID__&ua=__UA__&geo=__GEO__&callbackParam=__CALLBACK_PARAM__&dpaId=__OUTERID__&rtaId=__RTAID__&unionSite=__UNION_SITE__&caid=__CAID__&vid=__RTA_VID__&mid1=__MID1__&mid2=__MID2__&mid3=__MID3__&promotionId=__PROMOTION_ID__&projectId=__PROJECT_ID__"
+          "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
         ],
         "action_track_url": [
-          "https://wcp.taobao.com/adstrack/track.json?channel=2200803434013&taskId=942096489&app=31&recoverTag=1a6b9e15586e4f75abbd80b1ef64dd26&action=2&adid=__PROMOTION_ID__&cid=77777&idfa=__IDFA__&macMd5=__MAC__&mac1Md5=__MAC1__&os=__OS__&timestamp=__TS__&callbackUrl=__CALLBACK_URL__&imeiMd5=__IMEI__&csite=__CSITE__&ctype=__CTYPE__&ip=__IP__&convertId=__CONVERT_ID__&androidIdMd5=__ANDROIDID__&oaid=__OAID__&oaidMd5=__OAID_MD5__&adName=__PROMOTION_NAME__&advertiserId=__ADVERTISER_ID__&creativeName=77777&groupId=__PROJECT_ID__&groupName=__PROJECT_NAME__&requestId=__REQUEST_ID__&ua=__UA__&geo=__GEO__&callbackParam=__CALLBACK_PARAM__&dpaId=__OUTERID__&rtaId=__RTAID__&unionSite=__UNION_SITE__&caid=__CAID__&vid=__RTA_VID__&mid1=__MID1__&mid2=__MID2__&mid3=__MID3__&promotionId=__PROMOTION_ID__&projectId=__PROJECT_ID__"
+          "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
         ]
       },
       "titles": [
-        "与其花一小时准备高蛋白餐，不如花一分钟摇一杯营养满分的美味。把时间留给更重要的事！！！",
-        "打工人的作弊神器！！！",
-        "每日博士五重快慢蛋白粉推荐女性蛋白蔓越莓接骨木巴西莓粉",
-        "【限时优惠】早晚一袋，真是我的好帮手",
-        "爆了！爆了！又卖爆了！每日博士五重蛋白赶紧薅#每日博士#每日博士五重蛋白",
-        "早晚一袋，真是我的好帮手！！！！！",
-        "早晚一袋，真是我的好帮手！！！！",
-        "蛋白粉，补充营养，健康，营养的好，你值得拥有！",
-        "给它一次机会，真的特别不一样#每日博士蛋白粉",
-        "每日博士蛋白粉真不一样，爱了爱了"
+        "这里填写第一条广告标题",
+        "这里填写第二条广告标题",
+        "这里填写第三条广告标题"
       ]
     }
   },

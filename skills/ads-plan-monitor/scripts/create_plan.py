@@ -187,7 +187,7 @@ def build_payloads(config, args):
 
     product_info = {
         "titles": [product_name],
-        "selling_points": ["每日博士五重蛋白粉"],
+        "selling_points": [product_name],
     }
     product_info_defaults = defaults.get("product_info", {})
     product_name_type = product_info_defaults.get("product_name_type")

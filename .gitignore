@@ -1,4 +1,4 @@
-config/ads-plan-monitor/config.json
+config/
 runs/
 .venv/
 __pycache__/

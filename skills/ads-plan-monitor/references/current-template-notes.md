@@ -1,38 +1,42 @@
-# Current Template Notes
+# Template Notes
 
-Use this reference only for the current active plan template and reusable template rules.
-Do not infer behavior from experiments or historical run files.
+Use this reference for the active plan template and reusable template rules.
+Do not infer behavior from experiments, historical run files, or user-specific local config.
 
-## Active Template
+## Template Naming
 
-- Template name: `天猫-CID-蛋白粉-7563545512968814601`
 - Naming rule: `平台-CID-商品名-商品ID`
-- Platform: `天猫`
-- Traffic source: `CID`
-- Product label: `蛋白粉`
-- Product ID: `7563545512968814601`
-- Product name: `多莓蛋白粉`
-- Category label: `食品饮料/普通膳食营养食品/蛋白粉/氨基酸/胶原蛋白`
-- Brand label: `MEIDABOSHILY/每日博士`
+- Example placeholder: `示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID`
+- The real active template name should live in the user's local `config/ads-plan-monitor/config.json`.
 
-## Confirmed Defaults
+## Required Template Sections
 
-- Daily budget: `300`
-- CPA bid: `100`
-- Deep bid type: `NET_ORDER_ROI`
+A practical create-plan template normally needs:
+
+- `defaults`: budget, bid/ROI, naming templates, delivery settings, audience settings, product defaults.
+- `materials`: optional fixed video IDs and cover IDs.
+- `resolved_ids`: city IDs, product IDs, image IDs, landing page asset IDs, event asset IDs, and brand/category IDs when available.
+- `links`: landing page and app/open URL.
+- `tracking_urls`: display and click/action tracking URLs.
+- `titles`: reusable promotion title material.
+
+## Confirmed Defaults For This Skill
+
+- Deep bid type for ROI flow: `NET_ORDER_ROI`
 - Deep optimization label: `净成交ROI`
-- ROI goal: `1.5`
-- Hide converted users: `NO_EXCLUDE`
-- Age targeting: omit `audience.age` for unlimited age.
+- Hide converted users unlimited: `NO_EXCLUDE`
+- Age targeting unlimited: omit `audience.age`.
 - Video image mode: `CREATIVE_IMAGE_MODE_VIDEO_VERTICAL`
 - Max videos per project: `5` unless the user explicitly changes it.
 
-## Current Links
+## Links
 
-Use the links from `plan_templates.<template>.tracking_urls` and `plan_templates.<template>.links`
-in config. Preserve every query parameter exactly when editing links.
+Use the links from `plan_templates.<template>.tracking_urls` and
+`plan_templates.<template>.links` in local config. Preserve every query parameter exactly when
+editing links.
 
-Current template links are the source of truth.
+The public `assets/config.example.json` contains placeholder links only. Do not treat them as a
+real campaign template.
 
 ## Query Scope
 
