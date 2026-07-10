@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
 
 
 def get_path(data, dotted, default=None):
@@ -86,7 +87,7 @@ def summarize_goals(response):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--out")
     parser.add_argument("--landing-type")
     parser.add_argument("--ad-type")
@@ -98,7 +99,7 @@ def main():
     parser.add_argument("--no-asset-id", action="store_true")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     defaults = config["defaults"]

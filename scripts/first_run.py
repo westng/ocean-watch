@@ -5,7 +5,9 @@ import json
 import shutil
 from pathlib import Path
 
+import config_paths
 import credential_store
+import validate_config
 
 
 SECRET_KEYS = {"access_token", "refresh_token", "secret", "auth_code"}
@@ -14,7 +16,7 @@ TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking
 
 
 def skill_root():
-    return Path(__file__).resolve().parents[1]
+    return config_paths.skill_root()
 
 
 def project_root():
@@ -22,11 +24,11 @@ def project_root():
 
 
 def default_project_config():
-    return project_root() / "config" / "ads-plan-monitor" / "config.json"
+    return config_paths.project_config_path()
 
 
 def fallback_codex_config():
-    return Path.home() / ".codex" / "ads-plan-monitor" / "config.json"
+    return config_paths.home_config_path()
 
 
 def get_path(data, dotted):
@@ -83,42 +85,19 @@ def redacted_value(value, key):
 
 
 def check_fields(config):
-    credentials = credential_store.read_credentials()
-    has_token = not is_missing(credentials.get("access_token"))
-    has_refresh = not is_missing(credentials.get("refresh_token"))
+    result = validate_config.validate_config(config)
     query_required = [
         "api.base_url",
         "account.advertiser_id",
     ]
-    create_required = [
-        "defaults.project_name_template",
-        "defaults.promotion_name_template",
-        "defaults.product_id",
-        "defaults.daily_budget",
-        "defaults.roi_goal",
-        "materials.video_ids",
-        "tracking_urls.track_url",
-        "tracking_urls.action_track_url",
-        "links.landing_page_url",
-        "links.open_url",
-        "resolved_ids.city_ids",
-        "resolved_ids.product_platform_id",
-        "resolved_ids.product_image_ids",
-        "titles",
-    ]
-    query_missing = [field for field in query_required if is_missing(get_path(config, field))]
-    if not has_token and not has_refresh:
-        query_missing.append("local access_token or refresh_token")
-    if is_missing(credentials.get("app_id")):
-        query_missing.append("local app_id")
-    if is_missing(credentials.get("secret")):
-        query_missing.append("local secret")
-    create_missing = [field for field in create_required if is_missing(get_path(config, field))]
     field_preview = {
         field: redacted_value(get_path(config, field), field)
         for field in query_required
     }
-    return query_missing, create_missing, field_preview
+    create_missing = list(result["missing_create_preview_required"])
+    if result["plan_template_error"]:
+        create_missing.append(f"plan template: {result['plan_template_error']}")
+    return result["missing_query_required"], create_missing, field_preview
 
 
 def main():
@@ -140,8 +119,10 @@ def main():
     args = parser.parse_args()
 
     template = skill_root() / "assets" / "config.example.json"
-    config_path = Path(args.config).expanduser() if args.config else (
-        fallback_codex_config() if args.home_config else default_project_config()
+    config_path = (
+        fallback_codex_config()
+        if args.home_config
+        else config_paths.resolve_config_path(args.config, prefer_project=True)
     )
     config_path = config_path.resolve()
 

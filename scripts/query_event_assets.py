@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
 
 
 def get_path(data, dotted, default=None):
@@ -39,7 +40,7 @@ def get_json(base_url, token, path, params):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--out")
     parser.add_argument("--asset-type", default="THIRD_EXTERNAL")
     parser.add_argument("--asset-id", action="append", type=int)
@@ -47,7 +48,7 @@ def main():
     parser.add_argument("--page-size", type=int, default=100)
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     filtering = {}

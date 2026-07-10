@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import create_plan
+import config_paths
 import query_videos
 import token_manager
 
@@ -570,9 +571,21 @@ def positive_int(value):
     return parsed
 
 
+def batch_exit_code(accounts):
+    bad_statuses = {
+        "blocked",
+        "query_failed",
+        "failed",
+        "completed_with_errors",
+        "planned_with_blocks",
+        "no_qualified_videos",
+    }
+    return 1 if any(account.get("status") in bad_statuses for account in accounts) else 0
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--accounts", action="append", help="Comma-separated advertiser IDs. Defaults to config account.")
     parser.add_argument("--plan-template")
     parser.add_argument("--date", default="today", help="today, yesterday, or yyyy-mm-dd.")
@@ -600,7 +613,7 @@ def main():
     parser.add_argument("--out")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     preview_config = create_plan.apply_plan_template(raw_config, args.plan_template)
     if args.videos_per_unit is None:
@@ -664,14 +677,7 @@ def main():
         out_path.write_text(output + "\n", encoding="utf-8")
     print(output)
 
-    bad_statuses = {
-        "blocked",
-        "query_failed",
-        "failed",
-        "completed_with_errors",
-        "planned_with_blocks",
-    }
-    return 1 if any(account.get("status") in bad_statuses for account in ordered_accounts) else 0
+    return batch_exit_code(ordered_accounts)
 
 
 if __name__ == "__main__":

@@ -13,12 +13,15 @@ python3 scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 
 python3 scripts/validate_config.py \
-  config/ads-plan-monitor/config.json
+  config/ads-plan-monitor/config.json \
+  --mode all
 
 python3 scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
   --status
 ```
+
+只检查某个用途时，将 `--mode all` 改成 `query`、`create-preview` 或 `create-submit`。
 
 ## 查询视频素材
 

@@ -14,6 +14,7 @@ from pathlib import Path
 SERVICE = "ads-plan-monitor"
 ACCOUNT = "oceanengine-oauth"
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
+INSECURE_FALLBACK_ENV = "ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK"
 SENSITIVE_KEYS = {
     "app_id",
     "secret",
@@ -58,10 +59,12 @@ def backend_name():
             import ctypes  # noqa: F401
             return "windows-dpapi"
         except Exception:
-            return "none"
+            return "unavailable"
     if has_command("secret-tool"):
         return "linux-secret-service"
-    return "file-fallback"
+    if os.environ.get(INSECURE_FALLBACK_ENV) == "1":
+        return "file-fallback"
+    return "unavailable"
 
 
 def redact(data):
@@ -242,7 +245,9 @@ def read_credentials():
         return windows_read()
     if backend == "linux-secret-service":
         return linux_read()
-    return fallback_read()
+    if backend == "file-fallback":
+        return fallback_read()
+    return {}
 
 
 def write_credentials(data):
@@ -253,8 +258,13 @@ def write_credentials(data):
         windows_write(data)
     elif backend == "linux-secret-service":
         linux_write(data)
-    else:
+    elif backend == "file-fallback":
         fallback_write(data)
+    else:
+        raise RuntimeError(
+            "No secure credential backend is available. Install secret-tool/libsecret, "
+            f"or set {INSECURE_FALLBACK_ENV}=1 to explicitly allow a plaintext fallback."
+        )
     return backend
 
 
@@ -319,10 +329,19 @@ def configure_app(app_id=None, secret=None):
 
 
 def status(config_path=None):
+    backend = backend_name()
     credentials = read_credentials()
     result = {
-        "backend": backend_name(),
-        "credential_location": "system credential store" if backend_name() != "file-fallback" else str(fallback_path()),
+        "backend": backend,
+        "credential_location": (
+            str(fallback_path())
+            if backend == "file-fallback"
+            else "system credential store"
+            if backend != "unavailable"
+            else None
+        ),
+        "secure_backend_available": backend not in {"file-fallback", "unavailable"},
+        "insecure_file_fallback": backend == "file-fallback",
         "has_app_id": not is_missing(credentials.get("app_id")),
         "has_secret": not is_missing(credentials.get("secret")),
         "has_access_token": not is_missing(credentials.get("access_token")),
@@ -343,17 +362,20 @@ def status(config_path=None):
 
 
 def main():
+    import config_paths
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--migrate-config", action="store_true")
     parser.add_argument("--set-app", action="store_true")
     parser.add_argument("--app-id")
     parser.add_argument("--secret")
     args = parser.parse_args()
+    config_path = config_paths.resolve_config_path(args.config)
 
     if args.migrate_config:
-        print(json.dumps(migrate_from_config(args.config), ensure_ascii=False, indent=2))
+        print(json.dumps(migrate_from_config(config_path), ensure_ascii=False, indent=2))
         return 0
 
     if args.set_app:
@@ -362,7 +384,7 @@ def main():
         print(json.dumps(configure_app(app_id, secret), ensure_ascii=False, indent=2))
         return 0
 
-    print(json.dumps(status(args.config), ensure_ascii=False, indent=2))
+    print(json.dumps(status(config_path), ensure_ascii=False, indent=2))
     return 0
 
 

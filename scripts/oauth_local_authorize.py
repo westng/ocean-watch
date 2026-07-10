@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import credential_store
+import config_paths
 import token_manager
 
 
@@ -133,14 +134,14 @@ def wait_for_callback(redirect_uri, state, timeout):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--redirect-uri")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--no-open", action="store_true", help="Print URL only; do not open browser.")
     parser.add_argument("--print-url", action="store_true")
     args = parser.parse_args()
 
-    config_path = Path(args.config).expanduser()
+    config_path = config_paths.resolve_config_path(args.config)
     config = token_manager.load_config(config_path)
     credential_status = credential_store.status(config_path)
     if not credential_status.get("has_app_id") or not credential_status.get("has_secret"):

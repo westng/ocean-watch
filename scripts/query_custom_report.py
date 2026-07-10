@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
 
 
 DEFAULT_DATA_TOPIC = "MATERIAL_DATA"
@@ -120,7 +121,7 @@ def write_csv(path, rows):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--out", help="Optional JSON output path. No file is written by default.")
     parser.add_argument("--csv-out", help="Optional CSV output path. No file is written by default.")
     parser.add_argument("--data-topic", default=DEFAULT_DATA_TOPIC)
@@ -141,7 +142,7 @@ def main():
     parser.add_argument("--page-size", type=int, default=100)
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     dimensions = split_csv(args.dimension) or DEFAULT_DIMENSIONS

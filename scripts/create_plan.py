@@ -3,16 +3,20 @@ import argparse
 import copy
 import datetime as dt
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+import config_paths
 import token_manager
 
 
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
+UNRESOLVED_TEMPLATE_PATTERN = re.compile(r"\{+[A-Za-z_][A-Za-z0-9_]*\}+")
+UNRESOLVED_MARKERS = ("REPLACE_WITH", "TODO", "待填", "待反查")
 
 
 def is_missing(value):
@@ -24,6 +28,22 @@ def is_missing(value):
     if isinstance(value, list):
         return len(value) == 0
     return False
+
+
+def contains_unresolved_value(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        return (
+            is_missing(value)
+            or "example.com" in stripped.lower()
+            or any(marker.lower() in stripped.lower() for marker in UNRESOLVED_MARKERS)
+            or bool(UNRESOLVED_TEMPLATE_PATTERN.search(stripped))
+        )
+    if isinstance(value, list):
+        return not value or any(contains_unresolved_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(contains_unresolved_value(item) for item in value.values())
+    return value is None
 
 
 def get_path(data, dotted, default=None):
@@ -98,6 +118,9 @@ def build_payloads(config, args):
     names = {
         "material_date": material_date,
         "product_name": product_name,
+        "group_index": 1,
+        "index": 1,
+        "suffix": "01",
     }
     project_name = args.project_name or render_template(defaults["project_name_template"], names)
     promotion_name = args.promotion_name or render_template(defaults["promotion_name_template"], names)
@@ -148,8 +171,11 @@ def build_payloads(config, args):
     deep_bid_type = defaults.get("deep_bid_type")
     if cpa_bid is not None:
         delivery_setting["cpa_bid"] = cpa_bid
-    if deep_bid_type != "DEEP_BID_DEFAULT" and defaults.get("roi_goal") is not None:
-        delivery_setting["roi_goal"] = defaults["roi_goal"]
+    roi_goal = getattr(args, "roi_goal", None)
+    if roi_goal is None:
+        roi_goal = defaults.get("roi_goal")
+    if deep_bid_type != "DEEP_BID_DEFAULT" and roi_goal is not None:
+        delivery_setting["roi_goal"] = roi_goal
     if deep_bid_type:
         delivery_setting["deep_bid_type"] = deep_bid_type
 
@@ -272,28 +298,43 @@ def build_payloads(config, args):
 
 def missing_fields(config, project_payload, promotion_payload, submit):
     missing = []
+    if contains_unresolved_value(get_path(config, "api.base_url")):
+        missing.append("api.base_url")
     api_token = get_path(config, "api.access_token")
     if submit and is_missing(api_token):
         missing.append("api.access_token")
     if is_missing(project_payload.get("advertiser_id")):
         missing.append("advertiser_id")
-    if is_missing(project_payload["track_url_setting"]["track_url"]):
+    if contains_unresolved_value(project_payload.get("name")):
+        missing.append("defaults.project_name_template")
+    if contains_unresolved_value(promotion_payload.get("name")):
+        missing.append("defaults.promotion_name_template")
+    if contains_unresolved_value(project_payload["track_url_setting"]["track_url"]):
         missing.append("tracking_urls.track_url")
-    if is_missing(project_payload["track_url_setting"]["action_track_url"]):
+    if contains_unresolved_value(project_payload["track_url_setting"]["action_track_url"]):
         missing.append("tracking_urls.action_track_url")
     if is_missing(project_payload["audience"]["city"]):
         missing.append("resolved_ids.city_ids")
-    if is_missing(get_path(config, "resolved_ids.product_platform_id")):
+    unique_product_id = get_path(config, "resolved_ids.unique_product_id")
+    if is_missing(unique_product_id) and is_missing(get_path(config, "resolved_ids.product_platform_id")):
         missing.append("resolved_ids.product_platform_id")
     if is_missing(promotion_payload["promotion_materials"]["video_material_list"]):
         missing.append("materials.video_ids")
     product_image_type = get_path(config, "defaults.product_info.product_image_type")
     if product_image_type != "DPA" and is_missing(get_path(config, "resolved_ids.product_image_ids")):
         missing.append("resolved_ids.product_image_ids")
-    if is_missing(get_path(config, "links.landing_page_url")):
+    if contains_unresolved_value(get_path(config, "links.landing_page_url")):
         missing.append("links.landing_page_url")
-    if is_missing(get_path(config, "links.open_url")):
+    if contains_unresolved_value(get_path(config, "links.open_url")):
         missing.append("links.open_url")
+    if contains_unresolved_value(promotion_payload.get("source")):
+        missing.append("defaults.source")
+    titles = promotion_payload["promotion_materials"].get("title_material_list") or []
+    if not titles or any(contains_unresolved_value(item.get("title")) for item in titles):
+        missing.append("titles")
+    product_id = get_path(config, "defaults.product_id")
+    if is_missing(unique_product_id) and contains_unresolved_value(product_id):
+        missing.append("defaults.product_id")
     return missing
 
 
@@ -319,10 +360,11 @@ def post_json(base_url, access_token, path, payload):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--advertiser-id", type=int)
     parser.add_argument("--budget", type=float)
     parser.add_argument("--bid", type=float)
+    parser.add_argument("--roi-goal", type=float)
     parser.add_argument("--video-id", action="append")
     parser.add_argument("--material-date")
     parser.add_argument("--product-name")
@@ -336,8 +378,9 @@ def main():
     parser.add_argument("--out")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    submit_failed = False
     if args.submit:
         raw_config = token_manager.ensure_access_token(config_path, raw_config)
     try:
@@ -396,11 +439,19 @@ def main():
                 project_rsp = post_json(base_url, access_token, "/v3.0/project/create/", project_payload)
                 result["project_response"] = project_rsp
                 project_id = get_path(project_rsp, "data.project_id")
+                if not project_id:
+                    result["submit_failed"] = True
+                    result["failure_stage"] = "project_create"
+                    submit_failed = True
             if project_id:
                 promotion_payload["project_id"] = project_id
                 promotion_rsp = post_json(base_url, access_token, "/v3.0/promotion/create/", promotion_payload)
                 result["promotion_payload"] = promotion_payload
                 result["promotion_response"] = promotion_rsp
+                if not get_path(promotion_rsp, "data.promotion_id"):
+                    result["submit_failed"] = True
+                    result["failure_stage"] = "promotion_create"
+                    submit_failed = True
 
     output = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out:
@@ -408,7 +459,7 @@ def main():
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output + "\n", encoding="utf-8")
     print(output)
-    return 1 if args.submit and result.get("submit_blocked") else 0
+    return 1 if args.submit and (result.get("submit_blocked") or submit_failed) else 0
 
 
 if __name__ == "__main__":

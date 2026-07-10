@@ -45,7 +45,7 @@ Look for config in this order:
 1. User-provided explicit path.
 2. Environment variable `ADS_PLAN_MONITOR_CONFIG`.
 3. Project-local `config/ads-plan-monitor/config.json`.
-4. `/Users/west/.codex/ads-plan-monitor/config.json`.
+4. `~/.codex/ads-plan-monitor/config.json`.
 
 Project config stores only non-secret business settings. Never store `app_id`, `secret`, `access_token`, `refresh_token`, or auth codes in project config. Never ask the user to paste tokens into chat. Never print `access_token`, `refresh_token`, `secret`, or auth codes. If a config file is missing, tell the user to create it from `assets/config.example.json`.
 
@@ -53,10 +53,10 @@ Sensitive OAuth credentials live in the user's local OS credential store through
 
 - macOS: Keychain.
 - Windows: DPAPI-protected local credential file under the user's home directory.
-- Linux: Secret Service through `secret-tool` when available.
-- File fallback: only for development or constrained environments; warn that it is not equivalent to OS credential storage.
+- Linux: Secret Service through `secret-tool`; install `libsecret` tooling when unavailable.
+- File fallback: disabled by default. Only set `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for explicit development use, and warn that it stores plaintext credentials under the user's home directory.
 
-Use `scripts/validate_config.py <config-path>` to check local config shape before API work.
+Use `scripts/validate_config.py <config-path> --mode query|create-preview|create-submit|all` to check readiness before API work. The default mode is `all`.
 Use `scripts/first_run.py` when a user is new to this skill, asks to initialize/configure it, or a config file is missing. The guide may create a local config from `assets/config.example.json`, but it must not call Ocean Engine APIs or print secrets.
 Use `scripts/credential_store.py --set-app` to save `app_id` and `secret` into the local OS credential store before first authorization.
 Use `scripts/oauth_local_authorize.py` when the user asks to 获取 token, 本地授权, or first-time OAuth setup. It starts a temporary local callback server at the configured redirect URI, opens the official authorization URL, receives `auth_code`, exchanges it for token fields, writes them to the local credential store, and prints only redacted status.
@@ -134,7 +134,7 @@ For a new teammate, use this onboarding flow:
    - `links.landing_page_url`
    - `links.open_url`
    - titles and product defaults
-7. After the user updates config and authorizes, run `scripts/validate_config.py <config-path>` and `scripts/token_manager.py --config <config-path> --status`.
+7. After the user updates config and authorizes, run `scripts/validate_config.py <config-path> --mode all` and `scripts/token_manager.py --config <config-path> --status`.
 8. If `ok_for_query_data` is true, the teammate can ask for "今天汇总数据" or "消耗前十". If create fields are still missing, allow query branch but block online plan creation.
 
 ### 3. Build project payload

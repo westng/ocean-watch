@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
 
 
 DEFAULT_DATA_TOPICS = ["MATERIAL_DATA"]
@@ -74,7 +75,7 @@ def compact_topic(topic):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--out", help="Optional JSON output path. No file is written by default.")
     parser.add_argument(
         "--data-topic",
@@ -84,7 +85,7 @@ def main():
     parser.add_argument("--full", action="store_true", help="Print the full API response.")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     data_topics = split_csv(args.data_topic) or DEFAULT_DATA_TOPICS

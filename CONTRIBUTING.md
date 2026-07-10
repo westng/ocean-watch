@@ -19,7 +19,7 @@
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/*.py
 python3 -m json.tool assets/config.example.json >/tmp/ocean-watch-config-check.json
-python3 -m json.tool assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
+python3 -m unittest discover -s tests -v
 git diff --check
 git status --short --ignored
 ```

@@ -30,10 +30,9 @@ OAuth App ID、Secret、Access Token 和 Refresh Token 不应写入项目配置�
 
 - macOS: Keychain
 - Windows: DPAPI 保护的用户本地文件
-- Linux: Secret Service
-- 受限环境 fallback: `~/.codex/ads-plan-monitor/credentials.json`
+- Linux: Secret Service (`secret-tool`)
 
-fallback 文件只适合开发或受限环境。请确保它不在仓库目录内，并限制文件权限。
+缺少安全凭据后端时，脚本默认拒绝保存，不会静默写入明文。只有显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` 才会启用 `~/.codex/ads-plan-monitor/credentials.json`；该文件是明文，只适合受限开发环境。请确保它不在仓库目录内，并限制文件权限。
 
 ## 泄露处理
 

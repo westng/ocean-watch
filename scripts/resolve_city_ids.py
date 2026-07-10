@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
+import credential_store
 
 
 def read_city_names(path):
@@ -148,14 +150,14 @@ def resolve(config, city_csv, country_codes):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--city-csv", required=True)
     parser.add_argument("--country-code", action="append", default=["CN", "CHN", "156"])
     parser.add_argument("--write-config", action="store_true")
     parser.add_argument("--out")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     best, attempts = resolve(config, args.city_csv, args.country_code)
@@ -170,7 +172,8 @@ def main():
     if args.write_config and result["resolved_count"] and not result["missing"]:
         config.setdefault("resolved_ids", {})["city_ids"] = [item["code"] for item in result["resolved"]]
         config.setdefault("resolved_ids", {})["city_names"] = [item["name"] for item in result["resolved"]]
-        config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        safe_config = credential_store.strip_sensitive_config(config)
+        config_path.write_text(json.dumps(safe_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         result["config_updated"] = str(config_path)
 
     output = json.dumps(result, ensure_ascii=False, indent=2)

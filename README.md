@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="SKILL.md"><img src="https://img.shields.io/badge/Codex-Skill-111827" alt="Codex Skill"></a>
-  <a href="scripts/"><img src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white" alt="Python 3"></a>
+  <a href="scripts/"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-API-1677FF" alt="Ocean Engine API"></a>
   <a href="docs/configuration.md"><img src="https://img.shields.io/badge/OAuth-local-10B981" alt="Local OAuth"></a>
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/Credentials-local%20store-6B7280" alt="Local credential store"></a>
@@ -46,6 +46,8 @@
 mkdir -p ~/.codex/skills
 ln -s "$(pwd)" ~/.codex/skills/ads-plan-monitor
 ```
+
+运行环境需要 Python 3.9 或更高版本，只使用 Python 标准库。
 
 创建本地配置：
 
@@ -99,7 +101,7 @@ python3 scripts/first_run.py \
 .
 ├── SKILL.md                  # Codex 读取的技能指令
 ├── agents/                   # Codex UI 元数据
-├── assets/                   # 示例配置和输入模板
+├── assets/                   # 脱敏示例配置
 ├── references/               # 运行时按需读取的规则和 API 笔记
 ├── scripts/                  # API 调用、授权、查询和创建脚本
 ├── docs/                     # 给人看的安装、配置、命令和结构文档
@@ -131,8 +133,9 @@ runs/                                 # API 运行产物和调试输出
 
 - macOS: Keychain
 - Windows: DPAPI-protected user-local file
-- Linux: Secret Service
-- fallback: `~/.codex/ads-plan-monitor/credentials.json`
+- Linux: Secret Service (`secret-tool`)
+
+没有安全后端时，脚本默认拒绝写入凭据，不会静默降级为明文文件。仅在受限开发环境中可显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1`，此时凭据以明文写入 `~/.codex/ads-plan-monitor/credentials.json`，不建议用于生产账户。
 
 `config/`、`runs/`、`.venv/`、日志、临时文件和本地 fallback 凭据都被 `.gitignore` 排除。
 
@@ -141,7 +144,7 @@ runs/                                 # API 运行产物和调试输出
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/*.py
 python3 -m json.tool assets/config.example.json >/tmp/ocean-watch-config-check.json
-python3 -m json.tool assets/plan-input.example.json >/tmp/ocean-watch-plan-input-check.json
+python3 -m unittest discover -s tests -v
 git diff --check
 ```
 

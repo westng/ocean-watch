@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 import credential_store
+import config_paths
 
 
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
@@ -142,10 +143,43 @@ def save_credentials(config):
 
 
 class FileLock:
+    INCOMPLETE_LOCK_GRACE_SECONDS = 5
+
     def __init__(self, path, timeout=DEFAULT_LOCK_TIMEOUT_SECONDS):
         self.path = Path(path)
         self.timeout = timeout
         self.fd = None
+
+    def remove_if_stale(self):
+        try:
+            text = self.path.read_text(encoding="utf-8").strip()
+            pid = int(text)
+        except (FileNotFoundError, OSError, TypeError, ValueError):
+            pid = None
+        if pid is not None:
+            try:
+                os.kill(pid, 0)
+                return False
+            except PermissionError:
+                return False
+            except ProcessLookupError:
+                pass
+            except OSError:
+                pass
+        else:
+            try:
+                age = time.time() - self.path.stat().st_mtime
+            except (FileNotFoundError, OSError):
+                age = self.INCOMPLETE_LOCK_GRACE_SECONDS
+            if age < self.INCOMPLETE_LOCK_GRACE_SECONDS:
+                return False
+        try:
+            self.path.unlink()
+            return True
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
 
     def __enter__(self):
         deadline = time.monotonic() + self.timeout
@@ -156,6 +190,8 @@ class FileLock:
                 os.write(self.fd, str(os.getpid()).encode("utf-8"))
                 return self
             except FileExistsError:
+                if self.remove_if_stale():
+                    continue
                 if time.monotonic() > deadline:
                     raise TimeoutError(f"Timed out waiting for token lock: {self.path}")
                 time.sleep(0.2)
@@ -275,12 +311,12 @@ def ensure_access_token(config_path, config=None, force_refresh=False, margin_se
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--refresh", action="store_true", help="Force refresh using api.refresh_token.")
     parser.add_argument("--status", action="store_true", help="Print redacted token status.")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = load_config(config_path)
     if args.refresh:
         config = ensure_access_token(config_path, config, force_refresh=True)

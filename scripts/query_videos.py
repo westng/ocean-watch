@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_paths
 
 
 def get_path(data, dotted, default=None):
@@ -136,7 +137,7 @@ def compact_video(item):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config/ads-plan-monitor/config.json")
+    parser.add_argument("--config")
     parser.add_argument("--advertiser-id", type=int, help="Override account.advertiser_id from config.")
     parser.add_argument("--out")
     parser.add_argument("--video-id", action="append")
@@ -157,7 +158,7 @@ def main():
     )
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     config = token_manager.ensure_access_token(config_path, config)
     video_ids = split_csv(args.video_id)

@@ -14,8 +14,7 @@
 ├── agents/
 │   └── openai.yaml
 ├── assets/
-│   ├── config.example.json
-│   └── plan-input.example.json
+│   └── config.example.json
 ├── references/
 │   ├── current-template-notes.md
 │   └── official-api-notes.md
@@ -36,6 +35,10 @@
 │   ├── configuration.md
 │   ├── commands.md
 │   └── project-structure.md
+├── tests/
+│   └── test_regressions.py
+├── .github/workflows/
+│   └── ci.yml
 ├── README.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md
@@ -48,7 +51,8 @@
 | --- | --- | --- |
 | `SKILL.md` | Codex | Skill 触发后的核心工作指令 |
 | `agents/` | Codex UI | Skill 展示名称、简介和默认提示 |
-| `assets/` | 用户和脚本 | 示例配置、输入模板；只能放占位符 |
+| `assets/` | 用户和脚本 | 脱敏示例配置；只能放占位符 |
+| `tests/` | 维护者 | 不调用真实 API 的回归测试 |
 | `references/` | Codex | 按需读取的 API 笔记和模板规则 |
 | `scripts/` | 用户和 Codex | 授权、查询、创建、批量创建等确定性脚本 |
 | `docs/` | 人类用户 | 安装、配置、命令和结构说明 |

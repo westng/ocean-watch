@@ -20,6 +20,8 @@ cp assets/config.example.json config/ads-plan-monitor/config.json
 
 `config/` 已被 `.gitignore` 排除。这个目录用于保存每个使用者自己的真实广告账户和模板信息。
 
+所有命令按以下顺序查找配置：命令行 `--config`、环境变量 `ADS_PLAN_MONITOR_CONFIG`、项目配置、`~/.codex/ads-plan-monitor/config.json`。
+
 ## 配置内容
 
 需要按业务填写的典型字段：
@@ -71,6 +73,14 @@ python3 scripts/credential_store.py \
 
 脚本会交互式要求输入 App ID 和 Secret。不要把它们写进配置文件或聊天记录。
 
+凭据后端：macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。Linux 缺少 `secret-tool` 时应安装系统的 `libsecret` 工具；脚本不会自动改用明文文件。仅限受限开发环境，可显式设置：
+
+```bash
+export ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1
+```
+
+该选项会把凭据以明文保存到用户目录，不应用于生产广告账户。
+
 ## OAuth 授权
 
 默认回调地址：
@@ -114,7 +124,8 @@ python3 scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 
 python3 scripts/validate_config.py \
-  config/ads-plan-monitor/config.json
+  config/ads-plan-monitor/config.json \
+  --mode all
 ```
 
-`first_run.py` 更适合第一次使用；`validate_config.py` 更适合提交前或排查字段缺失。
+`validate_config.py` 支持 `query`、`create-preview`、`create-submit` 和 `all` 四种模式，所选模式未就绪时返回非零退出码。`first_run.py` 更适合第一次使用；验证器更适合提交前或排查字段缺失。
