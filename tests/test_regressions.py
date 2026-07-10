@@ -172,6 +172,15 @@ class ConfigAndCredentialTests(unittest.TestCase):
         cleaned = credential_store.strip_sensitive_config(config)
         self.assertEqual(cleaned["api"], {"base_url": "u"})
 
+    def test_macos_hex_encoded_credentials_are_decoded(self):
+        data = {"access_token": "token", "refresh_token": "refresh"}
+        encoded = json.dumps(data).encode("utf-8").hex()
+        self.assertEqual(credential_store.decode_stored_credentials(encoded), data)
+
+    def test_invalid_stored_credentials_raise_clear_error(self):
+        with self.assertRaisesRegex(RuntimeError, "not valid JSON"):
+            credential_store.decode_stored_credentials("not-json")
+
 
 class FileLockTests(unittest.TestCase):
     def test_stale_pid_lock_is_recovered(self):
@@ -251,10 +260,12 @@ class TokenRefreshTests(unittest.TestCase):
             },
         }
         with mock.patch.object(token_manager, "post_json", return_value=response), \
+                mock.patch.object(token_manager, "update_accounts_after_token", side_effect=lambda updated: (updated, {})), \
                 mock.patch.object(token_manager, "save_credentials") as save:
             updated, _ = token_manager.refresh_access_token("unused.json", config)
-        self.assertEqual(updated["api"]["access_token"], "new-access-token")
-        self.assertEqual(updated["api"]["refresh_token"], "new-refresh-token")
+        saved = save.call_args.args[0]
+        self.assertEqual(saved["api"]["access_token"], "new-access-token")
+        self.assertEqual(saved["api"]["refresh_token"], "new-refresh-token")
         save.assert_called_once_with(updated)
 
     def test_refresh_response_requires_access_token(self):
@@ -273,6 +284,44 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertTrue(token_manager.advertiser_is_authorized(123456, ["123456"]))
         self.assertTrue(token_manager.advertiser_is_authorized("123456", [123456]))
         self.assertFalse(token_manager.advertiser_is_authorized(123456, [654321]))
+
+    def test_authorized_account_sync_keeps_only_valid_advertisers(self):
+        config = self.expiring_config()
+        response = {
+            "code": 0,
+            "data": {
+                "list": [
+                    {"advertiser_id": 1, "advertiser_name": "one", "account_type": "ADVERTISER", "is_valid": True},
+                    {"advertiser_id": 2, "advertiser_name": "two", "account_type": "ADVERTISER", "is_valid": False},
+                    {"advertiser_id": 3, "advertiser_name": "center", "account_type": "CUSTOMER_ADMIN", "is_valid": True},
+                ]
+            },
+        }
+        with mock.patch.object(token_manager, "get_json", return_value=response):
+            updated, summary = token_manager.update_authorized_accounts(config)
+        self.assertEqual(updated["api"]["authorized_advertiser_ids"], [1])
+        self.assertEqual(len(updated["api"]["oauth_authorized_accounts"]), 3)
+        self.assertNotIn("company_list", updated["api"]["oauth_authorized_accounts"][0])
+        self.assertEqual(summary["oauth_authorized_account_count"], 3)
+        self.assertEqual(summary["authorized_advertiser_count"], 1)
+        self.assertEqual(summary["account_types"], {"ADVERTISER": 2, "CUSTOMER_ADMIN": 1})
+
+    def test_token_update_does_not_trust_response_advertiser_ids(self):
+        config = self.expiring_config()
+        updated = token_manager.update_token_fields(config, {
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
+            "advertiser_ids": [999],
+        })
+        self.assertNotEqual(updated["api"].get("authorized_advertiser_ids"), [999])
+
+    def test_account_sync_failure_preserves_new_token(self):
+        config = self.expiring_config()
+        config["api"]["access_token"] = "new-access"
+        with mock.patch.object(token_manager, "update_authorized_accounts", side_effect=RuntimeError("sync failed")):
+            updated, summary = token_manager.update_accounts_after_token(config)
+        self.assertEqual(updated["api"]["access_token"], "new-access")
+        self.assertTrue(summary["sync_failed"])
 
 
 class ExitAndValidationTests(unittest.TestCase):

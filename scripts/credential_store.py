@@ -23,6 +23,8 @@ SENSITIVE_KEYS = {
     "access_token_expires_at",
     "refresh_token_expires_at",
     "last_token_update_at",
+    "last_authorized_account_sync_at",
+    "oauth_authorized_accounts",
     "authorized_advertiser_ids",
 }
 
@@ -75,11 +77,28 @@ def redact(data):
         if key in SENSITIVE_KEYS and not is_missing(value):
             if key == "authorized_advertiser_ids":
                 redacted[key] = f"<{len(value)} authorized advertisers>"
+            elif key == "oauth_authorized_accounts":
+                redacted[key] = f"<{len(value)} OAuth authorized accounts>"
             else:
                 redacted[key] = "<redacted>"
         else:
             redacted[key] = value
     return redacted
+
+
+def decode_stored_credentials(text):
+    stripped = text.strip()
+    if not stripped:
+        return {}
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError as json_error:
+        if len(stripped) % 2 == 0 and all(char in "0123456789abcdefABCDEF" for char in stripped):
+            try:
+                return json.loads(bytes.fromhex(stripped).decode("utf-8"))
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                pass
+        raise RuntimeError("Stored credentials are not valid JSON or hex-encoded JSON") from json_error
 
 
 def macos_read():
@@ -92,8 +111,7 @@ def macos_read():
     )
     if result.returncode != 0:
         return {}
-    text = result.stdout.strip()
-    return json.loads(text) if text else {}
+    return decode_stored_credentials(result.stdout)
 
 
 def macos_write(data):
@@ -349,13 +367,18 @@ def status(config_path=None):
         "access_token_expires_at": credentials.get("access_token_expires_at"),
         "refresh_token_expires_at": credentials.get("refresh_token_expires_at"),
         "last_token_update_at": credentials.get("last_token_update_at"),
+        "oauth_authorized_account_count": len(credentials.get("oauth_authorized_accounts") or []),
         "authorized_advertiser_count": len(credentials.get("authorized_advertiser_ids") or []),
+        "last_authorized_account_sync_at": credentials.get("last_authorized_account_sync_at"),
     }
     if config_path:
         config = json.loads(Path(config_path).expanduser().read_text(encoding="utf-8"))
         advertiser_id = (config.get("account") or {}).get("advertiser_id")
         result["advertiser_id"] = advertiser_id
-        result["advertiser_id_authorized"] = advertiser_id in (credentials.get("authorized_advertiser_ids") or [])
+        result["advertiser_id_authorized"] = any(
+            str(item) == str(advertiser_id)
+            for item in (credentials.get("authorized_advertiser_ids") or [])
+        )
         result["project_config_has_sensitive_fields"] = sorted(
             key for key in SENSITIVE_KEYS if key in (config.get("api") or {})
         )

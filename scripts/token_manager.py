@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -18,6 +19,7 @@ SECRET_KEYS = {"access_token", "refresh_token", "secret", "auth_code"}
 DEFAULT_OAUTH_BASE_URL = "https://ad.oceanengine.com/open_api"
 ACCESS_TOKEN_PATH = "/oauth2/access_token/"
 REFRESH_TOKEN_PATH = "/oauth2/refresh_token/"
+AUTHORIZED_ACCOUNT_PATH = "/oauth2/advertiser/get/"
 DEFAULT_REFRESH_MARGIN_SECONDS = 30 * 60
 DEFAULT_LOCK_TIMEOUT_SECONDS = 60
 
@@ -143,6 +145,17 @@ def post_json(base_url, path, payload):
         return {"code": exc.code, "message": text}
 
 
+def get_json(base_url, path, params):
+    url = base_url.rstrip("/") + path + "?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        text = exc.read().decode("utf-8", errors="replace")
+        return {"code": exc.code, "message": text}
+
+
 def redact(data):
     if isinstance(data, dict):
         result = {}
@@ -252,9 +265,82 @@ def update_token_fields(config, token_data):
     if refresh_expires_at:
         api["refresh_token_expires_at"] = refresh_expires_at
     api["last_token_update_at"] = now_utc().isoformat()
-    if token_data.get("advertiser_ids") is not None:
-        api["authorized_advertiser_ids"] = token_data.get("advertiser_ids")
     return updated
+
+
+def normalize_authorized_accounts(rows):
+    fields = (
+        "account_id",
+        "account_name",
+        "account_type",
+        "advertiser_id",
+        "advertiser_name",
+        "is_valid",
+    )
+    normalized = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        normalized.append({key: copy.deepcopy(row[key]) for key in fields if key in row})
+    return normalized
+
+
+def fetch_authorized_accounts(config):
+    access_token = get_path(config, "api.access_token")
+    if is_missing(access_token):
+        raise RuntimeError("missing api.access_token for authorized account sync")
+    response = get_json(
+        oauth_base_url(config),
+        AUTHORIZED_ACCOUNT_PATH,
+        {"access_token": access_token},
+    )
+    if response.get("code") != 0:
+        raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
+    accounts = normalize_authorized_accounts((response.get("data") or {}).get("list") or [])
+    advertiser_ids = [
+        account.get("advertiser_id")
+        for account in accounts
+        if account.get("account_type") == "ADVERTISER"
+        and account.get("is_valid") is not False
+        and not is_missing(account.get("advertiser_id"))
+    ]
+    account_types = {}
+    for account in accounts:
+        account_type = account.get("account_type") or "UNKNOWN"
+        account_types[account_type] = account_types.get(account_type, 0) + 1
+    return accounts, advertiser_ids, account_types
+
+
+def update_authorized_accounts(config):
+    accounts, advertiser_ids, account_types = fetch_authorized_accounts(config)
+    updated = copy.deepcopy(config)
+    api = updated.setdefault("api", {})
+    api["oauth_authorized_accounts"] = accounts
+    api["authorized_advertiser_ids"] = advertiser_ids
+    api["last_authorized_account_sync_at"] = now_utc().isoformat()
+    return updated, {
+        "oauth_authorized_account_count": len(accounts),
+        "authorized_advertiser_count": len(advertiser_ids),
+        "account_types": account_types,
+    }
+
+
+def sync_authorized_accounts(config_path, config=None):
+    config_path = Path(config_path).expanduser()
+    config = copy.deepcopy(config) if config is not None else load_config(config_path)
+    updated, summary = update_authorized_accounts(config)
+    save_credentials(updated)
+    return updated, summary
+
+
+def update_accounts_after_token(config):
+    try:
+        return update_authorized_accounts(config)
+    except RuntimeError as exc:
+        return config, {
+            "sync_failed": True,
+            "error": str(exc),
+        }
 
 
 def exchange_auth_code(config_path, auth_code, config=None):
@@ -280,6 +366,7 @@ def exchange_auth_code(config_path, auth_code, config=None):
     if is_missing(data.get("access_token")) or is_missing(data.get("refresh_token")):
         raise RuntimeError("OAuth authorization response did not include access_token and refresh_token")
     updated = update_token_fields(config, data)
+    updated, account_summary = update_accounts_after_token(updated)
     save_credentials(updated)
     return updated, redact({
         "response_code": response.get("code"),
@@ -287,7 +374,7 @@ def exchange_auth_code(config_path, auth_code, config=None):
         "request_id": response.get("request_id"),
         "access_token_expires_at": get_path(updated, "api.access_token_expires_at"),
         "refresh_token_expires_at": get_path(updated, "api.refresh_token_expires_at"),
-        "authorized_advertiser_ids": get_path(updated, "api.authorized_advertiser_ids"),
+        "authorized_accounts": account_summary,
     })
 
 
@@ -316,6 +403,7 @@ def refresh_access_token(config_path, config=None):
     if is_missing(data.get("access_token")):
         raise RuntimeError("OAuth refresh response did not include access_token")
     updated = update_token_fields(config, data)
+    updated, account_summary = update_accounts_after_token(updated)
     save_credentials(updated)
     return updated, redact({
         "response_code": response.get("code"),
@@ -323,7 +411,7 @@ def refresh_access_token(config_path, config=None):
         "request_id": response.get("request_id"),
         "access_token_expires_at": get_path(updated, "api.access_token_expires_at"),
         "refresh_token_expires_at": get_path(updated, "api.refresh_token_expires_at"),
-        "authorized_advertiser_ids": get_path(updated, "api.authorized_advertiser_ids"),
+        "authorized_accounts": account_summary,
     })
 
 
@@ -346,6 +434,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config")
     parser.add_argument("--refresh", action="store_true", help="Force refresh using api.refresh_token.")
+    parser.add_argument("--sync-accounts", action="store_true", help="Sync authorized account details without refreshing a valid token.")
     parser.add_argument("--status", action="store_true", help="Print redacted token status.")
     args = parser.parse_args()
 
@@ -353,6 +442,9 @@ def main():
     config = load_config(config_path)
     if args.refresh:
         config = ensure_access_token(config_path, config, force_refresh=True)
+    elif args.sync_accounts:
+        config = ensure_access_token(config_path, config)
+        config, _ = sync_authorized_accounts(config_path, config)
 
     status = {
         "advertiser_id": get_path(config, "account.advertiser_id"),
@@ -366,6 +458,7 @@ def main():
         "token_has_ttl": token_has_ttl(config),
         "refresh_token_has_ttl": refresh_token_has_ttl(config),
         "next_action": token_next_action(config),
+        "oauth_authorized_account_count": len(get_path(config, "api.oauth_authorized_accounts", []) or []),
         "authorized_advertiser_count": len(get_path(config, "api.authorized_advertiser_ids", []) or []),
         "advertiser_id_authorized": advertiser_is_authorized(
             get_path(config, "account.advertiser_id"),

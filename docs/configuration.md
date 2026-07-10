@@ -135,6 +135,21 @@ python3 scripts/token_manager.py --refresh
 
 状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `scripts/oauth_local_authorize.py`。
 
+## 授权账户同步
+
+OAuth 换 Token 响应不是完整的广告主账户详情。授权或刷新成功后，脚本会继续调用官方 `/oauth2/advertiser/get/` 接口同步账户类型，并区分：
+
+- `oauth_authorized_account_count`：官方接口返回的全部授权主体，可能包含客户中心、企业 BP、星图等角色账户。
+- `authorized_advertiser_count`：其中 `account_type=ADVERTISER` 且有效的真实广告主账户。
+
+不要把授权主体数量当作可投放广告主数量。手动重新同步可运行：
+
+```bash
+python3 scripts/token_manager.py --sync-accounts
+```
+
+如果授权主体存在但真实广告主为 0，重新运行本地 OAuth，并在官方授权页选择目标广告主账户。
+
 ## 配置校验
 
 ```bash
