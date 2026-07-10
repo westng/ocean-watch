@@ -260,13 +260,24 @@ class TokenRefreshTests(unittest.TestCase):
             },
         }
         with mock.patch.object(token_manager, "post_json", return_value=response), \
-                mock.patch.object(token_manager, "update_accounts_after_token", side_effect=lambda updated: (updated, {})), \
                 mock.patch.object(token_manager, "save_credentials") as save:
             updated, _ = token_manager.refresh_access_token("unused.json", config)
         saved = save.call_args.args[0]
         self.assertEqual(saved["api"]["access_token"], "new-access-token")
         self.assertEqual(saved["api"]["refresh_token"], "new-refresh-token")
         save.assert_called_once_with(updated)
+
+    def test_token_refresh_does_not_resync_accounts(self):
+        config = self.expiring_config()
+        response = {
+            "code": 0,
+            "data": {"access_token": "new-access-token", "expires_in": 3600},
+        }
+        with mock.patch.object(token_manager, "post_json", return_value=response), \
+                mock.patch.object(token_manager, "update_accounts_after_token") as sync, \
+                mock.patch.object(token_manager, "save_credentials"):
+            token_manager.refresh_access_token("unused.json", config)
+        sync.assert_not_called()
 
     def test_refresh_response_requires_access_token(self):
         config = self.expiring_config()
@@ -297,7 +308,16 @@ class TokenRefreshTests(unittest.TestCase):
                 ]
             },
         }
-        with mock.patch.object(token_manager, "get_json", return_value=response):
+        expansion = {
+            "candidate_advertiser_count": 1,
+            "verified_advertiser_count": 1,
+            "role_counts": {"ADVERTISER": 2, "CUSTOMER_ADMIN": 1},
+            "branch_error_count": 0,
+            "unsupported_role_count": 0,
+            "verification_error_count": 0,
+        }
+        with mock.patch.object(token_manager, "get_json", return_value=response), \
+                mock.patch.object(token_manager, "expand_authorized_advertisers", return_value=([1], expansion)):
             updated, summary = token_manager.update_authorized_accounts(config)
         self.assertEqual(updated["api"]["authorized_advertiser_ids"], [1])
         self.assertEqual(len(updated["api"]["oauth_authorized_accounts"]), 3)
@@ -305,6 +325,62 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertEqual(summary["oauth_authorized_account_count"], 3)
         self.assertEqual(summary["authorized_advertiser_count"], 1)
         self.assertEqual(summary["account_types"], {"ADVERTISER": 2, "CUSTOMER_ADMIN": 1})
+
+    def test_customer_center_role_expands_with_account_source(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        response = {
+            "code": 0,
+            "data": {
+                "list": [{"advertiser_id": 201}, {"advertiser_id": 202}],
+                "page_info": {"total_page": 1},
+            },
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response) as request:
+            identifiers, result = token_manager.fetch_role_advertiser_ids(config, account)
+        self.assertEqual(identifiers, [201, 202])
+        self.assertEqual(result["status"], "ok")
+        params = request.call_args.args[2]
+        self.assertEqual(params["cc_account_id"], 101)
+        self.assertEqual(params["account_source"], "AD")
+
+    def test_ebp_role_expands_advertiser_accounts(self):
+        config = self.expiring_config()
+        account = {"account_role": "PLATFORM_ROLE_ENTERPRISE_BP_ADMIN", "account_id": 301}
+        response = {
+            "code": 0,
+            "data": {
+                "account_list": [{"account_id": 401}, {"account_id": 402}],
+                "page_info": {"total_page": 1},
+            },
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response) as request:
+            identifiers, result = token_manager.fetch_role_advertiser_ids(config, account)
+        self.assertEqual(identifiers, [401, 402])
+        self.assertEqual(result["status"], "ok")
+        params = request.call_args.args[2]
+        self.assertEqual(params["enterprise_organization_id"], 301)
+        self.assertEqual(params["account_source"], "AD")
+
+    def test_advertiser_verification_batches_fifty_ids(self):
+        config = self.expiring_config()
+
+        def response_for_chunk(_config, _path, params):
+            identifiers = json.loads(params["advertiser_ids"])
+            return {"code": 0, "data": [{"id": identifier} for identifier in identifiers]}
+
+        with mock.patch.object(token_manager, "get_api_json", side_effect=response_for_chunk) as request:
+            verified, errors = token_manager.verify_advertiser_ids(config, list(range(1, 122)))
+        self.assertEqual(verified, list(range(1, 122)))
+        self.assertEqual(errors, [])
+        self.assertEqual(request.call_count, 3)
+
+    def test_total_verification_failure_preserves_previous_cache(self):
+        config = self.expiring_config()
+        accounts = [{"account_role": "ADVERTISER", "advertiser_id": 1}]
+        with mock.patch.object(token_manager, "get_api_json", return_value={"code": 40002}):
+            with self.assertRaisesRegex(RuntimeError, "Unable to verify"):
+                token_manager.expand_authorized_advertisers(config, accounts)
 
     def test_token_update_does_not_trust_response_advertiser_ids(self):
         config = self.expiring_config()

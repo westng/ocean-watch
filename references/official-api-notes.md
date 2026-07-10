@@ -13,6 +13,19 @@ Official docs:
 
 - `POST https://api.oceanengine.com/open_api/v3.0/project/create/`
 - `POST https://api.oceanengine.com/open_api/v3.0/promotion/create/`
+- `GET https://ad.oceanengine.com/open_api/oauth2/advertiser/get/`
+- `GET https://api.oceanengine.com/open_api/2/customer_center/advertiser/list/`
+- `GET https://api.oceanengine.com/open_api/2/ebp/advertiser/list/`
+- `GET https://api.oceanengine.com/open_api/2/advertiser/info/`
+
+## Authorized Advertiser Expansion
+
+The OAuth advertiser endpoint returns authorization subjects, not only direct advertisers. Expand by `account_role`:
+
+- `ADVERTISER`: use the subject advertiser ID directly.
+- `CUSTOMER_ADMIN` and `CUSTOMER_OPERATOR`: query customer-center advertisers with `cc_account_id` and `account_source=AD`.
+- `PLATFORM_ROLE_ENTERPRISE_BP_ADMIN` and `PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR`: query EBP advertisers with `enterprise_organization_id` and `account_source=AD`.
+- Deduplicate candidates, then validate them through advertiser info in chunks of 50.
 
 Required headers:
 

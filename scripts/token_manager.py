@@ -20,6 +20,9 @@ DEFAULT_OAUTH_BASE_URL = "https://ad.oceanengine.com/open_api"
 ACCESS_TOKEN_PATH = "/oauth2/access_token/"
 REFRESH_TOKEN_PATH = "/oauth2/refresh_token/"
 AUTHORIZED_ACCOUNT_PATH = "/oauth2/advertiser/get/"
+CUSTOMER_CENTER_ADVERTISER_PATH = "/2/customer_center/advertiser/list/"
+EBP_ADVERTISER_PATH = "/2/ebp/advertiser/list/"
+ADVERTISER_INFO_PATH = "/2/advertiser/info/"
 DEFAULT_REFRESH_MARGIN_SECONDS = 30 * 60
 DEFAULT_LOCK_TIMEOUT_SECONDS = 60
 
@@ -156,6 +159,24 @@ def get_json(base_url, path, params):
         return {"code": exc.code, "message": text}
 
 
+def get_api_json(config, path, params):
+    access_token = get_path(config, "api.access_token")
+    if is_missing(access_token):
+        raise RuntimeError("missing api.access_token")
+    url = get_path(config, "api.base_url").rstrip("/") + path + "?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        url,
+        headers={"Access-Token": access_token},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        text = exc.read().decode("utf-8", errors="replace")
+        return {"code": exc.code, "message": text}
+
+
 def redact(data):
     if isinstance(data, dict):
         result = {}
@@ -272,6 +293,7 @@ def normalize_authorized_accounts(rows):
     fields = (
         "account_id",
         "account_name",
+        "account_role",
         "account_type",
         "advertiser_id",
         "advertiser_name",
@@ -283,6 +305,123 @@ def normalize_authorized_accounts(rows):
             continue
         normalized.append({key: copy.deepcopy(row[key]) for key in fields if key in row})
     return normalized
+
+
+def positive_account_id(account):
+    for key in ("account_id", "account_string_id", "advertiser_id"):
+        value = account.get(key)
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
+    return None
+
+
+def response_ids(rows, keys):
+    identifiers = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            value = next((row.get(key) for key in keys if row.get(key) is not None), None)
+        else:
+            value = row
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            identifiers.append(parsed)
+    return identifiers
+
+
+def fetch_role_advertiser_ids(config, account):
+    role = account.get("account_role") or account.get("account_type") or "UNKNOWN"
+    source_id = positive_account_id(account)
+    if source_id is None:
+        return [], {"role": role, "status": "missing_account_id", "count": 0}
+    if role == "ADVERTISER":
+        return [source_id], {"role": role, "status": "ok", "count": 1}
+    if role in {"CUSTOMER_ADMIN", "CUSTOMER_OPERATOR"}:
+        path = CUSTOMER_CENTER_ADVERTISER_PATH
+        base_params = {"cc_account_id": source_id, "account_source": "AD"}
+        list_key = "list"
+        id_keys = ("advertiser_id", "account_id")
+    elif role in {"PLATFORM_ROLE_ENTERPRISE_BP_ADMIN", "PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR"}:
+        path = EBP_ADVERTISER_PATH
+        base_params = {"enterprise_organization_id": source_id, "account_source": "AD"}
+        list_key = "account_list"
+        id_keys = ("account_id", "advertiser_id")
+    else:
+        return [], {"role": role, "status": "unsupported_role", "count": 0}
+
+    identifiers = []
+    page = 1
+    while page <= 100:
+        response = get_api_json(
+            config,
+            path,
+            {**base_params, "page": page, "page_size": 100},
+        )
+        if response.get("code") != 0:
+            return identifiers, {
+                "role": role,
+                "status": "api_error",
+                "code": response.get("code"),
+                "count": len(set(identifiers)),
+            }
+        data = response.get("data") or {}
+        rows = data.get(list_key) or []
+        identifiers.extend(response_ids(rows, id_keys))
+        page_info = data.get("page_info") or {}
+        total_page = int(page_info.get("total_page") or 1)
+        if page >= total_page or not rows:
+            break
+        page += 1
+    unique_ids = list(dict.fromkeys(identifiers))
+    return unique_ids, {"role": role, "status": "ok", "count": len(unique_ids), "pages": page}
+
+
+def verify_advertiser_ids(config, advertiser_ids):
+    verified = []
+    errors = []
+    for offset in range(0, len(advertiser_ids), 50):
+        chunk = advertiser_ids[offset:offset + 50]
+        response = get_api_json(
+            config,
+            ADVERTISER_INFO_PATH,
+            {"advertiser_ids": json.dumps(chunk, separators=(",", ":"))},
+        )
+        if response.get("code") != 0:
+            errors.append({"code": response.get("code"), "count": len(chunk)})
+            continue
+        verified.extend(response_ids(response.get("data") or [], ("id", "advertiser_id")))
+    return list(dict.fromkeys(verified)), errors
+
+
+def expand_authorized_advertisers(config, accounts):
+    candidate_ids = []
+    branch_results = []
+    for account in accounts:
+        identifiers, result = fetch_role_advertiser_ids(config, account)
+        candidate_ids.extend(identifiers)
+        branch_results.append(result)
+    candidate_ids = list(dict.fromkeys(candidate_ids))
+    verified_ids, verification_errors = verify_advertiser_ids(config, candidate_ids)
+    if candidate_ids and verification_errors and not verified_ids:
+        raise RuntimeError("Unable to verify expanded advertiser IDs through advertiser/info")
+    role_counts = {}
+    for result in branch_results:
+        role = result["role"]
+        role_counts[role] = role_counts.get(role, 0) + 1
+    return verified_ids, {
+        "candidate_advertiser_count": len(candidate_ids),
+        "verified_advertiser_count": len(verified_ids),
+        "role_counts": role_counts,
+        "branch_error_count": sum(result["status"] == "api_error" for result in branch_results),
+        "unsupported_role_count": sum(result["status"] == "unsupported_role" for result in branch_results),
+        "verification_error_count": len(verification_errors),
+    }
 
 
 def fetch_authorized_accounts(config):
@@ -297,22 +436,17 @@ def fetch_authorized_accounts(config):
     if response.get("code") != 0:
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
     accounts = normalize_authorized_accounts((response.get("data") or {}).get("list") or [])
-    advertiser_ids = [
-        account.get("advertiser_id")
-        for account in accounts
-        if account.get("account_type") == "ADVERTISER"
-        and account.get("is_valid") is not False
-        and not is_missing(account.get("advertiser_id"))
-    ]
+    valid_accounts = [account for account in accounts if account.get("is_valid") is not False]
+    advertiser_ids, expansion_summary = expand_authorized_advertisers(config, valid_accounts)
     account_types = {}
     for account in accounts:
         account_type = account.get("account_type") or "UNKNOWN"
         account_types[account_type] = account_types.get(account_type, 0) + 1
-    return accounts, advertiser_ids, account_types
+    return accounts, advertiser_ids, account_types, expansion_summary
 
 
 def update_authorized_accounts(config):
-    accounts, advertiser_ids, account_types = fetch_authorized_accounts(config)
+    accounts, advertiser_ids, account_types, expansion_summary = fetch_authorized_accounts(config)
     updated = copy.deepcopy(config)
     api = updated.setdefault("api", {})
     api["oauth_authorized_accounts"] = accounts
@@ -322,6 +456,7 @@ def update_authorized_accounts(config):
         "oauth_authorized_account_count": len(accounts),
         "authorized_advertiser_count": len(advertiser_ids),
         "account_types": account_types,
+        "advertiser_expansion": expansion_summary,
     }
 
 
@@ -403,7 +538,6 @@ def refresh_access_token(config_path, config=None):
     if is_missing(data.get("access_token")):
         raise RuntimeError("OAuth refresh response did not include access_token")
     updated = update_token_fields(config, data)
-    updated, account_summary = update_accounts_after_token(updated)
     save_credentials(updated)
     return updated, redact({
         "response_code": response.get("code"),
@@ -411,7 +545,6 @@ def refresh_access_token(config_path, config=None):
         "request_id": response.get("request_id"),
         "access_token_expires_at": get_path(updated, "api.access_token_expires_at"),
         "refresh_token_expires_at": get_path(updated, "api.refresh_token_expires_at"),
-        "authorized_accounts": account_summary,
     })
 
 

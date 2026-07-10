@@ -137,16 +137,25 @@ python3 scripts/token_manager.py --refresh
 
 ## 授权账户同步
 
-OAuth 换 Token 响应不是完整的广告主账户详情。授权或刷新成功后，脚本会继续调用官方 `/oauth2/advertiser/get/` 接口同步账户类型，并区分：
+OAuth 换 Token 响应不是完整的广告主账户详情。首次或重新授权成功后，脚本会先调用官方 `/oauth2/advertiser/get/` 获取授权主体，再按 `account_role` 展开真实广告主：
+
+- `ADVERTISER`：直接使用该广告主 ID。
+- `CUSTOMER_ADMIN` / `CUSTOMER_OPERATOR`：调用 `/2/customer_center/advertiser/list/`，参数包含 `account_source=AD`。
+- `PLATFORM_ROLE_ENTERPRISE_BP_ADMIN` / `PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR`：调用 `/2/ebp/advertiser/list/`。
+- 最后按 50 个一组调用 `/2/advertiser/info/` 验证广告主 ID。
+
+状态区分：
 
 - `oauth_authorized_account_count`：官方接口返回的全部授权主体，可能包含客户中心、企业 BP、星图等角色账户。
-- `authorized_advertiser_count`：其中 `account_type=ADVERTISER` 且有效的真实广告主账户。
+- `authorized_advertiser_count`：角色展开并通过广告主信息接口验证后的真实广告主账户。
 
 不要把授权主体数量当作可投放广告主数量。手动重新同步可运行：
 
 ```bash
 python3 scripts/token_manager.py --sync-accounts
 ```
+
+普通 Access Token 刷新只轮换 Token，不重复展开账户关系，避免每次刷新拖慢查询和创建流程。
 
 如果授权主体存在但真实广告主为 0，重新运行本地 OAuth，并在官方授权页选择目标广告主账户。
 
