@@ -198,6 +198,83 @@ class FileLockTests(unittest.TestCase):
             self.assertFalse(lock.remove_if_stale())
 
 
+class TokenRefreshTests(unittest.TestCase):
+    def expiring_config(self):
+        config = valid_config()
+        config["api"].update({
+            "app_id": "123",
+            "secret": "secret",
+            "refresh_token": "refresh-token",
+            "access_token_expires_at": "2000-01-01T00:00:00+00:00",
+            "refresh_token_expires_at": "2999-01-01T00:00:00+00:00",
+        })
+        return config
+
+    def test_expired_access_token_refreshes_before_api_use(self):
+        config = self.expiring_config()
+        refreshed = copy.deepcopy(config)
+        refreshed["api"]["access_token"] = "new-access-token"
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            with mock.patch.object(token_manager, "load_config", return_value=config), \
+                    mock.patch.object(token_manager, "refresh_access_token", return_value=(refreshed, {})) as refresh:
+                result = token_manager.ensure_access_token(config_path, config)
+        self.assertEqual(result["api"]["access_token"], "new-access-token")
+        refresh.assert_called_once()
+
+    def test_valid_access_token_does_not_refresh(self):
+        config = self.expiring_config()
+        config["api"]["access_token_expires_at"] = "2999-01-01T00:00:00+00:00"
+        with mock.patch.object(token_manager, "refresh_access_token") as refresh:
+            result = token_manager.ensure_access_token("unused.json", config)
+        self.assertEqual(result["api"]["access_token"], "test-access-token")
+        refresh.assert_not_called()
+
+    def test_expired_refresh_token_requires_authorization(self):
+        config = self.expiring_config()
+        config["api"]["refresh_token_expires_at"] = "2000-01-01T00:00:00+00:00"
+        with mock.patch.object(token_manager, "post_json") as post:
+            with self.assertRaisesRegex(RuntimeError, "authorize again"):
+                token_manager.refresh_access_token("unused.json", config)
+        post.assert_not_called()
+
+    def test_refresh_saves_rotated_tokens(self):
+        config = self.expiring_config()
+        response = {
+            "code": 0,
+            "data": {
+                "access_token": "new-access-token",
+                "refresh_token": "new-refresh-token",
+                "expires_in": 3600,
+                "refresh_token_expires_in": 7200,
+            },
+        }
+        with mock.patch.object(token_manager, "post_json", return_value=response), \
+                mock.patch.object(token_manager, "save_credentials") as save:
+            updated, _ = token_manager.refresh_access_token("unused.json", config)
+        self.assertEqual(updated["api"]["access_token"], "new-access-token")
+        self.assertEqual(updated["api"]["refresh_token"], "new-refresh-token")
+        save.assert_called_once_with(updated)
+
+    def test_refresh_response_requires_access_token(self):
+        config = self.expiring_config()
+        with mock.patch.object(token_manager, "post_json", return_value={"code": 0, "data": {}}):
+            with self.assertRaisesRegex(RuntimeError, "did not include access_token"):
+                token_manager.refresh_access_token("unused.json", config)
+
+    def test_status_next_action(self):
+        config = self.expiring_config()
+        self.assertEqual(token_manager.token_next_action(config), "refresh")
+        config["api"]["refresh_token_expires_at"] = "2000-01-01T00:00:00+00:00"
+        self.assertEqual(token_manager.token_next_action(config), "reauthorize")
+
+    def test_authorized_advertiser_ids_ignore_json_number_type(self):
+        self.assertTrue(token_manager.advertiser_is_authorized(123456, ["123456"]))
+        self.assertTrue(token_manager.advertiser_is_authorized("123456", [123456]))
+        self.assertFalse(token_manager.advertiser_is_authorized(123456, [654321]))
+
+
 class ExitAndValidationTests(unittest.TestCase):
     def test_no_qualified_videos_is_failure(self):
         self.assertEqual(batch_create_from_today_videos.batch_exit_code([{"status": "no_qualified_videos"}]), 1)

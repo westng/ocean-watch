@@ -117,6 +117,24 @@ python3 scripts/token_manager.py \
 
 如果 `advertiser_id_authorized` 为 `false`，说明当前配置的广告主没有包含在本次 OAuth 授权账户里，需要重新授权或切换广告主。
 
+## Token 刷新
+
+所有查询和创建脚本都会在调用官方 API 前检查 Access Token。剩余有效期不足 30 分钟时，脚本使用本机凭据仓库中的 Refresh Token 自动刷新，并保存官方返回的新 Access Token 和轮换后的 Refresh Token；并发任务通过本地锁避免重复刷新。
+
+查看状态：
+
+```bash
+python3 scripts/token_manager.py --status
+```
+
+手动强制刷新：
+
+```bash
+python3 scripts/token_manager.py --refresh
+```
+
+状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `scripts/oauth_local_authorize.py`。
+
 ## 配置校验
 
 ```bash

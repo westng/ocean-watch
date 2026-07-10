@@ -23,6 +23,16 @@ python3 scripts/token_manager.py \
 
 只检查某个用途时，将 `--mode all` 改成 `query`、`create-preview` 或 `create-submit`。
 
+强制刷新 Access Token：
+
+```bash
+python3 scripts/token_manager.py \
+  --config config/ads-plan-monitor/config.json \
+  --refresh
+```
+
+正常查询和创建不需要手动执行该命令；各 API 脚本会在 Token 临近过期时自动刷新。
+
 ## 查询视频素材
 
 查询今天上传的视频素材：

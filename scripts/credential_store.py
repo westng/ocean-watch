@@ -348,6 +348,7 @@ def status(config_path=None):
         "has_refresh_token": not is_missing(credentials.get("refresh_token")),
         "access_token_expires_at": credentials.get("access_token_expires_at"),
         "refresh_token_expires_at": credentials.get("refresh_token_expires_at"),
+        "last_token_update_at": credentials.get("last_token_update_at"),
         "authorized_advertiser_count": len(credentials.get("authorized_advertiser_ids") or []),
     }
     if config_path:

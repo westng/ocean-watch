@@ -9,8 +9,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import credential_store
 import config_paths
+import credential_store
 
 
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
@@ -92,6 +92,31 @@ def token_has_ttl(config, margin_seconds=DEFAULT_REFRESH_MARGIN_SECONDS):
         # Legacy/manual token: keep backward compatibility and let the API response decide.
         return True
     return expires_at - now_utc() > dt.timedelta(seconds=margin_seconds)
+
+
+def refresh_token_has_ttl(config, margin_seconds=0):
+    refresh_token = get_path(config, "api.refresh_token")
+    if is_missing(refresh_token):
+        return False
+    expires_at = parse_time(get_path(config, "api.refresh_token_expires_at"))
+    if not expires_at:
+        return True
+    return expires_at - now_utc() > dt.timedelta(seconds=margin_seconds)
+
+
+def token_next_action(config):
+    if token_has_ttl(config):
+        return "ready"
+    if refresh_token_has_ttl(config):
+        return "refresh"
+    return "reauthorize"
+
+
+def advertiser_is_authorized(advertiser_id, authorized_ids):
+    if is_missing(advertiser_id):
+        return False
+    normalized_id = str(advertiser_id)
+    return any(str(item) == normalized_id for item in (authorized_ids or []))
 
 
 def oauth_base_url(config):
@@ -252,6 +277,8 @@ def exchange_auth_code(config_path, auth_code, config=None):
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
 
     data = response.get("data") or {}
+    if is_missing(data.get("access_token")) or is_missing(data.get("refresh_token")):
+        raise RuntimeError("OAuth authorization response did not include access_token and refresh_token")
     updated = update_token_fields(config, data)
     save_credentials(updated)
     return updated, redact({
@@ -270,6 +297,10 @@ def refresh_access_token(config_path, config=None):
     missing = required_oauth_missing(config, include_refresh=True)
     if missing:
         raise RuntimeError("missing OAuth refresh fields: " + ", ".join(missing))
+    if not refresh_token_has_ttl(config):
+        raise RuntimeError(
+            "OAuth refresh token is expired; run scripts/oauth_local_authorize.py to authorize again"
+        )
 
     payload = {
         "app_id": int(get_path(config, "api.app_id")),
@@ -282,6 +313,8 @@ def refresh_access_token(config_path, config=None):
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
 
     data = response.get("data") or {}
+    if is_missing(data.get("access_token")):
+        raise RuntimeError("OAuth refresh response did not include access_token")
     updated = update_token_fields(config, data)
     save_credentials(updated)
     return updated, redact({
@@ -331,8 +364,13 @@ def main():
         "access_token_expires_at": get_path(config, "api.access_token_expires_at"),
         "refresh_token_expires_at": get_path(config, "api.refresh_token_expires_at"),
         "token_has_ttl": token_has_ttl(config),
+        "refresh_token_has_ttl": refresh_token_has_ttl(config),
+        "next_action": token_next_action(config),
         "authorized_advertiser_count": len(get_path(config, "api.authorized_advertiser_ids", []) or []),
-        "advertiser_id_authorized": get_path(config, "account.advertiser_id") in (get_path(config, "api.authorized_advertiser_ids", []) or []),
+        "advertiser_id_authorized": advertiser_is_authorized(
+            get_path(config, "account.advertiser_id"),
+            get_path(config, "api.authorized_advertiser_ids", []),
+        ),
         "credential_backend": credential_store.backend_name(),
         "project_config_has_sensitive_fields": credential_store.status(config_path).get("project_config_has_sensitive_fields"),
     }
