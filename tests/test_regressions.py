@@ -13,14 +13,17 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "scripts"
+SKILL = ROOT / "skills" / "ads-plan-monitor"
+SCRIPTS = SKILL / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import batch_create_from_today_videos
 import config_paths
+import configure_official_mcp
 import create_plan
 import credential_store
 import first_run
+import oceanengine_mcp_bridge
 import token_manager
 import validate_config
 
@@ -152,6 +155,22 @@ class CreatePlanTests(unittest.TestCase):
 
 
 class ConfigAndCredentialTests(unittest.TestCase):
+    def test_repository_config_resolves_from_plugin_checkout(self):
+        self.assertEqual(
+            config_paths.project_config_path(),
+            ROOT / "config" / "ads-plan-monitor" / "config.json",
+        )
+
+    def test_installed_skill_without_git_uses_home_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            start = Path(directory) / "skills" / "ads-plan-monitor" / "scripts"
+            start.mkdir(parents=True)
+            with mock.patch.object(config_paths, "repository_root", return_value=None):
+                self.assertEqual(
+                    config_paths.resolve_config_path(),
+                    config_paths.home_config_path(),
+                )
+
     def test_environment_config_precedence(self):
         with mock.patch.dict(os.environ, {config_paths.CONFIG_ENV: "~/env-config.json"}, clear=False):
             self.assertEqual(config_paths.resolve_config_path(), Path("~/env-config.json").expanduser())
@@ -172,6 +191,14 @@ class ConfigAndCredentialTests(unittest.TestCase):
         cleaned = credential_store.strip_sensitive_config(config)
         self.assertEqual(cleaned["api"], {"base_url": "u"})
 
+    def test_developer_id_is_not_merged_into_business_api_config(self):
+        merged = credential_store.merge_credentials(
+            {"api": {"base_url": "https://example.com"}},
+            {"access_token": "token", "developer_id": "developer-1"},
+        )
+        self.assertEqual(merged["api"]["access_token"], "token")
+        self.assertNotIn("developer_id", merged["api"])
+
     def test_macos_hex_encoded_credentials_are_decoded(self):
         data = {"access_token": "token", "refresh_token": "refresh"}
         encoded = json.dumps(data).encode("utf-8").hex()
@@ -180,6 +207,111 @@ class ConfigAndCredentialTests(unittest.TestCase):
     def test_invalid_stored_credentials_raise_clear_error(self):
         with self.assertRaisesRegex(RuntimeError, "not valid JSON"):
             credential_store.decode_stored_credentials("not-json")
+
+
+class OfficialMcpTests(unittest.TestCase):
+    def bridge_server(self):
+        return {
+            "transport": {
+                "type": "stdio",
+                "command": sys.executable,
+                "args": [str(configure_official_mcp.bridge_path())],
+            }
+        }
+
+    def test_bridge_url_encodes_ids(self):
+        url = oceanengine_mcp_bridge.build_url("app id", "developer/id")
+        self.assertIn("app_id=app+id", url)
+        self.assertIn("developer_id=developer%2Fid", url)
+
+    def test_bridge_rejects_untrusted_message_endpoint(self):
+        with self.assertRaisesRegex(RuntimeError, "untrusted"):
+            oceanengine_mcp_bridge.validated_message_endpoint(
+                "https://open.oceanengine.com/sse", "https://example.com/messages"
+            )
+
+    def test_status_is_redacted(self):
+        with mock.patch.object(
+            configure_official_mcp,
+            "get_server",
+            return_value=self.bridge_server(),
+        ), mock.patch.object(configure_official_mcp.shutil, "which", return_value="codex"):
+            result = configure_official_mcp.status(
+                {"app_id": "app-1", "developer_id": "developer-1"}
+            )
+        self.assertTrue(result["ready"])
+        self.assertNotIn("app-1", json.dumps(result))
+        self.assertNotIn("developer-1", json.dumps(result))
+
+    def test_configure_registers_stdio_bridge(self):
+        credentials = {"app_id": "app-1"}
+        calls = []
+
+        def fake_run(arguments, check=False):
+            calls.append(arguments)
+            return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+        with mock.patch.object(credential_store, "read_credentials", return_value=credentials), \
+                mock.patch.object(credential_store, "configure_developer_id"), \
+                mock.patch.object(oceanengine_mcp_bridge, "probe", return_value=["tool-1"]), \
+                mock.patch.object(configure_official_mcp, "get_server", side_effect=[None, self.bridge_server()]), \
+                mock.patch.object(configure_official_mcp, "run_codex", side_effect=fake_run), \
+                mock.patch.object(configure_official_mcp.shutil, "which", return_value="codex"):
+            result = configure_official_mcp.configure("developer-1")
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["verified_tool_count"], 1)
+        self.assertEqual(calls[0][:4], ["mcp", "add", configure_official_mcp.SERVER_NAME, "--"])
+        self.assertEqual(Path(calls[0][4]).resolve(), Path(sys.executable).resolve())
+        self.assertEqual(Path(calls[0][5]).resolve(), configure_official_mcp.bridge_path())
+        self.assertNotIn("app-1", json.dumps(calls))
+        self.assertNotIn("developer-1", json.dumps(calls))
+
+    def test_failed_registration_does_not_store_developer_id(self):
+        with mock.patch.object(
+            credential_store,
+            "read_credentials",
+            return_value={"app_id": "app-1"},
+        ), mock.patch.object(
+            credential_store,
+            "configure_developer_id",
+        ) as save, mock.patch.object(
+            configure_official_mcp,
+            "get_server",
+            return_value=None,
+        ), mock.patch.object(
+            oceanengine_mcp_bridge,
+            "probe",
+            return_value=["tool-1"],
+        ), mock.patch.object(
+            configure_official_mcp,
+            "run_codex",
+            return_value=SimpleNamespace(returncode=1, stdout="", stderr="failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Unable to register"):
+                configure_official_mcp.configure("developer-1")
+        save.assert_not_called()
+
+    def test_failed_probe_does_not_change_local_state(self):
+        with mock.patch.object(
+            credential_store,
+            "read_credentials",
+            return_value={"app_id": "app-1"},
+        ), mock.patch.object(
+            credential_store,
+            "configure_developer_id",
+        ) as save, mock.patch.object(
+            oceanengine_mcp_bridge,
+            "probe",
+            side_effect=RuntimeError("Official MCP rejected the configured developer credentials"),
+        ), mock.patch.object(
+            configure_official_mcp,
+            "run_codex",
+        ) as run_codex:
+            with self.assertRaisesRegex(RuntimeError, "rejected"):
+                configure_official_mcp.configure("developer-1")
+        save.assert_not_called()
+        run_codex.assert_not_called()
 
 
 class FileLockTests(unittest.TestCase):

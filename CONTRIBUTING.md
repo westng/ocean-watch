@@ -2,23 +2,27 @@
 
 > Organization: westng
 > Project: ocean-watch
+> Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
-欢迎改进 `ocean-watch`。这个仓库维护的是 Codex Skill，请尽量让变更保持小而清楚。
+欢迎改进 `ocean-watch`。这个仓库维护的是 Codex Plugin，请尽量让变更保持小而清楚。
 
 ## 开发原则
 
-- `SKILL.md` 只放 Codex 执行任务所需的核心指令。
-- 详细规则放在 `references/`。
-- 可重复、容易出错的 API 流程放在 `scripts/`。
+- `.codex-plugin/plugin.json` 只放可公开的 Plugin 元数据。
+- `skills/ads-plan-monitor/SKILL.md` 只放 Codex 执行任务所需的核心指令。
+- 详细规则放在 `skills/ads-plan-monitor/references/`。
+- 可重复、容易出错的 API 流程放在 `skills/ads-plan-monitor/scripts/`。
 - 示例文件必须使用占位符，不要放真实账户、商品、品牌、投放链接或 token。
 - 默认只读查询；写操作必须由用户明确要求。
 
 ## 提交前检查
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile scripts/*.py
-python3 -m json.tool assets/config.example.json >/tmp/ocean-watch-config-check.json
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/ads-plan-monitor/scripts/*.py
+python3 -m json.tool .codex-plugin/plugin.json >/tmp/ocean-watch-plugin-check.json
+python3 -m json.tool .agents/plugins/marketplace.json >/tmp/ocean-watch-marketplace-check.json
+python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/tmp/ocean-watch-config-check.json
 python3 -m unittest discover -s tests -v
 git diff --check
 git status --short --ignored

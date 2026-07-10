@@ -2,6 +2,7 @@
 
 > Organization: westng
 > Project: ocean-watch
+> Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
 `ocean-watch` 把业务配置和 OAuth 凭据分开保存：
@@ -15,7 +16,7 @@
 
 ```bash
 mkdir -p config/ads-plan-monitor
-cp assets/config.example.json config/ads-plan-monitor/config.json
+cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/config.json
 ```
 
 `config/` 已被 `.gitignore` 排除。这个目录用于保存每个使用者自己的真实广告账户和模板信息。
@@ -66,7 +67,7 @@ cp assets/config.example.json config/ads-plan-monitor/config.json
 首次使用前，把巨量引擎开放平台 App ID 和 Secret 保存到本机凭据仓库：
 
 ```bash
-python3 scripts/credential_store.py \
+python3 skills/ads-plan-monitor/scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
   --set-app
 ```
@@ -94,7 +95,7 @@ http://127.0.0.1:8787/oauth/callback
 启动授权：
 
 ```bash
-python3 scripts/oauth_local_authorize.py \
+python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
   --config config/ads-plan-monitor/config.json
 ```
 
@@ -110,7 +111,7 @@ python3 scripts/oauth_local_authorize.py \
 ## 检查状态
 
 ```bash
-python3 scripts/token_manager.py \
+python3 skills/ads-plan-monitor/scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
   --status
 ```
@@ -124,16 +125,16 @@ python3 scripts/token_manager.py \
 查看状态：
 
 ```bash
-python3 scripts/token_manager.py --status
+python3 skills/ads-plan-monitor/scripts/token_manager.py --status
 ```
 
 手动强制刷新：
 
 ```bash
-python3 scripts/token_manager.py --refresh
+python3 skills/ads-plan-monitor/scripts/token_manager.py --refresh
 ```
 
-状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `scripts/oauth_local_authorize.py`。
+状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `skills/ads-plan-monitor/scripts/oauth_local_authorize.py`。
 
 ## 授权账户同步
 
@@ -152,7 +153,7 @@ OAuth 换 Token 响应不是完整的广告主账户详情。首次或重新授�
 不要把授权主体数量当作可投放广告主数量。手动重新同步可运行：
 
 ```bash
-python3 scripts/token_manager.py --sync-accounts
+python3 skills/ads-plan-monitor/scripts/token_manager.py --sync-accounts
 ```
 
 普通 Access Token 刷新只轮换 Token，不重复展开账户关系，避免每次刷新拖慢查询和创建流程。
@@ -162,12 +163,30 @@ python3 scripts/token_manager.py --sync-accounts
 ## 配置校验
 
 ```bash
-python3 scripts/first_run.py \
+python3 skills/ads-plan-monitor/scripts/first_run.py \
   --config config/ads-plan-monitor/config.json
 
-python3 scripts/validate_config.py \
+python3 skills/ads-plan-monitor/scripts/validate_config.py \
   config/ads-plan-monitor/config.json \
   --mode all
 ```
 
 `validate_config.py` 支持 `query`、`create-preview`、`create-submit` 和 `all` 四种模式，所选模式未就绪时返回非零退出码。`first_run.py` 更适合第一次使用；验证器更适合提交前或排查字段缺失。
+
+## 官方开发文档 MCP
+
+官方 MCP 用于查询巨量引擎开放平台文档、OpenAPI Schema 和 SDK 示例，不执行广告业务操作。其地址需要当前用户匹配的 `app_id` 与 `developer_id`，因此不能写入开源 Plugin 清单。
+
+先通过 `credential_store.py --set-app` 保存 App ID，再运行：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py
+```
+
+脚本安全提示输入 `developer_id`，先执行官方 `initialize` 与 `tools/list` 握手，验证成功后将标识符保存到同一系统凭据仓库，并通过 Codex CLI 把本地 SSE→stdio 桥注册为 `oceanengine-developer-docs`。Codex 配置中不保存包含个人参数的官方 URL。检查脱敏状态：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py --status
+```
+
+`ready: true` 表示当前 Codex MCP 已注册本地桥接器且本机凭据完整。首次配置成功还会返回 `verified_tool_count`。状态输出不包含 MCP URL、App ID 或 Developer ID。重新运行配置命令可重新验证或替换旧绑定。

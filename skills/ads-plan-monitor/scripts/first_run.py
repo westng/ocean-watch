@@ -7,6 +7,7 @@ from pathlib import Path
 
 import config_paths
 import credential_store
+import configure_official_mcp
 import validate_config
 
 
@@ -20,7 +21,7 @@ def skill_root():
 
 
 def project_root():
-    return skill_root()
+    return config_paths.plugin_root()
 
 
 def default_project_config():
@@ -135,6 +136,8 @@ def main():
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     config = apply_plan_template(raw_config)
     query_missing, create_missing, field_preview = check_fields(config)
+    mcp_status = configure_official_mcp.status()
+    scripts_dir = skill_root() / "scripts"
 
     print(json.dumps({
         "mode": "first_run_guide",
@@ -155,9 +158,14 @@ def main():
         "oauth_setup": {
             "redirect_uri": get_path(raw_config, "oauth.redirect_uri"),
             "credential_backend": credential_store.backend_name(),
-            "set_app_command": f"scripts/credential_store.py --config {config_path} --set-app",
-            "local_authorize_command": f"scripts/oauth_local_authorize.py --config {config_path}",
-            "token_status_command": f"scripts/token_manager.py --config {config_path} --status",
+            "set_app_command": f'python3 "{scripts_dir / "credential_store.py"}" --config "{config_path}" --set-app',
+            "local_authorize_command": f'python3 "{scripts_dir / "oauth_local_authorize.py"}" --config "{config_path}"',
+            "token_status_command": f'python3 "{scripts_dir / "token_manager.py"}" --config "{config_path}" --status',
+        },
+        "official_docs_mcp": {
+            **mcp_status,
+            "configure_command": f'python3 "{scripts_dir / "configure_official_mcp.py"}"',
+            "status_command": f'python3 "{scripts_dir / "configure_official_mcp.py"}" --status',
         },
         "additional_fields_for_create_plan": create_missing,
         "missing_query_fields": query_missing,

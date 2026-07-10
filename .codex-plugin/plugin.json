@@ -1,0 +1,38 @@
+{
+  "name": "ocean-watch",
+  "version": "0.2.0",
+  "description": "Codex plugin for Ocean Engine plan creation, material reporting, OAuth account access, and monitoring analysis.",
+  "author": {
+    "name": "westng",
+    "url": "https://github.com/westng"
+  },
+  "homepage": "https://github.com/westng/ocean-watch",
+  "repository": "https://github.com/westng/ocean-watch",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "ocean-engine",
+    "advertising",
+    "campaign-monitoring"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "巨量引擎盯盘助手",
+    "shortDescription": "计划创建、素材报表、账户授权与盯盘分析",
+    "longDescription": "通过巨量引擎官方 Marketing API 完成 OAuth 授权、广告主账户同步、计划创建、素材查询、报表汇总和盯盘分析，并可在本机接入官方开发文档 MCP。",
+    "developerName": "westng",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/westng/ocean-watch",
+    "defaultPrompt": [
+      "查询当前广告账户今天素材消耗前十",
+      "按今天上传的视频素材创建计划",
+      "检查 OAuth、广告主账户和 Token 状态"
+    ],
+    "brandColor": "#1677FF"
+  }
+}

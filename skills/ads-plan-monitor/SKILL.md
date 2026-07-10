@@ -7,6 +7,7 @@ description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and 
 
 > Organization: westng
 > Project: ocean-watch
+> Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
 ## Purpose
@@ -25,7 +26,7 @@ Treat "创建计划" as a two-step API workflow:
 
 Default to generating and validating payloads first. Submit to the API only after the user explicitly asks to create online plans and the local config is complete.
 
-When the user asks about skill structure, explain that `ads-plan-monitor` is one skill with internal branches, and this repository root is the skill root.
+When the user asks about structure, explain that `ocean-watch` is one Codex Plugin containing one `ads-plan-monitor` Skill with internal branches. The repository root is the Plugin root; this directory is the Skill root.
 
 ## Required References
 
@@ -37,6 +38,19 @@ When the user asks about skill structure, explain that `ads-plan-monitor` is one
   - Custom report config: `https://open.oceanengine.com/labels/34/docs/1755261744248832?origin=left_nav`
   - Custom report data: `https://open.oceanengine.com/labels/34/docs/1741387668314126?origin=left_nav`
 - If the local reference and official docs conflict, prefer the official docs and call out the conflict.
+
+## Official Documentation MCP
+
+The Plugin can register Ocean Engine's official developer-documentation MCP as `oceanengine-developer-docs`. It is a documentation MCP, not a business-operation MCP. Continue to use the bundled Python scripts and official Marketing API for account data and plan creation.
+
+When official MCP tools are available:
+
+- Use `open_api_doc_gen` to find official endpoint paths and field semantics.
+- Use `open_api_schema_gen` before implementing or changing request/response payload fields.
+- Use `open_sdk_example_code_tool` only when an official SDK example is useful.
+- Prefer MCP results over bundled API notes when they conflict, and update local notes only when the user asks to change the repository.
+
+If MCP tools are missing, run `scripts/configure_official_mcp.py --status`. For first-time setup, run `scripts/configure_official_mcp.py`; it reads `app_id` from the OS credential store, prompts securely for `developer_id`, verifies the official tool list, and registers the bundled SSE-to-stdio bridge in the user's Codex config. The bridge builds the sensitive official URL only in memory. Never print or paste that URL because it contains both identifiers. MCP readiness is optional for business API use; fall back to `references/official-api-notes.md` when unavailable.
 
 ## Local Config
 
@@ -124,7 +138,8 @@ For a new teammate, use this onboarding flow:
    - `account.advertiser_id`
 4. If app credentials are missing, run `scripts/credential_store.py --config <config-path> --set-app`.
 5. If token fields are missing, run `scripts/oauth_local_authorize.py --config <config-path>` and complete browser authorization. The approved local redirect URI is `http://127.0.0.1:8787/oauth/callback`; it must exactly match the app setting.
-6. Extra fields for creating plans:
+6. If the official developer-documentation MCP is not ready, run `scripts/configure_official_mcp.py`. This is recommended for development and troubleshooting but does not block query or create readiness.
+7. Extra fields for creating plans:
    - `materials.video_ids`
    - `materials.video_cover_ids` if required
    - `resolved_ids.city_ids`
@@ -135,8 +150,8 @@ For a new teammate, use this onboarding flow:
    - `links.landing_page_url`
    - `links.open_url`
    - titles and product defaults
-7. After the user updates config and authorizes, run `scripts/validate_config.py <config-path> --mode all` and `scripts/token_manager.py --config <config-path> --status`.
-8. If `ok_for_query_data` is true, the teammate can ask for "今天汇总数据" or "消耗前十". If create fields are still missing, allow query branch but block online plan creation.
+8. After the user updates config and authorizes, run `scripts/validate_config.py <config-path> --mode all` and `scripts/token_manager.py --config <config-path> --status`.
+9. If `ok_for_query_data` is true, the teammate can ask for "今天汇总数据" or "消耗前十". If create fields are still missing, allow query branch but block online plan creation.
 
 ### 3. Build project payload
 

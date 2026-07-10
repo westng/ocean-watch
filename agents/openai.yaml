@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ads Plan Monitor"
-  short_description: "一个技能覆盖初始化、巨量计划创建、查询数据与逻辑策略"
-  default_prompt: "Use $ads-plan-monitor to initialize config, query unit material data, create plans, or analyze strategy through official Ocean Engine APIs."

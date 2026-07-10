@@ -17,6 +17,7 @@ PLACEHOLDER_PREFIX = "REPLACE_WITH"
 INSECURE_FALLBACK_ENV = "ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK"
 SENSITIVE_KEYS = {
     "app_id",
+    "developer_id",
     "secret",
     "access_token",
     "refresh_token",
@@ -27,6 +28,7 @@ SENSITIVE_KEYS = {
     "oauth_authorized_accounts",
     "authorized_advertiser_ids",
 }
+API_CREDENTIAL_KEYS = SENSITIVE_KEYS - {"developer_id"}
 
 
 def is_missing(value):
@@ -290,7 +292,7 @@ def merge_credentials(config, credentials=None):
     credentials = read_credentials() if credentials is None else credentials
     merged = json.loads(json.dumps(config, ensure_ascii=False))
     api = merged.setdefault("api", {})
-    for key in SENSITIVE_KEYS:
+    for key in API_CREDENTIAL_KEYS:
         if key in credentials and not is_missing(credentials[key]):
             api[key] = credentials[key]
     return merged
@@ -346,6 +348,16 @@ def configure_app(app_id=None, secret=None):
     }
 
 
+def configure_developer_id(developer_id):
+    credentials = read_credentials()
+    credentials["developer_id"] = str(developer_id).strip()
+    backend = write_credentials(credentials)
+    return {
+        "backend": backend,
+        "has_developer_id": not is_missing(credentials.get("developer_id")),
+    }
+
+
 def status(config_path=None):
     backend = backend_name()
     credentials = read_credentials()
@@ -361,6 +373,7 @@ def status(config_path=None):
         "secure_backend_available": backend not in {"file-fallback", "unavailable"},
         "insecure_file_fallback": backend == "file-fallback",
         "has_app_id": not is_missing(credentials.get("app_id")),
+        "has_developer_id": not is_missing(credentials.get("developer_id")),
         "has_secret": not is_missing(credentials.get("secret")),
         "has_access_token": not is_missing(credentials.get("access_token")),
         "has_refresh_token": not is_missing(credentials.get("refresh_token")),
