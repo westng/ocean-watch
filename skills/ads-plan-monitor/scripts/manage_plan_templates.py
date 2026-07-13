@@ -50,6 +50,9 @@ def list_templates(config):
                 "configured": bool(titles),
                 "title_count": len(titles),
                 "titles": titles,
+                "copied_from_template": normalized["copy_materials"].get(
+                    "copied_from_template"
+                ),
             },
             "bindings": bindings,
             "legacy": normalized["legacy"],
@@ -127,14 +130,28 @@ def create_template(config, args):
     return config, name
 
 
-def set_copy_materials(config, template_name, titles):
+def set_copy_materials(config, template_name, titles=None, from_template=None):
     templates = config.get("plan_templates") or {}
     if template_name not in templates:
         raise ValueError(f"plan template not found: {template_name}")
     template = templates[template_name]
     if int(config.get("plan_template_schema_version") or 1) < plan_templates.SCHEMA_VERSION:
         raise ValueError("migrate the config before setting copy materials")
-    template["copy_materials"] = {"titles": normalize_titles(titles)}
+    if bool(titles) == bool(from_template):
+        raise ValueError("provide either titles or one source template")
+    copy_materials = {}
+    if from_template:
+        source = templates.get(from_template)
+        if source is None:
+            raise ValueError(f"source plan template not found: {from_template}")
+        source_template = plan_templates.normalize_template(config, from_template, source)
+        copy_materials["titles"] = normalize_titles(
+            source_template["copy_materials"].get("titles")
+        )
+        copy_materials["copied_from_template"] = from_template
+    else:
+        copy_materials["titles"] = normalize_titles(titles)
+    template["copy_materials"] = copy_materials
     (template.get("overrides") or {}).pop("titles", None)
     return config
 
@@ -169,11 +186,15 @@ def main(argv=None):
 
     set_copy = subparsers.add_parser("set-copy")
     set_copy.add_argument("--template", required=True)
-    set_copy.add_argument(
+    copy_source = set_copy.add_mutually_exclusive_group(required=True)
+    copy_source.add_argument(
         "--title",
         action="append",
-        required=True,
         help="Promotion copy title; repeat this option to configure multiple titles.",
+    )
+    copy_source.add_argument(
+        "--from-template",
+        help="Copy only copy materials from another plan template.",
     )
     args = parser.parse_args(argv)
 
@@ -188,7 +209,12 @@ def main(argv=None):
         config, created_name = create_template(config, args)
         changed = True
     elif args.command == "set-copy":
-        config = set_copy_materials(config, args.template, args.title)
+        config = set_copy_materials(
+            config,
+            args.template,
+            titles=args.title,
+            from_template=args.from_template,
+        )
         changed = True
     if changed:
         save_config(path, config)

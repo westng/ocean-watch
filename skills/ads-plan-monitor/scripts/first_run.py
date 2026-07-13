@@ -175,6 +175,7 @@ def main():
             "migrate_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" migrate',
             "create_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create --advertiser-id <广告主ID> --platform <平台> --traffic-source CID --product-id <商品ID> --product-name <商品名> --title <文案1> --title <文案2> --activate',
             "set_copy_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" set-copy --template <模板名> --title <文案1> --title <文案2>',
+            "copy_from_template_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" set-copy --template <目标模板名> --from-template <来源模板名>',
         },
         "minimum_fields_for_query_data": [
             "local app_id and secret in the OS credential store",

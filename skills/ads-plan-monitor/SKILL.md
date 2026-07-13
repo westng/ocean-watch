@@ -96,6 +96,8 @@ Keep only genuinely reusable delivery and geographic settings in `default_plan_t
 
 Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Use repeated `--title` options while creating a template, or `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing copy materials as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
 
+When the user explicitly confirms two plan templates represent the same product, allow copying only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command.
+
 Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show templates with their advertiser IDs. Use its `create` command to guide the user through advertiser ID, platform, traffic source, product ID, and product name; use `migrate` for legacy schema v1 configs. Template differences live under `plan_templates.<模板名>.overrides` and may override `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`.
 
 ## Workflow

@@ -300,6 +300,38 @@ class CreatePlanTests(unittest.TestCase):
         row = manage_plan_templates.list_templates(updated)[0]
         self.assertEqual(row["copy_materials"]["title_count"], 2)
 
+    def test_copy_materials_can_copy_across_advertisers(self):
+        config = self.v2_config()
+        source_name = config["active_plan_template"]
+        config["plan_templates"][source_name]["copy_materials"] = {
+            "titles": ["第一条来源文案", "第二条来源文案"],
+        }
+        target_name = "京东-CID-同商品-product-1"
+        config["plan_templates"][target_name] = {
+            "display_name": target_name,
+            "bindings": {
+                "advertiser_id": "456",
+                "platform": "京东",
+                "traffic_source": "CID",
+                "product_id": "product-1",
+                "product_name": "同商品",
+            },
+            "copy_materials": {"titles": []},
+            "overrides": {},
+        }
+        updated = manage_plan_templates.set_copy_materials(
+            config,
+            target_name,
+            from_template=source_name,
+        )
+        copied = updated["plan_templates"][target_name]["copy_materials"]
+        self.assertEqual(copied["titles"], ["第一条来源文案", "第二条来源文案"])
+        self.assertEqual(copied["copied_from_template"], source_name)
+        self.assertEqual(
+            updated["plan_templates"][target_name]["bindings"]["advertiser_id"],
+            "456",
+        )
+
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"

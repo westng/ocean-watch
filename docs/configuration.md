@@ -107,6 +107,18 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 
 `--title` 可以重复传入；空文案会被拒绝，重复文案会自动去重。模板列表会显示 `copy_materials.configured`、`title_count` 和当前文案内容。创建 payload 时，这些文案会转换成官方字段 `promotion_materials.title_material_list`。
 
+相同商品可以只复制另一个创建计划模板的文案素材，即使两个模板属于不同广告主：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  set-copy \
+  --template "目标创建计划模板" \
+  --from-template "来源创建计划模板"
+```
+
+此操作只复制 `copy_materials.titles` 并记录 `copied_from_template`，不会复制广告主绑定、投放参数、链接、素材 ID 或账户资产。
+
 旧版配置先执行 `manage_plan_templates.py ... migrate`。同一配置可以维护多个广告主、平台和商品模板；Codex 默认读取 `active_plan_template`，用户指定模板时则使用对应的 `plan_templates.<模板名>`。
 
 ## 保存 App 凭据

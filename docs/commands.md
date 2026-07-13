@@ -171,6 +171,16 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   --title "第二条文案"
 ```
 
+相同商品从另一个创建计划模板复制文案：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  set-copy \
+  --template "目标创建计划模板" \
+  --from-template "来源创建计划模板"
+```
+
 先预览 payload：
 
 ```bash
