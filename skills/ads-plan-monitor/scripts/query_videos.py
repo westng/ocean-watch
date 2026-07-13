@@ -156,11 +156,18 @@ def main():
         default="library-get",
         help="library-get searches the video library; ad-get validates promotion-usable video IDs; cover-suggest gets recommended video covers.",
     )
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=args.advertiser_id,
+        auth_account_id=args.auth_account_id,
+    )
     video_ids = split_csv(args.video_id)
     if not video_ids and args.mode in {"ad-get", "cover-suggest"}:
         video_ids = [str(video_id) for video_id in get_path(config, "materials.video_ids", [])]

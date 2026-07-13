@@ -48,11 +48,18 @@ def main():
     parser.add_argument("--landing-type", default="SHOP")
     parser.add_argument("--marketing-goal", default="VIDEO_AND_IMAGE")
     parser.add_argument("--delivery-mode", default="PROCEDURAL")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        auth_account_id=args.auth_account_id,
+    )
     filtering = {}
     if args.name:
         filtering["name"] = args.name

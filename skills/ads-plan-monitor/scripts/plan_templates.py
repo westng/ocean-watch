@@ -4,7 +4,7 @@ import copy
 
 SCHEMA_VERSION = 2
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
-REQUIRED_BINDINGS = ("advertiser_id", "platform", "traffic_source", "product_id", "product_name")
+REQUIRED_BINDINGS = ("channel", "advertiser_id", "platform", "traffic_source", "product_id", "product_name")
 SHARED_RESOLVED_ID_FIELDS = ("city_ids", "city_names")
 PRODUCT_DEFAULT_FIELDS = ("product_name", "product_id", "source")
 
@@ -63,6 +63,7 @@ def binding_error(bindings):
 def legacy_bindings(config, template):
     defaults = template.get("defaults") or {}
     return {
+        "channel": (config.get("account") or {}).get("channel") or "marketing",
         "advertiser_id": (config.get("account") or {}).get("advertiser_id"),
         "platform": template.get("platform"),
         "traffic_source": template.get("traffic_source"),
@@ -78,10 +79,17 @@ def normalize_template(config, name, template):
         copy_materials = copy.deepcopy(template.get("copy_materials") or {})
         if legacy_titles is not None and "titles" not in copy_materials:
             copy_materials["titles"] = legacy_titles
+        bindings = copy.deepcopy(template.get("bindings") or {})
+        bindings.setdefault(
+            "channel",
+            (config.get("account") or {}).get("channel")
+            or config.get("default_channel")
+            or "marketing",
+        )
         return {
             "name": name,
             "display_name": template.get("display_name", name),
-            "bindings": copy.deepcopy(template.get("bindings") or {}),
+            "bindings": bindings,
             "copy_materials": copy_materials,
             "overrides": overrides,
             "legacy": False,
@@ -126,7 +134,7 @@ def shared_default_bundle(bundle):
     return shared
 
 
-def apply(config, template_name=None, advertiser_id=None, require_template=None):
+def apply(config, template_name=None, advertiser_id=None, require_template=None, channel=None):
     effective = copy.deepcopy(config)
     templates = config.get("plan_templates") or {}
     selected = template_name or config.get("active_plan_template")
@@ -156,6 +164,13 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None)
         raise ValueError(error)
 
     bound_advertiser_id = bindings.get("advertiser_id")
+    bound_channel = bindings.get("channel") or "marketing"
+    requested_channel = channel or (config.get("account") or {}).get("channel") or config.get("default_channel") or "marketing"
+    if str(bound_channel) != str(requested_channel):
+        raise ValueError(
+            f"plan template {selected} is bound to channel {bound_channel}, "
+            f"not channel {requested_channel}"
+        )
     requested_advertiser_id = advertiser_id or (config.get("account") or {}).get("advertiser_id")
     if not is_missing(bound_advertiser_id) and not is_missing(requested_advertiser_id):
         if str(bound_advertiser_id) != str(requested_advertiser_id):
@@ -172,6 +187,7 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None)
 
     if not is_missing(bound_advertiser_id):
         effective.setdefault("account", {})["advertiser_id"] = bound_advertiser_id
+    effective.setdefault("account", {})["channel"] = bound_channel
     if not is_missing(bindings.get("product_name")):
         effective.setdefault("defaults", {})["product_name"] = bindings["product_name"]
     if not is_missing(bindings.get("product_id")):
@@ -199,6 +215,10 @@ def migrate(config):
     templates = {}
     for name, raw_template in (config.get("plan_templates") or {}).items():
         normalized = normalize_template(config, name, raw_template)
+        normalized["bindings"].setdefault(
+            "channel",
+            (config.get("account") or {}).get("channel") or "marketing",
+        )
         effective = copy.deepcopy(original_base)
         for section in TEMPLATE_SECTIONS:
             if section in normalized["overrides"]:

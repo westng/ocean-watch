@@ -83,11 +83,18 @@ def main():
         help="Data topic or comma-separated topics, such as MATERIAL_DATA,BASIC_DATA.",
     )
     parser.add_argument("--full", action="store_true", help="Print the full API response.")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        auth_account_id=args.auth_account_id,
+    )
     data_topics = split_csv(args.data_topic) or DEFAULT_DATA_TOPICS
     params = {
         "advertiser_id": get_path(config, "account.advertiser_id"),

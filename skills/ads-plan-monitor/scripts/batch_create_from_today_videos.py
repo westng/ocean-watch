@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import create_plan
 import plan_templates
 import config_paths
+import channels
 import query_videos
 import token_manager
 
@@ -509,12 +510,20 @@ def process_account(raw_config, config_path, advertiser_id, template_name, args)
         raw_config,
         template_name,
         advertiser_id=advertiser_id,
+        channel=args.channel,
     )
-    raw_config = token_manager.ensure_access_token(config_path, raw_config)
+    raw_config = token_manager.ensure_access_token(
+        config_path,
+        raw_config,
+        channel=args.channel,
+        advertiser_id=advertiser_id,
+        auth_account_id=args.auth_account_id,
+    )
     base_config = plan_templates.apply(
         raw_config,
         template_name,
         advertiser_id=advertiser_id,
+        channel=args.channel,
     )
     base_config = apply_overrides(base_config, args)
     base_url = create_plan.get_path(base_config, "api.base_url")
@@ -688,10 +697,12 @@ def main():
     parser.add_argument("--include-payloads", action="store_true")
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--out")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    raw_config = channels.runtime_config(raw_config, channel=args.channel, capability="create")
     jobs = resolve_account_jobs(
         raw_config,
         args.accounts,
@@ -701,6 +712,7 @@ def main():
     preview_config = create_plan.apply_plan_template(
         raw_config,
         jobs[0]["plan_template"],
+        channel=args.channel,
     )
     if args.videos_per_unit is None:
         args.videos_per_unit = int(create_plan.get_path(preview_config, "defaults.max_videos_per_project", 5) or 5)

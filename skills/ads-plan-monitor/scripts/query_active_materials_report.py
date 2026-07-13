@@ -344,11 +344,18 @@ def main():
     )
     parser.add_argument("--order-field", default="stat_cost")
     parser.add_argument("--order-type", choices=["ASC", "DESC"], default="DESC")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=args.advertiser_id,
+        auth_account_id=args.auth_account_id,
+    )
     if args.advertiser_id:
         config.setdefault("account", {})["advertiser_id"] = args.advertiser_id
     base_url = get_path(config, "api.base_url")

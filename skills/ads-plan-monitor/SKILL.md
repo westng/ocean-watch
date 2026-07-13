@@ -26,6 +26,16 @@ Treat "创建计划" as a two-step API workflow:
 
 Default to generating and validating payloads first. Submit to the API only after the user explicitly asks to create online plans and the local config is complete.
 
+## Business Channels
+
+Treat channel selection as part of every authorization and business operation:
+
+- `marketing` means 巨量营销. Every currently implemented OAuth, account, creation, query, report, and strategy workflow belongs to this channel.
+- `qianchuan` means 巨量千川. Its isolated channel slot exists, but OAuth and business APIs are not implemented yet. Return `channel_not_implemented`; never reuse Marketing configuration or credentials.
+- Existing pre-channel APP ID, Secret, Token, authorized accounts, advertiser IDs, and business templates are Marketing state. Use `scripts/migrate_channels.py --config <path>` to migrate them without asking the user to authorize again.
+- A channel may contain multiple OAuth authorizations. Distinguish official authorization subjects by `account_id`, then resolve the authorization that covers the target `advertiser_id`. Pass `--auth-account-id` only to resolve ambiguity or when the user explicitly selected one.
+- Never fall back across channels. A Marketing template must contain `bindings.channel: marketing` and cannot run under Qianchuan.
+
 When the user asks about structure, explain that `ocean-watch` is one Codex Plugin containing one `ads-plan-monitor` Skill with internal branches. The repository root is the Plugin root; this directory is the Skill root.
 
 ## Development Mode Boundary
@@ -85,11 +95,12 @@ Sensitive OAuth credentials live in the user's local OS credential store through
 
 Use `scripts/validate_config.py <config-path> --mode query|create-preview|create-submit|all` to check readiness before API work. The default mode is `all`.
 Use `scripts/first_run.py` when a user is new to this skill, asks to initialize/configure it, or a config file is missing. The guide may create a local config from `assets/config.example.json`, but it must not call Ocean Engine APIs or print secrets.
-Use `scripts/credential_store.py --set-app` to save `app_id` and `secret` into the local OS credential store before first authorization.
-Use `scripts/oauth_local_authorize.py` when the user asks to 获取 token, 本地授权, or first-time OAuth setup. It starts a temporary local callback server at the configured redirect URI, opens the official authorization URL, receives `auth_code`, exchanges it for token fields, writes them to the local credential store, and prints only redacted status.
-Use `scripts/token_manager.py --status` to inspect redacted token readiness, and `scripts/token_manager.py --refresh` to force refresh through the stored `refresh_token`.
-Use `scripts/token_manager.py --sync-accounts` to sync OAuth subjects and expand real advertisers by `account_role`: direct `ADVERTISER`, customer-center roles through `/2/customer_center/advertiser/list/` with `account_source=AD`, and enterprise BP roles through `/2/ebp/advertiser/list/`. Verify expanded IDs through `/2/advertiser/info/` before saving `authorized_advertiser_ids`.
-All API scripts should call `token_manager.ensure_access_token()` before read/write API requests. This refreshes expired tokens and uses a local lock file so concurrent batch creation does not refresh the same config in parallel.
+Use `scripts/credential_store.py --channel marketing --set-app` to save the Marketing `app_id` and `secret` into the local OS credential store before first authorization.
+Use `scripts/oauth_local_authorize.py --channel marketing` when the user asks to 获取 token, 本地授权, or first-time Marketing OAuth setup. It starts a temporary local callback server at the configured redirect URI, opens the official authorization URL, receives `auth_code`, exchanges it for token fields, validates a complete account snapshot, creates a separate authorization record, and prints only redacted status. Do not overwrite another authorization unless the user explicitly confirms rebind.
+Use `scripts/token_manager.py --channel marketing --status` to inspect redacted token readiness, and `scripts/token_manager.py --channel marketing --refresh` to force refresh through the resolved authorization's stored `refresh_token`.
+Use `scripts/token_manager.py --channel marketing --sync-accounts` to sync OAuth subjects and expand real advertisers by `account_role`: direct `ADVERTISER`, customer-center roles through `/2/customer_center/advertiser/list/` with `account_source=AD`, and enterprise BP roles through `/2/ebp/advertiser/list/`. Verify all expanded IDs through `/2/advertiser/info/` and commit only a complete snapshot.
+If migration reports `pending_account_sync`, read the non-secret `authorization_id` from status and run `scripts/token_manager.py --channel marketing --authorization-id <id> --sync-accounts`. Use `--authorization-id` only for this recovery path; normal business calls resolve by target `advertiser_id` and optional official `auth_account_id`.
+All API scripts must pass `channel`, target `advertiser_id`, and optional `auth_account_id` to `token_manager.ensure_access_token()` before read/write API requests. This resolves the correct authorization, refreshes only its token, and prevents multi-account batches from sharing the wrong token.
 If an API returns `40002` / "No permission to operate account", check `scripts/token_manager.py --status`. Do not treat `oauth_authorized_account_count` as the advertiser count; customer-center and platform-role subjects are not direct ad accounts. If `advertiser_id_authorized` is false, ask the user to re-authorize with that advertiser selected or switch config to an actual authorized advertiser ID.
 Use `scripts/query_videos.py` to query account video materials through `/2/file/video/get/`, resolve video `material_id` values to promotion-ready `video_id` values, verify `/2/file/video/ad/get/` accepts them, and fetch `video_cover_id` candidates through `/2/tools/video_cover/suggest/` before submitting a promotion.
 Use `scripts/batch_create_from_today_videos.py` when the user asks to batch-create plans from today's uploaded video materials, split videos into groups such as 5 per unit, or create across multiple advertiser accounts with concurrency. This script queries videos, validates promotion-ready IDs, fetches covers with retries, skips unqualified videos by default, groups materials, then creates project/promotion pairs.
@@ -103,7 +114,7 @@ Creation parameters use schema v2 with one shared `default_plan_template` and ad
 
 `平台-CID-商品名-商品ID`
 
-Every business template must contain `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. The advertiser binding is ownership: reject single or batch creation whenever the target advertiser differs from `bindings.advertiser_id`. Never let `--advertiser-id` or `--accounts` bypass it.
+Every business template must contain `bindings.channel`, `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. Channel and advertiser bindings are ownership: reject single or batch creation whenever either target differs. Never let `--channel`, `--advertiser-id`, or `--accounts` bypass them.
 
 Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
 
@@ -157,13 +168,13 @@ Treat category and brand names as template metadata until official category or b
 For a new teammate, use this onboarding flow:
 
 1. Run `scripts/first_run.py` with no arguments for project-local setup, or `scripts/first_run.py --home-config` when the skill is installed outside a shared project.
-2. If the guide creates a config, tell the user the config path and ask them to fill only non-secret fields such as `account.advertiser_id` and `oauth.redirect_uri` in the file.
+2. If the guide creates a config, tell the user the config path and ask them to fill only non-secret fields such as `account.channel`, `account.advertiser_id`, and `channels.marketing.oauth.redirect_uri` in the file.
 3. Minimum fields for read-only query data:
-   - local `app_id` and `secret` saved through `scripts/credential_store.py --set-app`
-   - local `access_token` or `refresh_token`, normally written by `scripts/oauth_local_authorize.py`
+   - local Marketing `app_id` and `secret` saved through `scripts/credential_store.py --channel marketing --set-app`
+   - a Marketing authorization, normally written by `scripts/oauth_local_authorize.py --channel marketing`
    - `account.advertiser_id`
-4. If app credentials are missing, run `scripts/credential_store.py --config <config-path> --set-app`.
-5. If token fields are missing, run `scripts/oauth_local_authorize.py --config <config-path>` and complete browser authorization. The approved local redirect URI is `http://127.0.0.1:8787/oauth/callback`; it must exactly match the app setting.
+4. If app credentials are missing, run `scripts/credential_store.py --config <config-path> --channel marketing --set-app`.
+5. If authorization is missing, run `scripts/oauth_local_authorize.py --config <config-path> --channel marketing` and complete browser authorization. The approved local redirect URI is `http://127.0.0.1:8787/oauth/callback`; it must exactly match the Marketing app setting.
 6. If the official developer-documentation MCP is not ready, run `scripts/configure_official_mcp.py`. This is recommended for development and troubleshooting but does not block query or create readiness.
 7. Extra fields for creating plans:
    - one active business template explicitly bound to the target `advertiser_id`

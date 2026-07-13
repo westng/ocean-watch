@@ -29,6 +29,19 @@ def atomic_write_json(path, data, backup=True):
             backup_path = path.with_suffix(path.suffix + ".bak")
             backup_path.write_bytes(path.read_bytes())
         os.replace(temporary_path, path)
+        if path.read_text(encoding="utf-8") != payload:
+            raise OSError(f"atomic JSON write verification failed: {path}")
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            directory_fd = None
+        if directory_fd is not None:
+            try:
+                os.fsync(directory_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(directory_fd)
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise

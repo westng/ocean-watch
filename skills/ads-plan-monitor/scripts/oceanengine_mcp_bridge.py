@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 import credential_store
+import authorization_store
 
 
 MCP_ORIGIN = "https://open.oceanengine.com/sse"
@@ -183,7 +184,10 @@ def probe(app_id, developer_id, timeout=30):
 
 
 def main():
-    credentials = credential_store.read_credentials()
+    credentials = {
+        **authorization_store.read_app("marketing"),
+        **{"developer_id": credential_store.read_credentials().get("developer_id")},
+    }
     app_id = credentials.get("app_id")
     developer_id = credentials.get("developer_id")
     if credential_store.is_missing(app_id) or credential_store.is_missing(developer_id):

@@ -61,11 +61,18 @@ def main():
         default="ad-get",
         help="ad-get validates images by id; library-get searches this advertiser's image library.",
     )
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        auth_account_id=args.auth_account_id,
+    )
     image_ids = split_csv(args.image_id)
     if args.mode == "ad-get" and not image_ids:
         image_ids = get_path(config, "resolved_ids.product_image_ids", [])

@@ -3,15 +3,17 @@ import argparse
 import copy
 import datetime as dt
 import json
-import os
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 import config_paths
+import channels
+import authorization_store
 import credential_store
+import migrate_channels
+from process_lock import ProcessLock
 
 
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
@@ -191,106 +193,57 @@ def redact(data):
     return data
 
 
-def load_config(config_path):
+def load_config(
+    config_path,
+    channel=None,
+    advertiser_id=None,
+    auth_account_id=None,
+    authorization_id=None,
+    allow_pending=False,
+    capability=None,
+):
     path = Path(config_path).expanduser()
-    config = json.loads(path.read_text(encoding="utf-8"))
-    return credential_store.merge_credentials(config)
+    migrate_channels.assert_migration_ready(path)
+    raw_config = json.loads(path.read_text(encoding="utf-8"))
+    if int(raw_config.get("config_schema_version") or 1) < channels.CONFIG_SCHEMA_VERSION:
+        raise RuntimeError(
+            "channel migration required; run scripts/migrate_channels.py for this config"
+        )
+    runtime = channels.runtime_config(raw_config, channel=channel, capability=capability)
+    selected = channels.selected_channel(runtime, channel)
+    advertiser_id = advertiser_id or get_path(runtime, "account.advertiser_id")
+    return authorization_store.attach_runtime(
+        runtime,
+        selected,
+        advertiser_id=advertiser_id,
+        auth_account_id=auth_account_id,
+        authorization_id=authorization_id,
+        allow_pending=allow_pending,
+    )
 
 
 def save_credentials(config):
+    authorization = config.get("_authorization") or {}
+    if authorization.get("authorization_id") and not authorization.get("legacy"):
+        api = config.get("api") or {}
+        persisted_token = authorization_store.update_authorization_tokens(
+            authorization["channel"],
+            authorization["authorization_id"],
+            {
+                key: api.get(key)
+                for key in (
+                    "access_token",
+                    "refresh_token",
+                    "access_token_expires_at",
+                    "refresh_token_expires_at",
+                    "last_token_update_at",
+                )
+            },
+        )
+        updated = copy.deepcopy(config)
+        updated.setdefault("api", {}).update(persisted_token)
+        return updated
     return credential_store.write_credentials(credential_store.extract_credentials(config))
-
-
-class FileLock:
-    INCOMPLETE_LOCK_GRACE_SECONDS = 5
-
-    def __init__(self, path, timeout=DEFAULT_LOCK_TIMEOUT_SECONDS):
-        self.path = Path(path)
-        self.timeout = timeout
-        self.fd = None
-
-    @staticmethod
-    def process_is_alive(pid):
-        if os.name == "nt":
-            import ctypes
-
-            process_query_limited_information = 0x1000
-            still_active = 259
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-            kernel32.OpenProcess.restype = ctypes.c_void_p
-            kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
-            kernel32.GetExitCodeProcess.restype = ctypes.c_int
-            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-            kernel32.CloseHandle.restype = ctypes.c_int
-            handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
-            if not handle:
-                return ctypes.get_last_error() == 5
-            try:
-                exit_code = ctypes.c_ulong()
-                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-                    return True
-                return exit_code.value == still_active
-            finally:
-                kernel32.CloseHandle(handle)
-
-        try:
-            os.kill(pid, 0)
-            return True
-        except PermissionError:
-            return True
-        except ProcessLookupError:
-            return False
-        except OSError:
-            return False
-
-    def remove_if_stale(self):
-        try:
-            text = self.path.read_text(encoding="utf-8").strip()
-            pid = int(text)
-        except (FileNotFoundError, OSError, TypeError, ValueError):
-            pid = None
-        if pid is not None:
-            if self.process_is_alive(pid):
-                return False
-        else:
-            try:
-                age = time.time() - self.path.stat().st_mtime
-            except (FileNotFoundError, OSError):
-                age = self.INCOMPLETE_LOCK_GRACE_SECONDS
-            if age < self.INCOMPLETE_LOCK_GRACE_SECONDS:
-                return False
-        try:
-            self.path.unlink()
-            return True
-        except FileNotFoundError:
-            return True
-        except OSError:
-            return False
-
-    def __enter__(self):
-        deadline = time.monotonic() + self.timeout
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        while True:
-            try:
-                self.fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                os.write(self.fd, str(os.getpid()).encode("utf-8"))
-                return self
-            except FileExistsError:
-                if self.remove_if_stale():
-                    continue
-                if time.monotonic() > deadline:
-                    raise TimeoutError(f"Timed out waiting for token lock: {self.path}")
-                time.sleep(0.2)
-
-    def __exit__(self, exc_type, exc, tb):
-        if self.fd is not None:
-            os.close(self.fd)
-            self.fd = None
-        try:
-            self.path.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def required_oauth_missing(config, include_refresh=False):
@@ -452,6 +405,35 @@ def expand_authorized_advertisers(config, accounts):
     }
 
 
+def build_authorized_account_snapshot(config, accounts):
+    rows = []
+    candidate_ids = []
+    account_candidates = []
+    for account in accounts:
+        identifiers, result = fetch_role_advertiser_ids(config, account)
+        if result.get("status") != "ok":
+            raise RuntimeError(
+                "Authorized account expansion did not produce a complete snapshot: "
+                + json.dumps(redact(result), ensure_ascii=False)
+            )
+        candidate_ids.extend(identifiers)
+        account_candidates.append((account, identifiers))
+    verified_ids, verification_errors = verify_advertiser_ids(
+        config,
+        list(dict.fromkeys(candidate_ids)),
+    )
+    if verification_errors:
+        raise RuntimeError("Unable to verify complete authorized advertiser snapshot")
+    verified = {str(value) for value in verified_ids}
+    for account, identifiers in account_candidates:
+        row = copy.deepcopy(account)
+        row["advertiser_ids"] = [
+            str(value) for value in identifiers if str(value) in verified
+        ]
+        rows.append(row)
+    return rows, list(dict.fromkeys(str(value) for value in verified_ids))
+
+
 def fetch_authorized_accounts(config):
     access_token = get_path(config, "api.access_token")
     if is_missing(access_token):
@@ -465,12 +447,18 @@ def fetch_authorized_accounts(config):
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
     accounts = normalize_authorized_accounts((response.get("data") or {}).get("list") or [])
     valid_accounts = [account for account in accounts if account.get("is_valid") is not False]
-    advertiser_ids, expansion_summary = expand_authorized_advertisers(config, valid_accounts)
+    snapshot, advertiser_ids = build_authorized_account_snapshot(config, valid_accounts)
+    advertiser_ids = [int(value) for value in advertiser_ids]
+    expansion_summary = {
+        "complete_snapshot": True,
+        "candidate_advertiser_count": len(advertiser_ids),
+        "verified_advertiser_count": len(advertiser_ids),
+    }
     account_types = {}
     for account in accounts:
         account_type = account.get("account_type") or "UNKNOWN"
         account_types[account_type] = account_types.get(account_type, 0) + 1
-    return accounts, advertiser_ids, account_types, expansion_summary
+    return snapshot, advertiser_ids, account_types, expansion_summary
 
 
 def update_authorized_accounts(config):
@@ -492,7 +480,15 @@ def sync_authorized_accounts(config_path, config=None):
     config_path = Path(config_path).expanduser()
     config = copy.deepcopy(config) if config is not None else load_config(config_path)
     updated, summary = update_authorized_accounts(config)
-    save_credentials(updated)
+    authorization = updated.get("_authorization") or {}
+    if authorization.get("authorization_id") and not authorization.get("legacy"):
+        authorization_store.replace_authorization_snapshot(
+            authorization["channel"],
+            authorization["authorization_id"],
+            get_path(updated, "api.oauth_authorized_accounts", []),
+        )
+    else:
+        save_credentials(updated)
     return updated, summary
 
 
@@ -506,7 +502,7 @@ def update_accounts_after_token(config):
         }
 
 
-def exchange_auth_code(config_path, auth_code, config=None):
+def exchange_auth_code(config_path, auth_code, config=None, channel=None, rebind_existing=False):
     config_path = Path(config_path).expanduser()
     config = copy.deepcopy(config) if config is not None else load_config(config_path)
     missing = required_oauth_missing(config)
@@ -529,14 +525,22 @@ def exchange_auth_code(config_path, auth_code, config=None):
     if is_missing(data.get("access_token")) or is_missing(data.get("refresh_token")):
         raise RuntimeError("OAuth authorization response did not include access_token and refresh_token")
     updated = update_token_fields(config, data)
-    updated, account_summary = update_accounts_after_token(updated)
-    save_credentials(updated)
+    updated, account_summary = update_authorized_accounts(updated)
+    selected_channel = channels.selected_channel(updated, channel)
+    authorization_id = authorization_store.save_authorization(
+        selected_channel,
+        updated["api"],
+        get_path(updated, "api.oauth_authorized_accounts", []),
+        rebind_existing=rebind_existing,
+    )
     return updated, redact({
         "response_code": response.get("code"),
         "response_message": response.get("message"),
         "request_id": response.get("request_id"),
         "access_token_expires_at": get_path(updated, "api.access_token_expires_at"),
         "refresh_token_expires_at": get_path(updated, "api.refresh_token_expires_at"),
+        "channel": selected_channel,
+        "authorization_id": authorization_id,
         "authorized_accounts": account_summary,
     })
 
@@ -566,7 +570,9 @@ def refresh_access_token(config_path, config=None):
     if is_missing(data.get("access_token")):
         raise RuntimeError("OAuth refresh response did not include access_token")
     updated = update_token_fields(config, data)
-    save_credentials(updated)
+    persisted = save_credentials(updated)
+    if isinstance(persisted, dict):
+        updated = persisted
     return updated, redact({
         "response_code": response.get("code"),
         "response_message": response.get("message"),
@@ -576,19 +582,68 @@ def refresh_access_token(config_path, config=None):
     })
 
 
-def ensure_access_token(config_path, config=None, force_refresh=False, margin_seconds=DEFAULT_REFRESH_MARGIN_SECONDS):
+def ensure_access_token(
+    config_path,
+    config=None,
+    force_refresh=False,
+    margin_seconds=DEFAULT_REFRESH_MARGIN_SECONDS,
+    channel=None,
+    advertiser_id=None,
+    auth_account_id=None,
+    authorization_id=None,
+    allow_pending=False,
+):
     config_path = Path(config_path).expanduser()
-    config = copy.deepcopy(config) if config is not None else load_config(config_path)
+    if config is None or channel is not None or is_missing(get_path(config, "api.access_token")):
+        config = load_config(
+            config_path,
+            channel=channel,
+            advertiser_id=advertiser_id,
+            auth_account_id=auth_account_id,
+            authorization_id=authorization_id,
+            allow_pending=allow_pending,
+        )
+    else:
+        config = copy.deepcopy(config)
     if not force_refresh and token_has_ttl(config, margin_seconds=margin_seconds):
         return config
 
-    lock_path = config_path.with_suffix(config_path.suffix + ".token.lock")
-    with FileLock(lock_path):
-        locked_config = load_config(config_path)
+    selected_channel = channels.selected_channel(config, channel)
+    authorization_id = get_path(config, "_authorization.authorization_id") or "legacy"
+    lock_path = authorization_store.state_root() / "refresh-locks" / (
+        f"{selected_channel}-{authorization_id}.lock"
+    )
+    with ProcessLock(lock_path, timeout=DEFAULT_LOCK_TIMEOUT_SECONDS):
+        locked_config = load_config(
+            config_path,
+            channel=selected_channel,
+            advertiser_id=advertiser_id,
+            auth_account_id=auth_account_id,
+            authorization_id=authorization_id,
+            allow_pending=allow_pending,
+        )
         if not force_refresh and token_has_ttl(locked_config, margin_seconds=margin_seconds):
             return locked_config
         refreshed, _ = refresh_access_token(config_path, locked_config)
         return refreshed
+
+
+def add_authorization_arguments(parser, include_local_authorization=False):
+    parser.add_argument(
+        "--channel",
+        default="marketing",
+        choices=tuple(channels.CHANNELS),
+        help="Business channel. Existing Ocean Engine Marketing operations use marketing.",
+    )
+    parser.add_argument(
+        "--auth-account-id",
+        help="Official OAuth account_id override; normally resolved from advertiser_id.",
+    )
+    if include_local_authorization:
+        parser.add_argument(
+            "--authorization-id",
+            help="Local authorization ID, used to sync a migrated pending authorization.",
+        )
 
 
 def main():
@@ -597,17 +652,55 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="Force refresh using api.refresh_token.")
     parser.add_argument("--sync-accounts", action="store_true", help="Sync authorized account details without refreshing a valid token.")
     parser.add_argument("--status", action="store_true", help="Print redacted token status.")
+    add_authorization_arguments(parser, include_local_authorization=True)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
-    config = load_config(config_path)
+    resolution_error = None
+    try:
+        config = load_config(
+            config_path,
+            channel=args.channel,
+            auth_account_id=args.auth_account_id,
+            authorization_id=args.authorization_id,
+            allow_pending=args.sync_accounts,
+        )
+    except authorization_store.AuthorizationError as exc:
+        if args.refresh or args.sync_accounts:
+            raise
+        raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+        config = channels.runtime_config(raw_config, channel=args.channel)
+        config.setdefault("api", {}).update(authorization_store.read_app(args.channel))
+        resolution_error = {
+            "code": exc.code,
+            "message": str(exc),
+            **exc.details,
+        }
     if args.refresh:
-        config = ensure_access_token(config_path, config, force_refresh=True)
+        config = ensure_access_token(
+            config_path,
+            config,
+            force_refresh=True,
+            channel=args.channel,
+            auth_account_id=args.auth_account_id,
+            authorization_id=args.authorization_id,
+            allow_pending=args.sync_accounts,
+        )
     elif args.sync_accounts:
-        config = ensure_access_token(config_path, config)
+        config = ensure_access_token(
+            config_path,
+            config,
+            channel=args.channel,
+            auth_account_id=args.auth_account_id,
+            authorization_id=args.authorization_id,
+            allow_pending=True,
+        )
         config, _ = sync_authorized_accounts(config_path, config)
 
     status = {
+        "channel": args.channel,
+        "channel_display_name": channels.CHANNELS[args.channel]["display_name"],
+        "authorization_id": get_path(config, "_authorization.authorization_id"),
         "advertiser_id": get_path(config, "account.advertiser_id"),
         "config": str(config_path),
         "has_access_token": not is_missing(get_path(config, "api.access_token")),
@@ -626,7 +719,14 @@ def main():
             get_path(config, "api.authorized_advertiser_ids", []),
         ),
         "credential_backend": credential_store.backend_name(),
-        "project_config_has_sensitive_fields": credential_store.status(config_path).get("project_config_has_sensitive_fields"),
+        "project_config_has_sensitive_fields": credential_store.sensitive_config_fields(
+            json.loads(config_path.read_text(encoding="utf-8"))
+        ),
+        "authorization_status": authorization_store.status(
+            args.channel,
+            advertiser_id=get_path(config, "account.advertiser_id"),
+        ),
+        "resolution_error": resolution_error,
     }
     print(json.dumps(status, ensure_ascii=False, indent=2))
     return 0

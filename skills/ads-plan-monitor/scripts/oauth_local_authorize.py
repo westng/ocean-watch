@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import credential_store
+import authorization_store
 import config_paths
 import token_manager
 
@@ -139,16 +140,19 @@ def main():
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--no-open", action="store_true", help="Print URL only; do not open browser.")
     parser.add_argument("--print-url", action="store_true")
+    parser.add_argument("--channel", default="marketing", choices=("marketing", "qianchuan"))
+    parser.add_argument("--rebind-existing", action="store_true")
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
-    config = token_manager.load_config(config_path)
-    credential_status = credential_store.status(config_path)
-    if not credential_status.get("has_app_id") or not credential_status.get("has_secret"):
+    config = token_manager.load_config(config_path, channel=args.channel, capability="oauth")
+    app = authorization_store.read_app(args.channel)
+    if not app.get("app_id") or not app.get("secret"):
         raise RuntimeError(
             "missing local OAuth app credentials; run "
-            f"scripts/credential_store.py --config {config_path} --set-app first"
+            f"scripts/credential_store.py --config {config_path} --channel {args.channel} --set-app first"
         )
+    config.setdefault("api", {}).update({key: app[key] for key in ("app_id", "secret") if key in app})
     redirect_uri = (
         args.redirect_uri
         or token_manager.get_path(config, "oauth.redirect_uri")
@@ -181,10 +185,13 @@ def main():
         config_path,
         result["auth_code"],
         config=config,
+        channel=args.channel,
+        rebind_existing=args.rebind_existing,
     )
     print(json.dumps({
         "mode": "oauth_local_authorize",
         "ok": True,
+        "channel": args.channel,
         "config": str(config_path),
         "redirect_uri": redirect_uri,
         "token_update": exchange_summary,

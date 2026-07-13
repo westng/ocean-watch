@@ -138,6 +138,7 @@ def build_template(config, values, source_name=None):
         source_template = plan_templates.normalize_template(config, source_name, source)
 
     bindings = {
+        "channel": str(values.get("channel") or (config.get("account") or {}).get("channel") or "marketing"),
         "advertiser_id": str(values["advertiser_id"]),
         "platform": values["platform"],
         "traffic_source": values["traffic_source"],

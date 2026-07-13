@@ -12,6 +12,22 @@
 
 这样做是为了避免把 token、secret 或授权码提交到 GitHub。
 
+## 渠道
+
+当前支持两个稳定渠道标识：
+
+- `marketing`：巨量营销，当前 OAuth、账户、创建、查询和报表能力全部属于该渠道。
+- `qianchuan`：巨量千川，仅预留隔离结构，尚未开放授权和业务接口。
+
+每个渠道使用独立 APP ID、Secret、回调地址、Token 和账户集合。任何命令都不会跨渠道回退。旧版本已有配置和凭据全部视为巨量营销，升级后运行：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json
+```
+
+迁移会备份并更新非敏感配置，将已有模板补充 `bindings.channel: marketing`，并把旧应用与授权凭据迁入营销渠道；可重复执行，不要求重新授权。
+
 ## 创建配置
 
 ```bash
@@ -29,6 +45,10 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 
 | 字段 | 用途 |
 | --- | --- |
+| `config_schema_version` | 渠道配置结构版本，当前为 `2` |
+| `default_channel` | 默认业务渠道，当前为 `marketing` |
+| `channels.marketing` | 巨量营销 API 与 OAuth 非敏感地址配置 |
+| `account.channel` | 当前广告主所属渠道 |
 | `account.advertiser_id` | 巨量引擎广告主 ID |
 | `active_plan_template` | 默认创建计划模板名 |
 | `plan_template_schema_version` | 模板结构版本，当前为 `2` |
@@ -62,7 +82,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID
 ```
 
-模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
+模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `channel`、`advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
 
 `default_plan_template` 是创建新业务模板的默认骨架，只保存跨广告主、跨商品可复用的投放和地域参数。它不能激活，也不能直接创建计划。素材、商品与转化资产 ID、落地页资产、业务链接、监测链接和标题必须保存在业务模板中。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
 
@@ -128,6 +148,7 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 ```bash
 python3 skills/ads-plan-monitor/scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --set-app
 ```
 
@@ -155,7 +176,8 @@ http://127.0.0.1:8787/oauth/callback
 
 ```bash
 python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing
 ```
 
 流程：
@@ -164,14 +186,18 @@ python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
 2. 浏览器打开官方 OAuth 授权页。
 3. 用户选择授权账户并确认。
 4. 回调拿到 `auth_code`。
-5. 脚本换取 token，并写入本机凭据仓库。
-6. 终端只输出脱敏状态。
+5. 脚本换取 token，完整展开并验证该授权覆盖的广告主。
+6. 新增一份独立营销授权记录，并按官方 `account_id` 建立索引；不会覆盖其他授权。
+7. 终端只输出脱敏状态。
+
+同一渠道可以授权多次。业务命令通常只需目标 `advertiser_id`，Plugin 会自动选择对应 Token。多个授权都覆盖同一广告主时，命令会停止并列出候选，此时传 `--auth-account-id OFFICIAL_ACCOUNT_ID`。若新授权包含已归属旧授权的官方账户，默认拒绝覆盖；用户明确确认后才可使用 `--rebind-existing` 整体切换。
 
 ## 检查状态
 
 ```bash
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --status
 ```
 
@@ -184,13 +210,13 @@ python3 skills/ads-plan-monitor/scripts/token_manager.py \
 查看状态：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --status
+python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --status
 ```
 
 手动强制刷新：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --refresh
+python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --refresh
 ```
 
 状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `skills/ads-plan-monitor/scripts/oauth_local_authorize.py`。
@@ -212,8 +238,19 @@ OAuth 换 Token 响应不是完整的广告主账户详情。首次或重新授�
 不要把授权主体数量当作可投放广告主数量。手动重新同步可运行：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --sync-accounts
+python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --sync-accounts
 ```
+
+旧版本渠道迁移若显示 `pending_account_sync: true`，必须使用状态中对应的本地授权 ID 完成第一次同步：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/token_manager.py \
+  --channel marketing \
+  --authorization-id <AUTHORIZATION_ID> \
+  --sync-accounts
+```
+
+状态输出中的 `authorization_id`、`account_ids` 和广告主数量用于本机选择与排错，不是密钥；Access Token、Refresh Token 和 Secret 不会输出。普通业务命令仍按目标 `advertiser_id` 自动解析授权，不应使用 `--authorization-id` 绕过账户匹配。
 
 普通 Access Token 刷新只轮换 Token，不重复展开账户关系，避免每次刷新拖慢查询和创建流程。
 

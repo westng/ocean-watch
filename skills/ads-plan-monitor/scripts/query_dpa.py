@@ -55,11 +55,18 @@ def main():
     )
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--page-size", type=int, default=20)
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        auth_account_id=args.auth_account_id,
+    )
     base_url = get_path(config, "api.base_url")
     token = get_path(config, "api.access_token")
     advertiser_id = get_path(config, "account.advertiser_id")

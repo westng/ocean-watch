@@ -4,6 +4,8 @@ import json
 from types import SimpleNamespace
 
 import config_paths
+import authorization_store
+import channels
 import create_plan
 import credential_store
 
@@ -28,16 +30,30 @@ def payload_args():
 
 
 def validate_config(raw_config, credentials=None):
-    credentials = credential_store.read_credentials() if credentials is None else credentials
-    merged_config = credential_store.merge_credentials(raw_config, credentials)
+    channel = channels.selected_channel(raw_config)
+    merged_config = channels.runtime_config(raw_config, channel=channel, capability="query")
+    if credentials is None:
+        merged_config = authorization_store.attach_runtime(
+            merged_config,
+            channel,
+            advertiser_id=(merged_config.get("account") or {}).get("advertiser_id"),
+        )
+        app_credentials = authorization_store.read_app(channel)
+        runtime_credentials = merged_config.get("api") or {}
+    else:
+        app_credentials = credentials
+        runtime_credentials = credentials
+        merged_config.setdefault("api", {}).update({
+            key: value for key, value in credentials.items() if key != "developer_id"
+        })
     query_missing = []
     if create_plan.contains_unresolved_value(create_plan.get_path(merged_config, "api.base_url")):
         query_missing.append("api.base_url")
     if create_plan.contains_unresolved_value(create_plan.get_path(merged_config, "account.advertiser_id")):
         query_missing.append("account.advertiser_id")
-    if create_plan.is_missing(credentials.get("app_id")) or create_plan.is_missing(credentials.get("secret")):
+    if create_plan.is_missing(app_credentials.get("app_id")) or create_plan.is_missing(app_credentials.get("secret")):
         query_missing.append("local app_id and secret")
-    if create_plan.is_missing(credentials.get("access_token")) and create_plan.is_missing(credentials.get("refresh_token")):
+    if create_plan.is_missing(runtime_credentials.get("access_token")) and create_plan.is_missing(runtime_credentials.get("refresh_token")):
         query_missing.append("local access_token or refresh_token")
 
     template_error = None
@@ -64,9 +80,9 @@ def validate_config(raw_config, credentials=None):
     except (KeyError, TypeError, ValueError) as exc:
         template_error = str(exc)
 
-    if create_plan.is_missing(credentials.get("app_id")) or create_plan.is_missing(credentials.get("secret")):
+    if create_plan.is_missing(app_credentials.get("app_id")) or create_plan.is_missing(app_credentials.get("secret")):
         submit_missing.append("local app_id and secret")
-    if create_plan.is_missing(credentials.get("access_token")) and create_plan.is_missing(credentials.get("refresh_token")):
+    if create_plan.is_missing(runtime_credentials.get("access_token")) and create_plan.is_missing(runtime_credentials.get("refresh_token")):
         submit_missing.append("local access_token or refresh_token")
 
     preview_missing = list(dict.fromkeys(preview_missing))
@@ -78,6 +94,7 @@ def validate_config(raw_config, credentials=None):
     }
     return {
         "active_plan_template": selected_template,
+        "channel": channel,
         "plan_template_error": template_error,
         "ok_for_query_data": readiness["query"],
         "ok_for_create_payload_preview": readiness["create-preview"],
@@ -111,12 +128,23 @@ def main(argv=None):
     except (OSError, json.JSONDecodeError) as exc:
         parser.error(f"invalid config {path}: {exc}")
 
-    result = validate_config(raw_config)
+    try:
+        result = validate_config(raw_config)
+    except channels.ChannelError as exc:
+        print(json.dumps({
+            "config": str(path),
+            "validation_mode": args.mode,
+            "selected_mode_ready": False,
+            "channel": exc.channel,
+            "error_code": exc.code,
+            "error": str(exc),
+        }, ensure_ascii=False, indent=2))
+        return 1
     result.update({
         "config": str(path),
         "validation_mode": args.mode,
         "selected_mode_ready": mode_is_ready(result, args.mode),
-        "credential_status": credential_store.status(path),
+        "credential_status": credential_store.status(path, channel=result["channel"]),
     })
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["selected_mode_ready"] else 1

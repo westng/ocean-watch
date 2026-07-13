@@ -156,11 +156,19 @@ def main():
     parser.add_argument("--country-code", action="append", default=["CN", "CHN", "156"])
     parser.add_argument("--write-config", action="store_true")
     parser.add_argument("--out")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = token_manager.ensure_access_token(config_path, config)
+    raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    config = raw_config
+    config = token_manager.ensure_access_token(
+        config_path,
+        config,
+        channel=args.channel,
+        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        auth_account_id=args.auth_account_id,
+    )
     best, attempts = resolve(config, args.city_csv, args.country_code)
     result = {
         "city_csv": args.city_csv,
@@ -171,10 +179,9 @@ def main():
         "attempts": attempts,
     }
     if args.write_config and result["resolved_count"] and not result["missing"]:
-        config.setdefault("resolved_ids", {})["city_ids"] = [item["code"] for item in result["resolved"]]
-        config.setdefault("resolved_ids", {})["city_names"] = [item["name"] for item in result["resolved"]]
-        safe_config = credential_store.strip_sensitive_config(config)
-        config_store.atomic_write_json(config_path, safe_config)
+        raw_config.setdefault("resolved_ids", {})["city_ids"] = [item["code"] for item in result["resolved"]]
+        raw_config.setdefault("resolved_ids", {})["city_names"] = [item["name"] for item in result["resolved"]]
+        config_store.atomic_write_json(config_path, raw_config)
         result["config_updated"] = str(config_path)
 
     output = json.dumps(result, ensure_ascii=False, indent=2)

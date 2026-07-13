@@ -18,6 +18,8 @@ SCRIPTS = SKILL / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import batch_create_from_today_videos
+import authorization_store
+import channels
 import config_store
 import config_paths
 import configure_official_mcp
@@ -26,7 +28,9 @@ import credential_store
 import first_run
 import oceanengine_mcp_bridge
 import manage_plan_templates
+import migrate_channels
 import plan_templates
+import process_lock
 import template_workflow
 import token_manager
 import validate_config
@@ -261,6 +265,7 @@ class CreatePlanTests(unittest.TestCase):
     def test_template_list_exposes_advertiser_as_primary_field(self):
         config = self.v2_config()
         row = manage_plan_templates.list_templates(config)[0]
+        self.assertEqual(row["channel"], "marketing")
         self.assertEqual(row["advertiser_id"], "1234567890")
         self.assertEqual(row["platform"], "平台")
         self.assertEqual(row["product_id"], "unique-product-1")
@@ -350,6 +355,7 @@ class CreatePlanTests(unittest.TestCase):
         )
         rendered = "\n".join(output)
         self.assertIsNone(selected)
+        self.assertIn("渠道 marketing", rendered)
         self.assertIn("广告主 1234567890", rendered)
         self.assertIn("平台 平台", rendered)
         self.assertIn("商品 test product", rendered)
@@ -611,7 +617,7 @@ class CreatePlanTests(unittest.TestCase):
             config_path.write_text(json.dumps(valid_config()), encoding="utf-8")
             argv = ["create_plan.py", "--config", str(config_path), "--submit"]
             with mock.patch.object(sys, "argv", argv), \
-                    mock.patch.object(token_manager, "ensure_access_token", side_effect=lambda path, config: config), \
+                    mock.patch.object(token_manager, "ensure_access_token", side_effect=lambda path, config, **kwargs: config), \
                     mock.patch.object(create_plan, "post_json", return_value={"code": 500}), \
                     redirect_stdout(StringIO()):
                 self.assertEqual(create_plan.main(), 1)
@@ -626,7 +632,7 @@ class CreatePlanTests(unittest.TestCase):
             ]
             argv = ["create_plan.py", "--config", str(config_path), "--submit"]
             with mock.patch.object(sys, "argv", argv), \
-                    mock.patch.object(token_manager, "ensure_access_token", side_effect=lambda path, config: config), \
+                    mock.patch.object(token_manager, "ensure_access_token", side_effect=lambda path, config, **kwargs: config), \
                     mock.patch.object(create_plan, "post_json", side_effect=responses), \
                     redirect_stdout(StringIO()):
                 self.assertEqual(create_plan.main(), 1)
@@ -697,6 +703,369 @@ class ConfigStoreTests(unittest.TestCase):
                 {"version": 1},
             )
             self.assertEqual(list(path.parent.glob(".config.json.*.tmp")), [])
+
+
+class ChannelAuthorizationTests(unittest.TestCase):
+    def test_legacy_config_migrates_to_marketing(self):
+        migrated = channels.migrate_config({
+            "api": {"base_url": "https://api.example.test/open_api"},
+            "oauth": {"redirect_uri": "http://127.0.0.1/callback"},
+            "account": {"advertiser_id": "9007199254740993"},
+            "plan_templates": {
+                "template": {"bindings": {"advertiser_id": "9007199254740993"}},
+            },
+        })
+        self.assertEqual(migrated["default_channel"], "marketing")
+        self.assertEqual(migrated["account"]["channel"], "marketing")
+        self.assertEqual(migrated["plan_templates"]["template"]["bindings"]["channel"], "marketing")
+        self.assertEqual(
+            migrated["channels"]["marketing"]["api"]["base_url"],
+            "https://api.example.test/open_api",
+        )
+        self.assertNotIn("api", migrated)
+        self.assertEqual(channels.migrate_config(migrated), migrated)
+
+    def test_channel_config_drops_all_legacy_credential_metadata(self):
+        config = valid_config()
+        config["api"].update({
+            "access_token_expires_at": "2099-01-01T00:00:00+00:00",
+            "oauth_authorized_accounts": [{"account_id": "1"}],
+            "authorized_advertiser_ids": ["1"],
+        })
+        migrated = channels.migrate_config(config)
+        marketing_api = migrated["channels"]["marketing"]["api"]
+        self.assertEqual(marketing_api, {"base_url": "https://api.oceanengine.com/open_api"})
+
+    def test_schema_v1_template_migrates_before_channel_binding(self):
+        config = valid_config()
+        config["plan_templates"] = {
+            "legacy": {
+                "platform": "示例平台",
+                "traffic_source": "CID",
+                "product_id": "product-1",
+                "defaults": {"product_name": "test product"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")}), \
+                    mock.patch.object(credential_store, "read_credentials", return_value={}), \
+                    mock.patch.object(credential_store, "read_entry", return_value={}):
+                migrate_channels.migrate(config_path)
+            migrated = json.loads(config_path.read_text(encoding="utf-8"))
+        bindings = migrated["plan_templates"]["legacy"]["bindings"]
+        self.assertEqual(bindings["channel"], "marketing")
+        self.assertEqual(bindings["platform"], "示例平台")
+        self.assertEqual(bindings["product_id"], "product-1")
+
+    def test_qianchuan_never_uses_marketing_runtime(self):
+        with self.assertRaises(channels.ChannelError) as raised:
+            channels.runtime_config(valid_config(), channel="qianchuan", capability="query")
+        self.assertEqual(raised.exception.code, "channel_not_implemented")
+
+    def test_template_channel_mismatch_is_rejected(self):
+        config = CreatePlanTests().v2_config()
+        config["account"]["channel"] = "marketing"
+        name = config["active_plan_template"]
+        config["plan_templates"][name]["bindings"]["channel"] = "qianchuan"
+        with self.assertRaisesRegex(ValueError, "bound to channel qianchuan"):
+            plan_templates.apply(config)
+
+    def test_authorizations_resolve_by_advertiser_without_overwrite(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            first = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one", "refresh_token": "one-r"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            second = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "two", "refresh_token": "two-r"},
+                [{"account_id": "102", "advertiser_ids": ["202"]}],
+            )
+            resolved_first, _, token_first = authorization_store.resolve("marketing", "201")
+            resolved_second, _, token_second = authorization_store.resolve("marketing", "202")
+        self.assertEqual((resolved_first, token_first["access_token"]), (first, "one"))
+        self.assertEqual((resolved_second, token_second["access_token"]), (second, "two"))
+
+    def test_explicit_account_must_cover_advertiser(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            with self.assertRaises(authorization_store.AuthorizationError) as raised:
+                authorization_store.resolve("marketing", "999", auth_account_id="101")
+        self.assertEqual(raised.exception.code, "authorized_account_not_found")
+
+    def test_duplicate_account_requires_explicit_rebind(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            with self.assertRaises(authorization_store.AuthorizationError) as raised:
+                authorization_store.save_authorization(
+                    "marketing",
+                    {"access_token": "two"},
+                    [{"account_id": "101", "advertiser_ids": ["202"]}],
+                )
+        self.assertEqual(raised.exception.code, "authorized_account_conflict")
+
+    def test_official_ids_require_lossless_decimal_form(self):
+        self.assertEqual(
+            authorization_store.normalize_id("9007199254740993"),
+            "9007199254740993",
+        )
+        for value in ("01", " 1", "+1", "-1", "1.0"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    authorization_store.normalize_id(value)
+
+    def test_legacy_marketing_credentials_migrate_once(self):
+        entries = {}
+        legacy = {
+            "app_id": "app",
+            "secret": "secret",
+            "access_token": "token",
+            "refresh_token": "refresh",
+            "oauth_authorized_accounts": [
+                {"account_id": "101", "account_role": "ADVERTISER"},
+            ],
+            "authorized_advertiser_ids": ["101"],
+        }
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            first = authorization_store.migrate_legacy_marketing()
+            second = authorization_store.migrate_legacy_marketing()
+            state = authorization_store.load_state()
+        self.assertTrue(first["migrated"])
+        self.assertFalse(second["migrated"])
+        self.assertEqual(len(state["channels"]["marketing"]["authorizations"]), 1)
+
+    def test_runtime_resolves_different_tokens_for_different_advertisers(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_store.write_app("marketing", "app", "secret")
+            authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "two"},
+                [{"account_id": "102", "advertiser_ids": ["202"]}],
+            )
+            base = channels.runtime_config(valid_config(), "marketing")
+            first = authorization_store.attach_runtime(base, "marketing", advertiser_id="201")
+            second = authorization_store.attach_runtime(base, "marketing", advertiser_id="202")
+        self.assertEqual(first["api"]["access_token"], "one")
+        self.assertEqual(second["api"]["access_token"], "two")
+
+    def test_channel_migration_updates_temp_config_idempotently(self):
+        entries = {}
+        legacy = {"app_id": "app", "secret": "secret"}
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(valid_config()), encoding="utf-8")
+            state_dir = Path(directory) / "state"
+            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(state_dir)}), \
+                    mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
+                    mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                    mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+                first = migrate_channels.migrate(config_path)
+                second = migrate_channels.migrate(config_path)
+            migrated = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(first["activation"], "schema_v2_active")
+        self.assertEqual(second["activation"], "schema_v2_active")
+        self.assertEqual(migrated["account"]["channel"], "marketing")
+        self.assertNotIn("api", migrated)
+
+    def test_channel_manifest_commit_keeps_previous_generation(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_id = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one", "refresh_token": "refresh-one"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            first_manifest = authorization_store.channel_manifest_path("marketing", 1)
+            authorization_store.update_authorization_tokens(
+                "marketing",
+                authorization_id,
+                {"access_token": "two", "refresh_token": "refresh-two"},
+            )
+            current = json.loads(
+                authorization_store.channel_current_path("marketing").read_text(encoding="utf-8")
+            )
+            state = authorization_store.load_channel_state("marketing")
+            first_manifest_exists = first_manifest.exists()
+        self.assertTrue(first_manifest_exists)
+        self.assertEqual(current["generation"], 2)
+        self.assertEqual(state["generation"], 2)
+        self.assertEqual(state["authorizations"][authorization_id]["token_revision"], 2)
+
+    def test_manifest_pointer_failure_retries_with_new_generation(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            real_atomic_write = config_store.atomic_write_json
+            failed_once = False
+
+            def fail_current_once(path, data, backup=True):
+                nonlocal failed_once
+                if Path(path).name == "current.json" and not failed_once:
+                    failed_once = True
+                    raise OSError("injected current pointer failure")
+                return real_atomic_write(path, data, backup=backup)
+
+            with mock.patch.object(config_store, "atomic_write_json", side_effect=fail_current_once):
+                with self.assertRaisesRegex(OSError, "pointer"):
+                    authorization_store.save_authorization(
+                        "marketing",
+                        {"access_token": "one"},
+                        [{"account_id": "101", "advertiser_ids": ["201"]}],
+                        authorization_id="stable",
+                    )
+                authorization_store.save_authorization(
+                    "marketing",
+                    {"access_token": "one"},
+                    [{"account_id": "101", "advertiser_ids": ["201"]}],
+                    authorization_id="stable",
+                )
+            state = authorization_store.load_channel_state("marketing")
+        self.assertEqual(state["generation"], 1)
+        self.assertEqual(list(state["authorizations"]), ["stable"])
+
+    def test_qianchuan_app_configuration_is_rejected_until_implemented(self):
+        with mock.patch.object(authorization_store, "write_app") as write_app:
+            with self.assertRaises(channels.ChannelError) as raised:
+                credential_store.configure_app("app", "secret", channel="qianchuan")
+        self.assertEqual(raised.exception.code, "channel_not_implemented")
+        write_app.assert_not_called()
+
+    def test_business_runtime_never_falls_back_to_legacy_token(self):
+        legacy = {"access_token": "legacy-token", "refresh_token": "legacy-refresh"}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
+                mock.patch.object(credential_store, "read_entry", return_value={}):
+            runtime = authorization_store.attach_runtime(
+                channels.runtime_config(valid_config(), "marketing"),
+                "marketing",
+                advertiser_id="1234567890",
+            )
+        self.assertNotIn("access_token", runtime["api"])
+        self.assertNotIn("refresh_token", runtime["api"])
+
+    def test_pending_legacy_authorization_can_only_be_selected_for_sync(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_id = authorization_store.save_authorization(
+                "marketing",
+                {
+                    "access_token": "legacy-token",
+                    "refresh_token": "legacy-refresh",
+                    "pending_account_sync": True,
+                },
+                [],
+            )
+            with self.assertRaises(authorization_store.AuthorizationError) as raised:
+                authorization_store.resolve(
+                    "marketing",
+                    authorization_id=authorization_id,
+                )
+            resolved, _, token = authorization_store.resolve(
+                "marketing",
+                authorization_id=authorization_id,
+                allow_pending=True,
+            )
+        self.assertEqual(raised.exception.code, "legacy_authorization_pending_sync")
+        self.assertEqual(resolved, authorization_id)
+        self.assertEqual(token["access_token"], "legacy-token")
+
+    def test_migration_resumes_after_config_commit_failure(self):
+        entries = {}
+        legacy = {
+            "app_id": "app",
+            "secret": "secret",
+            "access_token": "token",
+            "refresh_token": "refresh",
+            "oauth_authorized_accounts": [
+                {"account_id": "101", "account_role": "ADVERTISER"},
+            ],
+            "authorized_advertiser_ids": ["101"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(valid_config()), encoding="utf-8")
+            state_dir = Path(directory) / "state"
+            real_atomic_write = config_store.atomic_write_json
+            failed_once = False
+
+            def fail_first_config_commit(path, data, backup=True):
+                nonlocal failed_once
+                if Path(path) == config_path and not failed_once:
+                    failed_once = True
+                    raise OSError("injected config commit failure")
+                return real_atomic_write(path, data, backup=backup)
+
+            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(state_dir)}), \
+                    mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
+                    mock.patch.object(credential_store, "write_credentials", return_value="test"), \
+                    mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                    mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))), \
+                    mock.patch.object(config_store, "atomic_write_json", side_effect=fail_first_config_commit):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    migrate_channels.migrate(config_path)
+                interrupted = json.loads(migrate_channels.journal_path().read_text(encoding="utf-8"))
+                result = migrate_channels.migrate(config_path)
+                completed = json.loads(migrate_channels.journal_path().read_text(encoding="utf-8"))
+                state = authorization_store.load_channel_state("marketing")
+        self.assertEqual(interrupted["credentials"], "committed")
+        self.assertEqual(interrupted["config"], "pending")
+        self.assertEqual(completed["migration_id"], interrupted["migration_id"])
+        self.assertEqual(completed["authorization_id"], interrupted["authorization_id"])
+        self.assertEqual(result["activation"], "schema_v2_active")
+        self.assertEqual(list(state["authorizations"]), [interrupted["authorization_id"]])
+
+    def test_channel_sensitive_fields_are_reported_with_full_paths(self):
+        config = channels.migrate_config(valid_config())
+        config["channels"]["marketing"]["api"]["access_token"] = "leaked"
+        self.assertEqual(
+            credential_store.sensitive_config_fields(config),
+            ["channels.marketing.api.access_token"],
+        )
 
 
 class ConfigAndCredentialTests(unittest.TestCase):
@@ -801,7 +1170,7 @@ class OfficialMcpTests(unittest.TestCase):
             calls.append(arguments)
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
 
-        with mock.patch.object(credential_store, "read_credentials", return_value=credentials), \
+        with mock.patch.object(authorization_store, "read_app", return_value=credentials), \
                 mock.patch.object(credential_store, "configure_developer_id"), \
                 mock.patch.object(oceanengine_mcp_bridge, "probe", return_value=["tool-1"]), \
                 mock.patch.object(configure_official_mcp, "get_server", side_effect=[None, self.bridge_server()]), \
@@ -819,8 +1188,8 @@ class OfficialMcpTests(unittest.TestCase):
 
     def test_failed_registration_does_not_store_developer_id(self):
         with mock.patch.object(
-            credential_store,
-            "read_credentials",
+            authorization_store,
+            "read_app",
             return_value={"app_id": "app-1"},
         ), mock.patch.object(
             credential_store,
@@ -844,8 +1213,8 @@ class OfficialMcpTests(unittest.TestCase):
 
     def test_failed_probe_does_not_change_local_state(self):
         with mock.patch.object(
-            credential_store,
-            "read_credentials",
+            authorization_store,
+            "read_app",
             return_value={"app_id": "app-1"},
         ), mock.patch.object(
             credential_store,
@@ -865,46 +1234,24 @@ class OfficialMcpTests(unittest.TestCase):
 
 
 class FileLockTests(unittest.TestCase):
-    def test_stale_pid_detection_is_platform_independent(self):
+    def test_process_lock_records_owner_metadata_and_releases_handle(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "token.lock"
-            path.write_text("99999999", encoding="utf-8")
-            lock = token_manager.FileLock(path, timeout=0)
-            with mock.patch.object(lock, "process_is_alive", return_value=False):
-                self.assertTrue(lock.remove_if_stale())
-            self.assertFalse(path.exists())
+            lock = process_lock.ProcessLock(path, timeout=0.1)
+            with lock:
+                metadata = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(metadata["pid"], os.getpid())
+                self.assertEqual(metadata["nonce"], lock.nonce)
+                self.assertIsNotNone(lock.handle)
+            self.assertIsNone(lock.handle)
 
-    def test_live_pid_detection_preserves_lock(self):
+    def test_process_lock_times_out_when_same_file_is_held(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "token.lock"
-            path.write_text("99999999", encoding="utf-8")
-            lock = token_manager.FileLock(path, timeout=0)
-            with mock.patch.object(lock, "process_is_alive", return_value=True):
-                self.assertFalse(lock.remove_if_stale())
-            self.assertTrue(path.exists())
-
-    def test_stale_pid_lock_is_recovered(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "token.lock"
-            path.write_text("99999999", encoding="utf-8")
-            with token_manager.FileLock(path, timeout=0.1):
-                self.assertEqual(path.read_text(encoding="utf-8"), str(os.getpid()))
-            self.assertFalse(path.exists())
-
-    def test_live_pid_lock_is_preserved(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "token.lock"
-            path.write_text(str(os.getpid()), encoding="utf-8")
-            lock = token_manager.FileLock(path, timeout=0)
-            self.assertFalse(lock.remove_if_stale())
-            self.assertTrue(path.exists())
-
-    def test_recent_incomplete_lock_is_preserved(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "token.lock"
-            path.write_text("", encoding="utf-8")
-            lock = token_manager.FileLock(path, timeout=0)
-            self.assertFalse(lock.remove_if_stale())
+            with process_lock.ProcessLock(path, timeout=0.1):
+                with self.assertRaises(TimeoutError):
+                    with process_lock.ProcessLock(path, timeout=0.01):
+                        pass
 
 
 class TokenRefreshTests(unittest.TestCase):
@@ -967,6 +1314,43 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertEqual(saved["api"]["refresh_token"], "new-refresh-token")
         save.assert_called_once_with(updated)
 
+    def test_channel_refresh_returns_persisted_revision(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_store.write_app("marketing", "123", "secret")
+            authorization_id = authorization_store.save_authorization(
+                "marketing",
+                {
+                    "access_token": "old-access",
+                    "refresh_token": "old-refresh",
+                    "access_token_expires_at": "2000-01-01T00:00:00+00:00",
+                    "refresh_token_expires_at": "2999-01-01T00:00:00+00:00",
+                },
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            config = channels.runtime_config(valid_config(), "marketing")
+            config["account"]["advertiser_id"] = "201"
+            config = authorization_store.attach_runtime(config, "marketing", advertiser_id="201")
+            response = {
+                "code": 0,
+                "data": {
+                    "access_token": "new-access",
+                    "refresh_token": "new-refresh",
+                    "expires_in": 3600,
+                    "refresh_token_expires_in": 7200,
+                },
+            }
+            with mock.patch.object(token_manager, "post_json", return_value=response):
+                updated, _ = token_manager.refresh_access_token("unused.json", config)
+            state = authorization_store.load_channel_state("marketing")
+            revision = state["authorizations"][authorization_id]["token_revision"]
+        self.assertEqual(updated["api"]["access_token"], "new-access")
+        self.assertEqual(updated["api"]["refresh_token"], "new-refresh")
+        self.assertEqual(revision, 2)
+
     def test_token_refresh_does_not_resync_accounts(self):
         config = self.expiring_config()
         response = {
@@ -990,6 +1374,41 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertEqual(token_manager.token_next_action(config), "refresh")
         config["api"]["refresh_token_expires_at"] = "2000-01-01T00:00:00+00:00"
         self.assertEqual(token_manager.token_next_action(config), "reauthorize")
+
+    def test_status_exposes_pending_authorization_without_using_it(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            authorization_id = authorization_store.save_authorization(
+                "marketing",
+                {
+                    "access_token": "legacy-token",
+                    "pending_account_sync": True,
+                },
+                [],
+            )
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(channels.migrate_config(valid_config())), encoding="utf-8")
+            output = StringIO()
+            with mock.patch.object(sys, "argv", [
+                "token_manager.py",
+                "--config",
+                str(config_path),
+                "--channel",
+                "marketing",
+                "--status",
+            ]), redirect_stdout(output):
+                exit_code = token_manager.main()
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["resolution_error"]["code"], "legacy_authorization_pending_sync")
+        self.assertEqual(
+            result["authorization_status"]["authorizations"][0]["authorization_id"],
+            authorization_id,
+        )
+        self.assertFalse(result["has_access_token"])
 
     def test_authorized_advertiser_ids_ignore_json_number_type(self):
         self.assertTrue(token_manager.advertiser_is_authorized(123456, ["123456"]))
@@ -1016,13 +1435,20 @@ class TokenRefreshTests(unittest.TestCase):
             "unsupported_role_count": 0,
             "verification_error_count": 0,
         }
+        snapshot = [{
+            "account_id": 1,
+            "advertiser_name": "one",
+            "account_type": "ADVERTISER",
+            "is_valid": True,
+            "advertiser_ids": ["1"],
+        }]
         with mock.patch.object(token_manager, "get_json", return_value=response), \
-                mock.patch.object(token_manager, "expand_authorized_advertisers", return_value=([1], expansion)):
+                mock.patch.object(token_manager, "build_authorized_account_snapshot", return_value=(snapshot, ["1"])):
             updated, summary = token_manager.update_authorized_accounts(config)
         self.assertEqual(updated["api"]["authorized_advertiser_ids"], [1])
-        self.assertEqual(len(updated["api"]["oauth_authorized_accounts"]), 3)
+        self.assertEqual(len(updated["api"]["oauth_authorized_accounts"]), 1)
         self.assertNotIn("company_list", updated["api"]["oauth_authorized_accounts"][0])
-        self.assertEqual(summary["oauth_authorized_account_count"], 3)
+        self.assertEqual(summary["oauth_authorized_account_count"], 1)
         self.assertEqual(summary["authorized_advertiser_count"], 1)
         self.assertEqual(summary["account_types"], {"ADVERTISER": 2, "CUSTOMER_ADMIN": 1})
 
@@ -1188,11 +1614,27 @@ class ExitAndValidationTests(unittest.TestCase):
             config["links"]["open_url"] = "https://example.com/open"
             config_path.write_text(json.dumps(config), encoding="utf-8")
             credentials = {"app_id": "app", "secret": "secret", "access_token": "token"}
-            with mock.patch.object(credential_store, "read_credentials", return_value=credentials), \
+            runtime = channels.runtime_config(config, "marketing")
+            runtime["api"].update(credentials)
+            with mock.patch.object(authorization_store, "attach_runtime", return_value=runtime), \
+                    mock.patch.object(authorization_store, "read_app", return_value=credentials), \
                     mock.patch.object(credential_store, "status", return_value={}), \
                     redirect_stdout(StringIO()):
                 self.assertEqual(validate_config.main([str(config_path), "--mode", "query"]), 0)
                 self.assertEqual(validate_config.main([str(config_path), "--mode", "create-submit"]), 1)
+
+    def test_validator_reports_unimplemented_channel_as_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config = channels.migrate_config(valid_config())
+            config["account"]["channel"] = "qianchuan"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output):
+                exit_code = validate_config.main([str(config_path), "--mode", "query"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(result["error_code"], "channel_not_implemented")
 
 
 if __name__ == "__main__":

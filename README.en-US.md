@@ -25,14 +25,14 @@
 
 `ocean-watch` is an installable Codex Plugin for automating Ocean Engine advertising workflows. The plugin contains one `ads-plan-monitor` Skill with four internal branches: first-run setup, campaign creation, data queries, and strategy analysis.
 
-Business operations use the official Ocean Engine Marketing API. The official Ocean Engine developer documentation MCP provides access to API documentation, OpenAPI schemas, and SDK examples. Real business configuration and OAuth credentials remain on each user's computer.
+Business operations currently use the official Ocean Engine Marketing API under the `marketing` channel. The Plugin now isolates channels; `qianchuan` is reserved for future Ocean Engine Qianchuan support and never reuses Marketing apps, tokens, or accounts. The official developer-documentation MCP provides API documentation, OpenAPI schemas, and SDK examples. Real business configuration and OAuth credentials remain on each user's computer.
 
 ## Features
 
 | Scenario | Capability |
 | --- | --- |
 | First run | Creates local configuration and checks OAuth, tokens, advertiser accounts, and official MCP status |
-| Account authorization | Completes OAuth through a `127.0.0.1` callback, then expands and verifies real advertiser accounts |
+| Account authorization | Stores independent channel apps and multiple OAuth authorizations, then resolves tokens by official `account_id` and target advertiser |
 | Token management | Checks token validity before API calls, refreshes expiring tokens, and saves rotated credentials |
 | Campaign creation | Generates projects and promotions from platform and product templates, then submits them after confirmation |
 | Batch creation | Retrieves videos uploaded today, groups N videos into each promotion, and supports concurrent multi-account creation |
@@ -72,6 +72,23 @@ The guide creates `~/.codex/ads-plan-monitor/config.json` and reports the next s
 
 OAuth App ID, Secret, Access Token, Refresh Token, and MCP `developer_id` are stored in the operating system credential store. They are never written to project configuration and should not be pasted into chat.
 
+When upgrading, migrate existing state once. Existing app credentials, tokens, authorized accounts, and templates become `marketing` state without reauthorization:
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json
+```
+
+Migration is safely repeatable and resumes from the same journal after interruption. If a legacy token lacks a complete official-account mapping, status reports `pending_account_sync: true`. Run one explicit sync with the reported `authorization_id`:
+
+```bash
+python3 skills/ads-plan-monitor/scripts/token_manager.py \
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing \
+  --authorization-id <AUTHORIZATION_ID> \
+  --sync-accounts
+```
+
 ### OAuth
 
 When developing from the repository, run:
@@ -79,13 +96,19 @@ When developing from the repository, run:
 ```bash
 python3 skills/ads-plan-monitor/scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --set-app
 
 python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing
 ```
 
 The default callback URL is `http://127.0.0.1:8787/oauth/callback`. It must exactly match the callback configured for the application on the Ocean Engine Open Platform.
+
+The same Marketing app may be authorized multiple times. The Plugin keeps every authorization and automatically selects the one whose official account covers the target `advertiser_id`; use `--auth-account-id` only when resolution is ambiguous. Business commands default to `--channel marketing`.
+
+`qianchuan` currently reserves an isolated channel structure only. OAuth and business APIs are not implemented, and it never reads or reuses Marketing apps, tokens, accounts, or templates.
 
 ### Official MCP
 

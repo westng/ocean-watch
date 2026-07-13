@@ -48,8 +48,9 @@ def credentials_dir():
     return Path.home() / ".codex" / "ads-plan-monitor"
 
 
-def fallback_path():
-    return credentials_dir() / "credentials.json"
+def fallback_path(account=ACCOUNT):
+    suffix = "credentials" if account == ACCOUNT else account.replace("/", "-")
+    return credentials_dir() / f"{suffix}.json"
 
 
 def has_command(command):
@@ -105,9 +106,9 @@ def decode_stored_credentials(text):
         raise RuntimeError("Stored credentials are not valid JSON or hex-encoded JSON") from json_error
 
 
-def macos_read():
+def macos_read(account=ACCOUNT):
     result = subprocess.run(
-        ["security", "find-generic-password", "-s", SERVICE, "-a", ACCOUNT, "-w"],
+        ["security", "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -118,9 +119,9 @@ def macos_read():
     return decode_stored_credentials(result.stdout)
 
 
-def macos_write(data):
+def macos_write(data, account=ACCOUNT):
     subprocess.run(
-        ["security", "delete-generic-password", "-s", SERVICE, "-a", ACCOUNT],
+        ["security", "delete-generic-password", "-s", SERVICE, "-a", account],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -133,7 +134,7 @@ def macos_write(data):
             "-s",
             SERVICE,
             "-a",
-            ACCOUNT,
+            account,
             "-w",
             json.dumps(data, ensure_ascii=False),
         ],
@@ -200,15 +201,15 @@ def windows_unprotect(text):
     return json.loads(decrypted.decode("utf-8"))
 
 
-def windows_read():
-    path = fallback_path().with_suffix(".dpapi")
+def windows_read(account=ACCOUNT):
+    path = fallback_path(account).with_suffix(".dpapi")
     if not path.exists():
         return {}
     return windows_unprotect(path.read_text(encoding="utf-8").strip())
 
 
-def windows_write(data):
-    path = fallback_path().with_suffix(".dpapi")
+def windows_write(data, account=ACCOUNT):
+    path = fallback_path(account).with_suffix(".dpapi")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(windows_protect(data) + "\n", encoding="utf-8")
     try:
@@ -217,9 +218,9 @@ def windows_write(data):
         pass
 
 
-def linux_read():
+def linux_read(account=ACCOUNT):
     result = subprocess.run(
-        ["secret-tool", "lookup", "service", SERVICE, "account", ACCOUNT],
+        ["secret-tool", "lookup", "service", SERVICE, "account", account],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -231,9 +232,9 @@ def linux_read():
     return json.loads(text) if text else {}
 
 
-def linux_write(data):
+def linux_write(data, account=ACCOUNT):
     subprocess.run(
-        ["secret-tool", "store", "--label", "Ads Plan Monitor OceanEngine OAuth", "service", SERVICE, "account", ACCOUNT],
+        ["secret-tool", "store", "--label", "Ads Plan Monitor OceanEngine OAuth", "service", SERVICE, "account", account],
         input=json.dumps(data, ensure_ascii=False),
         check=True,
         stdout=subprocess.DEVNULL,
@@ -242,15 +243,15 @@ def linux_write(data):
     )
 
 
-def fallback_read():
-    path = fallback_path()
+def fallback_read(account=ACCOUNT):
+    path = fallback_path(account)
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def fallback_write(data):
-    path = fallback_path()
+def fallback_write(data, account=ACCOUNT):
+    path = fallback_path(account)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
@@ -259,35 +260,43 @@ def fallback_write(data):
         pass
 
 
-def read_credentials():
+def read_entry(account=ACCOUNT):
     backend = backend_name()
     if backend == "macos-keychain":
-        return macos_read()
+        return macos_read(account)
     if backend == "windows-dpapi":
-        return windows_read()
+        return windows_read(account)
     if backend == "linux-secret-service":
-        return linux_read()
+        return linux_read(account)
     if backend == "file-fallback":
-        return fallback_read()
+        return fallback_read(account)
     return {}
 
 
-def write_credentials(data):
+def write_entry(account, data):
     backend = backend_name()
     if backend == "macos-keychain":
-        macos_write(data)
+        macos_write(data, account)
     elif backend == "windows-dpapi":
-        windows_write(data)
+        windows_write(data, account)
     elif backend == "linux-secret-service":
-        linux_write(data)
+        linux_write(data, account)
     elif backend == "file-fallback":
-        fallback_write(data)
+        fallback_write(data, account)
     else:
         raise RuntimeError(
             "No secure credential backend is available. Install secret-tool/libsecret, "
             f"or set {INSECURE_FALLBACK_ENV}=1 to explicitly allow a plaintext fallback."
         )
     return backend
+
+
+def read_credentials():
+    return read_entry(ACCOUNT)
+
+
+def write_credentials(data):
+    return write_entry(ACCOUNT, data)
 
 
 def merge_credentials(config, credentials=None):
@@ -300,21 +309,45 @@ def merge_credentials(config, credentials=None):
     return merged
 
 
-def extract_credentials(config):
-    api = config.get("api") or {}
-    return {
-        key: api[key]
-        for key in SENSITIVE_KEYS
-        if key in api and not is_missing(api.get(key))
-    }
+def extract_credentials(config, channel="marketing"):
+    sources = [config.get("api") or {}]
+    channel_config = (config.get("channels") or {}).get(channel) or {}
+    sources.append(channel_config.get("api") or {})
+    extracted = {}
+    for source in sources:
+        for key in SENSITIVE_KEYS:
+            value = source.get(key)
+            if is_missing(value):
+                continue
+            if key in extracted and extracted[key] != value:
+                raise ValueError(f"conflicting {channel} credential field: {key}")
+            extracted[key] = value
+    return extracted
 
 
 def strip_sensitive_config(config):
     cleaned = json.loads(json.dumps(config, ensure_ascii=False))
-    api = cleaned.setdefault("api", {})
-    for key in SENSITIVE_KEYS:
-        api.pop(key, None)
+    api_nodes = [cleaned.setdefault("api", {})]
+    for channel_config in (cleaned.get("channels") or {}).values():
+        if isinstance(channel_config, dict) and isinstance(channel_config.get("api"), dict):
+            api_nodes.append(channel_config["api"])
+    for api in api_nodes:
+        for key in SENSITIVE_KEYS:
+            api.pop(key, None)
     return cleaned
+
+
+def sensitive_config_fields(config):
+    fields = []
+    for key in SENSITIVE_KEYS:
+        if key in (config.get("api") or {}):
+            fields.append(f"api.{key}")
+    for channel, channel_config in (config.get("channels") or {}).items():
+        api = channel_config.get("api") if isinstance(channel_config, dict) else None
+        for key in SENSITIVE_KEYS:
+            if isinstance(api, dict) and key in api:
+                fields.append(f"channels.{channel}.api.{key}")
+    return sorted(fields)
 
 
 def migrate_from_config(config_path):
@@ -336,17 +369,22 @@ def migrate_from_config(config_path):
     }
 
 
-def configure_app(app_id=None, secret=None):
-    credentials = read_credentials()
-    if app_id:
-        credentials["app_id"] = app_id
-    if secret:
-        credentials["secret"] = secret
-    backend = write_credentials(credentials)
+def configure_app(app_id=None, secret=None, channel="marketing"):
+    import authorization_store
+    import channels
+
+    channels.get(channel, capability="oauth")
+    current = authorization_store.read_app(channel)
+    app_id = app_id or current.get("app_id")
+    secret = secret or current.get("secret")
+    if is_missing(app_id) or is_missing(secret):
+        raise ValueError("app_id and secret are required")
+    backend = authorization_store.write_app(channel, app_id, secret)
     return {
         "backend": backend,
-        "has_app_id": not is_missing(credentials.get("app_id")),
-        "has_secret": not is_missing(credentials.get("secret")),
+        "channel": channel,
+        "has_app_id": True,
+        "has_secret": True,
     }
 
 
@@ -360,11 +398,15 @@ def configure_developer_id(developer_id):
     }
 
 
-def status(config_path=None):
+def status(config_path=None, channel="marketing"):
+    import authorization_store
+
     backend = backend_name()
-    credentials = read_credentials()
+    channel_status = authorization_store.status(channel)
+    legacy = read_credentials()
     result = {
         "backend": backend,
+        "channel": channel,
         "credential_location": (
             str(fallback_path())
             if backend == "file-fallback"
@@ -374,29 +416,15 @@ def status(config_path=None):
         ),
         "secure_backend_available": backend not in {"file-fallback", "unavailable"},
         "insecure_file_fallback": backend == "file-fallback",
-        "has_app_id": not is_missing(credentials.get("app_id")),
-        "has_developer_id": not is_missing(credentials.get("developer_id")),
-        "has_secret": not is_missing(credentials.get("secret")),
-        "has_access_token": not is_missing(credentials.get("access_token")),
-        "has_refresh_token": not is_missing(credentials.get("refresh_token")),
-        "access_token_expires_at": credentials.get("access_token_expires_at"),
-        "refresh_token_expires_at": credentials.get("refresh_token_expires_at"),
-        "last_token_update_at": credentials.get("last_token_update_at"),
-        "oauth_authorized_account_count": len(credentials.get("oauth_authorized_accounts") or []),
-        "authorized_advertiser_count": len(credentials.get("authorized_advertiser_ids") or []),
-        "last_authorized_account_sync_at": credentials.get("last_authorized_account_sync_at"),
+        "has_developer_id": not is_missing(legacy.get("developer_id")),
+        **channel_status,
     }
     if config_path:
         config = json.loads(Path(config_path).expanduser().read_text(encoding="utf-8"))
         advertiser_id = (config.get("account") or {}).get("advertiser_id")
         result["advertiser_id"] = advertiser_id
-        result["advertiser_id_authorized"] = any(
-            str(item) == str(advertiser_id)
-            for item in (credentials.get("authorized_advertiser_ids") or [])
-        )
-        result["project_config_has_sensitive_fields"] = sorted(
-            key for key in SENSITIVE_KEYS if key in (config.get("api") or {})
-        )
+        result.update(authorization_store.status(channel, advertiser_id=advertiser_id))
+        result["project_config_has_sensitive_fields"] = sensitive_config_fields(config)
     return result
 
 
@@ -410,6 +438,7 @@ def main():
     parser.add_argument("--set-app", action="store_true")
     parser.add_argument("--app-id")
     parser.add_argument("--secret")
+    parser.add_argument("--channel", default="marketing", choices=("marketing", "qianchuan"))
     args = parser.parse_args()
     config_path = config_paths.resolve_config_path(args.config)
 
@@ -420,10 +449,10 @@ def main():
     if args.set_app:
         app_id = args.app_id or input("OceanEngine APP_ID: ").strip()
         secret = args.secret or getpass.getpass("OceanEngine Secret: ").strip()
-        print(json.dumps(configure_app(app_id, secret), ensure_ascii=False, indent=2))
+        print(json.dumps(configure_app(app_id, secret, channel=args.channel), ensure_ascii=False, indent=2))
         return 0
 
-    print(json.dumps(status(config_path), ensure_ascii=False, indent=2))
+    print(json.dumps(status(config_path, channel=args.channel), ensure_ascii=False, indent=2))
     return 0
 
 

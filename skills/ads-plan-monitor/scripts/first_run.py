@@ -5,6 +5,8 @@ import json
 
 import config_paths
 import config_store
+import authorization_store
+import channels
 import credential_store
 import configure_official_mcp
 import plan_templates
@@ -76,12 +78,13 @@ def redacted_value(value, key):
 
 def check_fields(config):
     result = validate_config.validate_config(config)
+    runtime = channels.runtime_config(config, capability="query")
     query_required = [
         "api.base_url",
         "account.advertiser_id",
     ]
     field_preview = {
-        field: redacted_value(get_path(config, field), field)
+        field: redacted_value(get_path(runtime, field), field)
         for field in query_required
     }
     create_missing = list(result["missing_create_preview_required"])
@@ -136,19 +139,21 @@ def main():
         created = True
 
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    migrated_config = channels.migrate_config(raw_config)
     try:
-        config = apply_plan_template(raw_config)
+        config = apply_plan_template(migrated_config)
     except ValueError:
-        config = raw_config
-    query_missing, create_missing, field_preview = check_fields(raw_config)
+        config = migrated_config
+    query_missing, create_missing, field_preview = check_fields(migrated_config)
     mcp_status = configure_official_mcp.status()
     scripts_dir = skill_root() / "scripts"
     template_rows = []
-    for name, raw_template in sorted((raw_config.get("plan_templates") or {}).items()):
-        template = plan_templates.normalize_template(raw_config, name, raw_template)
+    for name, raw_template in sorted((migrated_config.get("plan_templates") or {}).items()):
+        template = plan_templates.normalize_template(migrated_config, name, raw_template)
         copy_titles = template["copy_materials"].get("titles") or []
         template_rows.append({
             "name": name,
+            "channel": template["bindings"].get("channel"),
             "active": name == raw_config.get("active_plan_template"),
             "advertiser_id": template["bindings"].get("advertiser_id"),
             "platform": template["bindings"].get("platform"),
@@ -159,23 +164,34 @@ def main():
             "binding_error": plan_templates.binding_error(template["bindings"]),
         })
     active_template = next((row for row in template_rows if row["active"]), None)
+    channel_rows = []
+    for row in channels.status_rows(migrated_config):
+        channel_status = authorization_store.status(
+            row["channel"],
+            advertiser_id=(migrated_config.get("account") or {}).get("advertiser_id"),
+        ) if row["implemented"] else {}
+        channel_rows.append({**row, **channel_status})
 
     print(json.dumps({
         "mode": "first_run_guide",
         "skill": "ads-plan-monitor",
         "skill_root": str(skill_root()),
+        "default_channel": migrated_config.get("default_channel"),
+        "channels": channel_rows,
         "config": str(config_path),
         "created_config_from_template": created,
         "next_action": next_action(query_missing, active_template, create_missing),
         "ok_for_query_data": not query_missing,
         "ok_for_create_plan": not query_missing and not create_missing,
-        "active_plan_template": raw_config.get("active_plan_template"),
+        "active_plan_template": migrated_config.get("active_plan_template"),
         "active_template_advertiser_id": (
             active_template.get("advertiser_id") if active_template else None
         ),
         "available_plan_templates": template_rows,
-        "plan_template_schema_version": raw_config.get("plan_template_schema_version", 1),
-        "template_migration_required": int(raw_config.get("plan_template_schema_version") or 1) < 2,
+        "plan_template_schema_version": migrated_config.get("plan_template_schema_version", 1),
+        "template_migration_required": int(migrated_config.get("plan_template_schema_version") or 1) < 2,
+        "channel_migration_required": int(raw_config.get("config_schema_version") or 1) < 2,
+        "channel_migration_command": f'python3 "{scripts_dir / "migrate_channels.py"}" --config "{config_path}"',
         "template_setup": {
             "rule": "Each business template belongs to exactly one advertiser_id and cannot create plans for another advertiser.",
             "default_template_usage": "default_plan_template is a creation base shown by create-wizard and never participates in business delivery.",
@@ -191,11 +207,13 @@ def main():
             "account.advertiser_id",
         ],
         "oauth_setup": {
-            "redirect_uri": get_path(raw_config, "oauth.redirect_uri"),
+            "channel": "marketing",
+            "channel_display_name": "巨量营销",
+            "redirect_uri": get_path(migrated_config, "channels.marketing.oauth.redirect_uri"),
             "credential_backend": credential_store.backend_name(),
-            "set_app_command": f'python3 "{scripts_dir / "credential_store.py"}" --config "{config_path}" --set-app',
-            "local_authorize_command": f'python3 "{scripts_dir / "oauth_local_authorize.py"}" --config "{config_path}"',
-            "token_status_command": f'python3 "{scripts_dir / "token_manager.py"}" --config "{config_path}" --status',
+            "set_app_command": f'python3 "{scripts_dir / "credential_store.py"}" --config "{config_path}" --channel marketing --set-app',
+            "local_authorize_command": f'python3 "{scripts_dir / "oauth_local_authorize.py"}" --config "{config_path}" --channel marketing',
+            "token_status_command": f'python3 "{scripts_dir / "token_manager.py"}" --config "{config_path}" --channel marketing --status',
         },
         "official_docs_mcp": {
             **mcp_status,

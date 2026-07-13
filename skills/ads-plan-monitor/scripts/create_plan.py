@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 import config_paths
+import channels
 import plan_templates
 import token_manager
 
@@ -68,8 +69,8 @@ def deep_merge(base, override):
     return result
 
 
-def apply_plan_template(config, template_name=None):
-    return plan_templates.apply(config, template_name)
+def apply_plan_template(config, template_name=None, channel=None):
+    return plan_templates.apply(config, template_name, channel=channel)
 
 
 def material_date_for_yesterday(now=None):
@@ -356,23 +357,33 @@ def main():
     parser.add_argument("--promotion-only", action="store_true")
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--out")
+    token_manager.add_authorization_arguments(parser)
     args = parser.parse_args()
 
     config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    raw_config = channels.runtime_config(raw_config, channel=args.channel, capability="create")
     submit_failed = False
     try:
         config = plan_templates.apply(
             raw_config,
             args.plan_template,
             advertiser_id=args.advertiser_id,
+            channel=args.channel,
         )
         if args.submit:
-            raw_config = token_manager.ensure_access_token(config_path, raw_config)
+            raw_config = token_manager.ensure_access_token(
+                config_path,
+                raw_config,
+                channel=args.channel,
+                advertiser_id=args.advertiser_id,
+                auth_account_id=args.auth_account_id,
+            )
             config = plan_templates.apply(
                 raw_config,
                 args.plan_template,
                 advertiser_id=args.advertiser_id,
+                channel=args.channel,
             )
     except ValueError as exc:
         print(json.dumps({

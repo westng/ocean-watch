@@ -27,9 +27,13 @@
 │       │   └── official-api-notes.md
 │       └── scripts/
 │           ├── configure_official_mcp.py
+│           ├── channels.py
 │           ├── credential_store.py
+│           ├── authorization_store.py
 │           ├── oauth_local_authorize.py
 │           ├── token_manager.py
+│           ├── migrate_channels.py
+│           ├── process_lock.py
 │           ├── first_run.py
 │           ├── config_store.py
 │           ├── plan_templates.py
@@ -57,7 +61,7 @@
 | `skills/ads-plan-monitor/agents/` | Codex UI | Skill 展示名称、简介和默认提示 |
 | `skills/ads-plan-monitor/assets/` | 用户和脚本 | 脱敏示例配置；只能放占位符 |
 | `skills/ads-plan-monitor/references/` | Codex | 按需读取的 API 笔记和模板规则 |
-| `skills/ads-plan-monitor/scripts/` | 用户和 Codex | 授权、查询、模板领域逻辑、原子配置存储、创建、批量创建和 MCP 配置 |
+| `skills/ads-plan-monitor/scripts/` | 用户和 Codex | 渠道隔离、授权存储、可恢复迁移、查询、模板领域逻辑、创建、批量创建和 MCP 配置 |
 | `tests/` | 维护者 | 不调用真实业务 API 的回归测试 |
 | `docs/` | 人类用户 | 安装、配置、命令、设计和结构说明 |
 
@@ -70,7 +74,7 @@
 3. Git 开发仓库根目录的 `config/ads-plan-monitor/config.json`。
 4. 用户目录的 `~/.codex/ads-plan-monitor/config.json`。
 
-安装后的 Plugin 通常不包含 `.git`，因此自动使用用户目录配置。OAuth 和 MCP 参数独立保存在系统凭据仓库。
+安装后的 Plugin 通常不包含 `.git`，因此自动使用用户目录配置。OAuth 应用和 Token 按渠道保存在系统凭据仓库；非敏感授权账户索引和可恢复迁移 journal 保存在 `~/.codex/ads-plan-monitor/state/`。
 
 ## 本地私有目录
 
@@ -92,3 +96,4 @@ git ls-files config runs .venv
 - 只有用户另行明确要求写入本地配置、查询真实账户或提交真实计划时，才进入业务执行模式。
 - API 写操作默认先 dry-run 或预览，用户明确要求后再提交。
 - 官方 MCP 只负责开发文档、Schema 和 SDK 示例，不替代业务 API。
+- 当前业务能力全部属于 `marketing`（巨量营销）；`qianchuan`（巨量千川）仅预留隔离结构，不能复用营销凭据或端点。

@@ -5,7 +5,7 @@
 > Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
-下面命令默认从 `config/ads-plan-monitor/config.json` 读取业务配置，并从本机凭据仓库读取 OAuth token。
+下面命令默认从 `config/ads-plan-monitor/config.json` 读取业务配置，并从本机凭据仓库读取 OAuth Token。当前业务命令默认渠道为 `marketing`（巨量营销）；`qianchuan` 尚未实现，不会复用营销凭据。
 
 ## 初始化和检查
 
@@ -19,7 +19,15 @@ python3 skills/ads-plan-monitor/scripts/validate_config.py \
 
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --status
+```
+
+旧版本升级：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json
 ```
 
 只检查某个用途时，将 `--mode all` 改成 `query`、`create-preview` 或 `create-submit`。
@@ -36,6 +44,7 @@ python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py --status
 ```bash
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --refresh
 ```
 
@@ -46,7 +55,24 @@ python3 skills/ads-plan-monitor/scripts/token_manager.py \
 ```bash
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --sync-accounts
+```
+
+旧版本迁移后若状态显示 `pending_account_sync: true`，使用状态中的本地授权 ID 完成首次同步：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/token_manager.py \
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing \
+  --authorization-id <AUTHORIZATION_ID> \
+  --sync-accounts
+```
+
+一般无需指定授权账户，脚本会根据目标广告主自动选择 Token。只有多个授权同时覆盖该广告主时，增加：
+
+```bash
+--auth-account-id REPLACE_WITH_OFFICIAL_ACCOUNT_ID
 ```
 
 ## 查询视频素材

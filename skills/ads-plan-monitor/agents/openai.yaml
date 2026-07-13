@@ -1,4 +1,4 @@
 interface:
-  display_name: "巨量计划盯盘"
-  short_description: "初始化、计划创建、素材报表与盯盘策略"
-  default_prompt: "Use $ads-plan-monitor to initialize local access, query material data, create plans, or analyze strategy through official Ocean Engine APIs."
+  display_name: "巨量引擎盯盘助手"
+  short_description: "渠道授权、计划创建、素材报表与盯盘策略"
+  default_prompt: "Use $ads-plan-monitor to initialize channel-aware local access, query material data, create plans, or analyze strategy through official Ocean Engine APIs."

@@ -34,6 +34,7 @@ def list_templates(config):
         rows.append({
             "name": name,
             "active": name == config.get("active_plan_template"),
+            "channel": bindings.get("channel"),
             "advertiser_id": bindings.get("advertiser_id"),
             "platform": bindings.get("platform"),
             "traffic_source": bindings.get("traffic_source"),
@@ -85,6 +86,9 @@ def create_template(config, args):
                 f"{source_advertiser_id}; cross-advertiser template cloning is not allowed"
             )
     values = {
+        "channel": getattr(args, "channel", None)
+        or (config.get("account") or {}).get("channel")
+        or "marketing",
         "advertiser_id": args.advertiser_id,
         "platform": args.platform,
         "traffic_source": args.traffic_source,
@@ -141,7 +145,8 @@ def select_template_source(config, input_fn, output_fn):
         template = plan_templates.normalize_template(config, name, config["plan_templates"][name])
         bindings = template["bindings"]
         output_fn(
-            f"  {index}. {name}（广告主 {bindings.get('advertiser_id')}，"
+            f"  {index}. {name}（渠道 {bindings.get('channel')}，"
+            f"广告主 {bindings.get('advertiser_id')}，"
             f"平台 {bindings.get('platform')}，商品 {bindings.get('product_name')}，"
             f"商品 ID {bindings.get('product_id')}）"
         )
@@ -201,6 +206,9 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     name = prompt_value(input_fn, "模板名称", generated_name, required=True)
 
     target_bindings = {
+        "channel": bindings.get("channel")
+        or (config.get("account") or {}).get("channel")
+        or "marketing",
         "advertiser_id": advertiser_id,
         "platform": platform,
         "traffic_source": traffic_source,
@@ -221,6 +229,7 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     ) if same_product else []
     titles = collect_titles(input_fn, source_titles)
     arguments = argparse.Namespace(
+        channel=target_bindings["channel"],
         advertiser_id=advertiser_id,
         platform=platform,
         traffic_source=traffic_source,
@@ -271,6 +280,7 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     )
     if activate:
         candidate["active_plan_template"] = created_name
+        candidate.setdefault("account", {})["channel"] = target_bindings["channel"]
         candidate.setdefault("account", {})["advertiser_id"] = str(advertiser_id)
     return candidate, {**preview, "confirmed": True, "changed": True, "activate": activate}
 

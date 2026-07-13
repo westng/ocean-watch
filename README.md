@@ -25,14 +25,14 @@
 
 `ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin。插件内只有一个 `ads-plan-monitor` Skill，并在 Skill 内部处理首次向导、计划创建、数据查询和逻辑策略四类分支。
 
-业务操作通过官方 Ocean Engine Marketing API 完成；开发文档、OpenAPI Schema 和 SDK 示例可通过巨量引擎官方开发文档 MCP 查询。真实业务配置与 OAuth 凭据保留在使用者自己的电脑上。
+业务操作目前通过官方 Ocean Engine Marketing API 完成，并统一归属 `marketing`（巨量营销）渠道。Plugin 已具备渠道隔离底座；`qianchuan`（巨量千川）保留为待开发渠道，不会读取或复用营销应用、Token 和账户。开发文档、OpenAPI Schema 和 SDK 示例可通过巨量引擎官方开发文档 MCP 查询。真实业务配置与 OAuth 凭据保留在使用者自己的电脑上。
 
 ## 能力
 
 | 场景 | 能力 |
 | --- | --- |
 | 首次使用 | 创建本地配置，检查 OAuth、Token、广告主账户和官方 MCP 状态 |
-| 授权账户 | 使用 `127.0.0.1` 回调完成 OAuth，并展开、验证真实广告主账户 |
+| 授权账户 | 按渠道保存独立应用和多份 OAuth 授权，根据官方 `account_id` 与目标广告主自动选择 Token |
 | Token 管理 | API 调用前自动检查有效期，临近过期时刷新并保存轮换凭据 |
 | 创建计划 | 按平台和商品模板生成项目与单元，确认后提交官方 API |
 | 批量创建 | 获取当天上传视频，按 N 条一个单元分组，支持多账户并发 |
@@ -72,6 +72,23 @@ codex plugin add ocean-watch@ocean-watch
 
 OAuth App ID、Secret、Access Token、Refresh Token 和 MCP `developer_id` 均写入本机系统凭据仓库，不写进项目配置，也不应粘贴到聊天中。
 
+从旧版本升级时，先执行一次渠道迁移。现有 APP ID、Secret、Token、授权账户和模板全部迁入 `marketing`，不需要重新授权：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json
+```
+
+迁移可安全重复执行；中断后再次运行会沿用同一迁移记录继续完成。若旧 Token 没有完整的官方账户映射，状态会显示 `pending_account_sync: true`，按输出中的 `authorization_id` 执行一次同步：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/token_manager.py \
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing \
+  --authorization-id <AUTHORIZATION_ID> \
+  --sync-accounts
+```
+
 ### OAuth
 
 从仓库开发时，可以运行：
@@ -79,13 +96,19 @@ OAuth App ID、Secret、Access Token、Refresh Token 和 MCP `developer_id` 均�
 ```bash
 python3 skills/ads-plan-monitor/scripts/credential_store.py \
   --config config/ads-plan-monitor/config.json \
+  --channel marketing \
   --set-app
 
 python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json
+  --config config/ads-plan-monitor/config.json \
+  --channel marketing
 ```
 
 默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台应用配置完全一致。
+
+同一营销应用可以完成多次授权。Plugin 会保留每份授权，并根据目标 `advertiser_id` 自动匹配包含它的官方授权账户；只有匹配有歧义时才需要传 `--auth-account-id`。所有业务命令默认使用 `--channel marketing`。
+
+`qianchuan` 目前只预留独立渠道结构，尚未实现授权和业务 API；它不会读取或复用任何营销应用、Token、账户或模板。
 
 ### 官方 MCP
 

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import credential_store
+import authorization_store
 import oceanengine_mcp_bridge
 
 
@@ -81,7 +82,13 @@ def get_server():
 
 
 def status(credentials=None):
-    credentials = credential_store.read_credentials() if credentials is None else credentials
+    if credentials is None:
+        credentials = {
+            **authorization_store.read_app("marketing"),
+            **{
+                "developer_id": credential_store.read_credentials().get("developer_id"),
+            },
+        }
     app_id = credentials.get("app_id")
     developer_id = credentials.get("developer_id")
     server = get_server()
@@ -111,7 +118,10 @@ def status(credentials=None):
 
 
 def configure(developer_id=None):
-    credentials = credential_store.read_credentials()
+    credentials = {
+        **authorization_store.read_app("marketing"),
+        **{"developer_id": credential_store.read_credentials().get("developer_id")},
+    }
     app_id = credentials.get("app_id")
     if not is_configured(app_id):
         raise RuntimeError("APP_ID is missing; save app credentials before configuring the MCP")
