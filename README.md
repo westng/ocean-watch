@@ -21,7 +21,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
-中文默认
+中文默认 | [English](./README.en-US.md)
 
 `ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin。插件内只有一个 `ads-plan-monitor` Skill，并在 Skill 内部处理首次向导、计划创建、数据查询和逻辑策略四类分支。
 
