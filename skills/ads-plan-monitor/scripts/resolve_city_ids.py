@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 import token_manager
+import config_store
 import config_paths
 import credential_store
 
@@ -173,7 +174,7 @@ def main():
         config.setdefault("resolved_ids", {})["city_ids"] = [item["code"] for item in result["resolved"]]
         config.setdefault("resolved_ids", {})["city_names"] = [item["name"] for item in result["resolved"]]
         safe_config = credential_store.strip_sensitive_config(config)
-        config_path.write_text(json.dumps(safe_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        config_store.atomic_write_json(config_path, safe_config)
         result["config_updated"] = str(config_path)
 
     output = json.dumps(result, ensure_ascii=False, indent=2)

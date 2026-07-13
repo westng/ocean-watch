@@ -2,60 +2,27 @@
 import argparse
 import copy
 import json
-from pathlib import Path
 
+import config_store
 import config_paths
 import plan_templates
-
-
-ACCOUNT_SCOPED_RESOLVED_IDS = {
-    "brand_info",
-    "product_platform_id",
-    "event_asset_ids",
-    "product_image_ids",
-    "landing_page_asset_id",
-}
+import template_workflow
 
 
 def load_config(path):
-    return json.loads(path.read_text(encoding="utf-8"))
+    return config_store.load_json(path)
 
 
 def save_config(path, config):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config_store.atomic_write_json(path, config)
 
 
 def template_name(platform, traffic_source, product_name, product_id):
-    return f"{platform}-{traffic_source}-{product_name}-{product_id}"
+    return template_workflow.template_name(platform, traffic_source, product_name, product_id)
 
 
 def normalize_titles(titles):
-    normalized = []
-    for title in titles or []:
-        value = str(title).strip()
-        if value and value not in normalized:
-            normalized.append(value)
-    if not normalized:
-        raise ValueError("at least one non-empty copy title is required")
-    return normalized
-
-
-def sanitize_cross_advertiser_overrides(overrides):
-    sanitized = copy.deepcopy(overrides)
-    removed = []
-    materials = sanitized.get("materials") or {}
-    for field in sorted(materials):
-        removed.append(f"materials.{field}")
-    sanitized["materials"] = {}
-
-    resolved_ids = sanitized.get("resolved_ids") or {}
-    for field in sorted(ACCOUNT_SCOPED_RESOLVED_IDS):
-        if field in resolved_ids:
-            resolved_ids.pop(field, None)
-            removed.append(f"resolved_ids.{field}")
-    sanitized["resolved_ids"] = resolved_ids
-    return sanitized, removed
+    return template_workflow.normalize_titles(titles)
 
 
 def list_templates(config):
@@ -102,83 +69,44 @@ def default_template_summary(config):
 def create_template(config, args):
     if int(config.get("plan_template_schema_version") or 1) < plan_templates.SCHEMA_VERSION:
         config = plan_templates.migrate(config)
-    name = args.name or template_name(
-        args.platform,
-        args.traffic_source,
-        args.product_name,
-        args.product_id,
-    )
     templates = config.setdefault("plan_templates", {})
-    if name in templates and not args.force:
-        raise ValueError(f"plan template already exists: {name}; use --force to replace it")
-
-    overrides = {}
-    inherited_copy_materials = {"titles": []}
-    source_metadata = {
-        "type": "default",
-        "template": None,
-        "cross_advertiser": False,
-        "cleared_account_fields": [],
-    }
     if args.from_template:
         source = templates.get(args.from_template)
         if source is None:
             raise ValueError(f"source plan template not found: {args.from_template}")
-        normalized_source = plan_templates.normalize_template(config, args.from_template, source)
-        source_advertiser_id = normalized_source["bindings"].get("advertiser_id")
-        cross_advertiser = str(source_advertiser_id) != str(args.advertiser_id)
-        if cross_advertiser and not getattr(args, "allow_cross_advertiser_clone", False):
+        source_template = plan_templates.normalize_template(config, args.from_template, source)
+        source_advertiser_id = source_template["bindings"].get("advertiser_id")
+        if (
+            str(source_advertiser_id) != str(args.advertiser_id)
+            and not getattr(args, "allow_cross_advertiser_clone", False)
+        ):
             raise ValueError(
                 f"source plan template {args.from_template} is bound to advertiser "
                 f"{source_advertiser_id}; cross-advertiser template cloning is not allowed"
             )
-        overrides = copy.deepcopy(normalized_source["overrides"])
-        inherited_copy_materials = copy.deepcopy(normalized_source["copy_materials"])
-        source_metadata = {
-            "type": "business_template",
-            "template": args.from_template,
-            "cross_advertiser": cross_advertiser,
-            "cleared_account_fields": [],
-        }
-        if cross_advertiser:
-            overrides, removed = sanitize_cross_advertiser_overrides(overrides)
-            source_metadata["cleared_account_fields"] = removed
-    overrides.setdefault("defaults", {}).update({
-        "product_name": args.product_name,
+    values = {
+        "advertiser_id": args.advertiser_id,
+        "platform": args.platform,
+        "traffic_source": args.traffic_source,
         "product_id": args.product_id,
-    })
-    overrides.setdefault("resolved_ids", {})["unique_product_id"] = str(args.product_id)
-    if args.source_name:
-        overrides["defaults"]["source"] = args.source_name
-    if args.landing_page_url or args.open_url:
-        links = overrides.setdefault("links", {})
-        if args.landing_page_url:
-            links["landing_page_url"] = args.landing_page_url
-        if args.open_url:
-            links["open_url"] = args.open_url
-    if args.track_url or args.action_track_url:
-        tracking_urls = overrides.setdefault("tracking_urls", {})
-        if args.track_url:
-            tracking_urls["track_url"] = [args.track_url]
-        if args.action_track_url:
-            tracking_urls["action_track_url"] = [args.action_track_url]
-    copy_materials = {
-        "titles": normalize_titles(args.title),
-    } if args.title else inherited_copy_materials
-
-    templates[name] = {
-        "display_name": name,
-        "bindings": {
-            "advertiser_id": str(args.advertiser_id),
-            "platform": args.platform,
-            "traffic_source": args.traffic_source,
-            "product_id": str(args.product_id),
-            "product_name": args.product_name,
-        },
-        "copy_materials": copy_materials,
-        "created_from": source_metadata,
-        "overrides": overrides,
+        "product_name": args.product_name,
+        "name": args.name,
+        "source_name": args.source_name,
+        "landing_page_url": args.landing_page_url,
+        "open_url": args.open_url,
+        "track_url": args.track_url,
+        "action_track_url": args.action_track_url,
+        "titles": args.title,
     }
+    name, template = template_workflow.build_template(config, values, args.from_template)
+    if name in templates and not args.force:
+        raise ValueError(f"plan template already exists: {name}; use --force to replace it")
+    if args.activate:
+        validation = template_workflow.validate_candidate(config, name, template)
+        if not validation["ready_for_plan_creation"]:
+            missing = ", ".join(validation["template_missing_fields"])
+            raise ValueError(f"incomplete plan template cannot be activated: {missing}")
+    templates[name] = template
     if args.activate:
         config["active_plan_template"] = name
         config.setdefault("account", {})["advertiser_id"] = str(args.advertiser_id)
@@ -249,8 +177,6 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     bindings = (source or {}).get("bindings") or {}
     overrides = (source or {}).get("overrides") or {}
     defaults = overrides.get("defaults") or {}
-    links = overrides.get("links") or {}
-    tracking = overrides.get("tracking_urls") or {}
 
     advertiser_id = prompt_value(
         input_fn,
@@ -270,7 +196,25 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     generated_name = template_name(platform, traffic_source, product_name, product_id)
     name = prompt_value(input_fn, "模板名称", generated_name, required=True)
 
-    source_titles = ((source or {}).get("copy_materials") or {}).get("titles") or []
+    target_bindings = {
+        "advertiser_id": advertiser_id,
+        "platform": platform,
+        "traffic_source": traffic_source,
+        "product_id": product_id,
+        "product_name": product_name,
+    }
+    policy = template_workflow.clone_policy(source, target_bindings)
+    preserve_business_defaults = policy == "same_advertiser_same_product"
+    links = (overrides.get("links") or {}) if preserve_business_defaults else {}
+    tracking = (overrides.get("tracking_urls") or {}) if preserve_business_defaults else {}
+
+    same_product = policy in {
+        "same_advertiser_same_product",
+        "cross_advertiser_same_product",
+    }
+    source_titles = (
+        ((source or {}).get("copy_materials") or {}).get("titles") or []
+    ) if same_product else []
     titles = collect_titles(input_fn, source_titles)
     arguments = argparse.Namespace(
         advertiser_id=advertiser_id,
@@ -300,20 +244,27 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     )
     candidate, created_name = create_template(copy.deepcopy(config), arguments)
     created = candidate["plan_templates"][created_name]
+    validation = template_workflow.validate_candidate(config, created_name, created)
+    source_snapshot = config["plan_templates"].get(source_name) if source_name else None
     preview = {
         "action": "create_business_template",
         "template": created_name,
         "source": created["created_from"],
         "bindings": created["bindings"],
         "copy_title_count": len(created["copy_materials"].get("titles") or []),
-        "override_sections": sorted(created["overrides"]),
+        "validation": validation,
+        "changes": template_workflow.template_diff(source_snapshot, created),
         "activate": False,
     }
     output_fn("创建前预览：")
     output_fn(json.dumps(preview, ensure_ascii=False, indent=2))
     if not prompt_yes_no(input_fn, "确认创建此业务模板", default=False):
         return config, {**preview, "confirmed": False, "changed": False}
-    activate = prompt_yes_no(input_fn, "创建后设为当前模板", default=False)
+    activate = validation["ready_for_plan_creation"] and prompt_yes_no(
+        input_fn,
+        "创建后设为当前模板",
+        default=False,
+    )
     if activate:
         candidate["active_plan_template"] = created_name
         candidate.setdefault("account", {})["advertiser_id"] = str(advertiser_id)

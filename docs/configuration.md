@@ -64,7 +64,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 
 模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
 
-`default_plan_template` 是创建新业务模板的默认骨架，只在向导的来源选择中出现，不能激活，也不能直接创建计划。素材、商品与转化资产 ID、落地页资产、监测链接和标题必须保存在业务模板中。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
+`default_plan_template` 是创建新业务模板的默认骨架，只保存跨广告主、跨商品可复用的投放和地域参数。它不能激活，也不能直接创建计划。素材、商品与转化资产 ID、落地页资产、业务链接、监测链接和标题必须保存在业务模板中。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
 
 查看模板及其归属广告主：
 
@@ -88,9 +88,9 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 2. 已有业务模板会同时展示所属广告主 ID。
 3. 填写目标广告主、平台、流量来源、商品和模板名称。
 4. 确认文案、计划来源、落地页、直达及监测链接。
-5. 跨广告主复制时，自动清空视频、封面、转化资产、商品图片和落地页资产等账户专属字段。
-6. 展示来源、绑定关系、继承内容和清理字段的差异预览。
-7. 用户确认后才写入；是否设为当前模板需要再次确认，默认不激活。
+5. 按复制策略清理字段：同广告主同商品保留业务参数；新商品清空商品资产、链接和文案；跨广告主还会清空账户资产。
+6. 展示来源、绑定关系、复制策略和逐字段差异预览。
+7. 用户确认后才以原子方式写入，并保留上一版 `.bak`；不完整模板可保存为草稿，但不能激活。
 
 插件不提供绕过向导的新模板创建命令；所有业务模板创建都必须经过来源选择、差异预览和最终确认。
 
@@ -105,7 +105,7 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   --title "第二条文案"
 ```
 
-`--title` 可以重复传入；空文案会被拒绝，重复文案会自动去重。模板列表会显示 `copy_materials.configured`、`title_count` 和当前文案内容。创建 payload 时，这些文案会转换成官方字段 `promotion_materials.title_material_list`。
+`--title` 可以重复传入；每条标题必须为 5–30 个字符，空文案会被拒绝，重复文案会自动去重。模板列表会显示 `copy_materials.configured`、`title_count` 和当前文案内容。创建 payload 时，这些文案会转换成官方字段 `promotion_materials.title_material_list`。
 
 相同商品可以只复制另一个创建计划模板的文案素材，即使两个模板属于不同广告主：
 

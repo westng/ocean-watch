@@ -67,6 +67,68 @@ def resolve_accounts(config, accounts_arg):
     return unique_values(accounts)
 
 
+def parse_account_template_mappings(values):
+    mappings = {}
+    for item in values or []:
+        if "=" not in item:
+            raise ValueError("account template mapping must use ADVERTISER_ID=TEMPLATE_NAME")
+        advertiser_id, template_name = item.split("=", 1)
+        advertiser_id = advertiser_id.strip()
+        template_name = template_name.strip()
+        if not advertiser_id or not template_name:
+            raise ValueError("account template mapping must include both advertiser ID and template name")
+        if advertiser_id in mappings and mappings[advertiser_id] != template_name:
+            raise ValueError(f"advertiser {advertiser_id} has multiple template mappings")
+        mappings[advertiser_id] = template_name
+    return mappings
+
+
+def templates_by_advertiser(config):
+    result = {}
+    for name, raw_template in (config.get("plan_templates") or {}).items():
+        template = plan_templates.normalize_template(config, name, raw_template)
+        advertiser_id = str(template["bindings"].get("advertiser_id"))
+        result.setdefault(advertiser_id, []).append(name)
+    return result
+
+
+def resolve_account_jobs(config, accounts_arg, mapping_args, fallback_template=None):
+    explicit_mappings = parse_account_template_mappings(mapping_args)
+    accounts = resolve_accounts(config, accounts_arg)
+    if explicit_mappings:
+        if accounts:
+            missing = [account for account in accounts if account not in explicit_mappings]
+            extra = [account for account in explicit_mappings if account not in accounts]
+            if missing or extra:
+                raise ValueError(
+                    f"account template mappings must exactly match accounts; missing={missing}, extra={extra}"
+                )
+        else:
+            accounts = list(explicit_mappings)
+
+    if not accounts:
+        raise ValueError("No advertiser account found. Set account.advertiser_id or pass --accounts.")
+
+    bound_templates = templates_by_advertiser(config)
+    jobs = []
+    for advertiser_id in accounts:
+        template_name = explicit_mappings.get(advertiser_id)
+        if not template_name and fallback_template:
+            if len(accounts) > 1:
+                raise ValueError("--plan-template can only be used for one account; use --account-template for multiple accounts")
+            template_name = fallback_template
+        if not template_name:
+            candidates = bound_templates.get(str(advertiser_id), [])
+            if len(candidates) != 1:
+                raise ValueError(
+                    f"advertiser {advertiser_id} needs an explicit template mapping; candidates={candidates}"
+                )
+            template_name = candidates[0]
+        plan_templates.apply(config, template_name, advertiser_id=advertiser_id)
+        jobs.append({"advertiser_id": str(advertiser_id), "plan_template": template_name})
+    return jobs
+
+
 def parse_day(value):
     if not value:
         return dt.date.today()
@@ -442,16 +504,16 @@ def process_group(base_config, base_url, token, advertiser_id, videos, group_num
     return result
 
 
-def process_account(raw_config, config_path, advertiser_id, args):
+def process_account(raw_config, config_path, advertiser_id, template_name, args):
     plan_templates.apply(
         raw_config,
-        args.plan_template,
+        template_name,
         advertiser_id=advertiser_id,
     )
     raw_config = token_manager.ensure_access_token(config_path, raw_config)
     base_config = plan_templates.apply(
         raw_config,
-        args.plan_template,
+        template_name,
         advertiser_id=advertiser_id,
     )
     base_config = apply_overrides(base_config, args)
@@ -459,7 +521,7 @@ def process_account(raw_config, config_path, advertiser_id, args):
     token = create_plan.get_path(base_config, "api.access_token")
     result = {
         "advertiser_id": str(advertiser_id),
-        "selected_plan_template": base_config.get("_selected_plan_template"),
+        "plan_template": base_config.get("_selected_plan_template"),
         "status": "running",
         "groups": [],
         "skipped_videos": [],
@@ -598,6 +660,11 @@ def main():
     parser.add_argument("--config")
     parser.add_argument("--accounts", action="append", help="Comma-separated advertiser IDs. Defaults to config account.")
     parser.add_argument("--plan-template")
+    parser.add_argument(
+        "--account-template",
+        action="append",
+        help="Advertiser-to-template mapping as ADVERTISER_ID=TEMPLATE_NAME; repeat for multiple accounts.",
+    )
     parser.add_argument("--date", default="today", help="today, yesterday, or yyyy-mm-dd.")
     parser.add_argument("--filename")
     parser.add_argument("--material-date", help="Name date label such as 7.8. Defaults to --date.")
@@ -625,42 +692,59 @@ def main():
 
     config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
-    preview_config = create_plan.apply_plan_template(raw_config, args.plan_template)
+    jobs = resolve_account_jobs(
+        raw_config,
+        args.accounts,
+        args.account_template,
+        fallback_template=args.plan_template,
+    )
+    preview_config = create_plan.apply_plan_template(
+        raw_config,
+        jobs[0]["plan_template"],
+    )
     if args.videos_per_unit is None:
         args.videos_per_unit = int(create_plan.get_path(preview_config, "defaults.max_videos_per_project", 5) or 5)
     if args.videos_per_unit > 5:
         raise SystemExit("videos-per-unit must be <= 5 for the current promotion material rule.")
 
-    accounts = resolve_accounts(raw_config, args.accounts)
-    if not accounts:
-        raise SystemExit("No advertiser account found. Set account.advertiser_id or pass --accounts.")
-
-    workers = max(1, min(args.account_concurrency, len(accounts)))
+    workers = max(1, min(args.account_concurrency, len(jobs)))
     account_results = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_map = {
-            executor.submit(process_account, raw_config, config_path, account_id, args): account_id
-            for account_id in accounts
+            executor.submit(
+                process_account,
+                raw_config,
+                config_path,
+                job["advertiser_id"],
+                job["plan_template"],
+                args,
+            ): job
+            for job in jobs
         }
         for future in as_completed(future_map):
-            account_id = future_map[future]
+            job = future_map[future]
+            account_id = job["advertiser_id"]
             try:
                 account_results.append(future.result())
             except Exception as exc:
                 account_results.append({
                     "advertiser_id": str(account_id),
+                    "plan_template": {
+                        "name": job["plan_template"],
+                    },
                     "status": "failed",
                     "error": str(exc),
                     "groups": [],
                     "skipped_videos": [],
                 })
 
-    ordered_accounts = sorted(account_results, key=lambda item: accounts.index(item["advertiser_id"]))
+    job_order = [job["advertiser_id"] for job in jobs]
+    ordered_accounts = sorted(account_results, key=lambda item: job_order.index(item["advertiser_id"]))
     result = {
         "mode": "submit" if args.submit else "dry_run",
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(config_path),
-        "selected_plan_template": preview_config.get("_selected_plan_template"),
+        "account_templates": jobs,
         "settings": {
             "date": args.date,
             "material_date": args.material_date or day_label(args.date),

@@ -40,7 +40,7 @@
 | 盯盘策略 | 基于消耗、ROI、转化等数据给出分析和处理建议 |
 | 官方文档 | 通过官方 MCP 查询接口文档、Schema 和 SDK 示例 |
 
-计划模板采用“默认创建骨架 + 业务模板”结构。默认模板不参与真实业务，只用于新模板向导。用户创建业务模板时必须先选择从默认骨架创建，或复制一个已有业务模板；向导展示来源和广告主归属，跨广告主复制时清空账户资产，并在确认后才写入。每个业务模板都绑定广告主、平台、流量来源和商品，并独立保存链接及文案素材。
+计划模板采用“默认创建骨架 + 业务模板”结构。默认模板只保存可跨业务复用的投放参数，不参与真实投放。新模板向导要求选择默认骨架或已有业务模板，并根据广告主和商品是否变化清理账户资产、商品资产、链接及文案；不完整模板可以保存为草稿，但不能激活。每个业务模板只绑定一个广告主、平台、流量来源和商品，多账户批量创建会为每个广告主单独解析模板。
 
 ## 安装
 
@@ -68,7 +68,7 @@ codex plugin add ocean-watch@ocean-watch
 用 ads-plan-monitor 初始化配置
 ```
 
-向导会创建 `~/.codex/ads-plan-monitor/config.json`，并给出 OAuth、Token 和官方 MCP 的后续状态。开发仓库中则优先使用被 Git 忽略的 `config/ads-plan-monitor/config.json`。
+向导会创建 `~/.codex/ads-plan-monitor/config.json`，并给出 OAuth、Token、业务模板和官方 MCP 的后续状态。已有活动模板不完整时会提示补全，而不是重新创建模板。开发仓库中则优先使用被 Git 忽略的 `config/ads-plan-monitor/config.json`。
 
 OAuth App ID、Secret、Access Token、Refresh Token 和 MCP `developer_id` 均写入本机系统凭据仓库，不写进项目配置，也不应粘贴到聊天中。
 

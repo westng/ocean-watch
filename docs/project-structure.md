@@ -31,6 +31,10 @@
 │           ├── oauth_local_authorize.py
 │           ├── token_manager.py
 │           ├── first_run.py
+│           ├── config_store.py
+│           ├── plan_templates.py
+│           ├── template_workflow.py
+│           ├── manage_plan_templates.py
 │           ├── create_plan.py
 │           ├── batch_create_from_today_videos.py
 │           └── ...
@@ -53,7 +57,7 @@
 | `skills/ads-plan-monitor/agents/` | Codex UI | Skill 展示名称、简介和默认提示 |
 | `skills/ads-plan-monitor/assets/` | 用户和脚本 | 脱敏示例配置；只能放占位符 |
 | `skills/ads-plan-monitor/references/` | Codex | 按需读取的 API 笔记和模板规则 |
-| `skills/ads-plan-monitor/scripts/` | 用户和 Codex | 授权、查询、创建、批量创建和 MCP 配置 |
+| `skills/ads-plan-monitor/scripts/` | 用户和 Codex | 授权、查询、模板领域逻辑、原子配置存储、创建、批量创建和 MCP 配置 |
 | `tests/` | 维护者 | 不调用真实业务 API 的回归测试 |
 | `docs/` | 人类用户 | 安装、配置、命令、设计和结构说明 |
 

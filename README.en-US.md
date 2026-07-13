@@ -40,7 +40,7 @@ Business operations use the official Ocean Engine Marketing API. The official Oc
 | Monitoring strategy | Provides recommendations based on spend, ROI, conversions, and other performance data |
 | Official documentation | Queries API documentation, schemas, and SDK examples through the official MCP |
 
-Campaign templates use a default-creation-base-plus-business-template structure. The default template never participates in real delivery and exists only as a source in the new-template wizard. Users must choose the default base or an existing business template, review source ownership and cross-advertiser asset cleanup, and confirm before anything is written. Every business template binds an advertiser, platform, traffic source, and product, and owns its links and copy materials.
+Campaign templates use a shared default base plus advertiser-bound business templates. The default base contains only reusable delivery settings and never participates in real delivery. The wizard clears account assets, product assets, links, and copy according to whether the advertiser or product changes. Incomplete templates may be saved as drafts but cannot be activated. Each business template belongs to one advertiser, and multi-account batches resolve a separate template for every advertiser.
 
 ## Installation
 
@@ -68,7 +68,7 @@ Ask Codex directly:
 Initialize ads-plan-monitor
 ```
 
-The guide creates `~/.codex/ads-plan-monitor/config.json` and reports the next steps for OAuth, tokens, and the official MCP. Inside the development repository, it prefers the Git-ignored `config/ads-plan-monitor/config.json` instead.
+The guide creates `~/.codex/ads-plan-monitor/config.json` and reports the next steps for OAuth, tokens, business templates, and the official MCP. When an active template exists but is incomplete, it asks the user to complete it instead of creating another template. Inside the development repository, it prefers the Git-ignored `config/ads-plan-monitor/config.json` instead.
 
 OAuth App ID, Secret, Access Token, Refresh Token, and MCP `developer_id` are stored in the operating system credential store. They are never written to project configuration and should not be pasted into chat.
 

@@ -18,12 +18,9 @@
       "operation": "ENABLE",
       "project_name_template": "{material_date}_{product_name}_roi_详情页",
       "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
-      "product_name": "REPLACE_WITH_PRODUCT_NAME",
-      "product_id": "REPLACE_WITH_PRODUCT_ID",
       "daily_budget": 300,
       "cpa_bid": 100,
       "roi_goal": 1.5,
-      "source": "REPLACE_WITH_SOURCE_NAME",
       "landing_type": "SHOP",
       "asset_type": "THIRDPARTY",
       "marketing_goal": "VIDEO_AND_IMAGE",
@@ -52,38 +49,12 @@
         "product_selling_point_type": "CUSTOM"
       }
     },
-    "materials": {
-      "video_ids": [],
-      "video_cover_ids": []
-    },
+    "materials": {},
     "resolved_ids": {
-      "city_ids": [],
-      "brand_info": {
-        "yuntu_category_id": null,
-        "brand_name_id": null,
-        "ecom_brand_id": null,
-        "cdp_brand_id": null
-      },
-      "category_name": "REPLACE_WITH_CATEGORY_NAME",
-      "brand_name": "REPLACE_WITH_BRAND_NAME",
-      "product_platform_id": null,
-      "unique_product_id": null,
-      "event_asset_ids": [],
-      "product_image_ids": [],
-      "landing_page_asset_id": null
+      "city_ids": []
     },
-    "links": {
-      "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
-      "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
-    },
-    "tracking_urls": {
-      "track_url": [
-        "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-      ],
-      "action_track_url": [
-        "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-      ]
-    },
+    "links": {},
+    "tracking_urls": {},
     "titles": []
   }
 }

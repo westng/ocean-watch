@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import config_store
+
 
 SERVICE = "ads-plan-monitor"
 ACCOUNT = "oceanengine-oauth"
@@ -325,7 +327,7 @@ def migrate_from_config(config_path):
     if merged_credentials:
         backend = write_credentials(merged_credentials)
     cleaned = strip_sensitive_config(config)
-    path.write_text(json.dumps(cleaned, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    config_store.atomic_write_json(path, cleaned)
     return {
         "config": str(path),
         "backend": backend or backend_name(),

@@ -168,7 +168,7 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   create-wizard
 ```
 
-向导会要求选择默认骨架或已有业务模板，并在最终确认前展示复制来源、广告主绑定和跨账户清理项。默认模板不能用于真实计划创建。
+向导会要求选择默认骨架或已有业务模板，并在最终确认前展示复制策略、广告主绑定、逐字段差异和完整性校验。默认模板不能用于真实计划创建；不完整模板只能保存为草稿，不能激活。文案标题必须为 5–30 个字符。
 
 配置已有模板的文案素材：
 
@@ -247,12 +247,16 @@ python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
 python3 skills/ads-plan-monitor/scripts/batch_create_from_today_videos.py \
   --config config/ads-plan-monitor/config.json \
   --accounts 1111111111111111,2222222222222222 \
+  --account-template 1111111111111111="模板A" \
+  --account-template 2222222222222222="模板B" \
   --date today \
   --videos-per-unit 5 \
   --account-concurrency 2 \
   --group-concurrency 2 \
   --submit
 ```
+
+多账户任务必须为每个广告主解析一个归属模板。某广告主只有一个绑定模板时可自动选择；存在零个或多个候选时，必须显式传入 `--account-template ADVERTISER_ID=TEMPLATE_NAME`。`--plan-template` 仅适用于单账户任务。
 
 ## 辅助反查
 

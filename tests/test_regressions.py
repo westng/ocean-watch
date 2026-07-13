@@ -18,6 +18,7 @@ SCRIPTS = SKILL / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import batch_create_from_today_videos
+import config_store
 import config_paths
 import configure_official_mcp
 import create_plan
@@ -26,6 +27,7 @@ import first_run
 import oceanengine_mcp_bridge
 import manage_plan_templates
 import plan_templates
+import template_workflow
 import token_manager
 import validate_config
 
@@ -232,7 +234,7 @@ class CreatePlanTests(unittest.TestCase):
             action_track_url="https://tracking.test/new-click",
             title=["第一条测试文案", "第二条测试文案", "第一条测试文案"],
             from_template=None,
-            activate=True,
+            activate=False,
             force=False,
         )
         updated, name = manage_plan_templates.create_template(config, arguments)
@@ -416,18 +418,177 @@ class CreatePlanTests(unittest.TestCase):
         template = updated["plan_templates"][name]
         self.assertTrue(result["confirmed"])
         self.assertFalse(result["activate"])
-        self.assertEqual(template["copy_materials"]["titles"], ["来源文案"])
+        self.assertEqual(template["copy_materials"]["titles"], [])
         self.assertEqual(template["overrides"]["materials"], {})
         self.assertNotIn("event_asset_ids", template["overrides"]["resolved_ids"])
         self.assertNotIn("product_image_ids", template["overrides"]["resolved_ids"])
         self.assertEqual(template["overrides"]["resolved_ids"]["city_ids"], [1])
         self.assertEqual(template["created_from"]["template"], source_name)
-        self.assertTrue(template["created_from"]["cross_advertiser"])
+        self.assertEqual(
+            template["created_from"]["policy"],
+            "cross_advertiser_new_product",
+        )
         self.assertIn(
             "resolved_ids.event_asset_ids",
-            template["created_from"]["cleared_account_fields"],
+            template["created_from"]["cleared_fields"],
         )
         self.assertEqual(config["active_plan_template"], source_name)
+
+    def test_same_advertiser_new_product_clears_product_assets_and_copy(self):
+        config = self.v2_config()
+        source_name = config["active_plan_template"]
+        source = plan_templates.normalize_template(
+            config,
+            source_name,
+            config["plan_templates"][source_name],
+        )
+        source["copy_materials"] = {"titles": ["这是来源商品文案"]}
+        source["overrides"] = {
+            "resolved_ids": {
+                "unique_product_id": "unique-product-1",
+                "product_image_ids": ["old-image"],
+                "product_platform_id": "old-platform-product",
+            },
+            "links": {"landing_page_url": "https://old.test/product"},
+        }
+        config["plan_templates"][source_name] = source
+        values = {
+            "advertiser_id": "1234567890",
+            "platform": "平台",
+            "traffic_source": "CID",
+            "product_id": "product-2",
+            "product_name": "新商品",
+            "name": None,
+            "titles": None,
+        }
+        name, template = template_workflow.build_template(config, values, source_name)
+        self.assertEqual(name, "平台-CID-新商品-product-2")
+        self.assertEqual(template["copy_materials"]["titles"], [])
+        self.assertNotIn("product_image_ids", template["overrides"]["resolved_ids"])
+        self.assertNotIn("product_platform_id", template["overrides"]["resolved_ids"])
+        self.assertNotIn("landing_page_url", template["overrides"].get("links", {}))
+        self.assertEqual(template["created_from"]["policy"], "same_advertiser_new_product")
+
+    def test_cross_advertiser_same_product_keeps_copy_but_clears_links(self):
+        config = self.v2_config()
+        source_name = config["active_plan_template"]
+        source = config["plan_templates"][source_name]
+        source["copy_materials"] = {"titles": ["这是同款商品文案"]}
+        source["overrides"] = {
+            "links": {"landing_page_url": "https://old.test/product"},
+            "tracking_urls": {"track_url": ["https://old.test/impression"]},
+        }
+        values = {
+            "advertiser_id": "456",
+            "platform": "平台",
+            "traffic_source": "CID",
+            "product_id": "unique-product-1",
+            "product_name": "test product",
+            "name": None,
+            "titles": None,
+        }
+        _, template = template_workflow.build_template(config, values, source_name)
+        self.assertEqual(template["copy_materials"]["titles"], ["这是同款商品文案"])
+        self.assertEqual(template["overrides"].get("links"), {})
+        self.assertEqual(template["overrides"].get("tracking_urls"), {})
+        self.assertEqual(template["created_from"]["policy"], "cross_advertiser_same_product")
+
+    def test_copy_title_length_is_validated_locally(self):
+        with self.assertRaisesRegex(ValueError, "5-30"):
+            template_workflow.normalize_titles(["太短"])
+        with self.assertRaisesRegex(ValueError, "5-30"):
+            template_workflow.normalize_titles(["超" * 31])
+
+    def test_candidate_validation_reports_invalid_inherited_copy(self):
+        config = self.v2_config()
+        name = config["active_plan_template"]
+        template = copy.deepcopy(config["plan_templates"][name])
+        template["copy_materials"] = {"titles": ["太短"]}
+        result = template_workflow.validate_candidate(config, name, template)
+        self.assertFalse(result["ready_for_plan_creation"])
+        self.assertTrue(
+            any(field.startswith("copy_materials.titles:") for field in result["template_missing_fields"])
+        )
+
+    def test_incomplete_wizard_draft_cannot_activate(self):
+        config = self.v2_config()
+        answers = iter([
+            "0",
+            "456",
+            "京东",
+            "",
+            "新商品",
+            "product-2",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "y",
+        ])
+        updated, result = manage_plan_templates.run_create_wizard(
+            config,
+            input_fn=lambda _: next(answers),
+            output_fn=lambda _: None,
+        )
+        self.assertTrue(result["confirmed"])
+        self.assertFalse(result["activate"])
+        self.assertFalse(result["validation"]["ready_for_plan_creation"])
+        self.assertEqual(updated["active_plan_template"], config["active_plan_template"])
+
+    def test_direct_create_cannot_activate_incomplete_template(self):
+        config = self.v2_config()
+        original = copy.deepcopy(config)
+        arguments = SimpleNamespace(
+            advertiser_id="456",
+            platform="京东",
+            traffic_source="CID",
+            product_id="product-2",
+            product_name="新商品",
+            name=None,
+            source_name=None,
+            landing_page_url=None,
+            open_url=None,
+            track_url=None,
+            action_track_url=None,
+            title=["这是一条有效测试文案"],
+            from_template=None,
+            activate=True,
+            force=False,
+        )
+        with self.assertRaisesRegex(ValueError, "incomplete plan template cannot be activated"):
+            manage_plan_templates.create_template(config, arguments)
+        self.assertEqual(config, original)
+
+    def test_wizard_preview_contains_field_level_changes(self):
+        config = self.v2_config()
+        answers = iter([
+            "0",
+            "456",
+            "京东",
+            "",
+            "新商品",
+            "product-2",
+            "",
+            "这是一条有效测试文案",
+            "",
+            "新来源",
+            "https://landing.test/new",
+            "testapp://new",
+            "https://tracking.test/new-impression",
+            "https://tracking.test/new-click",
+            "n",
+        ])
+        _, result = manage_plan_templates.run_create_wizard(
+            config,
+            input_fn=lambda _: next(answers),
+            output_fn=lambda _: None,
+        )
+        changed_fields = {change["field"] for change in result["changes"]}
+        self.assertIn("bindings.advertiser_id", changed_fields)
+        self.assertIn("overrides.links.landing_page_url", changed_fields)
 
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -454,6 +615,73 @@ class CreatePlanTests(unittest.TestCase):
                     mock.patch.object(create_plan, "post_json", side_effect=responses), \
                     redirect_stdout(StringIO()):
                 self.assertEqual(create_plan.main(), 1)
+
+
+class TemplateBatchMappingTests(unittest.TestCase):
+    def config_with_two_accounts(self):
+        config = CreatePlanTests().v2_config()
+        second = "京东-CID-商品-product-2"
+        config["plan_templates"][second] = {
+            "display_name": second,
+            "bindings": {
+                "advertiser_id": "456",
+                "platform": "京东",
+                "traffic_source": "CID",
+                "product_id": "product-2",
+                "product_name": "商品",
+            },
+            "copy_materials": {"titles": ["这是第二账户文案"]},
+            "overrides": {"resolved_ids": {"unique_product_id": "product-2"}},
+        }
+        return config, second
+
+    def test_multi_account_jobs_use_bound_templates(self):
+        config, second = self.config_with_two_accounts()
+        first = config["active_plan_template"]
+        jobs = batch_create_from_today_videos.resolve_account_jobs(
+            config,
+            ["1234567890,456"],
+            [f"1234567890={first}", f"456={second}"],
+        )
+        self.assertEqual(jobs, [
+            {"advertiser_id": "1234567890", "plan_template": first},
+            {"advertiser_id": "456", "plan_template": second},
+        ])
+
+    def test_multi_account_single_template_is_rejected(self):
+        config, _ = self.config_with_two_accounts()
+        with self.assertRaisesRegex(ValueError, "one account"):
+            batch_create_from_today_videos.resolve_account_jobs(
+                config,
+                ["1234567890,456"],
+                None,
+                fallback_template=config["active_plan_template"],
+            )
+
+    def test_ambiguous_account_requires_explicit_mapping(self):
+        config, _ = self.config_with_two_accounts()
+        duplicate = copy.deepcopy(config["plan_templates"][config["active_plan_template"]])
+        config["plan_templates"]["duplicate"] = duplicate
+        with self.assertRaisesRegex(ValueError, "explicit template mapping"):
+            batch_create_from_today_videos.resolve_account_jobs(
+                config,
+                ["1234567890"],
+                None,
+            )
+
+
+class ConfigStoreTests(unittest.TestCase):
+    def test_atomic_write_replaces_json_and_keeps_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text('{"version": 1}\n', encoding="utf-8")
+            config_store.atomic_write_json(path, {"version": 2})
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"version": 2})
+            self.assertEqual(
+                json.loads(path.with_suffix(".json.bak").read_text(encoding="utf-8")),
+                {"version": 1},
+            )
+            self.assertEqual(list(path.parent.glob(".config.json.*.tmp")), [])
 
 
 class ConfigAndCredentialTests(unittest.TestCase):
@@ -896,6 +1124,24 @@ class ExitAndValidationTests(unittest.TestCase):
         with mock.patch.object(credential_store, "read_credentials", return_value=credentials):
             _, create_missing, _ = first_run.check_fields(config)
         self.assertTrue(any(item.startswith("plan template:") for item in create_missing))
+
+    def test_first_run_distinguishes_missing_and_incomplete_templates(self):
+        self.assertEqual(
+            first_run.next_action(["account.advertiser_id"], None, []),
+            "edit_config",
+        )
+        self.assertEqual(
+            first_run.next_action([], None, ["links.landing_page_url"]),
+            "create_business_template",
+        )
+        self.assertEqual(
+            first_run.next_action([], {"name": "draft"}, ["links.landing_page_url"]),
+            "complete_active_template",
+        )
+        self.assertEqual(
+            first_run.next_action([], {"name": "ready"}, []),
+            "ready",
+        )
 
     def test_validator_main_returns_selected_mode_status(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -2,10 +2,9 @@
 import argparse
 import copy
 import json
-import shutil
-from pathlib import Path
 
 import config_paths
+import config_store
 import credential_store
 import configure_official_mcp
 import plan_templates
@@ -91,6 +90,16 @@ def check_fields(config):
     return result["missing_query_required"], create_missing, field_preview
 
 
+def next_action(query_missing, active_template, create_missing):
+    if query_missing:
+        return "edit_config"
+    if not active_template:
+        return "create_business_template"
+    if create_missing:
+        return "complete_active_template"
+    return "ready"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -120,7 +129,10 @@ def main():
     created = False
     if args.force or not config_path.exists():
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(template, config_path)
+        config_store.atomic_write_json(
+            config_path,
+            json.loads(template.read_text(encoding="utf-8")),
+        )
         created = True
 
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -154,11 +166,7 @@ def main():
         "skill_root": str(skill_root()),
         "config": str(config_path),
         "created_config_from_template": created,
-        "next_action": (
-            "edit_config" if query_missing
-            else "create_business_template" if create_missing
-            else "ready"
-        ),
+        "next_action": next_action(query_missing, active_template, create_missing),
         "ok_for_query_data": not query_missing,
         "ok_for_create_plan": not query_missing and not create_missing,
         "active_plan_template": raw_config.get("active_plan_template"),

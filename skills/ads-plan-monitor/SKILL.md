@@ -107,13 +107,13 @@ Every business template must contain `bindings.advertiser_id`, `bindings.platfor
 
 Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
 
-Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Use repeated `--title` options while creating a template, or `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing copy materials as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
+Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Every title must contain 5–30 characters. Use `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing or invalid copy as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
 
 When the user explicitly confirms two plan templates represent the same product, the plugin capability may copy only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command. During plugin development, test this capability with fixtures; do not run it against local business config without a separate explicit execution request.
 
-Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID. It then collects target bindings, copy, source, links, and tracking URLs; previews source, bindings, copied sections, cross-advertiser cleanup, and activation state; and writes only after explicit confirmation. Activation requires a separate confirmation and defaults to false.
+Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID. It then collects target bindings, copy, source, links, and tracking URLs; previews provenance, clone policy, bindings, field-level changes, validation, and activation state; and writes only after explicit confirmation. Incomplete candidates may be saved as drafts but must never activate. Activation requires a separate confirmation and defaults to false.
 
-When copying a business template for the same advertiser, preserve its business settings for editing. When the target advertiser differs, clear materials and advertiser-scoped resolved IDs before preview while preserving reusable settings, links, tracking URLs, and copy for user review. Always replace product bindings and `unique_product_id` with the target product. Record provenance under `created_from`.
+Apply clone policy from advertiser and product ownership. For the same advertiser and same product, preserve business settings. For any new product, clear account/product assets, links, tracking URLs, and copy. For the same product across advertisers, clear account/product assets, links, and tracking URLs but allow copy reuse. Always replace product bindings and `unique_product_id` with the target product. Record provenance and cleared fields under `created_from`.
 
 There is no public non-interactive new-template command; all user-facing business-template creation must pass through `create-wizard`. Read `active_plan_template` from config when the user does not name a template for plan creation. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show the non-business default base separately from business templates with advertiser IDs. Use `migrate` for legacy schema v1 configs.
 
@@ -238,7 +238,7 @@ Common batch commands:
 
 - Dry-run current account, today, active template: `scripts/batch_create_from_today_videos.py --date today --plan-template <模板名>`
 - Create current account, 5 videos per unit, budget 5000, ROI goal 1.5: `scripts/batch_create_from_today_videos.py --date today --plan-template <模板名> --videos-per-unit 5 --budget 5000 --roi-goal 1.5 --submit`
-- Multi-account creation: add `--accounts 186...,187... --account-concurrency 2 --group-concurrency 2`
+- Multi-account creation: add `--accounts 111,222 --account-template 111=<模板A> --account-template 222=<模板B> --account-concurrency 2 --group-concurrency 2`
 - Limit or test: add `--max-videos 5` and omit `--submit`
 
 Batch behavior:
@@ -246,7 +246,8 @@ Batch behavior:
 - Query `/2/file/video/get/` for each account and date, then deduplicate by promotion `video_id`.
 - Validate videos through `/2/file/video/ad/get/` by default.
 - Fetch `video_cover_id` through `/2/tools/video_cover/suggest/` with retries. If covers are still unavailable or `RUNNING`, skip those videos by default and record them under `skipped_videos`; use `--no-skip-missing-cover` only when the run should block instead.
-- Use the selected plan template and existing `create_plan.py` payload builder so template fields, tracking links, audience settings, and product payloads stay consistent.
+- Resolve one advertiser-bound template per account. Automatic resolution is allowed only when exactly one template belongs to that advertiser; otherwise require `--account-template ADVERTISER_ID=TEMPLATE_NAME`.
+- Use each account's resolved template and the existing `create_plan.py` payload builder so template fields, tracking links, audience settings, and product payloads stay consistent.
 - Split videos by `--videos-per-unit`, defaulting to `defaults.max_videos_per_project` and capped at 5 for the current promotion material rule.
 - Auto-suffix names as `_01`, `_02`, etc. unless the template's name format already includes `{group_index}`, `{index}`, or `{suffix}`.
 - Record partial failures. If project creation succeeds but promotion creation fails, preserve `project_id`, compact API response, and group video list for retry.
