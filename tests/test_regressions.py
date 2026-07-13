@@ -230,6 +230,7 @@ class CreatePlanTests(unittest.TestCase):
             open_url=None,
             track_url="https://tracking.test/new-impression",
             action_track_url="https://tracking.test/new-click",
+            title=["第一条测试文案", "第二条测试文案", "第一条测试文案"],
             from_template=None,
             activate=True,
             force=False,
@@ -249,6 +250,10 @@ class CreatePlanTests(unittest.TestCase):
         self.assertEqual(
             template["overrides"]["tracking_urls"]["action_track_url"],
             ["https://tracking.test/new-click"],
+        )
+        self.assertEqual(
+            template["copy_materials"]["titles"],
+            ["第一条测试文案", "第二条测试文案"],
         )
 
     def test_template_list_exposes_advertiser_as_primary_field(self):
@@ -272,12 +277,28 @@ class CreatePlanTests(unittest.TestCase):
             open_url=None,
             track_url=None,
             action_track_url=None,
+            title=None,
             from_template=config["active_plan_template"],
             activate=False,
             force=False,
         )
         with self.assertRaisesRegex(ValueError, "cross-advertiser template cloning"):
             manage_plan_templates.create_template(config, arguments)
+
+    def test_set_copy_materials_updates_business_template(self):
+        config = self.v2_config()
+        name = config["active_plan_template"]
+        updated = manage_plan_templates.set_copy_materials(
+            config,
+            name,
+            ["第一条文案", "第二条文案", "第一条文案"],
+        )
+        self.assertEqual(
+            updated["plan_templates"][name]["copy_materials"]["titles"],
+            ["第一条文案", "第二条文案"],
+        )
+        row = manage_plan_templates.list_templates(updated)[0]
+        self.assertEqual(row["copy_materials"]["title_count"], 2)
 
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:

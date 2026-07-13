@@ -73,11 +73,17 @@ def legacy_bindings(config, template):
 
 def normalize_template(config, name, template):
     if "bindings" in template or "overrides" in template:
+        overrides = copy.deepcopy(template.get("overrides") or {})
+        legacy_titles = overrides.pop("titles", None)
+        copy_materials = copy.deepcopy(template.get("copy_materials") or {})
+        if legacy_titles is not None and "titles" not in copy_materials:
+            copy_materials["titles"] = legacy_titles
         return {
             "name": name,
             "display_name": template.get("display_name", name),
             "bindings": copy.deepcopy(template.get("bindings") or {}),
-            "overrides": copy.deepcopy(template.get("overrides") or {}),
+            "copy_materials": copy_materials,
+            "overrides": overrides,
             "legacy": False,
         }
     overrides = {
@@ -91,6 +97,7 @@ def normalize_template(config, name, template):
         "name": name,
         "display_name": template.get("display_name", name),
         "bindings": legacy_bindings(config, template),
+        "copy_materials": {"titles": copy.deepcopy(template.get("titles") or [])},
         "overrides": overrides,
         "legacy": True,
     }
@@ -161,8 +168,7 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None)
     for section in TEMPLATE_SECTIONS:
         if section in overrides:
             effective[section] = deep_merge(effective.get(section, {}), overrides[section] or {})
-    if "titles" in overrides:
-        effective["titles"] = copy.deepcopy(overrides["titles"])
+    effective["titles"] = copy.deepcopy(template["copy_materials"].get("titles") or [])
 
     if not is_missing(bound_advertiser_id):
         effective.setdefault("account", {})["advertiser_id"] = bound_advertiser_id
@@ -200,12 +206,15 @@ def migrate(config):
                     effective.get(section, {}),
                     normalized["overrides"][section] or {},
                 )
-        if "titles" in normalized["overrides"]:
-            effective["titles"] = copy.deepcopy(normalized["overrides"]["titles"])
+        effective["titles"] = copy.deepcopy(
+            normalized["copy_materials"].get("titles") or []
+        )
         overrides = deep_diff(base, effective) or {}
+        overrides.pop("titles", None)
         templates[name] = {
             "display_name": normalized["display_name"],
             "bindings": normalized["bindings"],
+            "copy_materials": normalized["copy_materials"],
             "overrides": overrides,
         }
 

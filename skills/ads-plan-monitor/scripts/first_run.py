@@ -134,6 +134,7 @@ def main():
     template_rows = []
     for name, raw_template in sorted((raw_config.get("plan_templates") or {}).items()):
         template = plan_templates.normalize_template(raw_config, name, raw_template)
+        copy_titles = template["copy_materials"].get("titles") or []
         template_rows.append({
             "name": name,
             "active": name == raw_config.get("active_plan_template"),
@@ -141,6 +142,8 @@ def main():
             "platform": template["bindings"].get("platform"),
             "product_id": template["bindings"].get("product_id"),
             "product_name": template["bindings"].get("product_name"),
+            "copy_materials_configured": bool(copy_titles),
+            "copy_title_count": len(copy_titles),
             "binding_error": plan_templates.binding_error(template["bindings"]),
         })
     active_template = next((row for row in template_rows if row["active"]), None)
@@ -170,7 +173,8 @@ def main():
             "default_template_usage": "default_plan_template provides shared defaults only and cannot submit plans directly.",
             "list_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" list',
             "migrate_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" migrate',
-            "create_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create --advertiser-id <广告主ID> --platform <平台> --traffic-source CID --product-id <商品ID> --product-name <商品名> --activate',
+            "create_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create --advertiser-id <广告主ID> --platform <平台> --traffic-source CID --product-id <商品ID> --product-name <商品名> --title <文案1> --title <文案2> --activate',
+            "set_copy_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" set-copy --template <模板名> --title <文案1> --title <文案2>',
         },
         "minimum_fields_for_query_data": [
             "local app_id and secret in the OS credential store",

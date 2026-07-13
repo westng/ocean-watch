@@ -21,11 +21,23 @@ def template_name(platform, traffic_source, product_name, product_id):
     return f"{platform}-{traffic_source}-{product_name}-{product_id}"
 
 
+def normalize_titles(titles):
+    normalized = []
+    for title in titles or []:
+        value = str(title).strip()
+        if value and value not in normalized:
+            normalized.append(value)
+    if not normalized:
+        raise ValueError("at least one non-empty copy title is required")
+    return normalized
+
+
 def list_templates(config):
     rows = []
     for name, template in sorted((config.get("plan_templates") or {}).items()):
         normalized = plan_templates.normalize_template(config, name, template)
         bindings = normalized["bindings"]
+        titles = normalized["copy_materials"].get("titles") or []
         rows.append({
             "name": name,
             "active": name == config.get("active_plan_template"),
@@ -34,6 +46,11 @@ def list_templates(config):
             "traffic_source": bindings.get("traffic_source"),
             "product_id": bindings.get("product_id"),
             "product_name": bindings.get("product_name"),
+            "copy_materials": {
+                "configured": bool(titles),
+                "title_count": len(titles),
+                "titles": titles,
+            },
             "bindings": bindings,
             "legacy": normalized["legacy"],
             "binding_error": plan_templates.binding_error(bindings),
@@ -55,6 +72,7 @@ def create_template(config, args):
         raise ValueError(f"plan template already exists: {name}; use --force to replace it")
 
     overrides = {}
+    inherited_copy_materials = {"titles": []}
     if args.from_template:
         source = templates.get(args.from_template)
         if source is None:
@@ -67,6 +85,7 @@ def create_template(config, args):
                 f"{source_advertiser_id}; cross-advertiser template cloning is not allowed"
             )
         overrides = copy.deepcopy(normalized_source["overrides"])
+        inherited_copy_materials = copy.deepcopy(normalized_source["copy_materials"])
     overrides.setdefault("defaults", {}).update({
         "product_name": args.product_name,
         "product_id": args.product_id,
@@ -86,6 +105,9 @@ def create_template(config, args):
             tracking_urls["track_url"] = [args.track_url]
         if args.action_track_url:
             tracking_urls["action_track_url"] = [args.action_track_url]
+    copy_materials = {
+        "titles": normalize_titles(args.title),
+    } if args.title else inherited_copy_materials
 
     templates[name] = {
         "display_name": name,
@@ -96,12 +118,25 @@ def create_template(config, args):
             "product_id": str(args.product_id),
             "product_name": args.product_name,
         },
+        "copy_materials": copy_materials,
         "overrides": overrides,
     }
     if args.activate or not config.get("active_plan_template"):
         config["active_plan_template"] = name
         config.setdefault("account", {})["advertiser_id"] = str(args.advertiser_id)
     return config, name
+
+
+def set_copy_materials(config, template_name, titles):
+    templates = config.get("plan_templates") or {}
+    if template_name not in templates:
+        raise ValueError(f"plan template not found: {template_name}")
+    template = templates[template_name]
+    if int(config.get("plan_template_schema_version") or 1) < plan_templates.SCHEMA_VERSION:
+        raise ValueError("migrate the config before setting copy materials")
+    template["copy_materials"] = {"titles": normalize_titles(titles)}
+    (template.get("overrides") or {}).pop("titles", None)
+    return config
 
 
 def main(argv=None):
@@ -123,9 +158,23 @@ def main(argv=None):
     create.add_argument("--open-url")
     create.add_argument("--track-url")
     create.add_argument("--action-track-url")
+    create.add_argument(
+        "--title",
+        action="append",
+        help="Promotion copy title; repeat this option to configure multiple titles.",
+    )
     create.add_argument("--from-template")
     create.add_argument("--activate", action="store_true")
     create.add_argument("--force", action="store_true")
+
+    set_copy = subparsers.add_parser("set-copy")
+    set_copy.add_argument("--template", required=True)
+    set_copy.add_argument(
+        "--title",
+        action="append",
+        required=True,
+        help="Promotion copy title; repeat this option to configure multiple titles.",
+    )
     args = parser.parse_args(argv)
 
     path = config_paths.resolve_config_path(args.config)
@@ -137,6 +186,9 @@ def main(argv=None):
         changed = True
     elif args.command == "create":
         config, created_name = create_template(config, args)
+        changed = True
+    elif args.command == "set-copy":
+        config = set_copy_materials(config, args.template, args.title)
         changed = True
     if changed:
         save_config(path, config)

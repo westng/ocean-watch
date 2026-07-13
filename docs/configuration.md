@@ -34,6 +34,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 | `plan_template_schema_version` | 模板结构版本，当前为 `2` |
 | `default_plan_template` | 所有业务模板继承的公共参数，不能直接创建计划 |
 | `plan_templates` | 与广告主、平台和商品绑定的业务模板 |
+| `plan_templates.<模板名>.copy_materials.titles` | 该业务模板创建单元时使用的文案标题素材 |
 | `resolved_ids` | 城市、商品、图片、转化资产、落地页等官方 ID |
 | `tracking_urls` | 展示和点击/有效触点监测链接 |
 | `links` | 落地页和直达链接 |
@@ -84,12 +85,27 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   --traffic-source CID \
   --product-id REPLACE_WITH_PRODUCT_ID \
   --product-name REPLACE_WITH_PRODUCT_NAME \
+  --title REPLACE_WITH_COPY_TITLE_1 \
+  --title REPLACE_WITH_COPY_TITLE_2 \
   --track-url REPLACE_WITH_IMPRESSION_TRACKING_URL \
   --action-track-url REPLACE_WITH_CLICK_TRACKING_URL \
   --landing-page-url REPLACE_WITH_LANDING_PAGE_URL \
   --open-url REPLACE_WITH_OPEN_URL \
   --activate
 ```
+
+为已有模板单独设置文案素材：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  set-copy \
+  --template "平台-CID-商品名-商品ID" \
+  --title "第一条文案" \
+  --title "第二条文案"
+```
+
+`--title` 可以重复传入；空文案会被拒绝，重复文案会自动去重。模板列表会显示 `copy_materials.configured`、`title_count` 和当前文案内容。创建 payload 时，这些文案会转换成官方字段 `promotion_materials.title_material_list`。
 
 旧版配置先执行 `manage_plan_templates.py ... migrate`。同一配置可以维护多个广告主、平台和商品模板；Codex 默认读取 `active_plan_template`，用户指定模板时则使用对应的 `plan_templates.<模板名>`。
 

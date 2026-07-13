@@ -84,10 +84,6 @@
         "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
       ]
     },
-    "titles": [
-      "这里填写第一条广告标题",
-      "这里填写第二条广告标题",
-      "这里填写第三条广告标题"
-    ]
+    "titles": []
   }
 }

@@ -160,6 +160,17 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 
 输出中的 `advertiser_id` 是模板唯一归属的广告主 ID。目标广告主与该值不一致时，单条和批量创建都会在调用官方 API 前停止。
 
+配置已有模板的文案素材：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  set-copy \
+  --template "平台-CID-商品名-商品ID" \
+  --title "第一条文案" \
+  --title "第二条文案"
+```
+
 先预览 payload：
 
 ```bash
