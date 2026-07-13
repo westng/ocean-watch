@@ -86,11 +86,13 @@ Use `scripts/query_active_materials_report.py` as the business entry for monitor
 
 ## Plan Templates
 
-Creation parameters are organized by product/platform plan templates. Template names follow:
+Creation parameters use schema v2 with one shared `default_plan_template` and advertiser-bound business templates. The default template contains reusable settings only and must never be used to create or submit a plan directly. Template names follow:
 
 `平台-CID-商品名-商品ID`
 
-Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Template data lives under `plan_templates.<模板名>` and can override these sections: `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`. Keep root-level sections as shared fallback defaults for backward compatibility.
+Every business template must contain `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. The advertiser binding is ownership: reject single or batch creation whenever the target advertiser differs from `bindings.advertiser_id`. Never let `--advertiser-id` or `--accounts` bypass it.
+
+Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show templates with their advertiser IDs. Use its `create` command to guide the user through advertiser ID, platform, traffic source, product ID, and product name; use `migrate` for legacy schema v1 configs. Template differences live under `plan_templates.<模板名>.overrides` and may override `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`.
 
 ## Workflow
 
@@ -140,6 +142,7 @@ For a new teammate, use this onboarding flow:
 5. If token fields are missing, run `scripts/oauth_local_authorize.py --config <config-path>` and complete browser authorization. The approved local redirect URI is `http://127.0.0.1:8787/oauth/callback`; it must exactly match the app setting.
 6. If the official developer-documentation MCP is not ready, run `scripts/configure_official_mcp.py`. This is recommended for development and troubleshooting but does not block query or create readiness.
 7. Extra fields for creating plans:
+   - one active business template explicitly bound to the target `advertiser_id`
    - `materials.video_ids`
    - `materials.video_cover_ids` if required
    - `resolved_ids.city_ids`

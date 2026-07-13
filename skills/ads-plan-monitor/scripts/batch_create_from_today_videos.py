@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import create_plan
+import plan_templates
 import config_paths
 import query_videos
 import token_manager
@@ -442,8 +443,17 @@ def process_group(base_config, base_url, token, advertiser_id, videos, group_num
 
 
 def process_account(raw_config, config_path, advertiser_id, args):
+    plan_templates.apply(
+        raw_config,
+        args.plan_template,
+        advertiser_id=advertiser_id,
+    )
     raw_config = token_manager.ensure_access_token(config_path, raw_config)
-    base_config = create_plan.apply_plan_template(raw_config, args.plan_template)
+    base_config = plan_templates.apply(
+        raw_config,
+        args.plan_template,
+        advertiser_id=advertiser_id,
+    )
     base_config = apply_overrides(base_config, args)
     base_url = create_plan.get_path(base_config, "api.base_url")
     token = create_plan.get_path(base_config, "api.access_token")

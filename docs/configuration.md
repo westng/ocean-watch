@@ -31,8 +31,9 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 | --- | --- |
 | `account.advertiser_id` | 巨量引擎广告主 ID |
 | `active_plan_template` | 默认创建计划模板名 |
-| `plan_templates` | 不同平台/商品的创建参数模板 |
-| `defaults` | 预算、出价、ROI、投放设置、命名模板 |
+| `plan_template_schema_version` | 模板结构版本，当前为 `2` |
+| `default_plan_template` | 所有业务模板继承的公共参数，不能直接创建计划 |
+| `plan_templates` | 与广告主、平台和商品绑定的业务模板 |
 | `resolved_ids` | 城市、商品、图片、转化资产、落地页等官方 ID |
 | `tracking_urls` | 展示和点击/有效触点监测链接 |
 | `links` | 落地页和直达链接 |
@@ -60,7 +61,33 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID
 ```
 
-同一仓库可以维护多个模板。Codex 默认读取 `active_plan_template`；用户在对话里指定模板时，脚本会使用对应 `plan_templates.<模板名>`。
+模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
+
+`default_plan_template` 只保存预算、投放设置等公共默认值，不能直接创建计划。业务模板通过 `overrides` 保存差异参数。创建时，目标广告主必须与模板的 `bindings.advertiser_id` 完全一致；命令行参数和批量账户参数都不能绕过此校验。
+
+查看模板及其归属广告主：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  list
+```
+
+创建并启用一个业务模板：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  create \
+  --advertiser-id REPLACE_WITH_ADVERTISER_ID \
+  --platform REPLACE_WITH_PLATFORM \
+  --traffic-source CID \
+  --product-id REPLACE_WITH_PRODUCT_ID \
+  --product-name REPLACE_WITH_PRODUCT_NAME \
+  --activate
+```
+
+旧版配置先执行 `manage_plan_templates.py ... migrate`。同一配置可以维护多个广告主、平台和商品模板；Codex 默认读取 `active_plan_template`，用户指定模板时则使用对应的 `plan_templates.<模板名>`。
 
 ## 保存 App 凭据
 

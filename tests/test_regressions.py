@@ -24,6 +24,8 @@ import create_plan
 import credential_store
 import first_run
 import oceanengine_mcp_bridge
+import manage_plan_templates
+import plan_templates
 import token_manager
 import validate_config
 
@@ -100,6 +102,26 @@ def args(**overrides):
 
 
 class CreatePlanTests(unittest.TestCase):
+    def v2_config(self):
+        config = valid_config()
+        migrated = plan_templates.migrate(config)
+        name = "平台-CID-商品-product-1"
+        migrated["plan_templates"] = {
+            name: {
+                "display_name": name,
+                "bindings": {
+                    "advertiser_id": "1234567890",
+                    "platform": "平台",
+                    "traffic_source": "CID",
+                    "product_id": "unique-product-1",
+                    "product_name": "test product",
+                },
+                "overrides": {},
+            }
+        }
+        migrated["active_plan_template"] = name
+        return migrated
+
     def test_single_create_resolves_suffix(self):
         project, promotion = create_plan.build_payloads(valid_config(), args())
         self.assertNotIn("{suffix}", project["name"])
@@ -126,6 +148,97 @@ class CreatePlanTests(unittest.TestCase):
     def test_roi_goal_override(self):
         project, _ = create_plan.build_payloads(valid_config(), args(roi_goal=2.25))
         self.assertEqual(project["delivery_setting"]["roi_goal"], 2.25)
+
+    def test_v2_template_binds_advertiser(self):
+        effective = plan_templates.apply(self.v2_config(), advertiser_id=1234567890)
+        self.assertEqual(effective["account"]["advertiser_id"], "1234567890")
+        self.assertEqual(
+            effective["_selected_plan_template"]["bindings"]["advertiser_id"],
+            "1234567890",
+        )
+
+    def test_v2_template_rejects_other_advertiser(self):
+        with self.assertRaisesRegex(ValueError, "bound to advertiser 1234567890"):
+            plan_templates.apply(self.v2_config(), advertiser_id=999)
+
+    def test_submit_rejects_other_advertiser_before_token_refresh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(self.v2_config()), encoding="utf-8")
+            argv = [
+                "create_plan.py",
+                "--config", str(config_path),
+                "--advertiser-id", "999",
+                "--submit",
+            ]
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.object(token_manager, "ensure_access_token") as ensure_token, \
+                    redirect_stdout(StringIO()):
+                self.assertEqual(create_plan.main(), 2)
+            ensure_token.assert_not_called()
+
+    def test_v2_default_template_cannot_create_directly(self):
+        config = self.v2_config()
+        config["active_plan_template"] = None
+        with self.assertRaisesRegex(ValueError, "default template cannot create plans"):
+            plan_templates.apply(config)
+
+    def test_v2_template_requires_all_bindings(self):
+        config = self.v2_config()
+        del config["plan_templates"][config["active_plan_template"]]["bindings"]["platform"]
+        with self.assertRaisesRegex(ValueError, "template bindings missing: platform"):
+            plan_templates.apply(config)
+
+    def test_template_migration_preserves_payloads(self):
+        config = valid_config()
+        name = "平台-CID-商品-unique-product-1"
+        config["active_plan_template"] = name
+        config["plan_templates"] = {
+            name: {
+                "display_name": name,
+                "platform": "平台",
+                "traffic_source": "CID",
+                "product_label": "test product",
+                "product_id": "unique-product-1",
+                **plan_templates.section_bundle(config),
+            }
+        }
+        before = create_plan.build_payloads(create_plan.apply_plan_template(config), args())
+        migrated = plan_templates.migrate(config)
+        after = create_plan.build_payloads(create_plan.apply_plan_template(migrated), args())
+        self.assertEqual(before, after)
+
+    def test_create_template_records_advertiser_binding(self):
+        config = plan_templates.migrate(valid_config())
+        arguments = SimpleNamespace(
+            advertiser_id="456",
+            platform="天猫",
+            traffic_source="CID",
+            product_id="product-2",
+            product_name="新商品",
+            name=None,
+            source_name=None,
+            landing_page_url=None,
+            open_url=None,
+            from_template=None,
+            activate=True,
+            force=False,
+        )
+        updated, name = manage_plan_templates.create_template(config, arguments)
+        template = updated["plan_templates"][name]
+        self.assertEqual(template["bindings"]["advertiser_id"], "456")
+        self.assertEqual(template["bindings"]["product_id"], "product-2")
+        self.assertEqual(
+            template["overrides"]["resolved_ids"]["unique_product_id"],
+            "product-2",
+        )
+
+    def test_template_list_exposes_advertiser_as_primary_field(self):
+        config = self.v2_config()
+        row = manage_plan_templates.list_templates(config)[0]
+        self.assertEqual(row["advertiser_id"], "1234567890")
+        self.assertEqual(row["platform"], "平台")
+        self.assertEqual(row["product_id"], "unique-product-1")
 
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -553,6 +666,32 @@ class ExitAndValidationTests(unittest.TestCase):
         self.assertTrue(validate_config.mode_is_ready(result, "query"))
         self.assertFalse(validate_config.mode_is_ready(result, "create-submit"))
         self.assertFalse(validate_config.mode_is_ready(result, "all"))
+
+    def test_v2_without_business_template_keeps_query_ready(self):
+        config = plan_templates.migrate(valid_config())
+        config["active_plan_template"] = None
+        credentials = {
+            "app_id": "app",
+            "secret": "secret",
+            "access_token": "token",
+        }
+        result = validate_config.validate_config(config, credentials)
+        self.assertTrue(validate_config.mode_is_ready(result, "query"))
+        self.assertFalse(validate_config.mode_is_ready(result, "create-preview"))
+        self.assertIn("default template cannot create plans", result["plan_template_error"])
+
+    def test_v2_mismatched_template_keeps_query_ready(self):
+        config = CreatePlanTests().v2_config()
+        config["account"]["advertiser_id"] = 999
+        credentials = {
+            "app_id": "app",
+            "secret": "secret",
+            "access_token": "token",
+        }
+        result = validate_config.validate_config(config, credentials)
+        self.assertTrue(validate_config.mode_is_ready(result, "query"))
+        self.assertFalse(validate_config.mode_is_ready(result, "create-submit"))
+        self.assertIn("bound to advertiser 1234567890", result["plan_template_error"])
 
     def test_first_run_uses_same_unique_product_rule(self):
         config = valid_config()

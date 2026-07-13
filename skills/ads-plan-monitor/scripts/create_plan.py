@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 import config_paths
+import plan_templates
 import token_manager
 
 
@@ -68,28 +69,7 @@ def deep_merge(base, override):
 
 
 def apply_plan_template(config, template_name=None):
-    effective = copy.deepcopy(config)
-    templates = config.get("plan_templates") or {}
-    selected = template_name or config.get("active_plan_template")
-    if not selected:
-        effective["_selected_plan_template"] = None
-        return effective
-    if selected not in templates:
-        available = ", ".join(sorted(templates)) or "<none>"
-        raise ValueError(f"unknown plan template: {selected}; available: {available}")
-
-    template = templates[selected]
-    for section in TEMPLATE_SECTIONS:
-        if section in template:
-            effective[section] = deep_merge(effective.get(section, {}), template[section] or {})
-    if "titles" in template:
-        effective["titles"] = copy.deepcopy(template["titles"])
-
-    effective["_selected_plan_template"] = {
-        "name": selected,
-        "display_name": template.get("display_name", selected),
-    }
-    return effective
+    return plan_templates.apply(config, template_name)
 
 
 def material_date_for_yesterday(now=None):
@@ -381,10 +361,19 @@ def main():
     config_path = config_paths.resolve_config_path(args.config)
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     submit_failed = False
-    if args.submit:
-        raw_config = token_manager.ensure_access_token(config_path, raw_config)
     try:
-        config = apply_plan_template(raw_config, args.plan_template)
+        config = plan_templates.apply(
+            raw_config,
+            args.plan_template,
+            advertiser_id=args.advertiser_id,
+        )
+        if args.submit:
+            raw_config = token_manager.ensure_access_token(config_path, raw_config)
+            config = plan_templates.apply(
+                raw_config,
+                args.plan_template,
+                advertiser_id=args.advertiser_id,
+            )
     except ValueError as exc:
         print(json.dumps({
             "mode": "submit" if args.submit else "dry_run",

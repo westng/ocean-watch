@@ -8,6 +8,7 @@ from pathlib import Path
 import config_paths
 import credential_store
 import configure_official_mcp
+import plan_templates
 import validate_config
 
 
@@ -54,18 +55,7 @@ def deep_merge(base, override):
 
 
 def apply_plan_template(config):
-    effective = copy.deepcopy(config)
-    templates = config.get("plan_templates") or {}
-    selected = config.get("active_plan_template")
-    if not selected or selected not in templates:
-        return effective
-    template = templates[selected]
-    for section in TEMPLATE_SECTIONS:
-        if section in template:
-            effective[section] = deep_merge(effective.get(section, {}), template[section] or {})
-    if "titles" in template:
-        effective["titles"] = copy.deepcopy(template["titles"])
-    return effective
+    return plan_templates.apply(config)
 
 
 def is_missing(value):
@@ -134,10 +124,26 @@ def main():
         created = True
 
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
-    config = apply_plan_template(raw_config)
-    query_missing, create_missing, field_preview = check_fields(config)
+    try:
+        config = apply_plan_template(raw_config)
+    except ValueError:
+        config = raw_config
+    query_missing, create_missing, field_preview = check_fields(raw_config)
     mcp_status = configure_official_mcp.status()
     scripts_dir = skill_root() / "scripts"
+    template_rows = []
+    for name, raw_template in sorted((raw_config.get("plan_templates") or {}).items()):
+        template = plan_templates.normalize_template(raw_config, name, raw_template)
+        template_rows.append({
+            "name": name,
+            "active": name == raw_config.get("active_plan_template"),
+            "advertiser_id": template["bindings"].get("advertiser_id"),
+            "platform": template["bindings"].get("platform"),
+            "product_id": template["bindings"].get("product_id"),
+            "product_name": template["bindings"].get("product_name"),
+            "binding_error": plan_templates.binding_error(template["bindings"]),
+        })
+    active_template = next((row for row in template_rows if row["active"]), None)
 
     print(json.dumps({
         "mode": "first_run_guide",
@@ -145,11 +151,27 @@ def main():
         "skill_root": str(skill_root()),
         "config": str(config_path),
         "created_config_from_template": created,
-        "next_action": "edit_config" if query_missing else "ready_for_query_data",
+        "next_action": (
+            "edit_config" if query_missing
+            else "create_business_template" if create_missing
+            else "ready"
+        ),
         "ok_for_query_data": not query_missing,
         "ok_for_create_plan": not query_missing and not create_missing,
         "active_plan_template": raw_config.get("active_plan_template"),
-        "available_plan_templates": sorted((raw_config.get("plan_templates") or {}).keys()),
+        "active_template_advertiser_id": (
+            active_template.get("advertiser_id") if active_template else None
+        ),
+        "available_plan_templates": template_rows,
+        "plan_template_schema_version": raw_config.get("plan_template_schema_version", 1),
+        "template_migration_required": int(raw_config.get("plan_template_schema_version") or 1) < 2,
+        "template_setup": {
+            "rule": "Each business template belongs to exactly one advertiser_id and cannot create plans for another advertiser.",
+            "default_template_usage": "default_plan_template provides shared defaults only and cannot submit plans directly.",
+            "list_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" list',
+            "migrate_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" migrate',
+            "create_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create --advertiser-id <广告主ID> --platform <平台> --traffic-source CID --product-id <商品ID> --product-name <商品名> --activate',
+        },
         "minimum_fields_for_query_data": [
             "local app_id and secret in the OS credential store",
             "local access_token or refresh_token from scripts/oauth_local_authorize.py",

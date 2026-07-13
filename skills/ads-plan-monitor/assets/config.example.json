@@ -5,169 +5,89 @@
   "account": {
     "advertiser_id": "REPLACE_WITH_ADVERTISER_ID"
   },
-  "defaults": {
-    "operation": "ENABLE",
-    "project_name_template": "{material_date}_{product_name}_roi_详情页",
-    "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
-    "product_name": "REPLACE_WITH_PRODUCT_NAME",
-    "product_id": "REPLACE_WITH_PRODUCT_ID",
-    "daily_budget": 300,
-    "cpa_bid": 100,
-    "roi_goal": 1.5,
-    "source": "REPLACE_WITH_SOURCE_NAME",
-    "landing_type": "SHOP",
-    "asset_type": "THIRDPARTY",
-    "marketing_goal": "VIDEO_AND_IMAGE",
-    "delivery_mode": "PROCEDURAL",
-    "ad_type": "ALL",
-    "gender": "NONE",
-    "ages": [],
-    "location_type": "CURRENT",
-    "district": "REGION",
-    "region_version": "2.3.2",
-    "hide_if_converted": "NO_EXCLUDE",
-    "schedule_type": "SCHEDULE_FROM_NOW",
-    "budget_mode": "BUDGET_MODE_DAY",
-    "pricing": "PRICING_OCPM",
-    "external_action": "AD_CONVERT_TYPE_APP_ORDER",
-    "deep_bid_type": "NET_ORDER_ROI",
-    "deep_bid_type_name": "净成交ROI",
-    "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
-    "max_videos_per_project": 5,
-    "call_to_action_buttons": [
-      "立即购买"
-    ],
-    "product_info": {
-      "product_name_type": "CUSTOM",
-      "product_image_type": "CUSTOM",
-      "product_selling_point_type": "CUSTOM"
-    }
-  },
-  "materials": {
-    "video_ids": [],
-    "video_cover_ids": []
-  },
-  "resolved_ids": {
-    "city_ids": [],
-    "brand_info": {
-      "yuntu_category_id": null,
-      "brand_name_id": null,
-      "ecom_brand_id": null,
-      "cdp_brand_id": null
-    },
-    "category_name": "REPLACE_WITH_CATEGORY_NAME",
-    "brand_name": "REPLACE_WITH_BRAND_NAME",
-    "product_platform_id": null,
-    "unique_product_id": null,
-    "event_asset_ids": [],
-    "product_image_ids": [],
-    "landing_page_asset_id": null
-  },
-  "tracking_urls": {
-    "track_url": [
-      "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-    ],
-    "action_track_url": [
-      "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-    ]
-  },
-  "links": {
-    "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
-    "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
-  },
-  "titles": [
-    "这里填写第一条广告标题",
-    "这里填写第二条广告标题",
-    "这里填写第三条广告标题"
-  ],
-  "active_plan_template": "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID",
-  "plan_templates": {
-    "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID": {
-      "display_name": "示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID",
-      "platform": "示例平台",
-      "traffic_source": "CID",
-      "product_label": "示例商品",
-      "product_id": "REPLACE_WITH_PRODUCT_ID",
-      "defaults": {
-        "operation": "ENABLE",
-        "project_name_template": "{material_date}_{product_name}_roi_详情页",
-        "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
-        "product_name": "REPLACE_WITH_PRODUCT_NAME",
-        "product_id": "REPLACE_WITH_PRODUCT_ID",
-        "daily_budget": 300,
-        "cpa_bid": 100,
-        "roi_goal": 1.5,
-        "source": "REPLACE_WITH_SOURCE_NAME",
-        "landing_type": "SHOP",
-        "asset_type": "THIRDPARTY",
-        "marketing_goal": "VIDEO_AND_IMAGE",
-        "delivery_mode": "PROCEDURAL",
-        "ad_type": "ALL",
-        "gender": "NONE",
-        "ages": [],
-        "location_type": "CURRENT",
-        "district": "REGION",
-        "region_version": "2.3.2",
-        "hide_if_converted": "NO_EXCLUDE",
-        "schedule_type": "SCHEDULE_FROM_NOW",
-        "budget_mode": "BUDGET_MODE_DAY",
-        "pricing": "PRICING_OCPM",
-        "external_action": "AD_CONVERT_TYPE_APP_ORDER",
-        "deep_bid_type": "NET_ORDER_ROI",
-        "deep_bid_type_name": "净成交ROI",
-        "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
-        "max_videos_per_project": 5,
-        "call_to_action_buttons": [
-          "立即购买"
-        ],
-        "product_info": {
-          "product_name_type": "CUSTOM",
-          "product_image_type": "CUSTOM",
-          "product_selling_point_type": "CUSTOM"
-        }
-      },
-      "materials": {
-        "video_ids": [],
-        "video_cover_ids": []
-      },
-      "resolved_ids": {
-        "city_ids": [],
-        "brand_info": {
-          "yuntu_category_id": null,
-          "brand_name_id": null,
-          "ecom_brand_id": null,
-          "cdp_brand_id": null
-        },
-        "category_name": "REPLACE_WITH_CATEGORY_NAME",
-        "brand_name": "REPLACE_WITH_BRAND_NAME",
-        "product_platform_id": null,
-        "unique_product_id": null,
-        "event_asset_ids": [],
-        "product_image_ids": [],
-        "landing_page_asset_id": null
-      },
-      "links": {
-        "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
-        "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
-      },
-      "tracking_urls": {
-        "track_url": [
-          "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-        ],
-        "action_track_url": [
-          "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
-        ]
-      },
-      "titles": [
-        "这里填写第一条广告标题",
-        "这里填写第二条广告标题",
-        "这里填写第三条广告标题"
-      ]
-    }
-  },
+  "active_plan_template": null,
+  "plan_templates": {},
   "oauth": {
     "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
     "authorize_url": "https://ad.oceanengine.com/openapi/audit/oauth.html",
     "token_base_url": "https://ad.oceanengine.com/open_api"
+  },
+  "plan_template_schema_version": 2,
+  "default_plan_template": {
+    "defaults": {
+      "operation": "ENABLE",
+      "project_name_template": "{material_date}_{product_name}_roi_详情页",
+      "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
+      "product_name": "REPLACE_WITH_PRODUCT_NAME",
+      "product_id": "REPLACE_WITH_PRODUCT_ID",
+      "daily_budget": 300,
+      "cpa_bid": 100,
+      "roi_goal": 1.5,
+      "source": "REPLACE_WITH_SOURCE_NAME",
+      "landing_type": "SHOP",
+      "asset_type": "THIRDPARTY",
+      "marketing_goal": "VIDEO_AND_IMAGE",
+      "delivery_mode": "PROCEDURAL",
+      "ad_type": "ALL",
+      "gender": "NONE",
+      "ages": [],
+      "location_type": "CURRENT",
+      "district": "REGION",
+      "region_version": "2.3.2",
+      "hide_if_converted": "NO_EXCLUDE",
+      "schedule_type": "SCHEDULE_FROM_NOW",
+      "budget_mode": "BUDGET_MODE_DAY",
+      "pricing": "PRICING_OCPM",
+      "external_action": "AD_CONVERT_TYPE_APP_ORDER",
+      "deep_bid_type": "NET_ORDER_ROI",
+      "deep_bid_type_name": "净成交ROI",
+      "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+      "max_videos_per_project": 5,
+      "call_to_action_buttons": [
+        "立即购买"
+      ],
+      "product_info": {
+        "product_name_type": "CUSTOM",
+        "product_image_type": "CUSTOM",
+        "product_selling_point_type": "CUSTOM"
+      }
+    },
+    "materials": {
+      "video_ids": [],
+      "video_cover_ids": []
+    },
+    "resolved_ids": {
+      "city_ids": [],
+      "brand_info": {
+        "yuntu_category_id": null,
+        "brand_name_id": null,
+        "ecom_brand_id": null,
+        "cdp_brand_id": null
+      },
+      "category_name": "REPLACE_WITH_CATEGORY_NAME",
+      "brand_name": "REPLACE_WITH_BRAND_NAME",
+      "product_platform_id": null,
+      "unique_product_id": null,
+      "event_asset_ids": [],
+      "product_image_ids": [],
+      "landing_page_asset_id": null
+    },
+    "links": {
+      "landing_page_url": "https://example.com/landing?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__",
+      "open_url": "https://example.com/open?click_id=__CLICKID__&promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__"
+    },
+    "tracking_urls": {
+      "track_url": [
+        "https://example.com/impression?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
+      ],
+      "action_track_url": [
+        "https://example.com/click?promotion_id=__PROMOTION_ID__&project_id=__PROJECT_ID__&advertiser_id=__ADVERTISER_ID__&track_id=__TRACK_ID__"
+      ]
+    },
+    "titles": [
+      "这里填写第一条广告标题",
+      "这里填写第二条广告标题",
+      "这里填写第三条广告标题"
+    ]
   }
 }

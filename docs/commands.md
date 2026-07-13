@@ -150,6 +150,16 @@ python3 skills/ads-plan-monitor/scripts/query_custom_report.py \
 
 ## 创建计划
 
+先查看业务模板及其归属广告主：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  list
+```
+
+输出中的 `advertiser_id` 是模板唯一归属的广告主 ID。目标广告主与该值不一致时，单条和批量创建都会在调用官方 API 前停止。
+
 先预览 payload：
 
 ```bash
