@@ -340,6 +340,21 @@ class CreatePlanTests(unittest.TestCase):
         self.assertFalse(summary["business_usable"])
         self.assertFalse(summary["selectable_for_plan_creation"])
 
+    def test_template_source_options_show_business_bindings(self):
+        config = self.v2_config()
+        output = []
+        selected = manage_plan_templates.select_template_source(
+            config,
+            input_fn=lambda _: "0",
+            output_fn=output.append,
+        )
+        rendered = "\n".join(output)
+        self.assertIsNone(selected)
+        self.assertIn("广告主 1234567890", rendered)
+        self.assertIn("平台 平台", rendered)
+        self.assertIn("商品 test product", rendered)
+        self.assertIn("商品 ID unique-product-1", rendered)
+
     def test_create_wizard_from_default_requires_confirmation(self):
         config = self.v2_config()
         original = copy.deepcopy(config)

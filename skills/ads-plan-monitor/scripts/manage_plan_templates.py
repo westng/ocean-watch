@@ -139,8 +139,12 @@ def select_template_source(config, input_fn, output_fn):
     output_fn("  0. 默认模板（仅作为新业务模板骨架）")
     for index, name in enumerate(names, start=1):
         template = plan_templates.normalize_template(config, name, config["plan_templates"][name])
-        advertiser_id = template["bindings"].get("advertiser_id")
-        output_fn(f"  {index}. {name}（广告主 {advertiser_id}）")
+        bindings = template["bindings"]
+        output_fn(
+            f"  {index}. {name}（广告主 {bindings.get('advertiser_id')}，"
+            f"平台 {bindings.get('platform')}，商品 {bindings.get('product_name')}，"
+            f"商品 ID {bindings.get('product_id')}）"
+        )
     while True:
         raw = input_fn("请选择来源编号: ").strip()
         if raw.isdigit() and 0 <= int(raw) <= len(names):
