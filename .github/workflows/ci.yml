@@ -10,6 +10,7 @@ permissions:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.9", "3.12"]
@@ -20,14 +21,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Compile scripts
-        run: python -m py_compile skills/ads-plan-monitor/scripts/*.py
-        shell: bash
+        run: python -c "from pathlib import Path; import py_compile; [py_compile.compile(str(path), doraise=True) for path in Path('skills/ads-plan-monitor/scripts').glob('*.py')]"
       - name: Validate example JSON
-        run: |
-          python -m json.tool .codex-plugin/plugin.json > /dev/null
-          python -m json.tool .agents/plugins/marketplace.json > /dev/null
-          python -m json.tool skills/ads-plan-monitor/assets/config.example.json > /dev/null
-        shell: bash
+        run: python -c "from pathlib import Path; import json; [json.loads(Path(path).read_text(encoding='utf-8')) for path in ['.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'skills/ads-plan-monitor/assets/config.example.json']]"
       - name: Run regression tests
         run: python -m unittest discover -s tests -v
       - name: Validate skill metadata
