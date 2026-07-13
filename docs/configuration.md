@@ -51,9 +51,10 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 | `account.channel` | 当前广告主所属渠道 |
 | `account.advertiser_id` | 巨量引擎广告主 ID |
 | `active_plan_template` | 默认创建计划模板名 |
-| `plan_template_schema_version` | 模板结构版本，当前为 `2` |
+| `plan_template_schema_version` | 模板结构版本，当前为 `3` |
 | `default_plan_template` | 创建新业务模板时使用的默认骨架，不参与真实业务投放 |
 | `plan_templates` | 与广告主、平台和商品绑定的业务模板 |
+| `plan_templates.<模板名>.material_strategy` | 素材来源、选择模式和单元素材上限 |
 | `plan_templates.<模板名>.copy_materials.titles` | 该业务模板创建单元时使用的文案标题素材 |
 | `resolved_ids` | 城市、商品、图片、转化资产、落地页等官方 ID |
 | `tracking_urls` | 展示和点击/有效触点监测链接 |
@@ -73,18 +74,19 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 建议使用：
 
 ```text
-平台-CID-商品名-商品ID
+平台-CID-商品名-商品ID-素材来源
 ```
 
 示例：
 
 ```text
-示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID
+示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID-上传素材
+示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID-达人素材
 ```
 
-模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `channel`、`advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
+模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `channel`、`advertiser_id`、`platform`、`traffic_source`、`product_id`、`product_name`，并通过 `material_strategy.source_type` 固定选择 `ACCOUNT_UPLOAD` 或 `CREATOR_AUTHORIZED`。
 
-`default_plan_template` 是创建新业务模板的默认骨架，只保存跨广告主、跨商品可复用的投放和地域参数。它不能激活，也不能直接创建计划。素材、商品与转化资产 ID、落地页资产、业务链接、监测链接和标题必须保存在业务模板中。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
+`default_plan_template` 是创建新业务模板的默认骨架，只保存跨广告主、跨商品可复用的投放和地域参数。它不能激活，也不能直接创建计划。业务模板保存素材选择规则，但具体视频、封面和达人作品 ID 只属于本次运行，不写回模板。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
 
 查看模板及其归属广告主：
 
@@ -106,11 +108,12 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 
 1. 选择从 `default_plan_template` 默认骨架创建，或复制某个已有业务模板。
 2. 已有业务模板会同时展示所属广告主 ID。
-3. 填写目标广告主、平台、流量来源、商品和模板名称。
-4. 确认文案、计划来源、落地页、直达及监测链接。
-5. 按复制策略清理字段：同广告主同商品保留业务参数；新商品清空商品资产、链接和文案；跨广告主还会清空账户资产。
-6. 展示来源、绑定关系、复制策略和逐字段差异预览。
-7. 用户确认后才以原子方式写入，并保留上一版 `.bak`；不完整模板可保存为草稿，但不能激活。
+3. 填写目标广告主、平台、流量来源和商品。
+4. 选择上传素材或达人素材，并设置手动/最新选择方式和单元素材数量；达人模板可设置达人白名单和授权剩余天数。
+5. 确认模板名称、文案、计划来源、落地页、直达及监测链接。
+6. 按复制策略清理字段：具体素材 ID 始终清空；新商品清空商品资产、链接和文案；跨广告主还会清空账户资产与达人白名单。
+7. 展示来源、绑定关系、素材来源、复制策略和逐字段差异预览。
+8. 用户确认后才以原子方式写入，并保留上一版 `.bak`；不完整模板可保存为草稿，但不能激活。
 
 插件不提供绕过向导的新模板创建命令；所有业务模板创建都必须经过来源选择、差异预览和最终确认。
 
@@ -139,7 +142,7 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 
 此操作只复制 `copy_materials.titles` 并记录 `copied_from_template`，不会复制广告主绑定、投放参数、链接、素材 ID 或账户资产。
 
-旧版配置先执行 `manage_plan_templates.py ... migrate`。同一配置可以维护多个广告主、平台和商品模板；Codex 默认读取 `active_plan_template`，用户指定模板时则使用对应的 `plan_templates.<模板名>`。
+旧版配置先执行 `manage_plan_templates.py ... migrate`。旧模板含固定视频 ID 时，增加 `--confirm-remove-legacy-materials` 明确确认改为运行时选材。同一配置可以维护多个广告主、平台、商品和素材来源模板。
 
 ## 保存 App 凭据
 

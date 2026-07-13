@@ -115,6 +115,26 @@ python3 skills/ads-plan-monitor/scripts/query_videos.py \
   --video-id REPLACE_WITH_VIDEO_ID
 ```
 
+## 查询达人授权素材
+
+查询当前广告主已授权且可投放的达人合作视频：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/query_creator_materials.py \
+  --config config/ads-plan-monitor/config.json
+```
+
+按达人或作品筛选：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/query_creator_materials.py \
+  --config config/ads-plan-monitor/config.json \
+  --aweme-id REPLACE_WITH_AWEME_ID \
+  --item-id REPLACE_WITH_ITEM_ID
+```
+
+默认只展示可用素材。增加 `--include-unusable` 可查看失效、临期或字段不完整的授权关系及原因。
+
 ## 查询素材表现
 
 查询当前账户今天的单元素材表现：
@@ -235,6 +255,26 @@ python3 skills/ads-plan-monitor/scripts/create_plan.py \
   --video-id REPLACE_WITH_VIDEO_ID \
   --submit
 ```
+
+达人素材模板使用独立入口。未指定 `--item-id` 时只返回可选素材，不创建 payload：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/create_creator_plan.py \
+  --config config/ads-plan-monitor/config.json \
+  --plan-template "平台-CID-商品名-商品ID-达人素材"
+```
+
+选择同一个达人的一个或多个合作视频并预览：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/create_creator_plan.py \
+  --config config/ads-plan-monitor/config.json \
+  --plan-template "平台-CID-商品名-商品ID-达人素材" \
+  --item-id REPLACE_WITH_ITEM_ID_1 \
+  --item-id REPLACE_WITH_ITEM_ID_2
+```
+
+确认后在同一命令增加 `--submit`。提交前会重新查询授权关系；一个普通原生单元只能使用同一个 `aweme_id` 下的达人素材。
 
 常用覆盖参数：
 

@@ -64,10 +64,13 @@ def write_journal(journal):
     config_store.atomic_write_json(journal_path(), journal, backup=False)
 
 
-def prepare_config(raw):
+def prepare_config(raw, confirm_remove_legacy_materials=False):
     prepared = raw
     if int(prepared.get("plan_template_schema_version") or 1) < plan_templates.SCHEMA_VERSION:
-        prepared = plan_templates.migrate(prepared)
+        prepared = plan_templates.migrate(
+            prepared,
+            confirm_remove_legacy_materials=confirm_remove_legacy_materials,
+        )
     return channels.migrate_config(prepared)
 
 
@@ -79,11 +82,14 @@ def prepare_legacy_credentials(raw):
     return extracted
 
 
-def migrate(config_path):
+def migrate(config_path, confirm_remove_legacy_materials=False):
     config_path = Path(config_path).expanduser()
     with ProcessLock(migration_lock_path()):
         raw = json.loads(config_path.read_text(encoding="utf-8"))
-        migrated = prepare_config(raw)
+        migrated = prepare_config(
+            raw,
+            confirm_remove_legacy_materials=confirm_remove_legacy_materials,
+        )
         journal = load_or_create_journal(config_path)
         extracted = prepare_legacy_credentials(raw)
 
@@ -97,7 +103,7 @@ def migrate(config_path):
             journal["credentials"] = "committed"
             write_journal(journal)
 
-        if journal["config"] != "committed":
+        if journal["config"] != "committed" or raw != migrated:
             config_store.atomic_write_json(config_path, migrated)
             journal["config"] = "committed"
             write_journal(journal)
@@ -133,9 +139,29 @@ def main(argv=None):
         description="Migrate existing Ocean Engine Marketing config and credentials to channel-aware storage."
     )
     parser.add_argument("--config")
+    parser.add_argument(
+        "--confirm-remove-legacy-materials",
+        action="store_true",
+        help="Confirm removal of fixed video IDs while upgrading plan templates to schema v3.",
+    )
     args = parser.parse_args(argv)
     config_path = config_paths.resolve_config_path(args.config)
-    print(json.dumps(migrate(config_path), ensure_ascii=False, indent=2))
+    try:
+        result = migrate(
+            config_path,
+            confirm_remove_legacy_materials=args.confirm_remove_legacy_materials,
+        )
+    except plan_templates.LegacyMaterialSelectionError as exc:
+        print(json.dumps({
+            "config": str(config_path),
+            "changed": False,
+            "error_code": "legacy_material_selection_requires_confirmation",
+            "error": str(exc),
+            "affected_templates": exc.templates,
+            "required_flag": "--confirm-remove-legacy-materials",
+        }, ensure_ascii=False, indent=2))
+        return 2
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

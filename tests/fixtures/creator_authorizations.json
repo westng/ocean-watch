@@ -1,0 +1,98 @@
+{
+  "pages": [
+    {
+      "code": 0,
+      "message": "OK",
+      "request_id": "fixture-request-1",
+      "data": {
+        "list": [
+          {
+            "auth_type": "VIDEO_ITEM",
+            "auth_status": "AUTHRIZED",
+            "aweme_id": "7001",
+            "aweme_name": "示例达人甲",
+            "start_time": "2026-07-01 00:00:00",
+            "end_time": "2026-08-01 00:00:00",
+            "video_info": {
+              "item_id": 8101,
+              "video_id": "9101",
+              "video_cover_id": "9201",
+              "mid": 9301,
+              "image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+              "title": "示例合作视频一"
+            }
+          },
+          {
+            "auth_type": "VIDEO_ITEM",
+            "auth_status": "AUTHRIZED",
+            "aweme_id": "7001",
+            "aweme_name": "示例达人甲",
+            "start_time": "2026-07-02 00:00:00",
+            "end_time": "2026-08-01 00:00:00",
+            "video_info": {
+              "item_id": 8102,
+              "video_id": "9102",
+              "video_cover_id": "9202",
+              "mid": 9302,
+              "image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+              "title": "示例合作视频二"
+            }
+          }
+        ],
+        "page_info": {
+          "page": 1,
+          "page_size": 2,
+          "total_page": 2,
+          "total_number": 4
+        }
+      }
+    },
+    {
+      "code": 0,
+      "message": "OK",
+      "request_id": "fixture-request-2",
+      "data": {
+        "list": [
+          {
+            "auth_type": "VIDEO_ITEM",
+            "auth_status": "AUTHRIZED",
+            "aweme_id": "7002",
+            "aweme_name": "示例达人乙",
+            "start_time": "2026-07-03 00:00:00",
+            "end_time": "2026-08-01 00:00:00",
+            "video_info": {
+              "item_id": 8103,
+              "video_id": "9103",
+              "video_cover_id": "9203",
+              "mid": 9303,
+              "image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+              "title": "示例合作视频三"
+            }
+          },
+          {
+            "auth_type": "VIDEO_ITEM",
+            "auth_status": "AUTHRIZED",
+            "aweme_id": "7003",
+            "aweme_name": "示例达人丙",
+            "start_time": "2026-06-01 00:00:00",
+            "end_time": "2026-07-13 12:00:00",
+            "video_info": {
+              "item_id": 8104,
+              "video_id": "9104",
+              "video_cover_id": "9204",
+              "mid": 9304,
+              "image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+              "title": "即将过期示例视频"
+            }
+          }
+        ],
+        "page_info": {
+          "page": 2,
+          "page_size": 2,
+          "total_page": 2,
+          "total_number": 4
+        }
+      }
+    }
+  ]
+}

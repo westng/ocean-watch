@@ -125,7 +125,16 @@ def resolve_account_jobs(config, accounts_arg, mapping_args, fallback_template=N
                     f"advertiser {advertiser_id} needs an explicit template mapping; candidates={candidates}"
                 )
             template_name = candidates[0]
-        plan_templates.apply(config, template_name, advertiser_id=advertiser_id)
+        effective = plan_templates.apply(
+            config,
+            template_name,
+            advertiser_id=advertiser_id,
+        )
+        if create_plan.get_path(effective, "material_strategy.source_type") == "CREATOR_AUTHORIZED":
+            raise ValueError(
+                f"plan template {template_name} uses creator-authorized materials; "
+                "batch_create_from_today_videos.py only supports account uploads"
+            )
         jobs.append({"advertiser_id": str(advertiser_id), "plan_template": template_name})
     return jobs
 
@@ -715,7 +724,11 @@ def main():
         channel=args.channel,
     )
     if args.videos_per_unit is None:
-        args.videos_per_unit = int(create_plan.get_path(preview_config, "defaults.max_videos_per_project", 5) or 5)
+        args.videos_per_unit = int(
+            create_plan.get_path(preview_config, "material_strategy.max_materials_per_unit")
+            or create_plan.get_path(preview_config, "defaults.max_videos_per_project", 5)
+            or 5
+        )
     if args.videos_per_unit > 5:
         raise SystemExit("videos-per-unit must be <= 5 for the current promotion material rule.")
 

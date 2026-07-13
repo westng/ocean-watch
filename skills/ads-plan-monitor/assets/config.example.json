@@ -22,7 +22,7 @@
   },
   "active_plan_template": null,
   "plan_templates": {},
-  "plan_template_schema_version": 2,
+  "plan_template_schema_version": 3,
   "default_plan_template": {
     "defaults": {
       "operation": "ENABLE",

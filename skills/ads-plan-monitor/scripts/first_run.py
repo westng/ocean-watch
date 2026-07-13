@@ -159,6 +159,10 @@ def main():
             "platform": template["bindings"].get("platform"),
             "product_id": template["bindings"].get("product_id"),
             "product_name": template["bindings"].get("product_name"),
+            "material_source_type": template["material_strategy"].get("source_type"),
+            "material_strategy_error": plan_templates.material_strategy_error(
+                template["material_strategy"]
+            ),
             "copy_materials_configured": bool(copy_titles),
             "copy_title_count": len(copy_titles),
             "binding_error": plan_templates.binding_error(template["bindings"]),
@@ -189,7 +193,10 @@ def main():
         ),
         "available_plan_templates": template_rows,
         "plan_template_schema_version": migrated_config.get("plan_template_schema_version", 1),
-        "template_migration_required": int(migrated_config.get("plan_template_schema_version") or 1) < 2,
+        "template_migration_required": (
+            int(migrated_config.get("plan_template_schema_version") or 1)
+            < plan_templates.SCHEMA_VERSION
+        ),
         "channel_migration_required": int(raw_config.get("config_schema_version") or 1) < 2,
         "channel_migration_command": f'python3 "{scripts_dir / "migrate_channels.py"}" --config "{config_path}"',
         "template_setup": {

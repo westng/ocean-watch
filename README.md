@@ -35,12 +35,13 @@
 | 授权账户 | 按渠道保存独立应用和多份 OAuth 授权，根据官方 `account_id` 与目标广告主自动选择 Token |
 | Token 管理 | API 调用前自动检查有效期，临近过期时刷新并保存轮换凭据 |
 | 创建计划 | 按平台和商品模板生成项目与单元，确认后提交官方 API |
+| 达人素材 | 查询当前广告主已授权合作视频，按达人素材模板生成原生单元 |
 | 批量创建 | 获取当天上传视频，按 N 条一个单元分组，支持多账户并发 |
 | 查询数据 | 查询单元、当前使用素材、视频素材库和素材维度报表 |
 | 盯盘策略 | 基于消耗、ROI、转化等数据给出分析和处理建议 |
 | 官方文档 | 通过官方 MCP 查询接口文档、Schema 和 SDK 示例 |
 
-计划模板采用“默认创建骨架 + 业务模板”结构。默认模板只保存可跨业务复用的投放参数，不参与真实投放。新模板向导要求选择默认骨架或已有业务模板，并根据广告主和商品是否变化清理账户资产、商品资产、链接及文案；不完整模板可以保存为草稿，但不能激活。每个业务模板只绑定一个广告主、平台、流量来源和商品，多账户批量创建会为每个广告主单独解析模板。
+计划模板采用“默认创建骨架 + 业务模板”结构。默认模板只保存可跨业务复用的投放参数，不参与真实投放。Schema v3 的每个业务模板还固定绑定“上传素材”或“达人素材”；创建时不能混用。达人素材通过官方授权关系接口实时查询，具体素材 ID 不写回模板。新模板向导会根据广告主、商品和素材来源变化清理对应资产；不完整模板可以保存为草稿，但不能激活。
 
 ## 安装
 
@@ -79,7 +80,15 @@ python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
   --config config/ads-plan-monitor/config.json
 ```
 
-迁移可安全重复执行；中断后再次运行会沿用同一迁移记录继续完成。若旧 Token 没有完整的官方账户映射，状态会显示 `pending_account_sync: true`，按输出中的 `authorization_id` 执行一次同步：
+迁移可安全重复执行；中断后再次运行会沿用同一迁移记录继续完成。旧业务模板如果固定保存过视频 ID，v3 迁移会先停止并要求确认。确认这些动态 ID 改为创建时实时选择后，运行：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json \
+  --confirm-remove-legacy-materials
+```
+
+若旧 Token 没有完整的官方账户映射，状态会显示 `pending_account_sync: true`，按输出中的 `authorization_id` 执行一次同步：
 
 ```bash
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
@@ -131,6 +140,8 @@ Codex 配置只保存本地桥接脚本路径；包含 `app_id` 和 `developer_i
 ```text
 查询当前广告账户今天素材消耗前十
 查询今天上传的视频素材
+查询当前广告账户可投放的达人授权视频
+使用达人素材模板和指定 item_id 创建一条计划，先 dry-run
 按今天上传的视频素材，每 5 条一个单元创建计划，先 dry-run
 使用指定计划模板，拿这条视频素材创建一条计划
 根据素材维度数据给我盯盘建议
@@ -167,6 +178,7 @@ Codex 配置只保存本地桥接脚本路径；包含 `app_id` 和 `developer_i
 - [配置、OAuth 与 MCP](docs/configuration.md)
 - [常用命令](docs/commands.md)
 - [项目结构](docs/project-structure.md)
+- [更新日志](CHANGELOG.md)
 - [安全说明](SECURITY.md)
 - [贡献指南](CONTRIBUTING.md)
 

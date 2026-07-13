@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and internal branches for first-run setup, local OAuth token authorization, creating single or batch ad plans from configurable templates, querying account unit/material performance, and strategy/monitoring analysis. Use when the user asks to 初始化配置, 第一次使用, 配置技能, 本地授权, 获取token, 刷新token, create 巨量计划, 新建计划, 批量创建计划, 按今天素材创建, 多账户并发创建, 查询素材数据, 素材维度数据, 消耗前十, 汇总数据, 盯盘数据, 逻辑策略, build project/promotion payloads, validate official API fields, configure plan templates following 平台-CID-商品名-商品ID, diagnose missing fields, or analyze ad performance through official Ocean Engine APIs.
+description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and internal branches for first-run setup, local OAuth token authorization, creating single or batch ad plans from account-uploaded or creator-authorized materials, querying account unit/material performance, and strategy/monitoring analysis. Use when the user asks to 初始化配置, 第一次使用, 配置技能, 本地授权, 获取token, 刷新token, create 巨量计划, 新建计划, 批量创建计划, 按今天素材创建, 达人素材, 达人授权视频, 合作视频, 多账户并发创建, 查询素材数据, 素材维度数据, 消耗前十, 汇总数据, 盯盘数据, 逻辑策略, build project/promotion payloads, validate official API fields, configure source-bound plan templates, diagnose missing fields, or analyze ad performance through official Ocean Engine APIs.
 ---
 
 # Ads Plan Monitor
@@ -58,6 +58,7 @@ This boundary applies to local configuration writes and read-only API calls as w
   - Project create: `https://open.oceanengine.com/labels/34/docs/1740868093375503?origin=left_nav`
   - Promotion create: `https://open.oceanengine.com/labels/34/docs/1740946299496459?origin=left_nav`
   - Video material list: `https://open.oceanengine.com/labels/34/docs/1696710601820172?origin=left_nav`
+  - Creator authorization relationships: `https://open.oceanengine.com/labels/7/docs/1729983667746823?origin=left_nav`
   - Custom report config: `https://open.oceanengine.com/labels/34/docs/1755261744248832?origin=left_nav`
   - Custom report data: `https://open.oceanengine.com/labels/34/docs/1741387668314126?origin=left_nav`
 - If the local reference and official docs conflict, prefer the official docs and call out the conflict.
@@ -103,6 +104,7 @@ If migration reports `pending_account_sync`, read the non-secret `authorization_
 All API scripts must pass `channel`, target `advertiser_id`, and optional `auth_account_id` to `token_manager.ensure_access_token()` before read/write API requests. This resolves the correct authorization, refreshes only its token, and prevents multi-account batches from sharing the wrong token.
 If an API returns `40002` / "No permission to operate account", check `scripts/token_manager.py --status`. Do not treat `oauth_authorized_account_count` as the advertiser count; customer-center and platform-role subjects are not direct ad accounts. If `advertiser_id_authorized` is false, ask the user to re-authorize with that advertiser selected or switch config to an actual authorized advertiser ID.
 Use `scripts/query_videos.py` to query account video materials through `/2/file/video/get/`, resolve video `material_id` values to promotion-ready `video_id` values, verify `/2/file/video/ad/get/` accepts them, and fetch `video_cover_id` candidates through `/2/tools/video_cover/suggest/` before submitting a promotion.
+Use `scripts/query_creator_materials.py` to query creator-authorized cooperation videos through `/2/tools/aweme_auth_list/`. Use `scripts/create_creator_plan.py` for a template whose `material_strategy.source_type` is `CREATOR_AUTHORIZED`; never send such a template through `create_plan.py` or the account-upload batch script.
 Use `scripts/batch_create_from_today_videos.py` when the user asks to batch-create plans from today's uploaded video materials, split videos into groups such as 5 per unit, or create across multiple advertiser accounts with concurrency. This script queries videos, validates promotion-ready IDs, fetches covers with retries, skips unqualified videos by default, groups materials, then creates project/promotion pairs.
 Use `scripts/query_report_config.py` to fetch available custom-report dimensions and metrics before choosing report fields.
 Use `scripts/query_custom_report.py` to query `/v3.0/report/custom/get/` directly when the user provides dimensions, metrics, and filters.
@@ -110,23 +112,25 @@ Use `scripts/query_active_materials_report.py` as the business entry for monitor
 
 ## Plan Templates
 
-Creation parameters use schema v2 with one shared `default_plan_template` and advertiser-bound business templates. The default template is a creation base only: it appears as a source option in the business-template wizard but must never be selected for plan creation or submission. Template names follow:
+Creation parameters use schema v3 with one shared `default_plan_template` and advertiser-bound business templates. The default template is a creation base only: it appears as a source option in the business-template wizard but must never be selected for plan creation or submission. New template names follow:
 
-`平台-CID-商品名-商品ID`
+`平台-CID-商品名-商品ID-素材来源`
 
 Every business template must contain `bindings.channel`, `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. Channel and advertiser bindings are ownership: reject single or batch creation whenever either target differs. Never let `--channel`, `--advertiser-id`, or `--accounts` bypass them.
 
-Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
+Every business template must also contain `material_strategy.source_type`: `ACCOUNT_UPLOAD` or `CREATOR_AUTHORIZED`. Treat it as an execution contract, not a suggestion. Specific video, cover, item, and material IDs are runtime selections and must not be written back into schema v3 templates. Existing fixed IDs require explicit migration confirmation before removal.
+
+Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Material selection rules, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Specific video, cover, item, and material IDs belong to the current run. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
 
 Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Every title must contain 5–30 characters. Use `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing or invalid copy as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
 
 When the user explicitly confirms two plan templates represent the same product, the plugin capability may copy only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command. During plugin development, test this capability with fixtures; do not run it against local business config without a separate explicit execution request.
 
-Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID. It then collects target bindings, copy, source, links, and tracking URLs; previews provenance, clone policy, bindings, field-level changes, validation, and activation state; and writes only after explicit confirmation. Incomplete candidates may be saved as drafts but must never activate. Activation requires a separate confirmation and defaults to false.
+Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID and material source. It then collects target bindings, material source, copy, source, links, and tracking URLs; previews provenance, clone policy, bindings, `material_strategy`, field-level changes, validation, and activation state; and writes only after explicit confirmation. Incomplete candidates may be saved as drafts but must never activate. Activation requires a separate confirmation and defaults to false.
 
 Apply clone policy from advertiser and product ownership. For the same advertiser and same product, preserve business settings. For any new product, clear account/product assets, links, tracking URLs, and copy. For the same product across advertisers, clear account/product assets, links, and tracking URLs but allow copy reuse. Always replace product bindings and `unique_product_id` with the target product. Record provenance and cleared fields under `created_from`.
 
-There is no public non-interactive new-template command; all user-facing business-template creation must pass through `create-wizard`. Read `active_plan_template` from config when the user does not name a template for plan creation. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show the non-business default base separately from business templates with advertiser IDs. Use `migrate` for legacy schema v1 configs.
+There is no public non-interactive new-template command; all user-facing business-template creation must pass through `create-wizard`. Read `active_plan_template` from config when the user does not name a template for plan creation. Route `ACCOUNT_UPLOAD` templates to `scripts/create_plan.py` or `scripts/batch_create_from_today_videos.py`, and `CREATOR_AUTHORIZED` templates to `scripts/create_creator_plan.py`. Use `scripts/manage_plan_templates.py list` to show the non-business default base separately from business templates with advertiser IDs and material sources. Use `migrate` for legacy configs; fixed legacy material IDs require `--confirm-remove-legacy-materials`.
 
 ## Workflow
 
@@ -178,8 +182,8 @@ For a new teammate, use this onboarding flow:
 6. If the official developer-documentation MCP is not ready, run `scripts/configure_official_mcp.py`. This is recommended for development and troubleshooting but does not block query or create readiness.
 7. Extra fields for creating plans:
    - one active business template explicitly bound to the target `advertiser_id`
-   - `materials.video_ids`
-   - `materials.video_cover_ids` if required
+   - an account-upload or creator-authorized `material_strategy`
+   - runtime material selection: upload `video_id` values or creator `item_id` values
    - `resolved_ids.city_ids`
    - `resolved_ids.product_platform_id`
    - `resolved_ids.product_image_ids`
@@ -291,6 +295,16 @@ Common commands:
 Official library filters `video_ids`, `material_ids`, and `signatures` are mutually exclusive; pass only one of them in a single query. Date range filters can be combined with filename filtering in local post-processing.
 
 Use `selected_videos` from the script output for downstream creation. Do not use `material_id` as `video_id`; the promotion payload needs the video `id` value from the video material response.
+
+### 4B. Creator-authorized materials
+
+When the user asks for 达人素材、达人授权视频、合作视频 or selecting creator content, use `scripts/query_creator_materials.py`. The official endpoint is `/2/tools/aweme_auth_list/`; initial support is restricted to `auth_type=VIDEO_ITEM` and the official active status spelling `AUTHRIZED`.
+
+Normalize official authorization rows with advertiser ownership, `aweme_id`, `item_id`, `video_id`, `video_cover_id`, start/end time, warning types, and usability reasons. Display candidates in a Markdown table by default. Do not create a spreadsheet file unless requested.
+
+For creation, require a `CREATOR_AUTHORIZED` business template and pass selected `item_id` values to `scripts/create_creator_plan.py`. The command re-queries the current authorization snapshot before building payloads. The promotion must contain `native_setting.aweme_id`; each video row must contain the matching `video_id`, `video_cover_id`, `item_id`, and `image_mode`.
+
+One ordinary native promotion supports one `aweme_id`, so selected creator videos in one unit must belong to the same creator. Reject expired, expiring-too-soon, inactive, incomplete, cross-advertiser, mixed-creator, or no-longer-returned materials before project creation. Dry-run is the default; pass `--submit` only after the user explicitly confirms the online write.
 
 ### 5. Preflight before API submission
 

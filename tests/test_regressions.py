@@ -122,6 +122,11 @@ class CreatePlanTests(unittest.TestCase):
                     "product_id": "unique-product-1",
                     "product_name": "test product",
                 },
+                "material_strategy": {
+                    "source_type": "ACCOUNT_UPLOAD",
+                    "selection_mode": "MANUAL",
+                    "max_materials_per_unit": 5,
+                },
                 "overrides": {},
             }
         }
@@ -195,7 +200,83 @@ class CreatePlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "template bindings missing: platform"):
             plan_templates.apply(config)
 
-    def test_template_migration_preserves_payloads(self):
+    def test_template_migration_requires_confirmation_for_fixed_materials(self):
+        config = valid_config()
+        name = "平台-CID-商品-unique-product-1"
+        config["active_plan_template"] = name
+        config["plan_templates"] = {
+            name: {
+                "display_name": name,
+                "custom_metadata": {"owner": "test-suite"},
+                "platform": "平台",
+                "traffic_source": "CID",
+                "product_label": "test product",
+                "product_id": "unique-product-1",
+                **plan_templates.section_bundle(config),
+            }
+        }
+        runtime_args = args(video_id=["video-1"])
+        before = create_plan.build_payloads(
+            create_plan.apply_plan_template(config),
+            runtime_args,
+        )
+        with self.assertRaises(plan_templates.LegacyMaterialSelectionError):
+            plan_templates.migrate(config)
+        migrated = plan_templates.migrate(
+            config,
+            confirm_remove_legacy_materials=True,
+        )
+        after = create_plan.build_payloads(
+            create_plan.apply_plan_template(migrated),
+            runtime_args,
+        )
+        self.assertEqual(before, after)
+        self.assertEqual(
+            migrated["plan_templates"][name]["material_strategy"]["source_type"],
+            "ACCOUNT_UPLOAD",
+        )
+        self.assertEqual(
+            migrated["plan_templates"][name]["custom_metadata"],
+            {"owner": "test-suite"},
+        )
+        self.assertNotIn(
+            "video_ids",
+            migrated["plan_templates"][name].get("overrides", {}).get("materials", {}),
+        )
+        self.assertEqual(migrated["default_plan_template"]["materials"], {})
+        self.assertEqual(migrated["default_plan_template"]["links"], {})
+        self.assertEqual(migrated["default_plan_template"]["tracking_urls"], {})
+        self.assertEqual(migrated["default_plan_template"]["titles"], [])
+        self.assertNotIn(
+            "unique_product_id",
+            migrated["default_plan_template"]["resolved_ids"],
+        )
+
+    def test_v3_template_rejects_fixed_runtime_material_ids(self):
+        config = self.v2_config()
+        name = config["active_plan_template"]
+        config["plan_templates"][name]["overrides"] = {
+            "materials": {"video_ids": ["video-1"]},
+        }
+        with self.assertRaisesRegex(ValueError, "cannot store runtime material IDs"):
+            plan_templates.apply(config)
+
+    def test_v3_template_rejects_empty_runtime_material_fields(self):
+        config = self.v2_config()
+        name = config["active_plan_template"]
+        config["plan_templates"][name]["overrides"] = {
+            "materials": {"video_ids": []},
+        }
+        with self.assertRaisesRegex(ValueError, "cannot store runtime material IDs"):
+            plan_templates.apply(config)
+
+    def test_v3_migration_rejects_missing_active_template(self):
+        config = self.v2_config()
+        config["active_plan_template"] = "missing-template"
+        with self.assertRaisesRegex(ValueError, "active plan template not found"):
+            plan_templates.migrate(config)
+
+    def test_template_migration_cli_returns_structured_confirmation_error(self):
         config = valid_config()
         name = "平台-CID-商品-unique-product-1"
         config["active_plan_template"] = name
@@ -209,18 +290,24 @@ class CreatePlanTests(unittest.TestCase):
                 **plan_templates.section_bundle(config),
             }
         }
-        before = create_plan.build_payloads(create_plan.apply_plan_template(config), args())
-        migrated = plan_templates.migrate(config)
-        after = create_plan.build_payloads(create_plan.apply_plan_template(migrated), args())
-        self.assertEqual(before, after)
-        self.assertEqual(migrated["default_plan_template"]["materials"], {})
-        self.assertEqual(migrated["default_plan_template"]["links"], {})
-        self.assertEqual(migrated["default_plan_template"]["tracking_urls"], {})
-        self.assertEqual(migrated["default_plan_template"]["titles"], [])
-        self.assertNotIn(
-            "unique_product_id",
-            migrated["default_plan_template"]["resolved_ids"],
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output):
+                code = manage_plan_templates.main([
+                    "--config", str(path), "migrate",
+                ])
+            unchanged = json.loads(path.read_text(encoding="utf-8"))
+        result = json.loads(output.getvalue())
+        self.assertEqual(code, 2)
+        self.assertFalse(result["changed"])
+        self.assertEqual(
+            result["error_code"],
+            "legacy_material_selection_requires_confirmation",
         )
+        self.assertEqual(result["affected_templates"], [name])
+        self.assertEqual(unchanged, config)
 
     def test_create_template_records_advertiser_binding(self):
         config = plan_templates.migrate(valid_config())
@@ -360,6 +447,7 @@ class CreatePlanTests(unittest.TestCase):
         self.assertIn("平台 平台", rendered)
         self.assertIn("商品 test product", rendered)
         self.assertIn("商品 ID unique-product-1", rendered)
+        self.assertIn("素材来源 上传素材", rendered)
 
     def test_create_wizard_from_default_requires_confirmation(self):
         config = self.v2_config()
@@ -371,6 +459,9 @@ class CreatePlanTests(unittest.TestCase):
             "",
             "新商品",
             "product-2",
+            "1",
+            "",
+            "",
             "",
             "第一条新文案",
             "",
@@ -427,6 +518,9 @@ class CreatePlanTests(unittest.TestCase):
             "",
             "",
             "",
+            "",
+            "",
+            "",
             "y",
             "n",
         ])
@@ -435,7 +529,7 @@ class CreatePlanTests(unittest.TestCase):
             input_fn=lambda _: next(answers),
             output_fn=lambda _: None,
         )
-        name = "京东-CID-同款商品-product-2"
+        name = "京东-CID-同款商品-product-2-上传素材"
         template = updated["plan_templates"][name]
         self.assertTrue(result["confirmed"])
         self.assertFalse(result["activate"])
@@ -483,7 +577,7 @@ class CreatePlanTests(unittest.TestCase):
             "titles": None,
         }
         name, template = template_workflow.build_template(config, values, source_name)
-        self.assertEqual(name, "平台-CID-新商品-product-2")
+        self.assertEqual(name, "平台-CID-新商品-product-2-上传素材")
         self.assertEqual(template["copy_materials"]["titles"], [])
         self.assertNotIn("product_image_ids", template["overrides"]["resolved_ids"])
         self.assertNotIn("product_platform_id", template["overrides"]["resolved_ids"])
@@ -540,6 +634,9 @@ class CreatePlanTests(unittest.TestCase):
             "",
             "新商品",
             "product-2",
+            "1",
+            "",
+            "",
             "",
             "",
             "",
@@ -592,6 +689,9 @@ class CreatePlanTests(unittest.TestCase):
             "",
             "新商品",
             "product-2",
+            "1",
+            "",
+            "",
             "",
             "这是一条有效测试文案",
             "",
@@ -652,6 +752,11 @@ class TemplateBatchMappingTests(unittest.TestCase):
                 "product_name": "商品",
             },
             "copy_materials": {"titles": ["这是第二账户文案"]},
+            "material_strategy": {
+                "source_type": "ACCOUNT_UPLOAD",
+                "selection_mode": "MANUAL",
+                "max_materials_per_unit": 5,
+            },
             "overrides": {"resolved_ids": {"unique_product_id": "product-2"}},
         }
         return config, second
@@ -738,6 +843,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
 
     def test_schema_v1_template_migrates_before_channel_binding(self):
         config = valid_config()
+        config["materials"] = {}
         config["plan_templates"] = {
             "legacy": {
                 "platform": "示例平台",
@@ -897,11 +1003,18 @@ class ChannelAuthorizationTests(unittest.TestCase):
                     mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                     mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
                 first = migrate_channels.migrate(config_path)
+                downgraded = json.loads(config_path.read_text(encoding="utf-8"))
+                downgraded["plan_template_schema_version"] = 2
+                config_path.write_text(json.dumps(downgraded), encoding="utf-8")
                 second = migrate_channels.migrate(config_path)
             migrated = json.loads(config_path.read_text(encoding="utf-8"))
         self.assertEqual(first["activation"], "schema_v2_active")
         self.assertEqual(second["activation"], "schema_v2_active")
         self.assertEqual(migrated["account"]["channel"], "marketing")
+        self.assertEqual(
+            migrated["plan_template_schema_version"],
+            plan_templates.SCHEMA_VERSION,
+        )
         self.assertNotIn("api", migrated)
 
     def test_channel_manifest_commit_keeps_previous_generation(self):

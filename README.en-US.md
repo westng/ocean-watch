@@ -35,12 +35,13 @@ Business operations currently use the official Ocean Engine Marketing API under 
 | Account authorization | Stores independent channel apps and multiple OAuth authorizations, then resolves tokens by official `account_id` and target advertiser |
 | Token management | Checks token validity before API calls, refreshes expiring tokens, and saves rotated credentials |
 | Campaign creation | Generates projects and promotions from platform and product templates, then submits them after confirmation |
+| Creator materials | Queries creator-authorized videos and builds native promotions from source-bound templates |
 | Batch creation | Retrieves videos uploaded today, groups N videos into each promotion, and supports concurrent multi-account creation |
 | Data queries | Queries promotions, active materials, the video library, and material-dimension reports |
 | Monitoring strategy | Provides recommendations based on spend, ROI, conversions, and other performance data |
 | Official documentation | Queries API documentation, schemas, and SDK examples through the official MCP |
 
-Campaign templates use a shared default base plus advertiser-bound business templates. The default base contains only reusable delivery settings and never participates in real delivery. The wizard clears account assets, product assets, links, and copy according to whether the advertiser or product changes. Incomplete templates may be saved as drafts but cannot be activated. Each business template belongs to one advertiser, and multi-account batches resolve a separate template for every advertiser.
+Campaign templates use a shared default base plus advertiser-bound business templates. Schema v3 binds every business template to either account-uploaded or creator-authorized materials, and the two sources cannot be mixed. Creator candidates are queried from the official authorization API at runtime; selected IDs are not written back to the template. Incomplete templates may be saved as drafts but cannot be activated.
 
 ## Installation
 
@@ -79,7 +80,15 @@ python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
   --config config/ads-plan-monitor/config.json
 ```
 
-Migration is safely repeatable and resumes from the same journal after interruption. If a legacy token lacks a complete official-account mapping, status reports `pending_account_sync: true`. Run one explicit sync with the reported `authorization_id`:
+Migration is safely repeatable and resumes from the same journal after interruption. If an old template stores fixed video IDs, v3 migration stops for explicit confirmation. After confirming that materials will be selected at runtime, run:
+
+```bash
+python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
+  --config config/ads-plan-monitor/config.json \
+  --confirm-remove-legacy-materials
+```
+
+If a legacy token lacks a complete official-account mapping, status reports `pending_account_sync: true`. Run one explicit sync with the reported `authorization_id`:
 
 ```bash
 python3 skills/ads-plan-monitor/scripts/token_manager.py \
@@ -131,6 +140,8 @@ Codex configuration stores only the path to the local bridge script. The officia
 ```text
 Show the top 10 materials by spend today for the current advertiser account
 List videos uploaded today
+List creator-authorized videos available to the current advertiser
+Dry-run one campaign from selected creator item IDs and a creator-material template
 Create campaigns from today's uploaded videos, five videos per promotion, and dry-run first
 Create one campaign from this video using the specified campaign template
 Give me monitoring recommendations based on material-level performance
@@ -167,6 +178,7 @@ Local directories excluded from the repository include `config/`, `runs/`, `.ven
 - [Configuration, OAuth, and MCP](docs/configuration.md)
 - [Common commands](docs/commands.md)
 - [Project structure](docs/project-structure.md)
+- [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md)
 

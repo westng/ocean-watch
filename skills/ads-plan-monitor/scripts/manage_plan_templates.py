@@ -17,8 +17,14 @@ def save_config(path, config):
     config_store.atomic_write_json(path, config)
 
 
-def template_name(platform, traffic_source, product_name, product_id):
-    return template_workflow.template_name(platform, traffic_source, product_name, product_id)
+def template_name(platform, traffic_source, product_name, product_id, source_type=None):
+    return template_workflow.template_name(
+        platform,
+        traffic_source,
+        product_name,
+        product_id,
+        source_type,
+    )
 
 
 def normalize_titles(titles):
@@ -30,6 +36,7 @@ def list_templates(config):
     for name, template in sorted((config.get("plan_templates") or {}).items()):
         normalized = plan_templates.normalize_template(config, name, template)
         bindings = normalized["bindings"]
+        strategy = normalized["material_strategy"]
         titles = normalized["copy_materials"].get("titles") or []
         rows.append({
             "name": name,
@@ -40,6 +47,11 @@ def list_templates(config):
             "traffic_source": bindings.get("traffic_source"),
             "product_id": bindings.get("product_id"),
             "product_name": bindings.get("product_name"),
+            "material_source_type": strategy.get("source_type"),
+            "material_source_name": template_workflow.material_source_label(
+                strategy.get("source_type")
+            ),
+            "material_strategy": strategy,
             "copy_materials": {
                 "configured": bool(titles),
                 "title_count": len(titles),
@@ -101,6 +113,12 @@ def create_template(config, args):
         "track_url": args.track_url,
         "action_track_url": args.action_track_url,
         "titles": args.title,
+        "material_source_type": getattr(args, "material_source_type", None),
+        "selection_mode": getattr(args, "selection_mode", None),
+        "max_materials_per_unit": getattr(args, "max_materials_per_unit", None),
+        "creator_ids": getattr(args, "creator_ids", None),
+        "creator_auth_types": getattr(args, "creator_auth_types", None),
+        "minimum_remaining_days": getattr(args, "minimum_remaining_days", None),
     }
     name, template = template_workflow.build_template(config, values, args.from_template)
     if name in templates and not args.force:
@@ -148,7 +166,8 @@ def select_template_source(config, input_fn, output_fn):
             f"  {index}. {name}（渠道 {bindings.get('channel')}，"
             f"广告主 {bindings.get('advertiser_id')}，"
             f"平台 {bindings.get('platform')}，商品 {bindings.get('product_name')}，"
-            f"商品 ID {bindings.get('product_id')}）"
+            f"商品 ID {bindings.get('product_id')}，"
+            f"素材来源 {template_workflow.material_source_label((template.get('material_strategy') or {}).get('source_type'))}）"
         )
     while True:
         raw = input_fn("请选择来源编号: ").strip()
@@ -172,6 +191,33 @@ def collect_titles(input_fn, inherited_titles):
     return normalize_titles(titles) if titles else []
 
 
+def select_material_source(input_fn, inherited=None):
+    default = "1" if inherited == "ACCOUNT_UPLOAD" else "2" if inherited == "CREATOR_AUTHORIZED" else None
+    suffix = f" [{default}]" if default else ""
+    while True:
+        raw = input_fn(f"素材来源（1 上传素材 / 2 达人素材）{suffix}: ").strip()
+        if not raw and default:
+            raw = default
+        if raw == "1":
+            return "ACCOUNT_UPLOAD"
+        if raw == "2":
+            return "CREATOR_AUTHORIZED"
+
+
+def select_selection_mode(input_fn, inherited=None):
+    default = "2" if inherited == "LATEST" else "1"
+    while True:
+        raw = input_fn(
+            f"素材选择方式（1 手动选择 / 2 自动选择最新） [{default}]: "
+        ).strip()
+        if not raw:
+            raw = default
+        if raw == "1":
+            return "MANUAL"
+        if raw == "2":
+            return "LATEST"
+
+
 def run_create_wizard(config, input_fn=input, output_fn=print):
     if int(config.get("plan_template_schema_version") or 1) < plan_templates.SCHEMA_VERSION:
         config = plan_templates.migrate(config)
@@ -184,6 +230,7 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
             config["plan_templates"][source_name],
         )
     bindings = (source or {}).get("bindings") or {}
+    inherited_strategy = (source or {}).get("material_strategy") or {}
     overrides = (source or {}).get("overrides") or {}
     defaults = overrides.get("defaults") or {}
 
@@ -202,7 +249,49 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
     )
     product_name = prompt_value(input_fn, "商品名称", bindings.get("product_name"), required=True)
     product_id = prompt_value(input_fn, "商品 ID", bindings.get("product_id"), required=True)
-    generated_name = template_name(platform, traffic_source, product_name, product_id)
+    material_source_type = select_material_source(
+        input_fn,
+        inherited_strategy.get("source_type"),
+    )
+    selection_mode = select_selection_mode(
+        input_fn,
+        inherited_strategy.get("selection_mode"),
+    )
+    max_materials_per_unit = int(prompt_value(
+        input_fn,
+        "每单元素材数量",
+        inherited_strategy.get("max_materials_per_unit") or 5,
+        required=True,
+    ))
+    creator_ids = None
+    minimum_remaining_days = None
+    if material_source_type == "CREATOR_AUTHORIZED":
+        creator_ids_value = prompt_value(
+            input_fn,
+            "达人 ID 白名单（逗号分隔，留空表示不限）",
+            ",".join((inherited_strategy.get("creator_filters") or {}).get("creator_ids") or []),
+        )
+        creator_ids = [
+            value.strip()
+            for value in str(creator_ids_value or "").split(",")
+            if value.strip()
+        ]
+        minimum_remaining_days = int(prompt_value(
+            input_fn,
+            "授权至少剩余天数",
+            (inherited_strategy.get("creator_filters") or {}).get(
+                "minimum_remaining_days",
+                1,
+            ),
+            required=True,
+        ))
+    generated_name = template_name(
+        platform,
+        traffic_source,
+        product_name,
+        product_id,
+        material_source_type,
+    )
     name = prompt_value(input_fn, "模板名称", generated_name, required=True)
 
     target_bindings = {
@@ -250,6 +339,12 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
             (tracking.get("action_track_url") or [None])[0],
         ),
         title=titles,
+        material_source_type=material_source_type,
+        selection_mode=selection_mode,
+        max_materials_per_unit=max_materials_per_unit,
+        creator_ids=creator_ids,
+        creator_auth_types=["VIDEO_ITEM"] if material_source_type == "CREATOR_AUTHORIZED" else None,
+        minimum_remaining_days=minimum_remaining_days,
         from_template=source_name,
         activate=False,
         force=False,
@@ -264,6 +359,7 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
         "template": created_name,
         "source": created["created_from"],
         "bindings": created["bindings"],
+        "material_strategy": created["material_strategy"],
         "copy_title_count": len(created["copy_materials"].get("titles") or []),
         "validation": validation,
         "changes": template_workflow.template_diff(source_snapshot, created),
@@ -316,7 +412,12 @@ def main(argv=None):
     parser.add_argument("--config")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("list")
-    subparsers.add_parser("migrate")
+    migrate_parser = subparsers.add_parser("migrate")
+    migrate_parser.add_argument(
+        "--confirm-remove-legacy-materials",
+        action="store_true",
+        help="Confirm that fixed legacy video IDs will be removed from business templates.",
+    )
     subparsers.add_parser("create-wizard")
 
     set_copy = subparsers.add_parser("set-copy")
@@ -338,20 +439,35 @@ def main(argv=None):
     changed = False
     created_name = None
     wizard_result = None
-    if args.command == "migrate":
-        config = plan_templates.migrate(config)
-        changed = True
-    elif args.command == "create-wizard":
-        config, wizard_result = run_create_wizard(config)
-        changed = wizard_result["changed"]
-    elif args.command == "set-copy":
-        config = set_copy_materials(
-            config,
-            args.template,
-            titles=args.title,
-            from_template=args.from_template,
-        )
-        changed = True
+    try:
+        if args.command == "migrate":
+            config = plan_templates.migrate(
+                config,
+                confirm_remove_legacy_materials=args.confirm_remove_legacy_materials,
+            )
+            changed = True
+        elif args.command == "create-wizard":
+            config, wizard_result = run_create_wizard(config)
+            changed = wizard_result["changed"]
+        elif args.command == "set-copy":
+            config = set_copy_materials(
+                config,
+                args.template,
+                titles=args.title,
+                from_template=args.from_template,
+            )
+            changed = True
+    except plan_templates.LegacyMaterialSelectionError as exc:
+        print(json.dumps({
+            "config": str(path),
+            "command": args.command,
+            "changed": False,
+            "error_code": "legacy_material_selection_requires_confirmation",
+            "error": str(exc),
+            "affected_templates": exc.templates,
+            "required_flag": "--confirm-remove-legacy-materials",
+        }, ensure_ascii=False, indent=2))
+        return 2
     if changed:
         save_config(path, config)
 

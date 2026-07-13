@@ -371,6 +371,10 @@ def main():
             advertiser_id=args.advertiser_id,
             channel=args.channel,
         )
+        if get_path(config, "material_strategy.source_type") == "CREATOR_AUTHORIZED":
+            raise ValueError(
+                "creator-authorized material templates must use create_creator_plan.py"
+            )
         if args.submit:
             raw_config = token_manager.ensure_access_token(
                 config_path,

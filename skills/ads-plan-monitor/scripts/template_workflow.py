@@ -7,10 +7,12 @@ import plan_templates
 
 
 ACCOUNT_FIELDS = {
-    "materials.video_ids",
-    "materials.video_cover_ids",
     "resolved_ids.event_asset_ids",
     "resolved_ids.landing_page_asset_id",
+}
+DYNAMIC_MATERIAL_FIELDS = {
+    "materials.video_ids",
+    "materials.video_cover_ids",
 }
 PRODUCT_FIELDS = {
     "resolved_ids.brand_info",
@@ -25,7 +27,11 @@ LINK_FIELDS = {
     "tracking_urls.track_url",
     "tracking_urls.action_track_url",
 }
-RUNTIME_MISSING_FIELDS = {"materials.video_ids", "api.access_token"}
+RUNTIME_MISSING_FIELDS = {
+    "materials.video_ids",
+    "runtime.creator_material_selection",
+    "api.access_token",
+}
 PAYLOAD_REQUIRED_FIELDS = {
     "defaults.operation",
     "defaults.project_name_template",
@@ -51,8 +57,16 @@ MIN_TITLE_LENGTH = 5
 MAX_TITLE_LENGTH = 30
 
 
-def template_name(platform, traffic_source, product_name, product_id):
-    return f"{platform}-{traffic_source}-{product_name}-{product_id}"
+def material_source_label(source_type):
+    return {
+        "ACCOUNT_UPLOAD": "上传素材",
+        "CREATOR_AUTHORIZED": "达人素材",
+    }.get(source_type, source_type)
+
+
+def template_name(platform, traffic_source, product_name, product_id, source_type=None):
+    base = f"{platform}-{traffic_source}-{product_name}-{product_id}"
+    return f"{base}-{material_source_label(source_type)}" if source_type else base
 
 
 def normalize_titles(titles):
@@ -79,7 +93,10 @@ def delete_path(data, dotted):
         current = current.get(part)
         if not isinstance(current, dict):
             return False
-    return current.pop(parts[-1], None) is not None
+    if parts[-1] not in current:
+        return False
+    current.pop(parts[-1])
+    return True
 
 
 def clone_policy(source_template, target_bindings):
@@ -103,7 +120,7 @@ def clone_policy(source_template, target_bindings):
 
 def prepare_source(source_template, target_bindings):
     if source_template is None:
-        return {}, {"titles": []}, {
+        return {}, {"titles": []}, None, {
             "type": "default",
             "template": None,
             "policy": "default",
@@ -112,20 +129,68 @@ def prepare_source(source_template, target_bindings):
 
     overrides = copy.deepcopy(source_template["overrides"])
     copy_materials = copy.deepcopy(source_template["copy_materials"])
+    material_strategy = copy.deepcopy(source_template.get("material_strategy") or {})
     policy = clone_policy(source_template, target_bindings)
-    fields_to_clear = set()
+    fields_to_clear = set(DYNAMIC_MATERIAL_FIELDS)
     if policy.startswith("cross_advertiser"):
         fields_to_clear.update(ACCOUNT_FIELDS | PRODUCT_FIELDS | LINK_FIELDS)
     elif policy == "same_advertiser_new_product":
         fields_to_clear.update(ACCOUNT_FIELDS | PRODUCT_FIELDS | LINK_FIELDS)
 
     cleared = sorted(field for field in fields_to_clear if delete_path(overrides, field))
-    return overrides, copy_materials, {
+    return overrides, copy_materials, material_strategy, {
         "type": "business_template",
         "template": source_template["name"],
         "policy": policy,
         "cleared_fields": cleared,
     }
+
+
+def build_material_strategy(values, inherited, policy):
+    inherited = copy.deepcopy(inherited or {})
+    source_type = (
+        values.get("material_source_type")
+        or inherited.get("source_type")
+        or "ACCOUNT_UPLOAD"
+    )
+    maximum = values.get("max_materials_per_unit")
+    if maximum is None:
+        maximum = inherited.get("max_materials_per_unit", 5)
+    strategy = {
+        "source_type": source_type,
+        "selection_mode": (
+            values.get("selection_mode")
+            or inherited.get("selection_mode")
+            or "MANUAL"
+        ),
+        "max_materials_per_unit": int(maximum),
+    }
+    if source_type == "CREATOR_AUTHORIZED":
+        inherited_filters = inherited.get("creator_filters") or {}
+        if values.get("creator_ids") is not None:
+            creator_ids = list(values["creator_ids"])
+        elif policy.startswith("cross_advertiser"):
+            creator_ids = []
+        else:
+            creator_ids = list(inherited_filters.get("creator_ids") or [])
+        strategy["creator_filters"] = {
+            "creator_ids": creator_ids,
+            "auth_types": list(
+                values.get("creator_auth_types")
+                or inherited_filters.get("auth_types")
+                or ["VIDEO_ITEM"]
+            ),
+            "authorization_status": "VALID",
+            "minimum_remaining_days": int(
+                values.get("minimum_remaining_days")
+                if values.get("minimum_remaining_days") is not None
+                else inherited_filters.get("minimum_remaining_days", 1)
+            ),
+        }
+    error = plan_templates.material_strategy_error(strategy)
+    if error:
+        raise ValueError(error)
+    return strategy
 
 
 def build_template(config, values, source_name=None):
@@ -145,7 +210,28 @@ def build_template(config, values, source_name=None):
         "product_id": str(values["product_id"]),
         "product_name": values["product_name"],
     }
-    overrides, inherited_copy, provenance = prepare_source(source_template, bindings)
+    overrides, inherited_copy, inherited_strategy, provenance = prepare_source(
+        source_template,
+        bindings,
+    )
+    material_strategy = build_material_strategy(
+        values,
+        inherited_strategy,
+        provenance["policy"],
+    )
+    source_changed = (
+        inherited_strategy
+        and inherited_strategy.get("source_type") != material_strategy["source_type"]
+    )
+    if source_changed and inherited_strategy.get("creator_filters"):
+        provenance["cleared_fields"].append("material_strategy.creator_filters")
+    elif (
+        provenance["policy"].startswith("cross_advertiser")
+        and (inherited_strategy.get("creator_filters") or {}).get("creator_ids")
+    ):
+        provenance["cleared_fields"].append(
+            "material_strategy.creator_filters.creator_ids"
+        )
     overrides.setdefault("defaults", {}).update({
         "product_name": bindings["product_name"],
         "product_id": bindings["product_id"],
@@ -176,11 +262,13 @@ def build_template(config, values, source_name=None):
         bindings["traffic_source"],
         bindings["product_name"],
         bindings["product_id"],
+        material_strategy["source_type"],
     )
     return name, {
         "display_name": name,
         "bindings": bindings,
         "copy_materials": copy_materials,
+        "material_strategy": material_strategy,
         "created_from": provenance,
         "overrides": overrides,
     }
@@ -203,6 +291,15 @@ def payload_args():
 
 
 def validate_candidate(config, name, template):
+    strategy_error = plan_templates.material_strategy_error(
+        template.get("material_strategy")
+    )
+    if strategy_error:
+        return {
+            "ready_for_plan_creation": False,
+            "template_missing_fields": [f"material_strategy: {strategy_error}"],
+            "runtime_missing_fields": [],
+        }
     candidate = copy.deepcopy(config)
     candidate.setdefault("plan_templates", {})[name] = copy.deepcopy(template)
     effective = plan_templates.apply(
@@ -223,8 +320,18 @@ def validate_candidate(config, name, template):
             promotion_payload,
             False,
         ))
+    source_type = template["material_strategy"]["source_type"]
+    if source_type == "CREATOR_AUTHORIZED":
+        missing = [
+            "runtime.creator_material_selection" if field == "materials.video_ids" else field
+            for field in missing
+        ]
     if create_plan.is_missing(create_plan.get_path(effective, "materials.video_ids")):
-        missing.append("materials.video_ids")
+        missing.append(
+            "runtime.creator_material_selection"
+            if source_type == "CREATOR_AUTHORIZED"
+            else "materials.video_ids"
+        )
     if create_plan.is_missing(create_plan.get_path(effective, "api.access_token")):
         missing.append("api.access_token")
     missing = list(dict.fromkeys(missing))

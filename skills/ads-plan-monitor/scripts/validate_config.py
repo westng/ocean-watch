@@ -77,6 +77,15 @@ def validate_config(raw_config, credentials=None):
             promotion_payload,
             True,
         )
+        if create_plan.get_path(effective_config, "material_strategy.source_type") == "CREATOR_AUTHORIZED":
+            preview_missing = [
+                "runtime.creator_material_selection" if field == "materials.video_ids" else field
+                for field in preview_missing
+            ]
+            submit_missing = [
+                "runtime.creator_material_selection" if field == "materials.video_ids" else field
+                for field in submit_missing
+            ]
     except (KeyError, TypeError, ValueError) as exc:
         template_error = str(exc)
 
