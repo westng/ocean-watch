@@ -700,6 +700,11 @@ class ConfigStoreTests(unittest.TestCase):
 
 
 class ConfigAndCredentialTests(unittest.TestCase):
+    def test_skill_metadata_has_required_frontmatter(self):
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("---\nname: ads-plan-monitor\ndescription:"))
+        self.assertGreaterEqual(text.count("\n---\n"), 1)
+
     def test_repository_config_resolves_from_plugin_checkout(self):
         self.assertEqual(
             config_paths.project_config_path(),
