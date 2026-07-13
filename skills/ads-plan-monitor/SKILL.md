@@ -99,25 +99,30 @@ Use `scripts/query_active_materials_report.py` as the business entry for monitor
 
 ## Plan Templates
 
-Creation parameters use schema v2 with one shared `default_plan_template` and advertiser-bound business templates. The default template contains reusable settings only and must never be used to create or submit a plan directly. Template names follow:
+Creation parameters use schema v2 with one shared `default_plan_template` and advertiser-bound business templates. The default template is a creation base only: it appears as a source option in the business-template wizard but must never be selected for plan creation or submission. Template names follow:
 
 `平台-CID-商品名-商品ID`
 
 Every business template must contain `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. The advertiser binding is ownership: reject single or batch creation whenever the target advertiser differs from `bindings.advertiser_id`. Never let `--advertiser-id` or `--accounts` bypass it.
 
-Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Reject cross-advertiser cloning with `--from-template`; a new advertiser must provide its own account-specific assets and links.
+Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
 
 Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Use repeated `--title` options while creating a template, or `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing copy materials as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
 
 When the user explicitly confirms two plan templates represent the same product, the plugin capability may copy only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command. During plugin development, test this capability with fixtures; do not run it against local business config without a separate explicit execution request.
 
-Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show templates with their advertiser IDs. Use its `create` command to guide the user through advertiser ID, platform, traffic source, product ID, and product name; use `migrate` for legacy schema v1 configs. Template differences live under `plan_templates.<模板名>.overrides` and may override `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`.
+Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID. It then collects target bindings, copy, source, links, and tracking URLs; previews source, bindings, copied sections, cross-advertiser cleanup, and activation state; and writes only after explicit confirmation. Activation requires a separate confirmation and defaults to false.
+
+When copying a business template for the same advertiser, preserve its business settings for editing. When the target advertiser differs, clear materials and advertiser-scoped resolved IDs before preview while preserving reusable settings, links, tracking URLs, and copy for user review. Always replace product bindings and `unique_product_id` with the target product. Record provenance under `created_from`.
+
+There is no public non-interactive new-template command; all user-facing business-template creation must pass through `create-wizard`. Read `active_plan_template` from config when the user does not name a template for plan creation. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show the non-business default base separately from business templates with advertiser IDs. Use `migrate` for legacy schema v1 configs.
 
 ## Workflow
 
 ### 1. Classify the request
 
 - If the user says "第一次使用", "初始化", "配置技能", "帮我配置", "缺配置", or a config is missing, run `scripts/first_run.py` and report the setup checklist. Do not call Ocean Engine APIs during the guide.
+- If the user asks to create a new plan template, start the template wizard. Do not silently infer a source, call non-interactive `create`, activate the result, or write a template without the wizard's preview and confirmation.
 - If the user asks to "生成参数", "看 payload", "检查字段", or is missing credentials, generate payloads and validation notes only.
 - If the user asks to "查询数据", "素材数据", "视频素材", "素材维度", "盯盘数据", or "查看素材表现", use read-only query scripts and do not create or update ads.
 - If the user asks for "逻辑策略", "盯盘建议", "怎么处理", "是否关停", "是否放量", or similar, use the strategy branch: query current data first when needed, summarize the evidence, and output recommendations without calling write APIs by default.

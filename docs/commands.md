@@ -160,6 +160,16 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
 
 输出中的 `advertiser_id` 是模板唯一归属的广告主 ID。目标广告主与该值不一致时，单条和批量创建都会在调用官方 API 前停止。
 
+新建业务模板必须先运行向导：
+
+```bash
+python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
+  --config config/ads-plan-monitor/config.json \
+  create-wizard
+```
+
+向导会要求选择默认骨架或已有业务模板，并在最终确认前展示复制来源、广告主绑定和跨账户清理项。默认模板不能用于真实计划创建。
+
 配置已有模板的文案素材：
 
 ```bash

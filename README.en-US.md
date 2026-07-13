@@ -40,7 +40,7 @@ Business operations use the official Ocean Engine Marketing API. The official Oc
 | Monitoring strategy | Provides recommendations based on spend, ROI, conversions, and other performance data |
 | Official documentation | Queries API documentation, schemas, and SDK examples through the official MCP |
 
-Campaign templates use a shared-default-plus-business-template structure. The shared default provides reusable settings only. Every executable business template must explicitly bind an advertiser ID, platform, traffic source, product ID, and product name, and configure its promotion copy under `copy_materials.titles`. Before creation, the plugin verifies template ownership to prevent one advertiser's product, tracking links, and copy from being submitted to another account.
+Campaign templates use a default-creation-base-plus-business-template structure. The default template never participates in real delivery and exists only as a source in the new-template wizard. Users must choose the default base or an existing business template, review source ownership and cross-advertiser asset cleanup, and confirm before anything is written. Every business template binds an advertiser, platform, traffic source, and product, and owns its links and copy materials.
 
 ## Installation
 

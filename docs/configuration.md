@@ -32,7 +32,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 | `account.advertiser_id` | 巨量引擎广告主 ID |
 | `active_plan_template` | 默认创建计划模板名 |
 | `plan_template_schema_version` | 模板结构版本，当前为 `2` |
-| `default_plan_template` | 所有业务模板继承的公共参数，不能直接创建计划 |
+| `default_plan_template` | 创建新业务模板时使用的默认骨架，不参与真实业务投放 |
 | `plan_templates` | 与广告主、平台和商品绑定的业务模板 |
 | `plan_templates.<模板名>.copy_materials.titles` | 该业务模板创建单元时使用的文案标题素材 |
 | `resolved_ids` | 城市、商品、图片、转化资产、落地页等官方 ID |
@@ -64,7 +64,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 
 模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
 
-`default_plan_template` 只保存预算、投放设置和地域等可跨账户复用的公共默认值，不能直接创建计划。素材、商品与转化资产 ID、落地页资产、监测链接和标题必须保存在业务模板的 `overrides` 中。创建时，目标广告主必须与模板的 `bindings.advertiser_id` 完全一致；命令行参数和批量账户参数都不能绕过此校验，也不允许跨广告主克隆业务模板。
+`default_plan_template` 是创建新业务模板的默认骨架，只在向导的来源选择中出现，不能激活，也不能直接创建计划。素材、商品与转化资产 ID、落地页资产、监测链接和标题必须保存在业务模板中。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
 
 查看模板及其归属广告主：
 
@@ -74,25 +74,25 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   list
 ```
 
-创建并启用一个业务模板：
+创建业务模板必须运行交互式向导：
 
 ```bash
 python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   --config config/ads-plan-monitor/config.json \
-  create \
-  --advertiser-id REPLACE_WITH_ADVERTISER_ID \
-  --platform REPLACE_WITH_PLATFORM \
-  --traffic-source CID \
-  --product-id REPLACE_WITH_PRODUCT_ID \
-  --product-name REPLACE_WITH_PRODUCT_NAME \
-  --title REPLACE_WITH_COPY_TITLE_1 \
-  --title REPLACE_WITH_COPY_TITLE_2 \
-  --track-url REPLACE_WITH_IMPRESSION_TRACKING_URL \
-  --action-track-url REPLACE_WITH_CLICK_TRACKING_URL \
-  --landing-page-url REPLACE_WITH_LANDING_PAGE_URL \
-  --open-url REPLACE_WITH_OPEN_URL \
-  --activate
+  create-wizard
 ```
+
+向导流程：
+
+1. 选择从 `default_plan_template` 默认骨架创建，或复制某个已有业务模板。
+2. 已有业务模板会同时展示所属广告主 ID。
+3. 填写目标广告主、平台、流量来源、商品和模板名称。
+4. 确认文案、计划来源、落地页、直达及监测链接。
+5. 跨广告主复制时，自动清空视频、封面、转化资产、商品图片和落地页资产等账户专属字段。
+6. 展示来源、绑定关系、继承内容和清理字段的差异预览。
+7. 用户确认后才写入；是否设为当前模板需要再次确认，默认不激活。
+
+插件不提供绕过向导的新模板创建命令；所有业务模板创建都必须经过来源选择、差异预览和最终确认。
 
 为已有模板单独设置文案素材：
 

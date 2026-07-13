@@ -170,10 +170,10 @@ def main():
         "template_migration_required": int(raw_config.get("plan_template_schema_version") or 1) < 2,
         "template_setup": {
             "rule": "Each business template belongs to exactly one advertiser_id and cannot create plans for another advertiser.",
-            "default_template_usage": "default_plan_template provides shared defaults only and cannot submit plans directly.",
+            "default_template_usage": "default_plan_template is a creation base shown by create-wizard and never participates in business delivery.",
             "list_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" list',
             "migrate_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" migrate',
-            "create_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create --advertiser-id <广告主ID> --platform <平台> --traffic-source CID --product-id <商品ID> --product-name <商品名> --title <文案1> --title <文案2> --activate',
+            "create_wizard_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" create-wizard',
             "set_copy_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" set-copy --template <模板名> --title <文案1> --title <文案2>',
             "copy_from_template_command": f'python3 "{scripts_dir / "manage_plan_templates.py"}" --config "{config_path}" set-copy --template <目标模板名> --from-template <来源模板名>',
         },

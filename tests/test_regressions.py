@@ -332,6 +332,103 @@ class CreatePlanTests(unittest.TestCase):
             "456",
         )
 
+    def test_default_template_is_listed_as_non_business_base(self):
+        summary = manage_plan_templates.default_template_summary(self.v2_config())
+        self.assertEqual(summary["name"], "default_plan_template")
+        self.assertFalse(summary["business_usable"])
+        self.assertFalse(summary["selectable_for_plan_creation"])
+
+    def test_create_wizard_from_default_requires_confirmation(self):
+        config = self.v2_config()
+        original = copy.deepcopy(config)
+        answers = iter([
+            "0",
+            "456",
+            "京东",
+            "",
+            "新商品",
+            "product-2",
+            "",
+            "第一条新文案",
+            "",
+            "新来源",
+            "https://landing.test/new",
+            "testapp://new",
+            "https://tracking.test/new-impression",
+            "https://tracking.test/new-click",
+            "n",
+        ])
+        updated, result = manage_plan_templates.run_create_wizard(
+            config,
+            input_fn=lambda _: next(answers),
+            output_fn=lambda _: None,
+        )
+        self.assertEqual(updated, original)
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(result["changed"])
+
+    def test_create_wizard_clones_business_template_and_clears_account_assets(self):
+        config = self.v2_config()
+        source_name = config["active_plan_template"]
+        source = config["plan_templates"][source_name]
+        source["copy_materials"] = {"titles": ["来源文案"]}
+        source["overrides"] = {
+            "defaults": {"source": "来源渠道"},
+            "materials": {"video_ids": ["source-video"]},
+            "resolved_ids": {
+                "unique_product_id": "unique-product-1",
+                "city_ids": [1],
+                "event_asset_ids": [100],
+                "product_image_ids": ["source-image"],
+            },
+            "links": {
+                "landing_page_url": "https://landing.test/source",
+                "open_url": "testapp://source",
+            },
+            "tracking_urls": {
+                "track_url": ["https://tracking.test/source-impression"],
+                "action_track_url": ["https://tracking.test/source-click"],
+            },
+        }
+        answers = iter([
+            "1",
+            "456",
+            "京东",
+            "",
+            "同款商品",
+            "product-2",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "y",
+            "n",
+        ])
+        updated, result = manage_plan_templates.run_create_wizard(
+            config,
+            input_fn=lambda _: next(answers),
+            output_fn=lambda _: None,
+        )
+        name = "京东-CID-同款商品-product-2"
+        template = updated["plan_templates"][name]
+        self.assertTrue(result["confirmed"])
+        self.assertFalse(result["activate"])
+        self.assertEqual(template["copy_materials"]["titles"], ["来源文案"])
+        self.assertEqual(template["overrides"]["materials"], {})
+        self.assertNotIn("event_asset_ids", template["overrides"]["resolved_ids"])
+        self.assertNotIn("product_image_ids", template["overrides"]["resolved_ids"])
+        self.assertEqual(template["overrides"]["resolved_ids"]["city_ids"], [1])
+        self.assertEqual(template["created_from"]["template"], source_name)
+        self.assertTrue(template["created_from"]["cross_advertiser"])
+        self.assertIn(
+            "resolved_ids.event_asset_ids",
+            template["created_from"]["cleared_account_fields"],
+        )
+        self.assertEqual(config["active_plan_template"], source_name)
+
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
