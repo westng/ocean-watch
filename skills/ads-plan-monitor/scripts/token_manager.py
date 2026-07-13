@@ -209,6 +209,41 @@ class FileLock:
         self.timeout = timeout
         self.fd = None
 
+    @staticmethod
+    def process_is_alive(pid):
+        if os.name == "nt":
+            import ctypes
+
+            process_query_limited_information = 0x1000
+            still_active = 259
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+            kernel32.GetExitCodeProcess.restype = ctypes.c_int
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel32.CloseHandle.restype = ctypes.c_int
+            handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+            if not handle:
+                return ctypes.get_last_error() == 5
+            try:
+                exit_code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return True
+                return exit_code.value == still_active
+            finally:
+                kernel32.CloseHandle(handle)
+
+        try:
+            os.kill(pid, 0)
+            return True
+        except PermissionError:
+            return True
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return False
+
     def remove_if_stale(self):
         try:
             text = self.path.read_text(encoding="utf-8").strip()
@@ -216,15 +251,8 @@ class FileLock:
         except (FileNotFoundError, OSError, TypeError, ValueError):
             pid = None
         if pid is not None:
-            try:
-                os.kill(pid, 0)
+            if self.process_is_alive(pid):
                 return False
-            except PermissionError:
-                return False
-            except ProcessLookupError:
-                pass
-            except OSError:
-                pass
         else:
             try:
                 age = time.time() - self.path.stat().st_mtime

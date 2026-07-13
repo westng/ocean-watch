@@ -860,6 +860,24 @@ class OfficialMcpTests(unittest.TestCase):
 
 
 class FileLockTests(unittest.TestCase):
+    def test_stale_pid_detection_is_platform_independent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "token.lock"
+            path.write_text("99999999", encoding="utf-8")
+            lock = token_manager.FileLock(path, timeout=0)
+            with mock.patch.object(lock, "process_is_alive", return_value=False):
+                self.assertTrue(lock.remove_if_stale())
+            self.assertFalse(path.exists())
+
+    def test_live_pid_detection_preserves_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "token.lock"
+            path.write_text("99999999", encoding="utf-8")
+            lock = token_manager.FileLock(path, timeout=0)
+            with mock.patch.object(lock, "process_is_alive", return_value=True):
+                self.assertFalse(lock.remove_if_stale())
+            self.assertTrue(path.exists())
+
     def test_stale_pid_lock_is_recovered(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "token.lock"
