@@ -28,6 +28,19 @@ Default to generating and validating payloads first. Submit to the API only afte
 
 When the user asks about structure, explain that `ocean-watch` is one Codex Plugin containing one `ads-plan-monitor` Skill with internal branches. The repository root is the Plugin root; this directory is the Skill root.
 
+## Development Mode Boundary
+
+Distinguish plugin development from business execution before choosing any workflow:
+
+- Treat requests such as "修改插件", "完善 Skill", "增加功能", "调整模板设计", "做成向导", "验收插件", and discussion about what the plugin should do as development mode.
+- In development mode, modify only tracked plugin source, public examples, documentation, and tests. Use temporary files or test fixtures for validation. Do not read, migrate, mutate, or execute against project-local `config/`, home config, credential stores, or real Ocean Engine APIs.
+- Business details supplied while designing or testing a feature are test cases and requirements, not permission to write them into the user's real local configuration.
+- Commands shown or implemented during development are capabilities for future plugin users. Do not execute them against real local business configuration merely because the user approved the capability design.
+- Enter business execution mode only when the user explicitly asks to operate local business state, for example "现在写入本地配置", "用当前账户执行", "查询真实数据", "创建真实计划", or "调用接口提交".
+- When intent is ambiguous inside an ongoing plugin-development conversation, remain in development mode and validate with isolated temporary configuration.
+
+This boundary applies to local configuration writes and read-only API calls as well as online write APIs. Explicit permission to implement a feature is not permission to execute that feature on real business state.
+
 ## Required References
 
 - Read `references/current-template-notes.md` when working on the current active plan template, fixed titles, tracking links, default product, naming rules, material selection rules, or report scope.
@@ -96,7 +109,7 @@ Keep only genuinely reusable delivery and geographic settings in `default_plan_t
 
 Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Use repeated `--title` options while creating a template, or `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing copy materials as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
 
-When the user explicitly confirms two plan templates represent the same product, allow copying only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command.
+When the user explicitly confirms two plan templates represent the same product, the plugin capability may copy only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command. During plugin development, test this capability with fixtures; do not run it against local business config without a separate explicit execution request.
 
 Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show templates with their advertiser IDs. Use its `create` command to guide the user through advertiser ID, platform, traffic source, product ID, and product name; use `migrate` for legacy schema v1 configs. Template differences live under `plan_templates.<模板名>.overrides` and may override `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`.
 

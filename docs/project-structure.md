@@ -84,5 +84,7 @@ git ls-files config runs .venv
 - Plugin 清单不存个人 MCP URL 或凭据。
 - Codex 运行时规则只放在 Skill 和 references 中。
 - 真实业务配置、OAuth 凭据和运行结果不进入 Git。
+- 开发插件、完善 Skill、调整模板设计或验收功能时，只修改仓库代码、公开示例、文档和测试，并使用临时配置验证；这些请求不代表允许修改本机真实 `config/` 或调用真实业务 API。
+- 只有用户另行明确要求写入本地配置、查询真实账户或提交真实计划时，才进入业务执行模式。
 - API 写操作默认先 dry-run 或预览，用户明确要求后再提交。
 - 官方 MCP 只负责开发文档、Schema 和 SDK 示例，不替代业务 API。

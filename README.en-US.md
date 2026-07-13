@@ -116,6 +116,8 @@ Look up the official fields and OpenAPI schema for promotion/create
 
 Creating real campaigns is a write operation. The Plugin performs a read-only query or payload preview by default and calls creation APIs only after the user explicitly requests submission.
 
+During Plugin or Skill development, advertiser, product, and URL details are treated as feature test cases by default. Codex changes only repository source, public examples, documentation, and tests, using isolated temporary configuration for validation. It does not modify real local `config/`, query real accounts, or call business APIs unless the user separately and explicitly requests a business operation.
+
 ## Project Structure
 
 ```text
