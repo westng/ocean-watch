@@ -31,4 +31,5 @@ jobs:
       - name: Run regression tests
         run: python -m unittest discover -s tests -v
       - name: Validate skill metadata
-        run: python -c "from pathlib import Path; text=Path('skills/ads-plan-monitor/SKILL.md').read_text(encoding='utf-8'); assert text.startswith('---\\nname: ads-plan-monitor\\ndescription:'); assert text.count('\\n---\\n') >= 1"
+        run: |
+          python -c "from pathlib import Path; text=Path('skills/ads-plan-monitor/SKILL.md').read_text(encoding='utf-8'); assert text.startswith('---\\nname: ads-plan-monitor\\ndescription:'); assert text.count('\\n---\\n') >= 1"
