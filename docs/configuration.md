@@ -63,7 +63,7 @@ cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/co
 
 模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `advertiser_id`、`platform`、`traffic_source`、`product_id` 和 `product_name`。
 
-`default_plan_template` 只保存预算、投放设置等公共默认值，不能直接创建计划。业务模板通过 `overrides` 保存差异参数。创建时，目标广告主必须与模板的 `bindings.advertiser_id` 完全一致；命令行参数和批量账户参数都不能绕过此校验。
+`default_plan_template` 只保存预算、投放设置和地域等可跨账户复用的公共默认值，不能直接创建计划。素材、商品与转化资产 ID、落地页资产、监测链接和标题必须保存在业务模板的 `overrides` 中。创建时，目标广告主必须与模板的 `bindings.advertiser_id` 完全一致；命令行参数和批量账户参数都不能绕过此校验，也不允许跨广告主克隆业务模板。
 
 查看模板及其归属广告主：
 
@@ -84,6 +84,10 @@ python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
   --traffic-source CID \
   --product-id REPLACE_WITH_PRODUCT_ID \
   --product-name REPLACE_WITH_PRODUCT_NAME \
+  --track-url REPLACE_WITH_IMPRESSION_TRACKING_URL \
+  --action-track-url REPLACE_WITH_CLICK_TRACKING_URL \
+  --landing-page-url REPLACE_WITH_LANDING_PAGE_URL \
+  --open-url REPLACE_WITH_OPEN_URL \
   --activate
 ```
 

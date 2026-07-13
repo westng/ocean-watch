@@ -59,9 +59,14 @@ def create_template(config, args):
         source = templates.get(args.from_template)
         if source is None:
             raise ValueError(f"source plan template not found: {args.from_template}")
-        overrides = copy.deepcopy(
-            plan_templates.normalize_template(config, args.from_template, source)["overrides"]
-        )
+        normalized_source = plan_templates.normalize_template(config, args.from_template, source)
+        source_advertiser_id = normalized_source["bindings"].get("advertiser_id")
+        if str(source_advertiser_id) != str(args.advertiser_id):
+            raise ValueError(
+                f"source plan template {args.from_template} is bound to advertiser "
+                f"{source_advertiser_id}; cross-advertiser template cloning is not allowed"
+            )
+        overrides = copy.deepcopy(normalized_source["overrides"])
     overrides.setdefault("defaults", {}).update({
         "product_name": args.product_name,
         "product_id": args.product_id,
@@ -75,6 +80,12 @@ def create_template(config, args):
             links["landing_page_url"] = args.landing_page_url
         if args.open_url:
             links["open_url"] = args.open_url
+    if args.track_url or args.action_track_url:
+        tracking_urls = overrides.setdefault("tracking_urls", {})
+        if args.track_url:
+            tracking_urls["track_url"] = [args.track_url]
+        if args.action_track_url:
+            tracking_urls["action_track_url"] = [args.action_track_url]
 
     templates[name] = {
         "display_name": name,
@@ -110,6 +121,8 @@ def main(argv=None):
     create.add_argument("--source-name")
     create.add_argument("--landing-page-url")
     create.add_argument("--open-url")
+    create.add_argument("--track-url")
+    create.add_argument("--action-track-url")
     create.add_argument("--from-template")
     create.add_argument("--activate", action="store_true")
     create.add_argument("--force", action="store_true")

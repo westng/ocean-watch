@@ -92,6 +92,8 @@ Creation parameters use schema v2 with one shared `default_plan_template` and ad
 
 Every business template must contain `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. The advertiser binding is ownership: reject single or batch creation whenever the target advertiser differs from `bindings.advertiser_id`. Never let `--advertiser-id` or `--accounts` bypass it.
 
+Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Materials, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Reject cross-advertiser cloning with `--from-template`; a new advertiser must provide its own account-specific assets and links.
+
 Read `active_plan_template` from config when the user does not name a template. When the user names a template, pass `--plan-template <模板名>` to `scripts/create_plan.py`. Use `scripts/manage_plan_templates.py list` to show templates with their advertiser IDs. Use its `create` command to guide the user through advertiser ID, platform, traffic source, product ID, and product name; use `migrate` for legacy schema v1 configs. Template differences live under `plan_templates.<模板名>.overrides` and may override `defaults`, `materials`, `resolved_ids`, `links`, `tracking_urls`, and `titles`.
 
 ## Workflow

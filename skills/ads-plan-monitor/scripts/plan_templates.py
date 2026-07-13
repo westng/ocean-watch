@@ -5,6 +5,8 @@ import copy
 SCHEMA_VERSION = 2
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
 REQUIRED_BINDINGS = ("advertiser_id", "platform", "traffic_source", "product_id", "product_name")
+SHARED_RESOLVED_ID_FIELDS = ("city_ids", "city_names")
+PRODUCT_DEFAULT_FIELDS = ("product_name", "product_id", "source")
 
 
 def is_missing(value):
@@ -99,6 +101,24 @@ def default_bundle(config):
     return copy.deepcopy(configured) if isinstance(configured, dict) else section_bundle(config)
 
 
+def shared_default_bundle(bundle):
+    shared = copy.deepcopy(bundle)
+    defaults = shared.setdefault("defaults", {})
+    for field in PRODUCT_DEFAULT_FIELDS:
+        defaults.pop(field, None)
+    resolved_ids = shared.get("resolved_ids") or {}
+    shared["resolved_ids"] = {
+        field: copy.deepcopy(resolved_ids[field])
+        for field in SHARED_RESOLVED_ID_FIELDS
+        if field in resolved_ids
+    }
+    shared["materials"] = {}
+    shared["links"] = {}
+    shared["tracking_urls"] = {}
+    shared["titles"] = []
+    return shared
+
+
 def apply(config, template_name=None, advertiser_id=None, require_template=None):
     effective = copy.deepcopy(config)
     templates = config.get("plan_templates") or {}
@@ -168,11 +188,12 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None)
 
 def migrate(config):
     migrated = copy.deepcopy(config)
-    base = default_bundle(config)
+    original_base = default_bundle(config)
+    base = shared_default_bundle(original_base)
     templates = {}
     for name, raw_template in (config.get("plan_templates") or {}).items():
         normalized = normalize_template(config, name, raw_template)
-        effective = copy.deepcopy(base)
+        effective = copy.deepcopy(original_base)
         for section in TEMPLATE_SECTIONS:
             if section in normalized["overrides"]:
                 effective[section] = deep_merge(

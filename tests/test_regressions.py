@@ -207,6 +207,14 @@ class CreatePlanTests(unittest.TestCase):
         migrated = plan_templates.migrate(config)
         after = create_plan.build_payloads(create_plan.apply_plan_template(migrated), args())
         self.assertEqual(before, after)
+        self.assertEqual(migrated["default_plan_template"]["materials"], {})
+        self.assertEqual(migrated["default_plan_template"]["links"], {})
+        self.assertEqual(migrated["default_plan_template"]["tracking_urls"], {})
+        self.assertEqual(migrated["default_plan_template"]["titles"], [])
+        self.assertNotIn(
+            "unique_product_id",
+            migrated["default_plan_template"]["resolved_ids"],
+        )
 
     def test_create_template_records_advertiser_binding(self):
         config = plan_templates.migrate(valid_config())
@@ -220,6 +228,8 @@ class CreatePlanTests(unittest.TestCase):
             source_name=None,
             landing_page_url=None,
             open_url=None,
+            track_url="https://tracking.test/new-impression",
+            action_track_url="https://tracking.test/new-click",
             from_template=None,
             activate=True,
             force=False,
@@ -232,6 +242,14 @@ class CreatePlanTests(unittest.TestCase):
             template["overrides"]["resolved_ids"]["unique_product_id"],
             "product-2",
         )
+        self.assertEqual(
+            template["overrides"]["tracking_urls"]["track_url"],
+            ["https://tracking.test/new-impression"],
+        )
+        self.assertEqual(
+            template["overrides"]["tracking_urls"]["action_track_url"],
+            ["https://tracking.test/new-click"],
+        )
 
     def test_template_list_exposes_advertiser_as_primary_field(self):
         config = self.v2_config()
@@ -239,6 +257,27 @@ class CreatePlanTests(unittest.TestCase):
         self.assertEqual(row["advertiser_id"], "1234567890")
         self.assertEqual(row["platform"], "平台")
         self.assertEqual(row["product_id"], "unique-product-1")
+
+    def test_cross_advertiser_template_clone_is_rejected(self):
+        config = self.v2_config()
+        arguments = SimpleNamespace(
+            advertiser_id="456",
+            platform="京东",
+            traffic_source="CID",
+            product_id="product-2",
+            product_name="new product",
+            name=None,
+            source_name=None,
+            landing_page_url=None,
+            open_url=None,
+            track_url=None,
+            action_track_url=None,
+            from_template=config["active_plan_template"],
+            activate=False,
+            force=False,
+        )
+        with self.assertRaisesRegex(ValueError, "cross-advertiser template cloning"):
+            manage_plan_templates.create_template(config, arguments)
 
     def test_failed_project_submission_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory:
