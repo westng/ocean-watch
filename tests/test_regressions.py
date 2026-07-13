@@ -751,6 +751,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
             config_path.write_text(json.dumps(config), encoding="utf-8")
             with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")}), \
                     mock.patch.object(credential_store, "read_credentials", return_value={}), \
+                    mock.patch.object(credential_store, "write_credentials"), \
                     mock.patch.object(credential_store, "read_entry", return_value={}):
                 migrate_channels.migrate(config_path)
             migrated = json.loads(config_path.read_text(encoding="utf-8"))
@@ -1171,6 +1172,7 @@ class OfficialMcpTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
 
         with mock.patch.object(authorization_store, "read_app", return_value=credentials), \
+                mock.patch.object(credential_store, "read_credentials", return_value={}), \
                 mock.patch.object(credential_store, "configure_developer_id"), \
                 mock.patch.object(oceanengine_mcp_bridge, "probe", return_value=["tool-1"]), \
                 mock.patch.object(configure_official_mcp, "get_server", side_effect=[None, self.bridge_server()]), \
@@ -1239,11 +1241,11 @@ class FileLockTests(unittest.TestCase):
             path = Path(directory) / "token.lock"
             lock = process_lock.ProcessLock(path, timeout=0.1)
             with lock:
-                metadata = json.loads(path.read_text(encoding="utf-8"))
-                self.assertEqual(metadata["pid"], os.getpid())
-                self.assertEqual(metadata["nonce"], lock.nonce)
                 self.assertIsNotNone(lock.handle)
             self.assertIsNone(lock.handle)
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["pid"], os.getpid())
+            self.assertEqual(metadata["nonce"], lock.nonce)
 
     def test_process_lock_times_out_when_same_file_is_held(self):
         with tempfile.TemporaryDirectory() as directory:
