@@ -20,9 +20,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - name: Compile scripts
-        run: python -c "from pathlib import Path; import py_compile; [py_compile.compile(str(path), doraise=True) for path in Path('skills/ads-plan-monitor/scripts').glob('*.py')]"
+      - name: Install package and quality tools
+        run: python -m pip install --disable-pip-version-check -e . ruff
+      - name: Compile package
+        run: python -m compileall -q skills/ads-plan-monitor/src/ocean_watch
+      - name: Lint package and tests
+        run: ruff check skills/ads-plan-monitor/src tests
+      - name: Verify CLI
+        run: ocean-watch --version
       - name: Validate example JSON
-        run: python -c "from pathlib import Path; import json; [json.loads(Path(path).read_text(encoding='utf-8')) for path in ['.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'skills/ads-plan-monitor/assets/config.example.json']]"
+        run: python -c "from pathlib import Path; import json; [json.loads(Path(path).read_text(encoding='utf-8')) for path in ['.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'skills/ads-plan-monitor/assets/config.example.json', 'skills/ads-plan-monitor/assets/creator-batch-jobs.example.json']]"
       - name: Run regression tests
         run: python -m unittest discover -s tests -v

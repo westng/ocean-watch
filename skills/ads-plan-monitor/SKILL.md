@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and internal branches for first-run setup, local OAuth token authorization, creating single or batch ad plans from account-uploaded or creator-authorized materials, querying account unit/material performance, and strategy/monitoring analysis. Use when the user asks to 初始化配置, 第一次使用, 配置技能, 本地授权, 获取token, 刷新token, create 巨量计划, 新建计划, 批量创建计划, 按今天素材创建, 达人素材, 达人授权视频, 合作视频, 多账户并发创建, 查询素材数据, 素材维度数据, 消耗前十, 汇总数据, 盯盘数据, 逻辑策略, build project/promotion payloads, validate official API fields, configure source-bound plan templates, diagnose missing fields, or analyze ad performance through official Ocean Engine APIs.
+description: Unified Ocean Engine / 巨量引擎盯盘 skill for first-run setup, local OAuth, advertiser-bound templates, uploaded or creator-authorized material discovery, single and concurrent batch plan creation, material performance reports, and monitoring strategy. Use for 初始化配置, 授权或刷新 token, 创建或迁移投放模板, 查询上传/达人素材, 创建或批量创建计划, 查询素材消耗排行, 汇总报表, and 投放策略分析 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -10,408 +10,185 @@ description: Unified Ocean Engine / 巨量计划盯盘 skill with one skill and 
 > Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
-## Purpose
+## Scope
 
-Use this as one complete `ads-plan-monitor` skill, not as separate create/query/strategy skills. Route each request to one of these internal branches:
+This is one Skill with internal branches, not separate create/query/strategy skills:
 
-1. `首次使用向导`: Initialize or check local config for a new user.
-2. `创建计划`: Create 巨量引擎升级版广告计划 through official Ocean Engine Marketing API endpoints.
-3. `查询数据`: Query account unit lists, current unit materials, and material performance reports.
-4. `逻辑策略`: Analyze monitoring data and produce strategy decisions or recommendations. Use read-only data first; do not modify ads unless the user explicitly asks for an API write action.
+1. `首次使用`: local config, secure credentials, OAuth, advertiser sync, readiness.
+2. `模板`: advertiser/product/platform/material-source-bound plan templates.
+3. `素材`: account-uploaded videos or creator homepage/authorized videos.
+4. `创建`: dry-run or submit project/promotion pairs, single or concurrent batch.
+5. `查询`: current promotion materials and material-level reports.
+6. `策略`: evidence-based recommendations; read-only unless the user explicitly requests a write.
 
-Treat "创建计划" as a two-step API workflow:
+Current business support is `marketing` (巨量营销). `qianchuan` (巨量千川) is isolated but not implemented. Return `channel_not_implemented`; never reuse Marketing credentials or endpoints.
 
-1. Create a project with `/open_api/v3.0/project/create/`.
-2. Create a promotion/unit with `/open_api/v3.0/promotion/create/` using the returned `project_id`.
+## Command Entry
 
-Default to generating and validating payloads first. Submit to the API only after the user explicitly asks to create online plans and the local config is complete.
+Use the unified launcher from this Skill root:
 
-## Business Channels
-
-Treat channel selection as part of every authorization and business operation:
-
-- `marketing` means 巨量营销. Every currently implemented OAuth, account, creation, query, report, and strategy workflow belongs to this channel.
-- `qianchuan` means 巨量千川. Its isolated channel slot exists, but OAuth and business APIs are not implemented yet. Return `channel_not_implemented`; never reuse Marketing configuration or credentials.
-- Existing pre-channel APP ID, Secret, Token, authorized accounts, advertiser IDs, and business templates are Marketing state. Use `scripts/migrate_channels.py --config <path>` to migrate them without asking the user to authorize again.
-- A channel may contain multiple OAuth authorizations. Distinguish official authorization subjects by `account_id`, then resolve the authorization that covers the target `advertiser_id`. Pass `--auth-account-id` only to resolve ambiguity or when the user explicitly selected one.
-- Never fall back across channels. A Marketing template must contain `bindings.channel: marketing` and cannot run under Qianchuan.
-
-When the user asks about structure, explain that `ocean-watch` is one Codex Plugin containing one `ads-plan-monitor` Skill with internal branches. The repository root is the Plugin root; this directory is the Skill root.
-
-## Development Mode Boundary
-
-Distinguish plugin development from business execution before choosing any workflow:
-
-- Treat requests such as "修改插件", "完善 Skill", "增加功能", "调整模板设计", "做成向导", "验收插件", and discussion about what the plugin should do as development mode.
-- In development mode, modify only tracked plugin source, public examples, documentation, and tests. Use temporary files or test fixtures for validation. Do not read, migrate, mutate, or execute against project-local `config/`, home config, credential stores, or real Ocean Engine APIs.
-- Business details supplied while designing or testing a feature are test cases and requirements, not permission to write them into the user's real local configuration.
-- Commands shown or implemented during development are capabilities for future plugin users. Do not execute them against real local business configuration merely because the user approved the capability design.
-- Enter business execution mode only when the user explicitly asks to operate local business state, for example "现在写入本地配置", "用当前账户执行", "查询真实数据", "创建真实计划", or "调用接口提交".
-- When intent is ambiguous inside an ongoing plugin-development conversation, remain in development mode and validate with isolated temporary configuration.
-
-This boundary applies to local configuration writes and read-only API calls as well as online write APIs. Explicit permission to implement a feature is not permission to execute that feature on real business state.
-
-## Required References
-
-- Read `references/current-template-notes.md` when working on the current active plan template, fixed titles, tracking links, default product, naming rules, material selection rules, or report scope.
-- Use the official docs as the source of truth for API field semantics:
-  - Project create: `https://open.oceanengine.com/labels/34/docs/1740868093375503?origin=left_nav`
-  - Promotion create: `https://open.oceanengine.com/labels/34/docs/1740946299496459?origin=left_nav`
-  - Video material list: `https://open.oceanengine.com/labels/34/docs/1696710601820172?origin=left_nav`
-  - Creator authorization relationships: `https://open.oceanengine.com/labels/7/docs/1729983667746823?origin=left_nav`
-  - Custom report config: `https://open.oceanengine.com/labels/34/docs/1755261744248832?origin=left_nav`
-  - Custom report data: `https://open.oceanengine.com/labels/34/docs/1741387668314126?origin=left_nav`
-- If the local reference and official docs conflict, prefer the official docs and call out the conflict.
-
-## Official Documentation MCP
-
-The Plugin can register Ocean Engine's official developer-documentation MCP as `oceanengine-developer-docs`. It is a documentation MCP, not a business-operation MCP. Continue to use the bundled Python scripts and official Marketing API for account data and plan creation.
-
-When official MCP tools are available:
-
-- Use `open_api_doc_gen` to find official endpoint paths and field semantics.
-- Use `open_api_schema_gen` before implementing or changing request/response payload fields.
-- Use `open_sdk_example_code_tool` only when an official SDK example is useful.
-- Prefer MCP results over bundled API notes when they conflict, and update local notes only when the user asks to change the repository.
-
-If MCP tools are missing, run `scripts/configure_official_mcp.py --status`. For first-time setup, run `scripts/configure_official_mcp.py`; it reads `app_id` from the OS credential store, prompts securely for `developer_id`, verifies the official tool list, and registers the bundled SSE-to-stdio bridge in the user's Codex config. The bridge builds the sensitive official URL only in memory. Never print or paste that URL because it contains both identifiers. MCP readiness is optional for business API use; fall back to `references/official-api-notes.md` when unavailable.
-
-## Local Config
-
-Look for config in this order:
-
-1. User-provided explicit path.
-2. Environment variable `ADS_PLAN_MONITOR_CONFIG`.
-3. Project-local `config/ads-plan-monitor/config.json`.
-4. `~/.codex/ads-plan-monitor/config.json`.
-
-Project config stores only non-secret business settings. Never store `app_id`, `secret`, `access_token`, `refresh_token`, or auth codes in project config. Never ask the user to paste tokens into chat. Never print `access_token`, `refresh_token`, `secret`, or auth codes. If a config file is missing, tell the user to create it from `assets/config.example.json`.
-
-Sensitive OAuth credentials live in the user's local OS credential store through `scripts/credential_store.py`:
-
-- macOS: Keychain.
-- Windows: DPAPI-protected local credential file under the user's home directory.
-- Linux: Secret Service through `secret-tool`; install `libsecret` tooling when unavailable.
-- File fallback: disabled by default. Only set `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for explicit development use, and warn that it stores plaintext credentials under the user's home directory.
-
-Use `scripts/validate_config.py <config-path> --mode query|create-preview|create-submit|all` to check readiness before API work. The default mode is `all`.
-Use `scripts/first_run.py` when a user is new to this skill, asks to initialize/configure it, or a config file is missing. The guide may create a local config from `assets/config.example.json`, but it must not call Ocean Engine APIs or print secrets.
-Use `scripts/credential_store.py --channel marketing --set-app` to save the Marketing `app_id` and `secret` into the local OS credential store before first authorization.
-Use `scripts/oauth_local_authorize.py --channel marketing` when the user asks to 获取 token, 本地授权, or first-time Marketing OAuth setup. It starts a temporary local callback server at the configured redirect URI, opens the official authorization URL, receives `auth_code`, exchanges it for token fields, validates a complete account snapshot, creates a separate authorization record, and prints only redacted status. Do not overwrite another authorization unless the user explicitly confirms rebind.
-Use `scripts/token_manager.py --channel marketing --status` to inspect redacted token readiness, and `scripts/token_manager.py --channel marketing --refresh` to force refresh through the resolved authorization's stored `refresh_token`.
-Use `scripts/token_manager.py --channel marketing --sync-accounts` to sync OAuth subjects and expand real advertisers by `account_role`: direct `ADVERTISER`, customer-center roles through `/2/customer_center/advertiser/list/` with `account_source=AD`, and enterprise BP roles through `/2/ebp/advertiser/list/`. Verify all expanded IDs through `/2/advertiser/info/` and commit only a complete snapshot.
-If migration reports `pending_account_sync`, read the non-secret `authorization_id` from status and run `scripts/token_manager.py --channel marketing --authorization-id <id> --sync-accounts`. Use `--authorization-id` only for this recovery path; normal business calls resolve by target `advertiser_id` and optional official `auth_account_id`.
-All API scripts must pass `channel`, target `advertiser_id`, and optional `auth_account_id` to `token_manager.ensure_access_token()` before read/write API requests. This resolves the correct authorization, refreshes only its token, and prevents multi-account batches from sharing the wrong token.
-If an API returns `40002` / "No permission to operate account", check `scripts/token_manager.py --status`. Do not treat `oauth_authorized_account_count` as the advertiser count; customer-center and platform-role subjects are not direct ad accounts. If `advertiser_id_authorized` is false, ask the user to re-authorize with that advertiser selected or switch config to an actual authorized advertiser ID.
-Use `scripts/query_videos.py` to query account video materials through `/2/file/video/get/`, resolve video `material_id` values to promotion-ready `video_id` values, verify `/2/file/video/ad/get/` accepts them, and fetch `video_cover_id` candidates through `/2/tools/video_cover/suggest/` before submitting a promotion.
-Use `scripts/query_creator_materials.py` to query creator-authorized cooperation videos through `/2/tools/aweme_auth_list/`. Use `scripts/create_creator_plan.py` for a template whose `material_strategy.source_type` is `CREATOR_AUTHORIZED`; never send such a template through `create_plan.py` or the account-upload batch script.
-Use `scripts/batch_create_from_today_videos.py` when the user asks to batch-create plans from today's uploaded video materials, split videos into groups such as 5 per unit, or create across multiple advertiser accounts with concurrency. This script queries videos, validates promotion-ready IDs, fetches covers with retries, skips unqualified videos by default, groups materials, then creates project/promotion pairs.
-Use `scripts/query_report_config.py` to fetch available custom-report dimensions and metrics before choosing report fields.
-Use `scripts/query_custom_report.py` to query `/v3.0/report/custom/get/` directly when the user provides dimensions, metrics, and filters.
-Use `scripts/query_active_materials_report.py` as the business entry for monitoring data: it reads the account promotion/unit list, records unit and material status fields, extracts video material IDs from units, queries custom-report material performance, and joins unit + material + metric rows.
-
-## Plan Templates
-
-Creation parameters use schema v3 with one shared `default_plan_template` and advertiser-bound business templates. The default template is a creation base only: it appears as a source option in the business-template wizard but must never be selected for plan creation or submission. New template names follow:
-
-`平台-CID-商品名-商品ID-素材来源`
-
-Every business template must contain `bindings.channel`, `bindings.advertiser_id`, `bindings.platform`, `bindings.traffic_source`, `bindings.product_id`, and `bindings.product_name`. Channel and advertiser bindings are ownership: reject single or batch creation whenever either target differs. Never let `--channel`, `--advertiser-id`, or `--accounts` bypass them.
-
-Every business template must also contain `material_strategy.source_type`: `ACCOUNT_UPLOAD` or `CREATOR_AUTHORIZED`. Treat it as an execution contract, not a suggestion. Specific video, cover, item, and material IDs are runtime selections and must not be written back into schema v3 templates. Existing fixed IDs require explicit migration confirmation before removal.
-
-Keep only genuinely reusable delivery and geographic settings in `default_plan_template`. Material selection rules, product and conversion asset IDs, product images, landing-page assets, links, tracking URLs, and titles belong to the advertiser-bound business template. Specific video, cover, item, and material IDs belong to the current run. Cross-advertiser cloning is allowed only through `create-wizard`: clear advertiser-scoped assets, show the cleanup in preview, and require confirmation.
-
-Store promotion copy explicitly under `plan_templates.<name>.copy_materials.titles`. Every title must contain 5–30 characters. Use `scripts/manage_plan_templates.py set-copy --template <name> --title <文案>` for an existing template. Treat missing or invalid copy as incomplete create configuration. These titles map to official `promotion_materials.title_material_list`; preserve their exact text and spacing.
-
-When the user explicitly confirms two plan templates represent the same product, the plugin capability may copy only copy materials with `set-copy --template <target> --from-template <source>`, including across advertisers. Record the source as `copy_materials.copied_from_template`. Never copy bindings, delivery settings, links, materials, or account assets through this command. During plugin development, test this capability with fixtures; do not run it against local business config without a separate explicit execution request.
-
-Always use `scripts/manage_plan_templates.py create-wizard` for a user-facing new-template request. The wizard must first ask whether to start from `default_plan_template` or copy an existing business template, showing each source business template's advertiser ID and material source. It then collects target bindings, material source, copy, source, links, and tracking URLs; previews provenance, clone policy, bindings, `material_strategy`, field-level changes, validation, and activation state; and writes only after explicit confirmation. Incomplete candidates may be saved as drafts but must never activate. Activation requires a separate confirmation and defaults to false.
-
-Apply clone policy from advertiser and product ownership. For the same advertiser and same product, preserve business settings. For any new product, clear account/product assets, links, tracking URLs, and copy. For the same product across advertisers, clear account/product assets, links, and tracking URLs but allow copy reuse. Always replace product bindings and `unique_product_id` with the target product. Record provenance and cleared fields under `created_from`.
-
-There is no public non-interactive new-template command; all user-facing business-template creation must pass through `create-wizard`. Read `active_plan_template` from config when the user does not name a template for plan creation. Route `ACCOUNT_UPLOAD` templates to `scripts/create_plan.py` or `scripts/batch_create_from_today_videos.py`, and `CREATOR_AUTHORIZED` templates to `scripts/create_creator_plan.py`. Use `scripts/manage_plan_templates.py list` to show the non-business default base separately from business templates with advertiser IDs and material sources. Use `migrate` for legacy configs; fixed legacy material IDs require `--confirm-remove-legacy-materials`.
-
-## Workflow
-
-### 1. Classify the request
-
-- If the user says "第一次使用", "初始化", "配置技能", "帮我配置", "缺配置", or a config is missing, run `scripts/first_run.py` and report the setup checklist. Do not call Ocean Engine APIs during the guide.
-- If the user asks to create a new plan template, start the template wizard. Do not silently infer a source, call non-interactive `create`, activate the result, or write a template without the wizard's preview and confirmation.
-- If the user asks to "生成参数", "看 payload", "检查字段", or is missing credentials, generate payloads and validation notes only.
-- If the user asks to "查询数据", "素材数据", "视频素材", "素材维度", "盯盘数据", or "查看素材表现", use read-only query scripts and do not create or update ads.
-- If the user asks for "逻辑策略", "盯盘建议", "怎么处理", "是否关停", "是否放量", or similar, use the strategy branch: query current data first when needed, summarize the evidence, and output recommendations without calling write APIs by default.
-- If the user asks to "创建计划", "调用接口", "真实创建", or similar, still produce a preflight summary first unless they explicitly asked for direct execution in the same turn.
-- If any required field is unknown, stop before API submission and output a missing-field checklist.
-
-### 2. Load defaults
-
-Load config, apply `active_plan_template` or the user-selected plan template, then apply user overrides from the prompt. For the active template flow, expected defaults include:
-
-- `advertiser_id`
-- `product_id`
-- `product_name`
-- `daily_budget`
-- `roi_goal`
-- `source`
-- `titles`
-- `tracking_urls`
-- `landing_page_url` or saved landing page asset ID
-- city names or city IDs
-- material selection rule
-
-The default public example template is only a placeholder. Use the real product template from local config. For ROI flows, deep optimization `净成交ROI` is represented by `deep_bid_type: NET_ORDER_ROI`.
-
-When `deep_bid_type` is not `DEEP_BID_DEFAULT`, include `roi_goal` in the project payload. When `deep_bid_type` is `DEEP_BID_DEFAULT`, do not include `roi_goal`.
-
-Do not invent IDs for city, video, cover, image, brand, category, landing page, product platform, or product assets.
-Treat category and brand names as template metadata until official category or brand IDs are resolved. Send `brand_info` only when non-empty official ID fields exist under `resolved_ids.brand_info`.
-
-### 2A. First-run guide
-
-For a new teammate, use this onboarding flow:
-
-1. Run `scripts/first_run.py` with no arguments for project-local setup, or `scripts/first_run.py --home-config` when the skill is installed outside a shared project.
-2. If the guide creates a config, tell the user the config path and ask them to fill only non-secret fields such as `account.channel`, `account.advertiser_id`, and `channels.marketing.oauth.redirect_uri` in the file.
-3. Minimum fields for read-only query data:
-   - local Marketing `app_id` and `secret` saved through `scripts/credential_store.py --channel marketing --set-app`
-   - a Marketing authorization, normally written by `scripts/oauth_local_authorize.py --channel marketing`
-   - `account.advertiser_id`
-4. If app credentials are missing, run `scripts/credential_store.py --config <config-path> --channel marketing --set-app`.
-5. If authorization is missing, run `scripts/oauth_local_authorize.py --config <config-path> --channel marketing` and complete browser authorization. The approved local redirect URI is `http://127.0.0.1:8787/oauth/callback`; it must exactly match the Marketing app setting.
-6. If the official developer-documentation MCP is not ready, run `scripts/configure_official_mcp.py`. This is recommended for development and troubleshooting but does not block query or create readiness.
-7. Extra fields for creating plans:
-   - one active business template explicitly bound to the target `advertiser_id`
-   - an account-upload or creator-authorized `material_strategy`
-   - runtime material selection: upload `video_id` values or creator `item_id` values
-   - `resolved_ids.city_ids`
-   - `resolved_ids.product_platform_id`
-   - `resolved_ids.product_image_ids`
-   - `tracking_urls.track_url`
-   - `tracking_urls.action_track_url`
-   - `links.landing_page_url`
-   - `links.open_url`
-   - titles and product defaults
-8. After the user updates config and authorizes, run `scripts/validate_config.py <config-path> --mode all` and `scripts/token_manager.py --config <config-path> --status`.
-9. If `ok_for_query_data` is true, the teammate can ask for "今天汇总数据" or "消耗前十". If create fields are still missing, allow query branch but block online plan creation.
-
-### 3. Build project payload
-
-Use these official defaults when they match the active short-video/image ecommerce flow:
-
-- `operation`: `ENABLE` or `DISABLE`
-- `delivery_mode`: `PROCEDURAL`
-- `landing_type`: `SHOP`
-- `marketing_goal`: `VIDEO_AND_IMAGE`
-- `ad_type`: `ALL`
-- `related_product.product_setting`: `SINGLE`
-- `delivery_range.inventory_catalog`: `UNIVERSAL_SMART` for automatic SHOP delivery
-- `audience.district`: `REGION`
-- `audience.region_version`: `2.3.2`
-- `audience.location_type`: `CURRENT`
-- `audience.gender`: `GENDER_FEMALE`
-- `audience.age`: omit the field for 年龄不限; only send configured age enums when the template explicitly sets them
-- `audience.hide_if_converted`: `NO_EXCLUDE` for 过滤已转化用户不限; do not omit this field for the active template
-- `delivery_setting.schedule_type`: `SCHEDULE_FROM_NOW`
-- `delivery_setting.budget_mode`: `BUDGET_MODE_DAY`
-- `delivery_setting.pricing`: `PRICING_OCPM` for automatic delivery
-- `track_url_setting.track_url`: display tracking link list
-- `track_url_setting.action_track_url`: click/action tracking link list
-
-High-risk fields must be confirmed from official available-target APIs or a known successful response before submission:
-
-- `external_action`, especially ecommerce `AD_CONVERT_TYPE_APP_ORDER`
-- `deep_external_action`
-- `deep_bid_type`
-- whether `roi_goal` belongs at project level, promotion level, or both for this exact account and chain
-- product payload shape, such as `product_platform_id`, `product_id`, `unique_product_id`, and `products[]`
-
-### 4. Build promotion payload
-
-After project creation, use returned `project_id`. For payload preview, use a placeholder `{{project_id}}`.
-
-Required base fields:
-
-- `advertiser_id`
-- `project_id`
-- `name`
-- `operation`
-- `source`
-- `promotion_materials`
-
-For vertical videos, use `image_mode: CREATIVE_IMAGE_MODE_VIDEO_VERTICAL`. Include no more than 5 videos per project for the current business rule unless the user changes that rule; if more qualified videos exist, split into additional project/promotion pairs.
-
-For the active template flow, include the configured titles. Do not alter hashtag spacing in configured titles.
-
-When the user asks to create plans from "today's videos", "当天视频素材", "新上传素材", or similar, first run `scripts/query_videos.py --mode library-get --date today --fetch-all` to get the account video material list. Use `selected_videos[].video_id` as `promotion_materials.video_material_list[].video_id`. Preserve `material_id`, `filename`, and `create_time` in the preflight summary so the user can see which uploaded asset maps to each planned unit.
-
-For one-plan-per-video workflows, build one project/promotion pair per selected video by passing a single `--video-id` into `scripts/create_plan.py` for each row. Do not batch multiple videos into one plan unless the user explicitly asks for multi-video units. Ask for confirmation before submitting multiple online creations in one turn.
-
-For batch workflows such as "今天上传的素材每 5 条一个单元", "按账户批量创建", or "多账户并发创建", use `scripts/batch_create_from_today_videos.py` instead of looping `create_plan.py` manually. The batch script keeps each group internally sequential (`project/create` then `promotion/create`) but runs accounts and material groups concurrently. It defaults to dry-run; pass `--submit` only when the user explicitly asks to create online plans in the same turn.
-
-Common batch commands:
-
-- Dry-run current account, today, active template: `scripts/batch_create_from_today_videos.py --date today --plan-template <模板名>`
-- Create current account, 5 videos per unit, budget 5000, ROI goal 1.5: `scripts/batch_create_from_today_videos.py --date today --plan-template <模板名> --videos-per-unit 5 --budget 5000 --roi-goal 1.5 --submit`
-- Multi-account creation: add `--accounts 111,222 --account-template 111=<模板A> --account-template 222=<模板B> --account-concurrency 2 --group-concurrency 2`
-- Limit or test: add `--max-videos 5` and omit `--submit`
-
-Batch behavior:
-
-- Query `/2/file/video/get/` for each account and date, then deduplicate by promotion `video_id`.
-- Validate videos through `/2/file/video/ad/get/` by default.
-- Fetch `video_cover_id` through `/2/tools/video_cover/suggest/` with retries. If covers are still unavailable or `RUNNING`, skip those videos by default and record them under `skipped_videos`; use `--no-skip-missing-cover` only when the run should block instead.
-- Resolve one advertiser-bound template per account. Automatic resolution is allowed only when exactly one template belongs to that advertiser; otherwise require `--account-template ADVERTISER_ID=TEMPLATE_NAME`.
-- Use each account's resolved template and the existing `create_plan.py` payload builder so template fields, tracking links, audience settings, and product payloads stay consistent.
-- Split videos by `--videos-per-unit`, defaulting to `defaults.max_videos_per_project` and capped at 5 for the current promotion material rule.
-- Auto-suffix names as `_01`, `_02`, etc. unless the template's name format already includes `{group_index}`, `{index}`, or `{suffix}`.
-- Record partial failures. If project creation succeeds but promotion creation fails, preserve `project_id`, compact API response, and group video list for retry.
-- Do not print tokens. Save JSON output with `--out` only when a file artifact is useful.
-
-High-risk promotion fields that require IDs or confirmation before submission:
-
-- `video_material_list[].video_id`
-- `video_material_list[].video_cover_id` if required by the exact chain
-- `brand_info.yuntu_category_id`
-- `brand_info.brand_name_id`, `ecom_brand_id`, or `cdp_brand_id`
-- landing page field choice: `external_url_material_list` vs `web_url_material_list`
-- direct link field choice: `open_url` vs `open_urls[]`
-- product info image IDs
-
-### 4A. Query Account Video Materials
-
-Use `/2/file/video/get/` when the user asks for videos under the advertising account, newly uploaded videos, today's videos, or material candidates for plan creation.
-
-Common commands:
-
-- Today: `scripts/query_videos.py --mode library-get --date today --fetch-all`
-- Yesterday: `scripts/query_videos.py --mode library-get --date yesterday --fetch-all`
-- Specific date: `scripts/query_videos.py --mode library-get --date YYYY-MM-DD --fetch-all`
-- Filename contains text: add `--filename <text>`
-- Specific material IDs: `scripts/query_videos.py --mode library-get --material-id <id>`
-- Validate promotion-ready video IDs: `scripts/query_videos.py --mode ad-get --video-id <video_id>`
-- Get a suggested cover: `scripts/query_videos.py --mode cover-suggest --video-id <video_id>`
-
-Official library filters `video_ids`, `material_ids`, and `signatures` are mutually exclusive; pass only one of them in a single query. Date range filters can be combined with filename filtering in local post-processing.
-
-Use `selected_videos` from the script output for downstream creation. Do not use `material_id` as `video_id`; the promotion payload needs the video `id` value from the video material response.
-
-### 4B. Creator-authorized materials
-
-When the user asks for 达人素材、达人授权视频、合作视频 or selecting creator content, use `scripts/query_creator_materials.py`. The official endpoint is `/2/tools/aweme_auth_list/`; initial support is restricted to `auth_type=VIDEO_ITEM` and the official active status spelling `AUTHRIZED`.
-
-Normalize official authorization rows with advertiser ownership, `aweme_id`, `item_id`, `video_id`, `video_cover_id`, start/end time, warning types, and usability reasons. Display candidates in a Markdown table by default. Do not create a spreadsheet file unless requested.
-
-For creation, require a `CREATOR_AUTHORIZED` business template and pass selected `item_id` values to `scripts/create_creator_plan.py`. The command re-queries the current authorization snapshot before building payloads. The promotion must contain `native_setting.aweme_id`; each video row must contain the matching `video_id`, `video_cover_id`, `item_id`, and `image_mode`.
-
-One ordinary native promotion supports one `aweme_id`, so selected creator videos in one unit must belong to the same creator. Reject expired, expiring-too-soon, inactive, incomplete, cross-advertiser, mixed-creator, or no-longer-returned materials before project creation. Dry-run is the default; pass `--submit` only after the user explicitly confirms the online write.
-
-### 5. Preflight before API submission
-
-Block submission if any of these are missing:
-
-- `access_token`
-- `advertiser_id`
-- unique project and promotion names or permission to auto-suffix duplicates
-- confirmed project payload fields
-- confirmed promotion payload fields
-- city IDs, if using regional targeting
-- selected video IDs and any required cover IDs
-- product ID and product投放状态 confirmation
-- brand/category IDs when `brand_info` is required
-
-Block submission if payload still contains placeholders such as `待反查`, `待填`, `TODO`, `{{...}}`, or empty strings in required fields.
-
-Before submitting, show a concise summary:
-
-- advertiser ID
-- project name and promotion name
-- daily budget, CPA bid, and ROI goal only when present in the payload
-- city count
-- video count
-- product ID
-- operation state
-- endpoints to call
-
-Then ask for explicit confirmation unless the user already gave explicit same-turn permission to create online plans with the prepared payload.
-
-### 6. API call rules
-
-Use only official Ocean Engine API endpoints under `https://api.oceanengine.com/open_api/`.
-
-Headers:
-
-```http
-Access-Token: <from token_manager / local credential store>
-Content-Type: application/json
+```bash
+python3 run.py <domain> <action> [options]
 ```
 
-Do not log secrets. Redact token-like fields in errors and summaries.
+If the package is installed, `ocean-watch <domain> <action>` is equivalent. Read `../../docs/cli.md` only when full command details are needed.
 
-Expected success fields:
+Core routes:
 
-- project create returns `data.project_id`
-- promotion create returns `data.promotion_id`
+| Request | Command |
+| --- | --- |
+| First run | `setup init` |
+| Validate config | `setup validate --mode query|create-preview|create-submit|all` |
+| Save Marketing app | `auth set-app --channel marketing` |
+| Local OAuth | `auth authorize --channel marketing` |
+| Token/account status | `auth status --channel marketing` |
+| Create/list templates | `templates create` / `templates list` |
+| Uploaded videos | `materials videos` |
+| Creator videos | `materials creator` |
+| Single upload plan | `plans create` |
+| Single creator plan | `plans create-creator` |
+| Upload batch | `plans batch-upload` |
+| Creator batch | `plans batch-creator` |
+| Current material report | `reports materials` |
+| Report field discovery | `reports schema` |
 
-If project creation succeeds and promotion creation fails, preserve the project ID and error response so the user can decide whether to retry, disable, or delete the project.
+## Development Boundary
 
-### 7. Query material data
+Classify the request before touching local state:
 
-For material-level monitoring, call `scripts/query_active_materials_report.py`, not the raw report endpoint directly. The workflow is:
+- Plugin development requests modify only tracked source, public examples, docs, and tests.
+- Business details given during development are requirements or fixtures, not permission to persist them.
+- Do not read or mutate real `config/`, OS credentials, local journals, or real APIs during development validation.
+- Enter business execution only when the user explicitly asks to query real data, write local business config, authorize locally, or submit real plans.
+- When intent is ambiguous in a development conversation, remain in development mode.
 
-1. Query `/v3.0/promotion/list/` for the account or requested project/promotion.
-2. Record `status`, `status_first`, `status_second`, `opt_status`, `material_status`, and `material_opt_status`; do not hide units because of status unless the user asks for filtering.
-3. Extract `promotion_materials.video_material_list[]` material IDs and related video metadata.
-4. Query `/v3.0/report/custom/config/get/` if dimensions or metrics need discovery.
-5. Query `/v3.0/report/custom/get/` with `data_topic=MATERIAL_DATA`, material/unit dimensions, selected metrics, and filters based on the extracted unit/material IDs.
-6. Join promotion, material, and metric fields into rows.
+Never use browser-admin automation. Use official APIs and the bundled CLI.
 
-Defaults:
+## Config And Secrets
 
-- report config endpoint: `/v3.0/report/custom/config/get/`
-- report data endpoint: `/v3.0/report/custom/get/`
-- account: `account.advertiser_id`
-- date range: today unless the user gives dates
-- data topic: `MATERIAL_DATA`
-- default dimensions: `material_id`, `cdp_promotion_id`, `cdp_promotion_name`
-- order: `stat_cost DESC`
-- pagination: fetch all returned promotion/report pages unless the user asks for a specific page
+Config resolution order:
 
-Common filters:
+1. Explicit `--config`.
+2. `ADS_PLAN_MONITOR_CONFIG`.
+3. Git checkout `config/ads-plan-monitor/config.json`.
+4. `~/.codex/ads-plan-monitor/config.json`.
 
-- `--promotion-id <id>` for one or more ad units
-- `--project-id <id>` for one project
-- `--start-date YYYY-MM-DD --end-date YYYY-MM-DD`
-- `--dimension <field>` and `--metric <field>` for custom report fields
-- Exact material filtering is the default: report data is restricted by both extracted `material_id` values and unit IDs from `promotion/list`, so chat summaries match the currently listed video materials.
-- `--include-extra-report-materials` only when the user explicitly wants the broader report-visible material rows under the same units.
-- `--active-only` only when the user explicitly asks to see投放中/active-like units; normal monitoring should keep status fields and include every returned unit.
+Project config is non-secret. Never ask the user to paste App Secret, Access Token, Refresh Token, auth code, or MCP identifiers into chat. Never print them.
 
-Do not write CSV or JSON files unless the user asks for a file or passes `--out` / `--csv-out`.
+Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service. Plaintext fallback is disabled unless the user explicitly sets `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for development.
 
-When the user asks for "汇总数据", "消耗是多少", "给我数据", or similar chat output, answer with Markdown tables in the conversation, not spreadsheet files. Default table output:
+Business commands resolve an authorization by target `advertiser_id` and optional official `auth_account_id`, refresh only that authorization, and never fall back across channels.
 
-1. Show the account, date range, unit count, material count, report row count, and non-secret request IDs in a compact context table.
-2. Show a summary metrics table with spend, impressions, clicks, CTR, CPC, CPM, conversions, conversion cost, conversion rate, orders, GMV, ROI, total plays, 3s plays, and play completion rate when those fields are present.
-3. Show a top-spend unit/material table when row-level data is available, including promotion name, promotion ID, material ID, status fields, spend, impressions, clicks, conversions, conversion cost, orders, GMV, and ROI.
-4. Mention status handling: statuses are recorded/displayed, not filtered by default. Only apply `--active-only` when the user explicitly asks for投放中/active-like rows.
+Marketing and Qianchuan share `http://127.0.0.1:8787/oauth/callback`. OAuth state is `AD.<nonce>` for Marketing and `QC.<nonce>` for Qianchuan; require an exact state and channel match before exchanging or storing tokens.
 
-Default metrics are the monitoring basics supported by `MATERIAL_DATA`: spend, impressions, clicks, CTR, CPC, CPM, conversions, conversion cost/rate, play metrics, and in-app order/ROI fields. Use `query_report_config.py --data-topic MATERIAL_DATA` to confirm fields before adding new metrics. Do not put dimension fields in `metrics`; custom reports return them under `rows[].dimensions`.
+## Official References
 
-## Output Format
+Use official docs as the source of truth:
 
-For payload-only work, output:
+- Project create: `https://open.oceanengine.com/labels/34/docs/1740868093375503`
+- Promotion create: `https://open.oceanengine.com/labels/34/docs/1740946299496459`
+- Account video list: `https://open.oceanengine.com/labels/34/docs/1696710601820172`
+- Creator homepage videos: `https://open.oceanengine.com/labels/7/docs/1729982871844879`
+- Creator authorization: `https://open.oceanengine.com/labels/7/docs/1729983667746823`
+- Report config: `https://open.oceanengine.com/labels/34/docs/1755261744248832`
+- Custom report: `https://open.oceanengine.com/labels/34/docs/1741387668314126`
 
-1. `project_payload`
-2. `promotion_payload`
-3. `missing_fields`
-4. `preflight_notes`
+Read `references/official-api-notes.md` for endpoint details and `references/creator-material-api-notes.md` for creator semantics. Read `references/current-template-notes.md` for reusable template and reporting rules. If references conflict with official docs or official MCP results, prefer the official source.
 
-For successful API creation, output:
+Official MCP is documentation-only. Use `mcp configure`/`mcp status`; continue using the official business API through the CLI for accounts, plans, and reports.
 
-1. project ID
-2. promotion ID
-3. created names
-4. any non-secret request IDs or warnings
+## Template Contract
 
-Keep payloads compact unless the user asks for full JSON.
+Schema v3 has one `default_plan_template` and advertiser-bound business templates.
+
+- The default template is a creation base only and must never submit a plan.
+- New business templates must use the interactive `templates create` wizard.
+- Every business template binds `channel`, `advertiser_id`, `platform`, `traffic_source`, `product_id`, and `product_name`.
+- Every template binds `material_strategy.source_type` to `ACCOUNT_UPLOAD` or `CREATOR_AUTHORIZED`.
+- Target channel and advertiser must match the template before token resolution or API calls.
+- Dynamic video, cover, item, and material IDs belong to the current run, not the template.
+- Titles live in `copy_materials.titles`; each title must contain 5–30 characters.
+- New product or advertiser cloning clears account/product-owned assets according to the wizard preview.
+
+Suggested template name:
+
+```text
+平台-CID-商品名-商品ID-素材来源
+```
+
+Online project and promotion names must expose `混剪` for `ACCOUNT_UPLOAD` and `原生` for `CREATOR_AUTHORIZED`.
+
+## Create Workflow
+
+Creation is always a two-step official transaction:
+
+1. `/v3.0/project/create/`
+2. `/v3.0/promotion/create/` with returned `project_id`
+
+Default to dry-run. Submit only after explicit online-write permission, using `--submit`. Before submission:
+
+- Apply the named or active business template.
+- Apply explicit user overrides.
+- Query and revalidate current material availability.
+- Block unresolved values such as `REPLACE_WITH`, `TODO`, `待填`, or unsupported placeholders.
+- Show advertiser, template, project/promotion names, budget/bid/ROI when present, material count, product ID, operation, missing fields, and endpoints.
+- Never invent city, video, cover, image, product, brand, category, event, or landing-page IDs.
+
+If project creation succeeds and promotion creation fails, preserve `project_id` and `failure_stage: promotion_create`. Resume with promotion-only instead of creating another project.
+
+### Uploaded materials
+
+- Query `/2/file/video/get/`; use returned promotion-ready `video_id`, not `material_id`.
+- Validate through `/2/file/video/ad/get/` and fetch cover suggestions before submission.
+- For today's grouped uploads, use `plans batch-upload`; do not manually loop single commands.
+- Default maximum is 5 videos per unit unless official rules and the selected template explicitly support another value.
+- Multi-account batches resolve one advertiser-bound template per account and run with bounded concurrency.
+
+### Creator materials
+
+- `materials creator` defaults to cooperation authorization through `/2/tools/aweme_auth_list/`.
+- `--source homepage` queries public homepage videos and requires exactly one `aweme_id`.
+- Homepage visibility does not imply cooperation authorization.
+- Re-query the authorization snapshot immediately before creation.
+- Reject inactive, expired, expiring-too-soon, incomplete, cross-advertiser, mixed-creator, or missing materials.
+- One normal native promotion contains one `aweme_id`; all selected items in a unit must belong to that creator.
+- Exclude clear product mismatches. Ambiguous materials require explicit user confirmation.
+- Creator batch jobs must record `product_match.status` as `MATCHED` or `USER_CONFIRMED` plus concise evidence.
+- Use `plans batch-creator` for multiple creators. Its local journal skips completed jobs and resumes promotion failures.
+
+## Query And Reporting
+
+For current material monitoring, use `reports materials`:
+
+1. Query promotion/unit list and retain status fields.
+2. Extract current `promotion_materials.video_material_list` IDs.
+3. Query `MATERIAL_DATA` for those material and promotion IDs.
+4. Join unit, material, and metric rows.
+
+Do not use a broad promotion-only total as the current material-list total. Status values are displayed and remembered but not filtered unless the user asks for active-only data.
+
+Default conversation output is Markdown tables, not spreadsheet files:
+
+- Context: account, date range, unit/material/report counts.
+- Summary: spend, impressions, clicks, CTR, CPC, CPM, conversions, conversion cost/rate, orders, GMV, ROI, play metrics when present.
+- Top spend: promotion, IDs, status, spend, conversions, orders, GMV, ROI.
+
+Write JSON or CSV only when explicitly requested.
+
+## Strategy
+
+Strategy is read-only by default:
+
+1. Query current evidence for the requested date/account scope.
+2. Separate facts from model judgment.
+3. Identify high-spend/no-conversion, weak ROI, rising cost, and promising materials.
+4. Recommend concrete stop, observe, test, or scale actions with reasons.
+5. Do not change delivery state, budgets, bids, templates, or plans unless the user explicitly requests the write after seeing the evidence.
+
+## Output And Safety
+
+- Keep IDs as exact strings unless an official JSON field requires a number.
+- Preserve every tracking-link query parameter exactly.
+- Do not print credentials or sensitive MCP URLs.
+- Report partial batch failures per account/job; do not hide successful rows.
+- Prefer concise structured summaries; show full payloads only when requested.

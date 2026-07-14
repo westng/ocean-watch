@@ -2,10 +2,16 @@
 
 Official sources:
 
+- Homepage videos: `https://open.oceanengine.com/labels/7/docs/1729982871844879?origin=left_nav`
 - Authorization relationships: `https://open.oceanengine.com/labels/7/docs/1729983667746823?origin=left_nav`
 - Promotion create: `https://open.oceanengine.com/labels/34/docs/1740946299496459?origin=left_nav`
 
 ## Query
+
+Use `GET /open_api/2/file/video/aweme/get/` when the user supplies an `aweme_id`
+and wants public videos from that creator's Douyin homepage. The `aweme_id` is a
+top-level required string. This endpoint only returns public homepage videos and
+requires the creator to be bound to the advertiser account.
 
 Use `GET /open_api/2/tools/aweme_auth_list/` with:
 
@@ -36,7 +42,22 @@ Relevant response fields:
 - `video_info.image_mode`
 - `video_info.title`
 
-All official IDs are decoded losslessly and normalized to decimal strings in the local domain model. `item_id` is converted to a Python integer only at the final promotion payload boundary because the official create schema declares it as a number.
+Numeric official IDs such as `advertiser_id`, `item_id`, and `mid` are decoded
+losslessly and normalized to decimal strings. `aweme_id`, `video_id`, and
+`video_cover_id` are opaque strings and must not be restricted to decimal digits.
+`item_id` is converted to a Python integer only at the final promotion payload
+boundary because the official create schema declares it as a number.
+
+Treat homepage videos and cooperation-authorized videos as separate query branches.
+Do not infer cooperation authorization merely because a video is visible on a homepage.
+Even when the official relationship endpoint ignores an `aweme_ids` or `item_ids`
+filter, apply the same filters locally before returning candidates.
+
+Authorization and API usability do not establish that a video matches the product in
+the selected plan template. Before automatic selection, compare the candidate title
+and available product context with `bindings.product_name`. Exclude clear conflicts
+such as a fiber-drink video under a protein-powder template. Treat generic or
+ambiguous titles as requiring user confirmation instead of silently selecting them.
 
 ## Promotion payload
 
@@ -58,6 +79,8 @@ The promotion also contains:
 ```
 
 The ordinary native-unit path supports one `aweme_id`, so one unit must not mix materials from different creators. Multi-creator support would require a separate, officially qualified Star Joint Delivery flow and is outside the initial creator-material mode.
+
+The checked official schema does not establish a numeric maximum for `video_material_list`. A creator template may therefore set `max_materials_per_unit` to `null`, meaning Ocean Watch applies no client-side count cap. This does not override any account-specific validation returned by the official create API.
 
 ## Development boundary
 

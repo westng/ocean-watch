@@ -1,6 +1,6 @@
 {
   "name": "ocean-watch",
-  "version": "0.7.0+codex.20260713124156",
+  "version": "0.8.0+codex.20260714081317",
   "description": "Codex plugin for Ocean Engine plan creation from uploaded or creator-authorized materials, reporting, OAuth access, and monitoring analysis.",
   "author": {
     "name": "westng",
@@ -32,6 +32,7 @@
       "\u67e5\u8be2\u5f53\u524d\u5e7f\u544a\u8d26\u6237\u4eca\u5929\u7d20\u6750\u6d88\u8017\u524d\u5341",
       "\u6309\u4eca\u5929\u4e0a\u4f20\u7684\u89c6\u9891\u7d20\u6750\u521b\u5efa\u8ba1\u5212",
       "\u67e5\u8be2\u8fbe\u4eba\u6388\u6743\u89c6\u9891\u5e76\u4f7f\u7528\u8fbe\u4eba\u7d20\u6750\u6a21\u677f\u521b\u5efa\u8ba1\u5212",
+      "\u6309\u591a\u4e2a\u6296\u97f3\u53f7\u7b5b\u9009\u5339\u914d\u5546\u54c1\u7684\u8fbe\u4eba\u7d20\u6750\u5e76\u6279\u91cf\u521b\u5efa\u539f\u751f\u8ba1\u5212",
       "\u68c0\u67e5 OAuth\u3001\u5e7f\u544a\u4e3b\u8d26\u6237\u548c Token \u72b6\u6001"
     ],
     "brandColor": "#1677FF"

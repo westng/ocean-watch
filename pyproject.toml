@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocean-watch"
+version = "0.8.0"
+description = "Codex plugin for Ocean Engine advertising operations and monitoring"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "westng" }]
+keywords = ["codex", "ocean-engine", "advertising", "monitoring"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+ocean-watch = "ocean_watch.cli.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "skills/ads-plan-monitor/src" }
+
+[tool.setuptools.packages.find]
+where = ["skills/ads-plan-monitor/src"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+exclude = ["docs/superpowers/specs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.pyright]
+pythonVersion = "3.9"
+include = ["skills/ads-plan-monitor/src/ocean_watch"]
+typeCheckingMode = "basic"
+
+[tool.coverage.run]
+branch = true
+source = ["ocean_watch"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

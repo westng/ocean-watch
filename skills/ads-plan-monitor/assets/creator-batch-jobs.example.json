@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "channel": "marketing",
+  "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+  "plan_template": "REPLACE_WITH_CREATOR_PLAN_TEMPLATE",
+  "material_date": "7.14",
+  "budget": 5000,
+  "jobs": [
+    {
+      "aweme_id": "REPLACE_WITH_AWEME_ID",
+      "item_ids": [
+        "REPLACE_WITH_ITEM_ID"
+      ],
+      "product_match": {
+        "status": "MATCHED",
+        "evidence": "Candidate title clearly matches the template product"
+      }
+    },
+    {
+      "aweme_id": "REPLACE_WITH_ANOTHER_AWEME_ID",
+      "item_ids": [
+        "REPLACE_WITH_ANOTHER_ITEM_ID"
+      ],
+      "product_match": {
+        "status": "USER_CONFIRMED",
+        "evidence": "User confirmed this ambiguous material belongs to the template product"
+      }
+    }
+  ]
+}

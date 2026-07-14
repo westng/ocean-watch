@@ -5,287 +5,209 @@
 > Plugin: ocean-watch
 > Skill: ads-plan-monitor
 
-`ocean-watch` 把业务配置和 OAuth 凭据分开保存：
+## 存储边界
 
-- 业务配置：项目本地 `config/ads-plan-monitor/config.json`
-- OAuth 凭据：本机系统凭据仓库
+Ocean Watch 将非敏感业务配置与敏感凭据分开：
 
-这样做是为了避免把 token、secret 或授权码提交到 GitHub。
+| 数据 | 默认位置 | 是否可提交 |
+| --- | --- | --- |
+| 业务配置 | `~/.codex/ads-plan-monitor/config.json` | 否 |
+| 开发业务配置 | `config/ads-plan-monitor/config.json` | 否 |
+| App、Token、MCP 标识符 | 操作系统凭据仓库 | 否 |
+| 授权账户索引、迁移状态 | `~/.codex/ads-plan-monitor/state/` | 否 |
+| 运行结果和 batch journal | 用户指定路径或本机状态目录 | 否 |
+
+配置解析顺序：`--config`、`ADS_PLAN_MONITOR_CONFIG`、开发仓库配置、用户配置。
 
 ## 渠道
 
-当前支持两个稳定渠道标识：
+- `marketing`：巨量营销，当前已经实现 OAuth、账户、素材、计划和报表。
+- `qianchuan`：巨量千川，只保留隔离标识，尚未实现。
 
-- `marketing`：巨量营销，当前 OAuth、账户、创建、查询和报表能力全部属于该渠道。
-- `qianchuan`：巨量千川，仅预留隔离结构，尚未开放授权和业务接口。
-
-每个渠道使用独立 APP ID、Secret、回调地址、Token 和账户集合。任何命令都不会跨渠道回退。旧版本已有配置和凭据全部视为巨量营销，升级后运行：
+渠道之间不共享 App、Secret、Token、账户或模板。旧配置迁移到巨量营销：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
-  --config config/ads-plan-monitor/config.json
+ocean-watch auth migrate --config PATH
 ```
 
-迁移会备份并更新非敏感配置，将已有模板补充 `bindings.channel: marketing`，并把旧应用与授权凭据迁入营销渠道；可重复执行，不要求重新授权。
-
-## 创建配置
+迁移使用原子写入和 journal，可安全重复执行。旧授权缺少完整账户映射时，状态会显示 `pending_account_sync`，按输出中的本地授权 ID 执行：
 
 ```bash
-mkdir -p config/ads-plan-monitor
-cp skills/ads-plan-monitor/assets/config.example.json config/ads-plan-monitor/config.json
+ocean-watch auth sync-accounts \
+  --channel marketing \
+  --authorization-id AUTHORIZATION_ID
 ```
 
-`config/` 已被 `.gitignore` 排除。这个目录用于保存每个使用者自己的真实广告账户和模板信息。
+普通业务调用不要传 `--authorization-id`；它们按目标 `advertiser_id` 自动解析授权。
 
-所有命令按以下顺序查找配置：命令行 `--config`、环境变量 `ADS_PLAN_MONITOR_CONFIG`、项目配置、`~/.codex/ads-plan-monitor/config.json`。
+## 配置 Schema
 
-## 配置内容
+顶层关键字段：
 
-需要按业务填写的典型字段：
-
-| 字段 | 用途 |
+| 字段 | 说明 |
 | --- | --- |
-| `config_schema_version` | 渠道配置结构版本，当前为 `2` |
-| `default_channel` | 默认业务渠道，当前为 `marketing` |
-| `channels.marketing` | 巨量营销 API 与 OAuth 非敏感地址配置 |
-| `account.channel` | 当前广告主所属渠道 |
-| `account.advertiser_id` | 巨量引擎广告主 ID |
-| `active_plan_template` | 默认创建计划模板名 |
-| `plan_template_schema_version` | 模板结构版本，当前为 `3` |
-| `default_plan_template` | 创建新业务模板时使用的默认骨架，不参与真实业务投放 |
-| `plan_templates` | 与广告主、平台和商品绑定的业务模板 |
-| `plan_templates.<模板名>.material_strategy` | 素材来源、选择模式和单元素材上限 |
-| `plan_templates.<模板名>.copy_materials.titles` | 该业务模板创建单元时使用的文案标题素材 |
-| `resolved_ids` | 城市、商品、图片、转化资产、落地页等官方 ID |
-| `tracking_urls` | 展示和点击/有效触点监测链接 |
-| `links` | 落地页和直达链接 |
-| `titles` | 单元标题素材 |
+| `config_schema_version` | 渠道与配置结构版本，当前为 `2` |
+| `default_channel` | 默认渠道 |
+| `channels.<channel>` | 非敏感 API、OAuth 地址和回调配置 |
+| `account.channel` | 当前业务账户渠道 |
+| `account.advertiser_id` | 当前广告主 |
+| `plan_template_schema_version` | 计划模板版本，当前为 `3` |
+| `active_plan_template` | 未显式指定时使用的业务模板 |
+| `default_plan_template` | 创建模板的默认骨架，不可投放 |
+| `plan_templates` | 广告主绑定的真实业务模板 |
 
-不要填写到项目配置里的字段：
+以下字段不得写入配置：`app_id`、`secret`、`access_token`、`refresh_token`、`auth_code`、`developer_id`。
 
-- `app_id`
-- `secret`
-- `access_token`
-- `refresh_token`
-- `auth_code`
+## 计划模板
 
-## 模板命名
-
-建议使用：
+业务模板建议命名：
 
 ```text
 平台-CID-商品名-商品ID-素材来源
 ```
 
-示例：
+真实归属由 `bindings` 决定，不依赖名称解析：
 
-```text
-示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID-上传素材
-示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID-达人素材
+```json
+{
+  "bindings": {
+    "channel": "marketing",
+    "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+    "platform": "REPLACE_WITH_PLATFORM",
+    "traffic_source": "CID",
+    "product_id": "REPLACE_WITH_PRODUCT_ID",
+    "product_name": "REPLACE_WITH_PRODUCT_NAME"
+  },
+  "material_strategy": {
+    "source_type": "ACCOUNT_UPLOAD",
+    "selection_mode": "MANUAL",
+    "max_materials_per_unit": 5
+  }
+}
 ```
 
-模板名称用于识别业务，实际归属由 `bindings` 明确记录。每个业务模板必须绑定 `channel`、`advertiser_id`、`platform`、`traffic_source`、`product_id`、`product_name`，并通过 `material_strategy.source_type` 固定选择 `ACCOUNT_UPLOAD` 或 `CREATOR_AUTHORIZED`。
+`source_type` 只允许：
 
-`default_plan_template` 是创建新业务模板的默认骨架，只保存跨广告主、跨商品可复用的投放和地域参数。它不能激活，也不能直接创建计划。业务模板保存素材选择规则，但具体视频、封面和达人作品 ID 只属于本次运行，不写回模板。创建计划时，目标广告主必须与业务模板的 `bindings.advertiser_id` 完全一致。
+- `ACCOUNT_UPLOAD`：账户上传素材，在线名称使用“混剪”。
+- `CREATOR_AUTHORIZED`：达人合作授权素材，在线名称使用“原生”。
 
-查看模板及其归属广告主：
+具体视频、封面、作品和 material ID 属于本次运行，不能写回 Schema v3 模板。
+
+### 创建模板
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
-  --config config/ads-plan-monitor/config.json \
-  list
+ocean-watch templates create
 ```
 
-创建业务模板必须运行交互式向导：
+向导必须完成来源选择、目标绑定、素材来源、复制策略、逐字段预览和最终确认。复制策略：
+
+| 目标变化 | 保留 | 清理 |
+| --- | --- | --- |
+| 同广告主、同商品 | 业务设置 | 动态素材 ID |
+| 同广告主、新商品 | 通用设置 | 商品资产、链接、追踪、文案 |
+| 跨广告主、同商品 | 文案可复用 | 账户资产、链接、追踪、达人白名单 |
+| 跨广告主、新商品 | 通用设置 | 账户与商品相关全部字段 |
+
+不完整候选只能保存为草稿，不能激活。默认骨架永远不能用于真实创建。
+
+### 文案素材
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
-  --config config/ads-plan-monitor/config.json \
-  create-wizard
+ocean-watch templates set-copy \
+  --template TEMPLATE \
+  --title TITLE_1 \
+  --title TITLE_2
 ```
 
-向导流程：
-
-1. 选择从 `default_plan_template` 默认骨架创建，或复制某个已有业务模板。
-2. 已有业务模板会同时展示所属广告主 ID。
-3. 填写目标广告主、平台、流量来源和商品。
-4. 选择上传素材或达人素材，并设置手动/最新选择方式和单元素材数量；达人模板可设置达人白名单和授权剩余天数。
-5. 确认模板名称、文案、计划来源、落地页、直达及监测链接。
-6. 按复制策略清理字段：具体素材 ID 始终清空；新商品清空商品资产、链接和文案；跨广告主还会清空账户资产与达人白名单。
-7. 展示来源、绑定关系、素材来源、复制策略和逐字段差异预览。
-8. 用户确认后才以原子方式写入，并保留上一版 `.bak`；不完整模板可保存为草稿，但不能激活。
-
-插件不提供绕过向导的新模板创建命令；所有业务模板创建都必须经过来源选择、差异预览和最终确认。
-
-为已有模板单独设置文案素材：
+每条标题必须为 5–30 个字符。相同商品可只复制另一模板的文案：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
-  --config config/ads-plan-monitor/config.json \
-  set-copy \
-  --template "平台-CID-商品名-商品ID" \
-  --title "第一条文案" \
-  --title "第二条文案"
+ocean-watch templates set-copy --template TARGET --from-template SOURCE
 ```
 
-`--title` 可以重复传入；每条标题必须为 5–30 个字符，空文案会被拒绝，重复文案会自动去重。模板列表会显示 `copy_materials.configured`、`title_count` 和当前文案内容。创建 payload 时，这些文案会转换成官方字段 `promotion_materials.title_material_list`。
+该操作不会复制广告主绑定、参数、链接或账户资产。
 
-相同商品可以只复制另一个创建计划模板的文案素材，即使两个模板属于不同广告主：
+## App 与 OAuth
+
+保存营销应用：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/manage_plan_templates.py \
-  --config config/ads-plan-monitor/config.json \
-  set-copy \
-  --template "目标创建计划模板" \
-  --from-template "来源创建计划模板"
+ocean-watch auth set-app --channel marketing
 ```
 
-此操作只复制 `copy_materials.titles` 并记录 `copied_from_template`，不会复制广告主绑定、投放参数、链接、素材 ID 或账户资产。
-
-旧版配置先执行 `manage_plan_templates.py ... migrate`。旧模板含固定视频 ID 时，增加 `--confirm-remove-legacy-materials` 明确确认改为运行时选材。同一配置可以维护多个广告主、平台、商品和素材来源模板。
-
-## 保存 App 凭据
-
-首次使用前，把巨量引擎开放平台 App ID 和 Secret 保存到本机凭据仓库：
+启动授权：
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/credential_store.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --set-app
+ocean-watch auth authorize --channel marketing
 ```
 
-脚本会交互式要求输入 App ID 和 Secret。不要把它们写进配置文件或聊天记录。
+默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台设置完全一致。
 
-凭据后端：macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。Linux 缺少 `secret-tool` 时应安装系统的 `libsecret` 工具；脚本不会自动改用明文文件。仅限受限开发环境，可显式设置：
+- 巨量营销和巨量千川共用这一条回调地址，不需要分别申请路径。
+- OAuth `state` 使用 `AD.<随机值>` 表示巨量营销，使用 `QC.<随机值>` 表示巨量千川。
+- 回调必须同时匹配完整随机 `state` 和当前授权渠道，否则拒绝交换 Token。
+- `AD` 或 `QC` 单独出现不是有效 `state`，不能省略随机值。
+
+渠道短码只用于本次 OAuth 会话路由，不替代广告主 ID，也不会写入业务模板。授权成功后：
+
+1. 获取官方授权主体。
+2. 按 `account_role` 展开客户中心或企业 BP 下的广告主。
+3. 通过广告主信息接口验证 ID。
+4. 原子保存一份独立授权记录和非敏感账户索引。
+
+`oauth_authorized_account_count` 是授权主体数量，不等于可投放广告主数量。真实广告主数量看 `authorized_advertiser_count`。
+
+同一渠道可以有多份 OAuth 授权。业务命令按广告主自动选 Token；只有多个授权同时覆盖同一广告主时才传 `--auth-account-id`。
+
+## Token 生命周期
+
+所有业务服务在 API 调用前检查 Token。剩余有效期不足 30 分钟时自动刷新，并保存轮换后的 Access Token 与 Refresh Token。并发进程使用本地锁避免重复刷新。
+
+```bash
+ocean-watch auth status --channel marketing
+ocean-watch auth refresh --channel marketing
+ocean-watch auth sync-accounts --channel marketing
+```
+
+状态：
+
+- `ready`：可直接调用。
+- `refresh`：下次调用前自动刷新。
+- `reauthorize`：Refresh Token 缺失或过期，需要重新授权。
+
+## 跨平台凭据仓库
+
+- macOS：Keychain。
+- Windows：DPAPI 保护的用户本地文件。
+- Linux：Secret Service，通过 `secret-tool`。
+
+缺少安全后端时默认拒绝保存。只有受限开发环境可以显式启用：
 
 ```bash
 export ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1
 ```
 
-该选项会把凭据以明文保存到用户目录，不应用于生产广告账户。
-
-## OAuth 授权
-
-默认回调地址：
-
-```text
-http://127.0.0.1:8787/oauth/callback
-```
-
-巨量引擎开放平台应用里的回调地址必须与本地配置一致。
-
-启动授权：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing
-```
-
-流程：
-
-1. 脚本启动本地 HTTP 回调服务。
-2. 浏览器打开官方 OAuth 授权页。
-3. 用户选择授权账户并确认。
-4. 回调拿到 `auth_code`。
-5. 脚本换取 token，完整展开并验证该授权覆盖的广告主。
-6. 新增一份独立营销授权记录，并按官方 `account_id` 建立索引；不会覆盖其他授权。
-7. 终端只输出脱敏状态。
-
-同一渠道可以授权多次。业务命令通常只需目标 `advertiser_id`，Plugin 会自动选择对应 Token。多个授权都覆盖同一广告主时，命令会停止并列出候选，此时传 `--auth-account-id OFFICIAL_ACCOUNT_ID`。若新授权包含已归属旧授权的官方账户，默认拒绝覆盖；用户明确确认后才可使用 `--rebind-existing` 整体切换。
-
-## 检查状态
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --status
-```
-
-如果 `advertiser_id_authorized` 为 `false`，说明当前配置的广告主没有包含在本次 OAuth 授权账户里，需要重新授权或切换广告主。
-
-## Token 刷新
-
-所有查询和创建脚本都会在调用官方 API 前检查 Access Token。剩余有效期不足 30 分钟时，脚本使用本机凭据仓库中的 Refresh Token 自动刷新，并保存官方返回的新 Access Token 和轮换后的 Refresh Token；并发任务通过本地锁避免重复刷新。
-
-查看状态：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --status
-```
-
-手动强制刷新：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --refresh
-```
-
-状态中的 `next_action` 含义：`ready` 可直接调用，`refresh` 会在下次 API 调用前刷新，`reauthorize` 表示 Refresh Token 缺失或已过期，需要重新运行 `skills/ads-plan-monitor/scripts/oauth_local_authorize.py`。
-
-## 授权账户同步
-
-OAuth 换 Token 响应不是完整的广告主账户详情。首次或重新授权成功后，脚本会先调用官方 `/oauth2/advertiser/get/` 获取授权主体，再按 `account_role` 展开真实广告主：
-
-- `ADVERTISER`：直接使用该广告主 ID。
-- `CUSTOMER_ADMIN` / `CUSTOMER_OPERATOR`：调用 `/2/customer_center/advertiser/list/`，参数包含 `account_source=AD`。
-- `PLATFORM_ROLE_ENTERPRISE_BP_ADMIN` / `PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR`：调用 `/2/ebp/advertiser/list/`。
-- 最后按 50 个一组调用 `/2/advertiser/info/` 验证广告主 ID。
-
-状态区分：
-
-- `oauth_authorized_account_count`：官方接口返回的全部授权主体，可能包含客户中心、企业 BP、星图等角色账户。
-- `authorized_advertiser_count`：角色展开并通过广告主信息接口验证后的真实广告主账户。
-
-不要把授权主体数量当作可投放广告主数量。手动重新同步可运行：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py --channel marketing --sync-accounts
-```
-
-旧版本渠道迁移若显示 `pending_account_sync: true`，必须使用状态中对应的本地授权 ID 完成第一次同步：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
-  --channel marketing \
-  --authorization-id <AUTHORIZATION_ID> \
-  --sync-accounts
-```
-
-状态输出中的 `authorization_id`、`account_ids` 和广告主数量用于本机选择与排错，不是密钥；Access Token、Refresh Token 和 Secret 不会输出。普通业务命令仍按目标 `advertiser_id` 自动解析授权，不应使用 `--authorization-id` 绕过账户匹配。
-
-普通 Access Token 刷新只轮换 Token，不重复展开账户关系，避免每次刷新拖慢查询和创建流程。
-
-如果授权主体存在但真实广告主为 0，重新运行本地 OAuth，并在官方授权页选择目标广告主账户。
+该模式在用户目录保存明文凭据，不应用于真实广告账户。
 
 ## 配置校验
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/first_run.py \
-  --config config/ads-plan-monitor/config.json
-
-python3 skills/ads-plan-monitor/scripts/validate_config.py \
-  config/ads-plan-monitor/config.json \
-  --mode all
+ocean-watch setup init --home-config
+ocean-watch setup validate --mode all
 ```
 
-`validate_config.py` 支持 `query`、`create-preview`、`create-submit` 和 `all` 四种模式，所选模式未就绪时返回非零退出码。`first_run.py` 更适合第一次使用；验证器更适合提交前或排查字段缺失。
+校验模式：
 
-## 官方开发文档 MCP
+- `query`：授权和账户查询就绪。
+- `create-preview`：模板足以生成 payload。
+- `create-submit`：凭据、账户和在线创建字段完整。
+- `all`：全部模式。
 
-官方 MCP 用于查询巨量引擎开放平台文档、OpenAPI Schema 和 SDK 示例，不执行广告业务操作。其地址需要当前用户匹配的 `app_id` 与 `developer_id`，因此不能写入开源 Plugin 清单。
-
-先通过 `credential_store.py --set-app` 保存 App ID，再运行：
+## 官方文档 MCP
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py
+ocean-watch mcp configure
+ocean-watch mcp status
 ```
 
-脚本安全提示输入 `developer_id`，先执行官方 `initialize` 与 `tools/list` 握手，验证成功后将标识符保存到同一系统凭据仓库，并通过 Codex CLI 把本地 SSE→stdio 桥注册为 `oceanengine-developer-docs`。Codex 配置中不保存包含个人参数的官方 URL。检查脱敏状态：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py --status
-```
-
-`ready: true` 表示当前 Codex MCP 已注册本地桥接器且本机凭据完整。首次配置成功还会返回 `verified_tool_count`。状态输出不包含 MCP URL、App ID 或 Developer ID。重新运行配置命令可重新验证或替换旧绑定。
+MCP 用于官方文档、OpenAPI Schema 和 SDK 示例，不执行广告业务。包含 App ID 和 Developer ID 的动态 URL 只在桥进程内存中构造，不写入 Plugin 清单或 Codex 配置。

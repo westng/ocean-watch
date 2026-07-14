@@ -56,7 +56,8 @@ Required headers:
 - `operation` supports `ENABLE`, `DISABLE`.
 - `promotion_materials` is required.
 - Vertical video uses `CREATIVE_IMAGE_MODE_VIDEO_VERTICAL`.
-- `title_material_list[].title` length should be 5-30 Chinese characters by official counting rules.
+- `title_material_list` accepts at most 10 title materials.
+- `title_material_list[].title` length is 5-30 characters by official counting rules; two English characters count as one position. The 55-character rule in this schema belongs to search keyword `bidword_list[].default_word`, not the creative title.
 - `source` is conditionally required for `landing_type=SHOP`.
 - `brand_info` can contain `yuntu_category_id`, `brand_name_id`, `ecom_brand_id`, or `cdp_brand_id` depending on account asset linkage.
 - Promotion success returns `data.promotion_id`.

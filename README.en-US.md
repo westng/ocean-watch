@@ -4,194 +4,141 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">
-  Ocean Engine Campaign Monitoring Assistant
-</p>
+<p align="center">Ocean Engine monitoring assistant</p>
 
 <p align="center">
-  An open-source Codex Plugin for campaign creation, material reporting, account authorization, and performance analysis through official APIs
+  An open-source Codex Plugin for OAuth, material discovery, plan creation, reporting, and delivery analysis through official APIs
 </p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="skills/ads-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-ads--plan--monitor-4B5563" alt="Ads Plan Monitor Skill"></a>
-  <a href="skills/ads-plan-monitor/scripts/"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
-  <a href="skills/ads-plan-monitor/references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-API%20%2B%20MCP-1677FF" alt="Ocean Engine API and MCP"></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Credentials-local%20store-6B7280" alt="Local credential store"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
 [中文](./README.md) | English
 
-`ocean-watch` is an installable Codex Plugin for automating Ocean Engine advertising workflows. The plugin contains one `ads-plan-monitor` Skill with four internal branches: first-run setup, campaign creation, data queries, and strategy analysis.
+`ocean-watch` is an installable Codex Plugin for Ocean Engine advertising operations. It contains one `ads-plan-monitor` Skill that routes first-run setup, authorization, templates, materials, plan creation, reports, and strategy requests.
 
-Business operations currently use the official Ocean Engine Marketing API under the `marketing` channel. The Plugin now isolates channels; `qianchuan` is reserved for future Ocean Engine Qianchuan support and never reuses Marketing apps, tokens, or accounts. The official developer-documentation MCP provides API documentation, OpenAPI schemas, and SDK examples. Real business configuration and OAuth credentials remain on each user's computer.
+The current implementation targets Ocean Engine Marketing (`marketing`) through official APIs. Ocean Engine Qianchuan (`qianchuan`) has an isolated channel boundary but is not implemented and never reuses Marketing credentials or accounts.
 
-## Features
+## Capabilities
 
-| Scenario | Capability |
+| Domain | Support |
 | --- | --- |
-| First run | Creates local configuration and checks OAuth, tokens, advertiser accounts, and official MCP status |
-| Account authorization | Stores independent channel apps and multiple OAuth authorizations, then resolves tokens by official `account_id` and target advertiser |
-| Token management | Checks token validity before API calls, refreshes expiring tokens, and saves rotated credentials |
-| Campaign creation | Generates projects and promotions from platform and product templates, then submits them after confirmation |
-| Creator materials | Queries creator-authorized videos and builds native promotions from source-bound templates |
-| Batch creation | Retrieves videos uploaded today, groups N videos into each promotion, and supports concurrent multi-account creation |
-| Data queries | Queries promotions, active materials, the video library, and material-dimension reports |
-| Monitoring strategy | Provides recommendations based on spend, ROI, conversions, and other performance data |
-| Official documentation | Queries API documentation, schemas, and SDK examples through the official MCP |
+| Authorization | Local OAuth, multiple authorization records, token refresh, advertiser sync |
+| Templates | Default base, advertiser/product/platform/source bindings, guided creation and migration |
+| Materials | Uploaded videos, creator homepage videos, authorized cooperation videos |
+| Plans | Dry-run, uploaded and creator materials, concurrent batches, resumable failures |
+| Reports | Active material joins, material metrics, spend rankings, custom reports |
+| Strategy | Read-only evidence and operational recommendations |
+| Development | Official documentation MCP, OpenAPI schemas, and SDK examples |
 
-Campaign templates use a shared default base plus advertiser-bound business templates. Schema v3 binds every business template to either account-uploaded or creator-authorized materials, and the two sources cannot be mixed. Creator candidates are queried from the official authorization API at runtime; selected IDs are not written back to the template. Incomplete templates may be saved as drafts but cannot be activated.
+## Install
 
-## Installation
-
-Requires Codex CLI 0.144.1 or later and Python 3.9 or later:
+Requires Codex CLI `0.144.1+` and Python `3.9+`:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-After installing or upgrading, start a new Codex task to load the latest Plugin. A clean development checkout without private local directories can also be used as a local marketplace:
-
-```bash
-codex plugin marketplace add "$(pwd)"
-codex plugin add ocean-watch@ocean-watch
-```
-
-Do not install locally from a working copy containing local `config/`, `runs/`, or `.venv/` directories. Codex may copy these untracked directories. Prefer installation from the GitHub marketplace for regular use.
-
-## First Run
-
-Ask Codex directly:
+Start a new Codex task after installation or upgrade, then ask:
 
 ```text
 Initialize ads-plan-monitor
+Show today's top ten materials by spend
+Create one unit per five videos uploaded today, dry-run first
+Query authorized creator videos and create a creator-material plan
 ```
 
-The guide creates `~/.codex/ads-plan-monitor/config.json` and reports the next steps for OAuth, tokens, business templates, and the official MCP. When an active template exists but is incomplete, it asks the user to complete it instead of creating another template. Inside the development repository, it prefers the Git-ignored `config/ads-plan-monitor/config.json` instead.
+## Development
 
-OAuth App ID, Secret, Access Token, Refresh Token, and MCP `developer_id` are stored in the operating system credential store. They are never written to project configuration and should not be pasted into chat.
-
-When upgrading, migrate existing state once. Existing app credentials, tokens, authorized accounts, and templates become `marketing` state without reauthorization:
+Run the unified CLI without installing the package:
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
-  --config config/ads-plan-monitor/config.json
+python3 skills/ads-plan-monitor/run.py --help
+python3 skills/ads-plan-monitor/run.py setup init --home-config
 ```
 
-Migration is safely repeatable and resumes from the same journal after interruption. If an old template stores fixed video IDs, v3 migration stops for explicit confirmation. After confirming that materials will be selected at runtime, run:
+Or install an editable package:
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
-  --config config/ads-plan-monitor/config.json \
-  --confirm-remove-legacy-materials
+python3 -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+python3 -m pip install -e .
+ocean-watch --help
 ```
 
-If a legacy token lacks a complete official-account mapping, status reports `pending_account_sync: true`. Run one explicit sync with the reported `authorization_id`:
+Commands follow `ocean-watch <domain> <action>`:
 
 ```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --authorization-id <AUTHORIZATION_ID> \
-  --sync-accounts
+ocean-watch auth status --channel marketing
+ocean-watch templates list
+ocean-watch materials videos --mode library-get --date today --fetch-all
+ocean-watch reports materials
+ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ```
 
-### OAuth
+Plan commands are dry-run by default. Online writes require an explicit `--submit`.
 
-When developing from the repository, run:
+## Security
 
-```bash
-python3 skills/ads-plan-monitor/scripts/credential_store.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --set-app
+- App secrets, access tokens, refresh tokens, and authorization codes never belong in Git config.
+- Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service.
+- Business config defaults to `~/.codex/ads-plan-monitor/config.json`.
+- `config/`, `runs/`, logs, caches, and runtime batch manifests are not open-source artifacts.
+- Plugin development does not read real business state or call real accounts without a separate explicit execution request.
 
-python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing
-```
+See [Security](SECURITY.md) and [Configuration](docs/configuration.md).
 
-The default callback URL is `http://127.0.0.1:8787/oauth/callback`. It must exactly match the callback configured for the application on the Ocean Engine Open Platform.
+## Architecture
 
-The same Marketing app may be authorized multiple times. The Plugin keeps every authorization and automatically selects the one whose official account covers the target `advertiser_id`; use `--auth-account-id` only when resolution is ambiguous. Business commands default to `--channel marketing`.
-
-`qianchuan` currently reserves an isolated channel structure only. OAuth and business APIs are not implemented, and it never reads or reuses Marketing apps, tokens, accounts, or templates.
-
-### Official MCP
-
-The official MCP endpoint requires each user's own `app_id` and `developer_id`. The Plugin does not hard-code personal parameters in its public manifest. Instead, it registers the MCP in the current user's Codex configuration during setup:
-
-```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py
-```
-
-The script reads `app_id` from the system credential store, securely prompts for `developer_id`, performs a handshake with the official service, verifies the tool list, and registers the local SSE-to-stdio bridge as `oceanengine-developer-docs`. Check its status with:
-
-```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py --status
-```
-
-Codex configuration stores only the path to the local bridge script. The official URL containing `app_id` and `developer_id` exists only in the bridge process memory. Status output does not expose the MCP URL or identifiers. Business API features remain available when MCP is not configured; the Skill falls back to sanitized references bundled with the repository.
-
-## Usage Examples
+The project uses a standard `src/` package and one CLI. `OceanEngineClient` is the only ordinary business API transport, while `PlanExecutor` owns the shared project/promotion transaction used by single and batch workflows.
 
 ```text
-Show the top 10 materials by spend today for the current advertiser account
-List videos uploaded today
-List creator-authorized videos available to the current advertiser
-Dry-run one campaign from selected creator item IDs and a creator-material template
-Create campaigns from today's uploaded videos, five videos per promotion, and dry-run first
-Create one campaign from this video using the specified campaign template
-Give me monitoring recommendations based on material-level performance
-Look up the official fields and OpenAPI schema for promotion/create
+skills/ads-plan-monitor/
+├── SKILL.md
+├── assets/
+├── references/
+├── run.py
+└── src/ocean_watch/
+    ├── cli/
+    ├── core/
+    ├── api/
+    ├── auth/
+    ├── templates/
+    ├── materials/
+    ├── plans/
+    ├── reports/
+    └── discovery/
 ```
 
-Creating real campaigns is a write operation. The Plugin performs a read-only query or payload preview by default and calls creation APIs only after the user explicitly requests submission.
-
-During Plugin or Skill development, advertiser, product, and URL details are treated as feature test cases by default. Codex changes only repository source, public examples, documentation, and tests, using isolated temporary configuration for validation. It does not modify real local `config/`, query real accounts, or call business APIs unless the user separately and explicitly requests a business operation.
-
-## Project Structure
-
-```text
-.
-├── .agents/plugins/marketplace.json       # GitHub and local marketplace entry
-├── .codex-plugin/plugin.json              # Codex Plugin manifest
-├── skills/ads-plan-monitor/
-│   ├── SKILL.md                           # Core instructions for the single Skill
-│   ├── agents/                            # Skill UI metadata
-│   ├── assets/                            # Sanitized example configuration
-│   ├── references/                        # API notes and template rules
-│   └── scripts/                           # Authorization, query, creation, and MCP guides
-├── tests/                                 # Regression tests
-├── docs/                                  # Installation, configuration, commands, and design docs
-├── CONTRIBUTING.md
-├── SECURITY.md
-└── LICENSE
-```
-
-Local directories excluded from the repository include `config/`, `runs/`, `.venv/`, caches, logs, and temporary output.
+See [Architecture](docs/architecture.md) for module contracts and data flow.
 
 ## Documentation
 
-- [Configuration, OAuth, and MCP](docs/configuration.md)
-- [Common commands](docs/commands.md)
+- [Getting started](docs/getting-started.md)
+- [CLI reference](docs/cli.md)
+- [Configuration and authorization](docs/configuration.md)
+- [Architecture](docs/architecture.md)
 - [Project structure](docs/project-structure.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [Security policy](SECURITY.md)
-- [Contributing guide](CONTRIBUTING.md)
 
-## Development Checks
+## Quality checks
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/ads-plan-monitor/scripts/*.py
+PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
-python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/dev/null
-python3 -m unittest discover -s tests -v
 git diff --check
 ```
+
+CI runs on Windows, macOS, and Linux with Python `3.9` and `3.12`.
 
 ## License
 

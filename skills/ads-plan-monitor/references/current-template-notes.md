@@ -9,8 +9,8 @@ Do not infer behavior from experiments, historical run files, or user-specific l
 
 ## Template Naming
 
-- Naming rule: `平台-CID-商品名-商品ID`
-- Example placeholder: `示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID`
+- Naming rule: `平台-CID-商品名-商品ID-素材来源`
+- Example placeholder: `示例平台-CID-示例商品-REPLACE_WITH_PRODUCT_ID-上传素材`
 - The real active template name should live in the user's local `config/ads-plan-monitor/config.json`.
 
 ## Required Template Sections
@@ -18,11 +18,14 @@ Do not infer behavior from experiments, historical run files, or user-specific l
 A practical create-plan template normally needs:
 
 - `defaults`: budget, bid/ROI, naming templates, delivery settings, audience settings, product defaults.
-- `materials`: optional fixed video IDs and cover IDs.
+- `material_strategy`: account-upload or creator-authorized source and runtime selection rules.
 - `resolved_ids`: city IDs, product IDs, image IDs, landing page asset IDs, event asset IDs, and brand/category IDs when available.
 - `links`: landing page and app/open URL.
 - `tracking_urls`: display and click/action tracking URLs.
-- `titles`: reusable promotion title material.
+- `copy_materials.titles`: reusable promotion title material.
+
+Specific video, cover, item, and material IDs belong to the current run. Never persist them in a
+schema v3 business template.
 
 ## Confirmed Defaults For This Skill
 

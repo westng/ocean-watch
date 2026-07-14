@@ -27,7 +27,7 @@ git status --short --ignored
 
 ## 凭据存储
 
-OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id` 不应写入项目配置。脚本会通过 `skills/ads-plan-monitor/scripts/credential_store.py` 存储在本机凭据仓库：
+OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id` 不应写入项目配置。`ocean-watch auth set-app` 和授权服务会将它们存储在本机凭据仓库：
 
 - macOS: Keychain
 - Windows: DPAPI 保护的用户本地文件

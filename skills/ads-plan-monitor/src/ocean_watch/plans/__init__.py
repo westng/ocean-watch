@@ -1,0 +1,1 @@
+"""Plan creation domain."""

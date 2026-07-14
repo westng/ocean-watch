@@ -9,189 +9,141 @@
 </p>
 
 <p align="center">
-  面向 Codex 的开源 Plugin，通过官方 API 完成计划创建、素材报表、账户授权与盯盘分析
+  面向 Codex 的开源 Plugin，通过官方 API 完成账户授权、素材查询、计划创建、报表汇总与投放分析
 </p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="skills/ads-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-ads--plan--monitor-4B5563" alt="Ads Plan Monitor Skill"></a>
-  <a href="skills/ads-plan-monitor/scripts/"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
-  <a href="skills/ads-plan-monitor/references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-API%20%2B%20MCP-1677FF" alt="Ocean Engine API and MCP"></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Credentials-local%20store-6B7280" alt="Local credential store"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
+  <a href="skills/ads-plan-monitor/references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-Official%20API-1677FF" alt="Ocean Engine official API"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
 中文默认 | [English](./README.en-US.md)
 
-`ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin。插件内只有一个 `ads-plan-monitor` Skill，并在 Skill 内部处理首次向导、计划创建、数据查询和逻辑策略四类分支。
+`ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin。仓库只包含一个 `ads-plan-monitor` Skill，并由该 Skill 在首次配置、授权、模板、素材、计划、报表和策略分支之间路由。
 
-业务操作目前通过官方 Ocean Engine Marketing API 完成，并统一归属 `marketing`（巨量营销）渠道。Plugin 已具备渠道隔离底座；`qianchuan`（巨量千川）保留为待开发渠道，不会读取或复用营销应用、Token 和账户。开发文档、OpenAPI Schema 和 SDK 示例可通过巨量引擎官方开发文档 MCP 查询。真实业务配置与 OAuth 凭据保留在使用者自己的电脑上。
+当前业务实现面向巨量营销（`marketing`），使用巨量引擎官方 API。巨量千川（`qianchuan`）已经预留独立渠道边界，但尚未实现，不会复用营销应用、Token 或账户。
 
-## 能力
+## 核心能力
 
-| 场景 | 能力 |
+| 领域 | 能力 |
 | --- | --- |
-| 首次使用 | 创建本地配置，检查 OAuth、Token、广告主账户和官方 MCP 状态 |
-| 授权账户 | 按渠道保存独立应用和多份 OAuth 授权，根据官方 `account_id` 与目标广告主自动选择 Token |
-| Token 管理 | API 调用前自动检查有效期，临近过期时刷新并保存轮换凭据 |
-| 创建计划 | 按平台和商品模板生成项目与单元，确认后提交官方 API |
-| 达人素材 | 查询当前广告主已授权合作视频，按达人素材模板生成原生单元 |
-| 批量创建 | 获取当天上传视频，按 N 条一个单元分组，支持多账户并发 |
-| 查询数据 | 查询单元、当前使用素材、视频素材库和素材维度报表 |
-| 盯盘策略 | 基于消耗、ROI、转化等数据给出分析和处理建议 |
-| 官方文档 | 通过官方 MCP 查询接口文档、Schema 和 SDK 示例 |
+| 授权 | 本地 OAuth、多授权账户索引、自动 Token 刷新、广告主同步 |
+| 模板 | 默认骨架、广告主/商品/平台/素材来源绑定、交互式创建与迁移 |
+| 素材 | 账户上传视频、达人主页视频、达人合作授权视频与可用性校验 |
+| 创建 | 上传素材和达人素材计划、dry-run、并发批量、失败续建 |
+| 报表 | 当前单元素材关联、素材维度数据、消耗排行与自定义报表 |
+| 策略 | 基于只读投放数据提供停投、观察、放量等运营建议 |
+| 开发 | 官方文档 MCP、OpenAPI Schema 和 SDK 示例查询 |
 
-计划模板采用“默认创建骨架 + 业务模板”结构。默认模板只保存可跨业务复用的投放参数，不参与真实投放。Schema v3 的每个业务模板还固定绑定“上传素材”或“达人素材”；创建时不能混用。达人素材通过官方授权关系接口实时查询，具体素材 ID 不写回模板。新模板向导会根据广告主、商品和素材来源变化清理对应资产；不完整模板可以保存为草稿，但不能激活。
+## 安装 Plugin
 
-## 安装
-
-需要 Codex CLI 0.144.1 或更高版本，以及 Python 3.9 或更高版本：
+需要 Codex CLI `0.144.1` 或更高版本，以及 Python `3.9+`：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-安装或升级后，新建一个 Codex 任务即可加载最新 Plugin。没有真实私有目录的干净开发副本也可以直接作为本地 marketplace：
-
-```bash
-codex plugin marketplace add "$(pwd)"
-codex plugin add ocean-watch@ocean-watch
-```
-
-不要从包含本地 `config/`、`runs/` 或 `.venv/` 的工作副本执行本地安装；Codex 可能复制这些未跟踪目录。日常使用优先通过 GitHub marketplace 安装。
-
-## 首次使用
-
-在 Codex 中直接说：
+安装或升级后，新建一个 Codex 任务加载最新版本。然后可以直接说：
 
 ```text
 用 ads-plan-monitor 初始化配置
-```
-
-向导会创建 `~/.codex/ads-plan-monitor/config.json`，并给出 OAuth、Token、业务模板和官方 MCP 的后续状态。已有活动模板不完整时会提示补全，而不是重新创建模板。开发仓库中则优先使用被 Git 忽略的 `config/ads-plan-monitor/config.json`。
-
-OAuth App ID、Secret、Access Token、Refresh Token 和 MCP `developer_id` 均写入本机系统凭据仓库，不写进项目配置，也不应粘贴到聊天中。
-
-从旧版本升级时，先执行一次渠道迁移。现有 APP ID、Secret、Token、授权账户和模板全部迁入 `marketing`，不需要重新授权：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
-  --config config/ads-plan-monitor/config.json
-```
-
-迁移可安全重复执行；中断后再次运行会沿用同一迁移记录继续完成。旧业务模板如果固定保存过视频 ID，v3 迁移会先停止并要求确认。确认这些动态 ID 改为创建时实时选择后，运行：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/migrate_channels.py \
-  --config config/ads-plan-monitor/config.json \
-  --confirm-remove-legacy-materials
-```
-
-若旧 Token 没有完整的官方账户映射，状态会显示 `pending_account_sync: true`，按输出中的 `authorization_id` 执行一次同步：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/token_manager.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --authorization-id <AUTHORIZATION_ID> \
-  --sync-accounts
-```
-
-### OAuth
-
-从仓库开发时，可以运行：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/credential_store.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing \
-  --set-app
-
-python3 skills/ads-plan-monitor/scripts/oauth_local_authorize.py \
-  --config config/ads-plan-monitor/config.json \
-  --channel marketing
-```
-
-默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台应用配置完全一致。
-
-同一营销应用可以完成多次授权。Plugin 会保留每份授权，并根据目标 `advertiser_id` 自动匹配包含它的官方授权账户；只有匹配有歧义时才需要传 `--auth-account-id`。所有业务命令默认使用 `--channel marketing`。
-
-`qianchuan` 目前只预留独立渠道结构，尚未实现授权和业务 API；它不会读取或复用任何营销应用、Token、账户或模板。
-
-### 官方 MCP
-
-官方 MCP 地址要求每个用户自己的 `app_id` 与 `developer_id`。Plugin 不会在公开清单中硬编码个人参数，而是在首次使用时注册到当前用户的 Codex 配置：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py
-```
-
-脚本从系统凭据仓库读取 `app_id`，安全提示输入 `developer_id`，先与官方服务完成握手并检查工具列表，再把本地 SSE→stdio 桥注册为 `oceanengine-developer-docs`。检查状态：
-
-```bash
-python3 skills/ads-plan-monitor/scripts/configure_official_mcp.py --status
-```
-
-Codex 配置只保存本地桥接脚本路径；包含 `app_id` 和 `developer_id` 的官方 URL 仅在桥进程内存中生成。状态输出不会显示 MCP URL 或标识符。MCP 未配置时，业务 API 功能仍可使用，Skill 会回退到仓库内的脱敏参考资料。
-
-## 使用示例
-
-```text
 查询当前广告账户今天素材消耗前十
-查询今天上传的视频素材
-查询当前广告账户可投放的达人授权视频
-使用达人素材模板和指定 item_id 创建一条计划，先 dry-run
-按今天上传的视频素材，每 5 条一个单元创建计划，先 dry-run
-使用指定计划模板，拿这条视频素材创建一条计划
-根据素材维度数据给我盯盘建议
-查询 promotion/create 的官方字段和 OpenAPI Schema
+按今天上传的视频素材，每 5 条一个单元创建计划，先预览
+查询达人授权视频并使用达人素材模板创建计划
 ```
 
-真实创建计划属于写操作。Plugin 默认先做只读查询或 payload 预览，只有用户明确要求提交时才调用创建接口。
+## 本地开发
 
-在开发 Plugin 或完善 Skill 的对话中，账户、商品和链接信息默认只作为功能测试案例。Codex 只修改仓库代码、公开示例、文档和测试，并使用临时配置验收；除非用户另行明确要求操作本地业务状态，否则不会修改真实 `config/`、查询真实账户或调用业务 API。
+仓库提供一个统一 CLI。无需安装即可运行：
 
-## 项目结构
+```bash
+python3 skills/ads-plan-monitor/run.py --help
+python3 skills/ads-plan-monitor/run.py setup init --home-config
+```
+
+开发者也可以安装可编辑包，获得 `ocean-watch` 命令：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+python3 -m pip install -e .
+ocean-watch --help
+```
+
+所有命令遵循 `ocean-watch <领域> <动作>`：
+
+```bash
+ocean-watch auth status --channel marketing
+ocean-watch templates list
+ocean-watch materials videos --mode library-get --date today --fetch-all
+ocean-watch reports materials
+ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
+```
+
+创建命令默认只预览。只有显式传入 `--submit` 才会调用在线写接口。
+
+## 安全边界
+
+- App ID、Secret、Access Token、Refresh Token 和授权码不写入 Git 配置。
+- macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。
+- 业务配置默认位于 `~/.codex/ads-plan-monitor/config.json`；开发仓库可使用被忽略的 `config/ads-plan-monitor/config.json`。
+- `config/`、`runs/`、缓存、日志和本地任务清单不属于开源包。
+- 开发 Plugin 时不会读取真实业务配置或调用真实账户；只有用户明确要求真实执行时才进入业务模式。
+
+详见 [安全说明](SECURITY.md) 和 [配置文档](docs/configuration.md)。
+
+## 工程架构
+
+项目采用标准 `src/` 包结构和单一 CLI：
 
 ```text
-.
-├── .agents/plugins/marketplace.json       # GitHub / 本地 marketplace 入口
-├── .codex-plugin/plugin.json              # Codex Plugin 清单
-├── skills/ads-plan-monitor/
-│   ├── SKILL.md                           # 单一 Skill 的核心指令
-│   ├── agents/                            # Skill UI 元数据
-│   ├── assets/                            # 脱敏示例配置
-│   ├── references/                        # API 与模板规则
-│   └── scripts/                           # 授权、查询、创建和 MCP 向导
-├── tests/                                 # 回归测试
-├── docs/                                  # 安装、配置、命令和设计文档
-├── CONTRIBUTING.md
-├── SECURITY.md
-└── LICENSE
+skills/ads-plan-monitor/
+├── SKILL.md                    # Codex 路由与安全规则
+├── assets/                     # 脱敏示例
+├── references/                 # 按需加载的官方 API 说明
+├── run.py                      # Plugin 内无需安装的统一入口
+└── src/ocean_watch/
+    ├── cli/                    # 命令路由和输出边界
+    ├── core/                   # 配置、错误、锁和公共数据工具
+    ├── api/                    # 唯一官方业务 API Client
+    ├── auth/                   # OAuth、Token 和授权账户
+    ├── templates/              # 模板模型、校验与向导
+    ├── materials/              # 上传素材与达人素材
+    ├── plans/                  # Payload、统一事务执行器和批量调度
+    ├── reports/                # 报表查询、关联与聚合
+    └── discovery/              # 账户资产反查
 ```
 
-不会进入仓库的本地目录：`config/`、`runs/`、`.venv/`、缓存、日志和临时输出。
+上传素材、达人素材、单条和批量创建共用 `PlanExecutor`。所有普通业务请求共用 `OceanEngineClient`，领域模块不自行实现 Header、URL 编码、超时或 HTTP 异常处理。
+
+完整设计见 [架构说明](docs/architecture.md)。
 
 ## 文档
 
-- [配置、OAuth 与 MCP](docs/configuration.md)
-- [常用命令](docs/commands.md)
+- [快速开始](docs/getting-started.md)
+- [CLI 参考](docs/cli.md)
+- [配置与授权](docs/configuration.md)
+- [架构说明](docs/architecture.md)
 - [项目结构](docs/project-structure.md)
-- [更新日志](CHANGELOG.md)
-- [安全说明](SECURITY.md)
 - [贡献指南](CONTRIBUTING.md)
+- [安全说明](SECURITY.md)
+- [更新日志](CHANGELOG.md)
 
-## 开发检查
+## 质量检查
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile skills/ads-plan-monitor/scripts/*.py
+PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
-python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/dev/null
-python3 -m unittest discover -s tests -v
 git diff --check
 ```
+
+CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行。
 
 ## License
 
