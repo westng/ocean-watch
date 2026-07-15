@@ -1,0 +1,4 @@
+interface:
+  display_name: "巨量千川计划助手"
+  short_description: "千川授权、商品模板、达人作品计划的创建、追加与素材删除"
+  default_prompt: "Use $qc-plan-monitor to resolve Douyin work links, filter creator videos by template products, create or append Qianchuan product plans, or safely remove custom plan materials."

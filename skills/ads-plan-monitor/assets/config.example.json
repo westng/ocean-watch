@@ -13,7 +13,14 @@
       }
     },
     "qianchuan": {
-      "status": "not_implemented"
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+        "authorize_url": "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api"
+      }
     }
   },
   "account": {
@@ -23,6 +30,31 @@
   "active_plan_template": null,
   "plan_templates": {},
   "plan_template_schema_version": 3,
+  "qianchuan_product_template_schema_version": 2,
+  "active_qianchuan_product_template": null,
+  "qianchuan_product_templates": {},
+  "default_qianchuan_product_template": {
+    "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
+    "business_usable": false,
+    "bindings": {
+      "channel": "qianchuan",
+      "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+      "product_name": "REPLACE_WITH_PRODUCT_NAME",
+      "product_ids": []
+    },
+    "delivery_setting": {
+      "smart_bid_type": "SMART_BID_CUSTOM",
+      "roi2_goal": 1.7,
+      "qcpx_mode": "QCPX_MODE_ON",
+      "budget": 5000,
+      "video_schedule_type": "SCHEDULE_FROM_NOW",
+      "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
+    },
+    "material_strategy": {
+      "source_type": "CREATOR_RUNTIME_QUERY",
+      "persist_material_ids": false
+    }
+  },
   "default_plan_template": {
     "defaults": {
       "operation": "ENABLE",

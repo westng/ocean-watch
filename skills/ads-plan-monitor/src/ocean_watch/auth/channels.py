@@ -20,13 +20,28 @@ CHANNELS = {
         "display_name": "巨量营销",
         "oauth_state_code": "AD",
         "implemented": True,
+        "business_base_url": "https://api.oceanengine.com/open_api",
+        "legacy_business_base_url": "https://ad.oceanengine.com/open_api",
+        "authorize_url": "https://ad.oceanengine.com/openapi/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api",
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
         "capabilities": {"oauth", "accounts", "create", "query", "report"},
     },
     "qianchuan": {
         "display_name": "巨量千川",
         "oauth_state_code": "QC",
-        "implemented": False,
-        "capabilities": set(),
+        "implemented": True,
+        "business_base_url": "https://api.oceanengine.com/open_api",
+        "legacy_business_base_url": "https://ad.oceanengine.com/open_api",
+        "authorize_url": "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api",
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+        "capabilities": {
+            "oauth",
+            "accounts",
+            "qianchuan_create",
+            "qianchuan_materials",
+        },
     },
 }
 
@@ -122,7 +137,9 @@ def migrate_config(config):
             raise ValueError(f"conflicting marketing OAuth config field: {key}")
         marketing_oauth.setdefault(key, copy.deepcopy(value))
 
-    channel_map.setdefault("qianchuan", {"status": "not_implemented"})
+    qianchuan = channel_map.setdefault("qianchuan", {})
+    if qianchuan.get("status") == "not_implemented":
+        qianchuan.pop("status")
     migrated["default_channel"] = migrated.get("default_channel") or DEFAULT_CHANNEL
     migrated.setdefault("account", {})["channel"] = (
         (migrated.get("account") or {}).get("channel") or DEFAULT_CHANNEL
@@ -144,6 +161,11 @@ def runtime_config(config, channel=None, capability=None):
     runtime = copy.deepcopy(migrated)
     runtime["api"] = copy.deepcopy(channel_config.get("api") or {})
     runtime["oauth"] = copy.deepcopy(channel_config.get("oauth") or {})
+    runtime["api"].setdefault("base_url", definition["business_base_url"])
+    runtime["api"].setdefault("legacy_base_url", definition["legacy_business_base_url"])
+    runtime["oauth"].setdefault("authorize_url", definition["authorize_url"])
+    runtime["oauth"].setdefault("token_base_url", definition["token_base_url"])
+    runtime["oauth"].setdefault("redirect_uri", definition["redirect_uri"])
     runtime.setdefault("account", {})["channel"] = selected
     runtime["_channel"] = {
         "id": selected,

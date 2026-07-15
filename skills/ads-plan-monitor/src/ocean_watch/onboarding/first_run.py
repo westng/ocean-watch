@@ -45,7 +45,12 @@ def redacted_value(value, key):
 
 def check_fields(config):
     result = validate_config.validate_config(config)
-    runtime = channels.runtime_config(config, capability="query")
+    selected_channel = channels.selected_channel(config)
+    runtime = channels.runtime_config(
+        config,
+        channel=selected_channel,
+        capability=validate_config.query_capability(selected_channel),
+    )
     query_required = [
         "api.base_url",
         "account.advertiser_id",
@@ -185,8 +190,8 @@ def main(argv=None):
             "channel_display_name": "巨量营销",
             "redirect_uri": get_path(migrated_config, "channels.marketing.oauth.redirect_uri"),
             "credential_backend": credential_store.backend_name(),
-            "set_app_command": f'{command} auth set-app --config "{config_path}" --channel marketing',
             "local_authorize_command": f'{command} auth authorize --config "{config_path}" --channel marketing',
+            "replace_app_command": f'{command} auth set-app --config "{config_path}" --channel marketing',
             "token_status_command": f'{command} auth status --config "{config_path}" --channel marketing',
         },
         "official_docs_mcp": {

@@ -1,0 +1,14 @@
+{
+  "advertiser_id": 1234567890123456,
+  "aweme_id": 12345678901,
+  "marketing_goal": "LIVE_PROM_GOODS",
+  "delivery_setting": {
+    "smart_bid_type": "SMART_BID_CONSERVATIVE",
+    "budget": 5000,
+    "live_schedule_type": "SCHEDULE_FROM_NOW",
+    "daily_delivery_time": 8.5
+  },
+  "creative_setting": {
+    "smart_select_material": true
+  }
+}

@@ -1,0 +1,246 @@
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest import mock
+
+from ocean_watch.auth import channels
+from ocean_watch.plans import create_qianchuan_plan
+from ocean_watch.templates import manage_qianchuan_templates
+from ocean_watch.templates import qianchuan_product_templates as product_templates
+
+from tests.support import valid_config
+
+
+class QianchuanProductTemplateTests(unittest.TestCase):
+    def test_default_template_matches_confirmed_business_defaults(self):
+        template = product_templates.default_template()
+        self.assertFalse(template["business_usable"])
+        self.assertEqual(template["bindings"]["product_ids"], [])
+        self.assertEqual(template["delivery_setting"], {
+            "smart_bid_type": "SMART_BID_CUSTOM",
+            "roi2_goal": 1.7,
+            "qcpx_mode": "QCPX_MODE_ON",
+            "budget": 5000,
+            "video_schedule_type": "SCHEDULE_FROM_NOW",
+            "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
+        })
+        self.assertEqual(
+            template["material_strategy"]["source_type"],
+            "CREATOR_RUNTIME_QUERY",
+        )
+
+    def test_product_ids_use_slash_format_and_official_limit(self):
+        values = [str(1000 + index) for index in range(30)]
+        normalized = product_templates.normalize_product_ids("/".join(values))
+        self.assertEqual(normalized, values)
+        with self.assertRaisesRegex(Exception, "at most 30"):
+            product_templates.normalize_product_ids(values + ["9999"])
+
+    def test_product_ids_are_deduplicated_in_input_order(self):
+        self.assertEqual(
+            product_templates.normalize_product_ids("123/456/123/789"),
+            ["123", "456", "789"],
+        )
+
+    def test_business_template_name_contains_all_product_ids(self):
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123/1231231231",
+            template_id="qcpt_test",
+        )
+        self.assertEqual(
+            template["display_name"],
+            "1234567890123456-商品全域-示例商品-12123123123/1231231231",
+        )
+        self.assertEqual(
+            template["bindings"]["product_ids"],
+            ["12123123123", "1231231231"],
+        )
+
+    def test_business_template_never_persists_runtime_or_channel_fields(self):
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123",
+            template_id="qcpt_test",
+        )
+        rendered = json.dumps(template)
+        for forbidden in (
+            "aweme_id",
+            "product_channel_info",
+            "channel_id",
+            "channel_type",
+            "multi_product_creative_list",
+        ):
+            self.assertNotIn(forbidden, rendered)
+
+    def test_clone_inherits_delivery_but_rebinds_business_fields(self):
+        source = product_templates.build_business_template(
+            advertiser_id="111",
+            product_name="来源产品",
+            product_ids="1001",
+            template_id="qcpt_source",
+        )
+        source["delivery_setting"]["roi2_goal"] = 2.0
+        target = product_templates.build_business_template(
+            advertiser_id="222",
+            product_name="目标产品",
+            product_ids="2001/2002",
+            source=source,
+            template_id="qcpt_target",
+        )
+        self.assertEqual(target["delivery_setting"]["roi2_goal"], 2.0)
+        self.assertEqual(target["bindings"]["advertiser_id"], "222")
+        self.assertEqual(target["bindings"]["product_ids"], ["2001", "2002"])
+
+    def test_wizard_creates_and_activates_template_from_default(self):
+        answers = iter([
+            "0",
+            "1234567890123456",
+            "示例商品",
+            "12123123123/1231231231",
+            "",
+            "y",
+        ])
+        config, result = manage_qianchuan_templates.run_create_wizard(
+            {},
+            input_fn=lambda _: next(answers),
+            output_fn=lambda _: None,
+        )
+        self.assertTrue(result["created"])
+        self.assertEqual(
+            config[product_templates.ACTIVE_TEMPLATE_KEY],
+            result["template_id"],
+        )
+        self.assertEqual(result["template"]["bindings"]["product_ids"], [
+            "12123123123",
+            "1231231231",
+        ])
+
+    def test_default_template_cannot_resolve_for_plan_creation(self):
+        with self.assertRaisesRegex(Exception, "not found"):
+            product_templates.resolve_template(
+                product_templates.ensure_config({}),
+                "default_qianchuan_product_template",
+            )
+
+    def test_template_generates_material_free_official_payload(self):
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123/1231231231",
+            template_id="qcpt_test",
+        )
+        payload = product_templates.payload_from_template(template, name="千川商品计划")
+        self.assertEqual(payload["marketing_goal"], "VIDEO_PROM_GOODS")
+        self.assertEqual(payload["product_ids"], [12123123123, 1231231231])
+        self.assertEqual(payload["name"], "千川商品计划")
+        self.assertNotIn("aweme_id", payload)
+        self.assertNotIn("product_channel_info", payload)
+        self.assertNotIn("multi_product_creative_list", payload)
+
+    def test_plan_cli_dry_run_uses_template_without_credentials(self):
+        config = channels.migrate_config(valid_config())
+        config = product_templates.ensure_config(config)
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123/1231231231",
+            template_id="qcpt_test",
+        )
+        config[product_templates.TEMPLATES_KEY] = {"qcpt_test": template}
+        config[product_templates.ACTIVE_TEMPLATE_KEY] = "qcpt_test"
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            output = StringIO()
+            with mock.patch.object(
+                create_qianchuan_plan.token_manager,
+                "ensure_access_token",
+            ) as ensure_token, redirect_stdout(output):
+                exit_code = create_qianchuan_plan.main([
+                    "--config",
+                    str(config_path),
+                    "--plan-template",
+                    "qcpt_test",
+                    "--name",
+                    "千川商品计划",
+                ])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["plan_template"]["template_id"], "qcpt_test")
+        self.assertEqual(result["payload"]["product_ids"], [12123123123, 1231231231])
+        self.assertEqual(result["blocking_fields"], ["runtime_creator_materials"])
+        ensure_token.assert_not_called()
+
+    def test_template_submit_blocks_before_credentials_without_runtime_materials(self):
+        config = channels.migrate_config(valid_config())
+        config = product_templates.ensure_config(config)
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123",
+            template_id="qcpt_test",
+        )
+        config[product_templates.TEMPLATES_KEY] = {"qcpt_test": template}
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            output = StringIO()
+            with mock.patch.object(
+                create_qianchuan_plan.token_manager,
+                "ensure_access_token",
+            ) as ensure_token, redirect_stdout(output):
+                exit_code = create_qianchuan_plan.main([
+                    "--config",
+                    str(config_path),
+                    "--plan-template",
+                    "qcpt_test",
+                    "--submit",
+                ])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 1)
+        self.assertTrue(result["submit_blocked"])
+        self.assertEqual(result["blocking_fields"], ["runtime_creator_materials"])
+        ensure_token.assert_not_called()
+
+    def test_schema_v1_template_migrates_shop_name_to_advertiser_name_prefix(self):
+        config = {
+            product_templates.SCHEMA_VERSION_KEY: 1,
+            product_templates.TEMPLATES_KEY: {
+                "qcpt_test": {
+                    "template_id": "qcpt_test",
+                    "display_name": "旧店铺-商品全域-示例商品-12123123123",
+                    "template_type": product_templates.TEMPLATE_TYPE,
+                    "status": "active",
+                    "bindings": {
+                        "channel": "qianchuan",
+                        "advertiser_id": "1234567890123456",
+                        "shop_name": "旧店铺",
+                        "product_name": "示例商品",
+                        "product_ids": ["12123123123"],
+                    },
+                    "delivery_setting": product_templates.DEFAULT_DELIVERY_SETTING,
+                    "material_strategy": {
+                        "source_type": product_templates.MATERIAL_SOURCE_TYPE,
+                        "persist_material_ids": False,
+                    },
+                }
+            },
+        }
+        migrated = product_templates.ensure_config(config)
+        template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 2)
+        self.assertNotIn("shop_name", template["bindings"])
+        self.assertEqual(
+            template["display_name"],
+            "1234567890123456-商品全域-示例商品-12123123123",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

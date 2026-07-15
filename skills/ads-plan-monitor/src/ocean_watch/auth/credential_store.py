@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import base64
-import getpass
 import json
 import os
 import platform
@@ -445,9 +444,15 @@ def main(argv=None):
         return 0
 
     if args.set_app:
-        app_id = args.app_id or input("OceanEngine APP_ID: ").strip()
-        secret = args.secret or getpass.getpass("OceanEngine Secret: ").strip()
-        print(json.dumps(configure_app(app_id, secret, channel=args.channel), ensure_ascii=False, indent=2))
+        if not args.app_id or not args.secret:
+            raise ValueError(
+                "interactive app configuration is provided by ocean-watch auth set-app"
+            )
+        print(json.dumps(
+            configure_app(args.app_id, args.secret, channel=args.channel),
+            ensure_ascii=False,
+            indent=2,
+        ))
         return 0
 
     print(json.dumps(status(config_path, channel=args.channel), ensure_ascii=False, indent=2))

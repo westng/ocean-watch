@@ -15,6 +15,7 @@
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="skills/ads-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-ads--plan--monitor-4B5563" alt="Ads Plan Monitor Skill"></a>
+  <a href="skills/qc-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-qc--plan--monitor-2563EB" alt="QC Plan Monitor Skill"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="skills/ads-plan-monitor/references/official-api-notes.md"><img src="https://img.shields.io/badge/Ocean%20Engine-Official%20API-1677FF" alt="Ocean Engine official API"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
@@ -22,18 +23,20 @@
 
 中文默认 | [English](./README.en-US.md)
 
-`ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin。仓库只包含一个 `ads-plan-monitor` Skill，并由该 Skill 在首次配置、授权、模板、素材、计划、报表和策略分支之间路由。
+`ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin，包含两个职责独立的 Skill：`ads-plan-monitor` 负责巨量营销，`qc-plan-monitor` 负责巨量千川。两者共享工程化 CLI 运行时，但不会混用授权、账户、模板或创建事务。
 
-当前业务实现面向巨量营销（`marketing`），使用巨量引擎官方 API。巨量千川（`qianchuan`）已经预留独立渠道边界，但尚未实现，不会复用营销应用、Token 或账户。
+巨量营销（`marketing`）已支持授权、素材、计划、报表和策略。巨量千川（`qianchuan`）已支持独立应用授权、Token 刷新、真实广告主发现、商品全域模板、按商品过滤的达人视频查询，以及根据抖音作品链接新建、追加或删除商品全域计划自提素材；千川报表、策略和直播模板仍未开放。两个渠道不会复用应用、Token、账户、模板或创建事务。
 
 ## 核心能力
 
 | 领域 | 能力 |
 | --- | --- |
-| 授权 | 本地 OAuth、多授权账户索引、自动 Token 刷新、广告主同步 |
+| 巨量营销 | `ads-plan-monitor`：授权、模板、上传/达人素材、计划、报表和策略 |
+| 巨量千川 | `qc-plan-monitor`：授权、商品全域模板、达人视频查询、作品链接批量创建、素材追加与删除 |
+| 授权 | 营销/千川独立本地 OAuth、多授权账户索引、自动 Token 刷新 |
 | 模板 | 默认骨架、广告主/商品/平台/素材来源绑定、交互式创建与迁移 |
-| 素材 | 账户上传视频、达人主页视频、达人合作授权视频与可用性校验 |
-| 创建 | 上传素材和达人素材计划、dry-run、并发批量、失败续建 |
+| 素材 | 账户上传视频、营销达人授权视频、千川按商品过滤达人视频与可用性校验 |
+| 计划 | 营销上传/达人素材计划；千川作品链接新建、追加或删除全域素材；dry-run、显式在线提交 |
 | 报表 | 当前单元素材关联、素材维度数据、消耗排行与自定义报表 |
 | 策略 | 基于只读投放数据提供停投、观察、放量等运营建议 |
 | 开发 | 官方文档 MCP、OpenAPI Schema 和 SDK 示例查询 |
@@ -54,6 +57,9 @@ codex plugin add ocean-watch@ocean-watch
 查询当前广告账户今天素材消耗前十
 按今天上传的视频素材，每 5 条一个单元创建计划，先预览
 查询达人授权视频并使用达人素材模板创建计划
+用 qc-plan-monitor 授权千川并预览商品全域计划
+用 qc-plan-monitor 查询抖音号下与模板商品匹配的视频
+用 qc-plan-monitor 按抖音作品链接预检删除指定千川计划素材
 ```
 
 ## 本地开发
@@ -78,10 +84,16 @@ ocean-watch --help
 
 ```bash
 ocean-watch auth status --channel marketing
+ocean-watch auth authorize --channel qianchuan
+ocean-watch qc-templates create
+ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
+ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
+ocean-watch plans remove-qianchuan-work --advertiser-id ADVERTISER_ID --ad-id AD_ID --work-url DOUYIN_WORK_URL
 ocean-watch templates list
 ocean-watch materials videos --mode library-get --date today --fetch-all
 ocean-watch reports materials
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
+ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
 创建命令默认只预览。只有显式传入 `--submit` 才会调用在线写接口。
@@ -98,7 +110,7 @@ ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 
 ## 工程架构
 
-项目采用标准 `src/` 包结构和单一 CLI：
+项目采用两个业务 Skill 和一个共享 `src/` CLI 运行时：
 
 ```text
 skills/ads-plan-monitor/
@@ -116,6 +128,11 @@ skills/ads-plan-monitor/
     ├── plans/                  # Payload、统一事务执行器和批量调度
     ├── reports/                # 报表查询、关联与聚合
     └── discovery/              # 账户资产反查
+skills/qc-plan-monitor/
+├── SKILL.md                    # 千川触发、授权与创建规则
+├── assets/                     # 千川脱敏 payload 示例
+├── references/                 # 千川官方 API 说明
+└── run.py                      # 复用共享 CLI 运行时
 ```
 
 上传素材、达人素材、单条和批量创建共用 `PlanExecutor`。所有普通业务请求共用 `OceanEngineClient`，领域模块不自行实现 Header、URL 编码、超时或 HTTP 异常处理。

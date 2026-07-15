@@ -13,24 +13,27 @@
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="skills/ads-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-ads--plan--monitor-4B5563" alt="Ads Plan Monitor Skill"></a>
+  <a href="skills/qc-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-qc--plan--monitor-2563EB" alt="QC Plan Monitor Skill"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
 [中文](./README.md) | English
 
-`ocean-watch` is an installable Codex Plugin for Ocean Engine advertising operations. It contains one `ads-plan-monitor` Skill that routes first-run setup, authorization, templates, materials, plan creation, reports, and strategy requests.
+`ocean-watch` is an installable Codex Plugin with two independent business Skills: `ads-plan-monitor` for Ocean Engine Marketing and `qc-plan-monitor` for Qianchuan. They share one engineered CLI runtime without sharing authorization, advertiser, template, or creation transactions.
 
-The current implementation targets Ocean Engine Marketing (`marketing`) through official APIs. Ocean Engine Qianchuan (`qianchuan`) has an isolated channel boundary but is not implemented and never reuses Marketing credentials or accounts.
+Ocean Engine Marketing (`marketing`) supports authorization, materials, plans, reports, and strategy. Qianchuan (`qianchuan`) supports isolated app authorization, token refresh, advertiser discovery, product all-domain templates, product-filtered creator video discovery, and plan material creation, append, or removal from Douyin work links. Qianchuan reports, strategy, and live templates remain unavailable. The channels never share apps, tokens, accounts, templates, endpoints, or creation transactions.
 
 ## Capabilities
 
 | Domain | Support |
 | --- | --- |
-| Authorization | Local OAuth, multiple authorization records, token refresh, advertiser sync |
+| Marketing | `ads-plan-monitor`: OAuth, templates, uploaded/creator materials, plans, reports, strategy |
+| Qianchuan | `qc-plan-monitor`: OAuth, product templates, creator videos, work-link batches, and material append or removal |
+| Authorization | Isolated Marketing/Qianchuan OAuth, multiple authorization records, token refresh |
 | Templates | Default base, advertiser/product/platform/source bindings, guided creation and migration |
-| Materials | Uploaded videos, creator homepage videos, authorized cooperation videos |
-| Plans | Dry-run, uploaded and creator materials, concurrent batches, resumable failures |
+| Materials | Uploaded videos, Marketing creator videos, and product-filtered Qianchuan creator videos |
+| Plans | Marketing uploaded/creator plans, Qianchuan create, append, or remove work materials, dry-run and explicit submit |
 | Reports | Active material joins, material metrics, spend rankings, custom reports |
 | Strategy | Read-only evidence and operational recommendations |
 | Development | Official documentation MCP, OpenAPI schemas, and SDK examples |
@@ -51,6 +54,9 @@ Initialize ads-plan-monitor
 Show today's top ten materials by spend
 Create one unit per five videos uploaded today, dry-run first
 Query authorized creator videos and create a creator-material plan
+Use qc-plan-monitor to authorize Qianchuan and dry-run a product all-domain plan
+Use qc-plan-monitor to find creator videos matching a Qianchuan product template
+Use qc-plan-monitor to dry-run removing a work from a Qianchuan plan
 ```
 
 ## Development
@@ -75,10 +81,16 @@ Commands follow `ocean-watch <domain> <action>`:
 
 ```bash
 ocean-watch auth status --channel marketing
+ocean-watch auth authorize --channel qianchuan
+ocean-watch qc-templates create
+ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
+ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
+ocean-watch plans remove-qianchuan-work --advertiser-id ADVERTISER_ID --ad-id AD_ID --work-url DOUYIN_WORK_URL
 ocean-watch templates list
 ocean-watch materials videos --mode library-get --date today --fetch-all
 ocean-watch reports materials
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
+ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
 Plan commands are dry-run by default. Online writes require an explicit `--submit`.
@@ -95,7 +107,7 @@ See [Security](SECURITY.md) and [Configuration](docs/configuration.md).
 
 ## Architecture
 
-The project uses a standard `src/` package and one CLI. `OceanEngineClient` is the only ordinary business API transport, while `PlanExecutor` owns the shared project/promotion transaction used by single and batch workflows.
+The project uses two business Skills and one shared `src/` CLI runtime. `OceanEngineClient` is the only ordinary business API transport, while channel-specific services keep Marketing and Qianchuan transactions separate.
 
 ```text
 skills/ads-plan-monitor/
@@ -113,6 +125,11 @@ skills/ads-plan-monitor/
     ├── plans/
     ├── reports/
     └── discovery/
+skills/qc-plan-monitor/
+├── SKILL.md
+├── assets/
+├── references/
+└── run.py
 ```
 
 See [Architecture](docs/architecture.md) for module contracts and data flow.

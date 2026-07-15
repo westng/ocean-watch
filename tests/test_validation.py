@@ -124,17 +124,37 @@ class ExitAndValidationTests(unittest.TestCase):
                     1,
                 )
 
-    def test_validator_reports_unimplemented_channel_as_json(self):
+    def test_validator_accepts_qianchuan_material_query_capability(self):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config = channels.migrate_config(valid_config())
             config["account"]["channel"] = "qianchuan"
             config_path.write_text(json.dumps(config), encoding="utf-8")
+            credentials = {"app_id": "app", "secret": "secret", "access_token": "token"}
+            runtime = channels.runtime_config(
+                config,
+                "qianchuan",
+                capability="qianchuan_materials",
+            )
+            runtime["api"].update(credentials)
             output = StringIO()
-            with redirect_stdout(output):
+            with mock.patch.object(
+                authorization_store,
+                "attach_runtime",
+                return_value=runtime,
+            ), mock.patch.object(
+                authorization_store,
+                "read_app",
+                return_value=credentials,
+            ), mock.patch.object(
+                credential_store,
+                "status",
+                return_value={},
+            ), redirect_stdout(output):
                 exit_code = validate_config.main(
                     ["--config", str(config_path), "--mode", "query"]
                 )
         result = json.loads(output.getvalue())
-        self.assertEqual(exit_code, 1)
-        self.assertEqual(result["error_code"], "channel_not_implemented")
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(result["selected_mode_ready"])
+        self.assertEqual(result["channel"], "qianchuan")

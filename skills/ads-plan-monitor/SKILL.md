@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Unified Ocean Engine / 巨量引擎盯盘 skill for first-run setup, local OAuth, advertiser-bound templates, uploaded or creator-authorized material discovery, single and concurrent batch plan creation, material performance reports, and monitoring strategy. Use for 初始化配置, 授权或刷新 token, 创建或迁移投放模板, 查询上传/达人素材, 创建或批量创建计划, 查询素材消耗排行, 汇总报表, and 投放策略分析 through official APIs.
+description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, advertiser-bound templates, uploaded or creator-authorized material discovery, single and concurrent batch plan creation, material performance reports, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、创建或迁移营销投放模板、查询上传/达人素材、创建营销计划、查询素材消耗排行、汇总报表, and 投放策略分析 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -21,7 +21,7 @@ This is one Skill with internal branches, not separate create/query/strategy ski
 5. `查询`: current promotion materials and material-level reports.
 6. `策略`: evidence-based recommendations; read-only unless the user explicitly requests a write.
 
-Current business support is `marketing` (巨量营销). `qianchuan` (巨量千川) is isolated but not implemented. Return `channel_not_implemented`; never reuse Marketing credentials or endpoints.
+This Skill owns only `marketing` (巨量营销): OAuth, account discovery, templates, materials, plans, reports, and strategy. Route every Qianchuan request to `$qc-plan-monitor`; never reuse Marketing credentials, endpoints, templates, or creation transactions for Qianchuan.
 
 ## Command Entry
 
@@ -39,8 +39,8 @@ Core routes:
 | --- | --- |
 | First run | `setup init` |
 | Validate config | `setup validate --mode query|create-preview|create-submit|all` |
-| Save Marketing app | `auth set-app --channel marketing` |
-| Local OAuth | `auth authorize --channel marketing` |
+| Marketing OAuth | `auth authorize --channel marketing` |
+| Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status | `auth status --channel marketing` |
 | Create/list templates | `templates create` / `templates list` |
 | Uploaded videos | `materials videos` |
@@ -77,9 +77,11 @@ Project config is non-secret. Never ask the user to paste App Secret, Access Tok
 
 Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service. Plaintext fallback is disabled unless the user explicitly sets `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for development.
 
-Business commands resolve an authorization by target `advertiser_id` and optional official `auth_account_id`, refresh only that authorization, and never fall back across channels.
+Business commands resolve a Marketing authorization by target `advertiser_id` and optional official `auth_account_id`, refresh only that authorization, and never fall back across channels.
 
-Marketing and Qianchuan share `http://127.0.0.1:8787/oauth/callback`. OAuth state is `AD.<nonce>` for Marketing and `QC.<nonce>` for Qianchuan; require an exact state and channel match before exchanging or storing tokens.
+Marketing OAuth state is `AD.<nonce>`. Require an exact state and channel match before exchanging or storing tokens.
+
+If the selected channel has no app credentials, `auth authorize` opens one local setup page that collects App ID and Secret together, stores them in the OS credential backend, then redirects to official OAuth. Do not split these fields into separate Codex prompts. `auth set-app` opens the same form only for an explicit app replacement.
 
 ## Official References
 
@@ -118,7 +120,7 @@ Suggested template name:
 
 Online project and promotion names must expose `混剪` for `ACCOUNT_UPLOAD` and `原生` for `CREATOR_AUTHORIZED`.
 
-## Create Workflow
+## Marketing Create Workflow
 
 Creation is always a two-step official transaction:
 

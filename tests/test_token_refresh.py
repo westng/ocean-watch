@@ -224,8 +224,12 @@ class TokenRefreshTests(unittest.TestCase):
             "is_valid": True,
             "advertiser_ids": ["1"],
         }]
-        with mock.patch.object(token_manager, "get_json", return_value=response), \
-                mock.patch.object(token_manager, "build_authorized_account_snapshot", return_value=(snapshot, ["1"])):
+        with mock.patch.object(token_manager, "get_oauth_json", return_value=response), \
+                mock.patch.object(
+                    token_manager,
+                    "build_authorized_account_snapshot",
+                    return_value=(snapshot, ["1"], []),
+                ):
             updated, summary = token_manager.update_authorized_accounts(config)
         self.assertEqual(updated["api"]["authorized_advertiser_ids"], [1])
         self.assertEqual(len(updated["api"]["oauth_authorized_accounts"]), 1)

@@ -77,7 +77,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_qianchuan_never_uses_marketing_runtime(self):
         with self.assertRaises(channels.ChannelError) as raised:
             channels.runtime_config(valid_config(), channel="qianchuan", capability="query")
-        self.assertEqual(raised.exception.code, "channel_not_implemented")
+        self.assertEqual(raised.exception.code, "channel_capability_not_implemented")
 
     def test_template_channel_mismatch_is_rejected(self):
         config = business_template_config()
@@ -286,12 +286,12 @@ class ChannelAuthorizationTests(unittest.TestCase):
         self.assertEqual(state["generation"], 1)
         self.assertEqual(list(state["authorizations"]), ["stable"])
 
-    def test_qianchuan_app_configuration_is_rejected_until_implemented(self):
-        with mock.patch.object(authorization_store, "write_app") as write_app:
-            with self.assertRaises(channels.ChannelError) as raised:
-                credential_store.configure_app("app", "secret", channel="qianchuan")
-        self.assertEqual(raised.exception.code, "channel_not_implemented")
-        write_app.assert_not_called()
+    def test_qianchuan_app_configuration_uses_qianchuan_store(self):
+        with mock.patch.object(authorization_store, "read_app", return_value={}), \
+                mock.patch.object(authorization_store, "write_app", return_value="test") as write_app:
+            result = credential_store.configure_app("app", "secret", channel="qianchuan")
+        self.assertEqual(result["channel"], "qianchuan")
+        write_app.assert_called_once_with("qianchuan", "app", "secret")
 
     def test_business_runtime_never_falls_back_to_legacy_token(self):
         legacy = {"access_token": "legacy-token", "refresh_token": "legacy-refresh"}

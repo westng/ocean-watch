@@ -4,7 +4,6 @@ import sys
 
 from ocean_watch import __version__
 from ocean_watch.auth import (
-    credential_store,
     migrate_channels,
     oauth_local_authorize,
     token_manager,
@@ -23,26 +22,30 @@ from ocean_watch.materials import (
     query_creator_materials,
     query_images,
     query_products,
+    query_qianchuan_creator_videos,
     query_videos,
 )
 from ocean_watch.onboarding import first_run, validate_config
 from ocean_watch.plans import (
     batch_create_creator_plans,
     batch_create_from_today_videos,
+    batch_qianchuan_work_plans,
     create_creator_plan,
     create_plan,
+    create_qianchuan_plan,
+    remove_qianchuan_work_materials,
 )
 from ocean_watch.reports import (
     query_active_materials_report,
     query_custom_report,
     query_report_config,
 )
-from ocean_watch.templates import manage_plan_templates
+from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
 
 COMMANDS = {
     ("setup", "init"): (first_run.main, (), "Initialize local configuration"),
     ("setup", "validate"): (validate_config.main, (), "Validate configuration readiness"),
-    ("auth", "set-app"): (credential_store.main, ("--set-app",), "Store app credentials"),
+    ("auth", "set-app"): (oauth_local_authorize.main, ("--configure-app-only",), "Store app credentials"),
     ("auth", "authorize"): (oauth_local_authorize.main, (), "Run local OAuth authorization"),
     ("auth", "status"): (token_manager.main, ("--status",), "Show redacted token status"),
     ("auth", "refresh"): (token_manager.main, ("--refresh",), "Refresh an access token"),
@@ -52,12 +55,43 @@ COMMANDS = {
     ("templates", "create"): (manage_plan_templates.main, ("create-wizard",), "Create a template"),
     ("templates", "migrate"): (manage_plan_templates.main, ("migrate",), "Migrate templates"),
     ("templates", "set-copy"): (manage_plan_templates.main, ("set-copy",), "Set copy materials"),
+    ("qc-templates", "list"): (
+        manage_qianchuan_templates.main,
+        ("list",),
+        "List Qianchuan product templates",
+    ),
+    ("qc-templates", "create"): (
+        manage_qianchuan_templates.main,
+        ("create-wizard",),
+        "Create a Qianchuan product template",
+    ),
+    ("qc-templates", "migrate"): (
+        manage_qianchuan_templates.main,
+        ("migrate",),
+        "Migrate Qianchuan product templates",
+    ),
     ("materials", "videos"): (query_videos.main, (), "Query uploaded videos"),
     ("materials", "creator"): (query_creator_materials.main, (), "Query creator videos"),
     ("materials", "images"): (query_images.main, (), "Query image assets"),
     ("materials", "products"): (query_products.main, (), "Query product assets"),
+    ("qc-materials", "creator-videos"): (
+        query_qianchuan_creator_videos.main,
+        (),
+        "Query Qianchuan creator videos",
+    ),
     ("plans", "create"): (create_plan.main, (), "Create from uploaded materials"),
     ("plans", "create-creator"): (create_creator_plan.main, (), "Create from creator materials"),
+    ("plans", "create-qianchuan"): (create_qianchuan_plan.main, (), "Create a Qianchuan all-domain plan"),
+    ("plans", "batch-qianchuan-works"): (
+        batch_qianchuan_work_plans.main,
+        (),
+        "Create or append Qianchuan plans from Douyin work links",
+    ),
+    ("plans", "remove-qianchuan-work"): (
+        remove_qianchuan_work_materials.main,
+        (),
+        "Remove Qianchuan plan materials by Douyin work link",
+    ),
     ("plans", "batch-upload"): (batch_create_from_today_videos.main, (), "Batch uploaded materials"),
     ("plans", "batch-creator"): (batch_create_creator_plans.main, (), "Batch creator materials"),
     ("reports", "materials"): (query_active_materials_report.main, (), "Material performance"),
@@ -105,7 +139,8 @@ def main(argv=None):
         print(json.dumps({"ok": False, "error": {"code": "interrupted", "message": "operation interrupted", "details": {}}}, ensure_ascii=False, indent=2))
         return 130
     except Exception as error:
-        payload = error.as_dict() if hasattr(error, "as_dict") else {
+        as_dict = getattr(error, "as_dict", None)
+        payload = as_dict() if callable(as_dict) else {
             "ok": False,
             "error": {"code": "unexpected_error", "message": str(error), "details": {}},
         }

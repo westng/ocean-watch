@@ -6,6 +6,18 @@ All notable changes to Ocean Watch are documented here.
 
 ### Added
 
+- Isolated Qianchuan OAuth, token refresh, authorized-subject expansion, and advertiser discovery.
+- Official-payload Qianchuan all-domain plan creation with dry-run validation and explicit submit.
+- Dedicated `qc-plan-monitor` Skill for Qianchuan authorization, advertiser discovery, and plan creation.
+- Advertiser-bound Qianchuan product all-domain templates with 1–30 products and runtime-only creator materials.
+- Qianchuan creator video discovery with exact visible-ID resolution, official product filtering, pagination, and cross-product deduplication.
+- Qianchuan product template Schema v2 names templates by advertiser ID and migrates the earlier shop-name prefix.
+- Safe Douyin share-link resolution and official creator/product matching in batches of up to 50 works.
+- Idempotent Qianchuan work-link batches that create one product all-domain plan per creator or append only missing materials to an existing or paused plan.
+- Dry-run-first Qianchuan work-link material removal with custom-material checks, official 100-item batches, and post-delete status verification.
+- Advertiser-scoped submit locks, bounded creator concurrency, and final-only skipped/failed batch summaries.
+- Channel adapters for authorization URLs, official account endpoints, and role expansion rules.
+- Recoverable pending authorization records when advertiser synchronization fails.
 - Standard `src/ocean_watch` Python package and `pyproject.toml` metadata.
 - Unified `ocean-watch <domain> <action>` CLI and Plugin-local `run.py` launcher.
 - Shared `OceanEngineClient`, structured error foundation, common data utilities, and `PlanExecutor` transaction service.
@@ -13,6 +25,7 @@ All notable changes to Ocean Watch are documented here.
 
 ### Changed
 
+- Consolidated App ID and Secret collection into one local secure form that continues directly to OAuth.
 - Routed Marketing and Qianchuan OAuth through one callback URI with validated `AD.<nonce>` and `QC.<nonce>` state values.
 - Reorganized authorization, templates, materials, plans, reports, discovery, onboarding, and integrations into explicit domain packages.
 - Routed ordinary business API calls through one HTTP client.

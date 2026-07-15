@@ -10,6 +10,21 @@ import ocean_watch.core.config_paths as config_paths
 import ocean_watch.plans.create_plan as create_plan
 
 MODES = ("query", "create-preview", "create-submit", "all")
+QUERY_CAPABILITIES = {
+    "marketing": "query",
+    "qianchuan": "qianchuan_materials",
+}
+
+
+def query_capability(channel):
+    try:
+        return QUERY_CAPABILITIES[channel]
+    except KeyError:
+        raise channels.ChannelError(
+            "channel_query_not_implemented",
+            channel,
+            f"channel {channel} does not implement a query workflow",
+        ) from None
 
 
 def payload_args():
@@ -30,7 +45,11 @@ def payload_args():
 
 def validate_config(raw_config, credentials=None):
     channel = channels.selected_channel(raw_config)
-    merged_config = channels.runtime_config(raw_config, channel=channel, capability="query")
+    merged_config = channels.runtime_config(
+        raw_config,
+        channel=channel,
+        capability=query_capability(channel),
+    )
     if credentials is None:
         merged_config = authorization_store.attach_runtime(
             merged_config,

@@ -9,7 +9,8 @@ from ocean_watch.auth import credential_store
 from ocean_watch.core import config_paths, config_store, process_lock
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills" / "ads-plan-monitor"
+MARKETING_SKILL = ROOT / "skills" / "ads-plan-monitor"
+QIANCHUAN_SKILL = ROOT / "skills" / "qc-plan-monitor"
 
 
 class ConfigStoreTests(unittest.TestCase):
@@ -27,9 +28,21 @@ class ConfigStoreTests(unittest.TestCase):
 
 class ConfigAndCredentialTests(unittest.TestCase):
     def test_skill_metadata_has_required_frontmatter(self):
-        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("---\nname: ads-plan-monitor\ndescription:"))
-        self.assertGreaterEqual(text.count("\n---\n"), 1)
+        for skill, name in (
+            (MARKETING_SKILL, "ads-plan-monitor"),
+            (QIANCHUAN_SKILL, "qc-plan-monitor"),
+        ):
+            text = (skill / "SKILL.md").read_text(encoding="utf-8")
+            self.assertTrue(text.startswith(f"---\nname: {name}\ndescription:"))
+            self.assertGreaterEqual(text.count("\n---\n"), 1)
+
+    def test_qianchuan_assets_belong_to_qc_skill(self):
+        for filename in (
+            "qianchuan-product-plan.example.json",
+            "qianchuan-live-plan.example.json",
+        ):
+            self.assertTrue((QIANCHUAN_SKILL / "assets" / filename).is_file())
+            self.assertFalse((MARKETING_SKILL / "assets" / filename).exists())
 
     def test_repository_config_resolves_from_plugin_checkout(self):
         self.assertEqual(

@@ -3,7 +3,7 @@
 > Organization: westng
 > Project: ocean-watch
 > Plugin: ocean-watch
-> Skill: ads-plan-monitor
+> Skills: ads-plan-monitor, qc-plan-monitor
 
 ## 存储边界
 
@@ -22,7 +22,7 @@ Ocean Watch 将非敏感业务配置与敏感凭据分开：
 ## 渠道
 
 - `marketing`：巨量营销，当前已经实现 OAuth、账户、素材、计划和报表。
-- `qianchuan`：巨量千川，只保留隔离标识，尚未实现。
+- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品全域模板、按商品过滤的达人视频查询，以及作品链接批量新建、追加或删除商品全域计划自提素材；报表和直播模板尚未实现。
 
 渠道之间不共享 App、Secret、Token、账户或模板。旧配置迁移到巨量营销：
 
@@ -55,6 +55,10 @@ ocean-watch auth sync-accounts \
 | `active_plan_template` | 未显式指定时使用的业务模板 |
 | `default_plan_template` | 创建模板的默认骨架，不可投放 |
 | `plan_templates` | 广告主绑定的真实业务模板 |
+| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `2` |
+| `default_qianchuan_product_template` | 千川商品全域默认骨架，不可投放 |
+| `active_qianchuan_product_template` | 当前千川商品模板 ID |
+| `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
 
 以下字段不得写入配置：`app_id`、`secret`、`access_token`、`refresh_token`、`auth_code`、`developer_id`。
 
@@ -127,18 +131,53 @@ ocean-watch templates set-copy --template TARGET --from-template SOURCE
 
 该操作不会复制广告主绑定、参数、链接或账户资产。
 
-## App 与 OAuth
+## 千川商品模板
 
-保存营销应用：
+千川商品模板与营销 Schema v3 完全独立：
 
 ```bash
-ocean-watch auth set-app --channel marketing
+ocean-watch qc-templates list
+ocean-watch qc-templates create
 ```
 
-启动授权：
+模板绑定一个千川广告主、产品名称和 1–30 个商品 ID。用户可见名称为：
+
+```text
+广告主ID-商品全域-产品-商品ID1/商品ID2
+```
+
+默认投放参数：
+
+| 字段 | 默认值 |
+| --- | --- |
+| `smart_bid_type` | `SMART_BID_CUSTOM` |
+| `roi2_goal` | `1.7` |
+| `budget` | `5000` |
+| `qcpx_mode` | `QCPX_MODE_ON` |
+| `video_schedule_type` | `SCHEDULE_FROM_NOW` |
+| `deep_external_action` | `AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI` |
+
+模板明确不保存 `aweme_id`、`product_channel_info`、渠道 ID、达人 ID、视频、图片或创意列表。`material_strategy.source_type=CREATOR_RUNTIME_QUERY` 表示素材必须在创建运行时根据用户提供的抖音号或作品链接查询；作品链接批量任务不会把解析结果写回模板。
+
+## App 与 OAuth
+
+直接启动营销授权：
 
 ```bash
 ocean-watch auth authorize --channel marketing
+```
+
+千川使用独立应用和凭据槽：
+
+```bash
+ocean-watch auth authorize --channel qianchuan
+```
+
+当前渠道缺少应用配置时，插件会先打开本地安全表单，APP ID 和 Secret 在同一页面填写；提交并安全保存后自动继续官方 OAuth。需要更换应用但暂不授权时使用：
+
+```bash
+ocean-watch auth set-app --channel marketing
+ocean-watch auth set-app --channel qianchuan
 ```
 
 默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台设置完全一致。
@@ -151,13 +190,21 @@ ocean-watch auth authorize --channel marketing
 渠道短码只用于本次 OAuth 会话路由，不替代广告主 ID，也不会写入业务模板。授权成功后：
 
 1. 获取官方授权主体。
-2. 按 `account_role` 展开客户中心或企业 BP 下的广告主。
+2. 按 `account_role` 展开广告主；千川额外展开店铺、客户中心或企业 BP 下的广告主。
 3. 通过广告主信息接口验证 ID。
 4. 原子保存一份独立授权记录和非敏感账户索引。
 
 `oauth_authorized_account_count` 是授权主体数量，不等于可投放广告主数量。真实广告主数量看 `authorized_advertiser_count`。
 
-同一渠道可以有多份 OAuth 授权。业务命令按广告主自动选 Token；只有多个授权同时覆盖同一广告主时才传 `--auth-account-id`。
+同一渠道可以有多份 OAuth 授权。业务命令按广告主自动选 Token；只有多个授权同时覆盖同一广告主时才传 `--auth-account-id`。若账户同步失败，Token 会保留为 `pending_account_sync`，按状态输出的授权 ID 重试：
+
+```bash
+ocean-watch auth sync-accounts \
+  --channel qianchuan \
+  --authorization-id AUTHORIZATION_ID
+```
+
+若官方账户已绑定另一份本地授权，确认后增加 `--rebind-existing` 完成迁移。
 
 ## Token 生命周期
 

@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+import argparse
+import datetime as dt
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
+
+import ocean_watch.auth.authorization_store as authorization_store
+import ocean_watch.auth.channels as channels
+import ocean_watch.auth.token_manager as token_manager
+import ocean_watch.core.config_paths as config_paths
+from ocean_watch.api import OceanEngineClient
+from ocean_watch.core.data import get_path
+from ocean_watch.core.output import write_json
+from ocean_watch.core.process_lock import ProcessLock
+from ocean_watch.materials.douyin_work_links import (
+    DEFAULT_CONCURRENCY,
+    MAX_CONCURRENCY,
+    resolve_work_links,
+)
+from ocean_watch.materials.qianchuan_work_materials import resolve_work_materials
+from ocean_watch.plans import create_qianchuan_plan
+from ocean_watch.plans.qianchuan_executor import (
+    QianchuanPlanExecutionRequest,
+    QianchuanPlanExecutor,
+)
+from ocean_watch.plans.qianchuan_plan_gateway import (
+    QianchuanPlanGateway,
+    existing_aweme_item_ids,
+)
+from ocean_watch.templates import qianchuan_product_templates
+
+MAX_MATERIALS_PER_WRITE = 100
+VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Create or append Qianchuan product plans from Douyin work links."
+    )
+    parser.add_argument("--config")
+    parser.add_argument("--plan-template", required=True)
+    parser.add_argument("--work-url", action="append", default=[])
+    parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    parser.add_argument("--auth-account-id")
+    parser.add_argument("--submit", action="store_true")
+    parser.add_argument("--include-payloads", action="store_true")
+    parser.add_argument("--out")
+    return parser
+
+
+def validate_concurrency(value):
+    value = int(value)
+    if value < 1 or value > MAX_CONCURRENCY:
+        raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
+    return value
+
+
+def weighted_truncate(value, maximum):
+    result = []
+    length = 0
+    for character in str(value):
+        width = 1 if ord(character) < 128 else 2
+        if length + width > maximum:
+            break
+        result.append(character)
+        length += width
+    return "".join(result)
+
+
+def build_plan_name(template, creator, now=None):
+    now = now or dt.datetime.now()
+    bindings = template["bindings"]
+    creator_label = (
+        creator.get("aweme_name")
+        or creator.get("aweme_show_id")
+        or creator["aweme_id"]
+    )
+    suffix = now.strftime("%Y%m%d%H%M%S")
+    prefix = f"{bindings['product_name']}-{creator_label}"
+    return f"{weighted_truncate(prefix, 84)}-{suffix}"
+
+
+def group_by_creator(material_rows):
+    groups = {}
+    for row in material_rows:
+        groups.setdefault(row["aweme_id"], []).append(row)
+    return groups
+
+
+def filter_supported_materials(rows):
+    eligible = []
+    skipped = []
+    for row in rows:
+        image_mode = get_path(row, "material.image_mode")
+        if image_mode not in VIDEO_IMAGE_MODES:
+            skipped.append({
+                **row,
+                "status": "skipped",
+                "reason": "unsupported_image_mode",
+                "message": f"作品素材类型 {image_mode!r} 不支持投放",
+            })
+        else:
+            eligible.append(row)
+    return eligible, skipped
+
+
+def chunk_rows(rows, size=MAX_MATERIALS_PER_WRITE):
+    return [rows[index : index + size] for index in range(0, len(rows), size)]
+
+
+def product_creatives(rows, allowed_product_ids, *, for_create):
+    allowed = {str(value) for value in allowed_product_ids}
+    videos_by_product = {}
+    for row in rows:
+        for product_id in row["matched_product_ids"]:
+            product_id = str(product_id)
+            if product_id not in allowed:
+                continue
+            videos_by_product.setdefault(product_id, []).append({
+                "image_mode": row["material"]["image_mode"],
+                "aweme_item_id": int(row["aweme_item_id"]),
+            })
+    creatives = []
+    for product_id in allowed_product_ids:
+        videos = videos_by_product.get(str(product_id)) or []
+        if not videos:
+            continue
+        creative = {
+            "product_id": int(product_id),
+            "video_material": videos,
+        }
+        if for_create:
+            creative["creative_type"] = "PROGRAMMATIC_CREATIVE"
+        creatives.append(creative)
+    return creatives
+
+
+def compact_response(response):
+    if not isinstance(response, dict):
+        return None
+    return {
+        key: value
+        for key, value in {
+            "code": response.get("code"),
+            "message": response.get("message"),
+            "request_id": response.get("request_id"),
+        }.items()
+        if value is not None
+    }
+
+
+def base_group_result(aweme_id, rows, existing_plan=None):
+    creator = rows[0]["creator"]
+    return {
+        "aweme_id": aweme_id,
+        "douyin_id": creator.get("aweme_show_id"),
+        "creator_name": creator.get("aweme_name"),
+        "ad_id": existing_plan.get("ad_id") if existing_plan else None,
+        "plan_name": existing_plan.get("name") if existing_plan else None,
+        "plan_status": existing_plan.get("status") if existing_plan else None,
+        "input_item_ids": [row["aweme_item_id"] for row in rows],
+    }
+
+
+def execute_add_batches(
+    gateway,
+    advertiser_id,
+    ad_id,
+    rows,
+    product_ids,
+    *,
+    submit,
+    include_payloads,
+):
+    batches = []
+    failed = False
+    for row_chunk in chunk_rows(rows):
+        creatives = product_creatives(row_chunk, product_ids, for_create=False)
+        if not creatives:
+            continue
+        payload = {
+            "advertiser_id": int(advertiser_id),
+            "ad_id": int(ad_id),
+            "multi_product_creative_list": creatives,
+        }
+        batch = {
+            "item_ids": [row["aweme_item_id"] for row in row_chunk],
+            "mode": "submit" if submit else "dry_run",
+        }
+        if include_payloads:
+            batch["payload"] = payload
+        if submit:
+            try:
+                _, response = gateway.add_materials(
+                    advertiser_id,
+                    ad_id,
+                    creatives,
+                )
+                batch["response"] = compact_response(response)
+            except Exception as error:
+                batch.update({
+                    "status": "failed",
+                    "reason": getattr(error, "code", "material_add_failed"),
+                    "message": str(error),
+                    "details": getattr(error, "details", {}),
+                })
+                failed = True
+                batches.append(batch)
+                continue
+            if response.get("code") != 0:
+                batch["status"] = "failed"
+                failed = True
+            else:
+                batch["status"] = "appended"
+        else:
+            batch["status"] = "would_append"
+        batches.append(batch)
+    return batches, failed
+
+
+def execute_existing_plan_group(
+    gateway,
+    advertiser_id,
+    rows,
+    plan,
+    *,
+    submit,
+    include_payloads,
+):
+    result = base_group_result(rows[0]["aweme_id"], rows, plan)
+    plan_products = set(plan["product_ids"])
+    eligible = [
+        row for row in rows
+        if plan_products.intersection(row["matched_product_ids"])
+    ]
+    result["skipped_item_ids"] = [
+        row["aweme_item_id"] for row in rows if row not in eligible
+    ]
+    if not eligible:
+        return {
+            **result,
+            "status": "skipped",
+            "reason": "existing_plan_product_mismatch",
+        }
+
+    material_result = gateway.list_plan_video_materials(
+        advertiser_id,
+        plan["ad_id"],
+    )
+    if material_result["truncated"]:
+        return {
+            **result,
+            "status": "failed",
+            "reason": "plan_material_query_truncated",
+        }
+    existing_ids = existing_aweme_item_ids(material_result["materials"])
+    new_rows = [row for row in eligible if row["aweme_item_id"] not in existing_ids]
+    result["already_present_item_ids"] = [
+        row["aweme_item_id"] for row in eligible if row["aweme_item_id"] in existing_ids
+    ]
+    if not new_rows:
+        return {**result, "status": "already_present"}
+
+    batches, failed = execute_add_batches(
+        gateway,
+        advertiser_id,
+        plan["ad_id"],
+        new_rows,
+        plan["product_ids"],
+        submit=submit,
+        include_payloads=include_payloads,
+    )
+    return {
+        **result,
+        "status": "append_failed" if failed else ("appended" if submit else "would_append"),
+        "appended_item_ids": [row["aweme_item_id"] for row in new_rows],
+        "batches": batches,
+    }
+
+
+def execute_new_plan_group(
+    gateway,
+    plan_executor,
+    template,
+    rows,
+    *,
+    submit,
+    include_payloads,
+    now=None,
+):
+    advertiser_id = template["bindings"]["advertiser_id"]
+    aweme_id = rows[0]["aweme_id"]
+    result = base_group_result(aweme_id, rows)
+    first_chunk, remaining = rows[:MAX_MATERIALS_PER_WRITE], rows[MAX_MATERIALS_PER_WRITE:]
+    payload = qianchuan_product_templates.payload_from_template(
+        template,
+        name=build_plan_name(template, rows[0]["creator"], now=now),
+    )
+    payload["aweme_id"] = int(aweme_id)
+    payload["multi_product_creative_list"] = product_creatives(
+        first_chunk,
+        template["bindings"]["product_ids"],
+        for_create=True,
+    )
+    payload, blocking_fields = create_qianchuan_plan.normalize_and_validate(payload)
+    if blocking_fields:
+        return {
+            **result,
+            "status": "blocked",
+            "blocking_fields": list(blocking_fields),
+            **({"create_payload": payload} if include_payloads else {}),
+        }
+
+    execution = plan_executor.execute(QianchuanPlanExecutionRequest(
+        payload=payload,
+        submit=submit,
+    ))
+    if include_payloads:
+        result["create_payload"] = payload
+    if not submit:
+        result.update({
+            "status": "would_create",
+            "plan_name": payload["name"],
+            "created_item_ids": [row["aweme_item_id"] for row in first_chunk],
+        })
+        if remaining:
+            result["remaining_item_ids"] = [row["aweme_item_id"] for row in remaining]
+        return result
+    if execution.get("submit_failed") or not execution.get("ad_id"):
+        return {
+            **result,
+            "status": "create_failed",
+            "plan_name": payload["name"],
+            "response": compact_response(execution.get("response")),
+        }
+
+    ad_id = execution["ad_id"]
+    result.update({
+        "ad_id": ad_id,
+        "plan_name": payload["name"],
+        "created_item_ids": [row["aweme_item_id"] for row in first_chunk],
+        "create_response": compact_response(execution.get("response")),
+    })
+    batches = []
+    failed = False
+    if remaining:
+        batches, failed = execute_add_batches(
+            gateway,
+            advertiser_id,
+            ad_id,
+            remaining,
+            template["bindings"]["product_ids"],
+            submit=True,
+            include_payloads=include_payloads,
+        )
+    result["status"] = "created_partial" if failed else "created"
+    if batches:
+        result["append_batches"] = batches
+    return result
+
+
+def execute_plan_actions(
+    template,
+    matched_rows,
+    gateway,
+    plan_executor,
+    *,
+    concurrency,
+    submit,
+    include_payloads=False,
+    now=None,
+):
+    advertiser_id = template["bindings"]["advertiser_id"]
+    eligible, unsupported = filter_supported_materials(matched_rows)
+    groups = group_by_creator(eligible)
+    if not groups:
+        return [], unsupported
+    discovery = gateway.find_creator_plans(advertiser_id, groups)
+
+    def execute(aweme_id, rows):
+        plans = discovery["matches"].get(aweme_id) or []
+        if len(plans) > 1:
+            return {
+                **base_group_result(aweme_id, rows),
+                "status": "failed",
+                "reason": "multiple_existing_plans",
+                "candidate_ad_ids": [plan["ad_id"] for plan in plans],
+            }
+        if plans:
+            return execute_existing_plan_group(
+                gateway,
+                advertiser_id,
+                rows,
+                plans[0],
+                submit=submit,
+                include_payloads=include_payloads,
+            )
+        return execute_new_plan_group(
+            gateway,
+            plan_executor,
+            template,
+            rows,
+            submit=submit,
+            include_payloads=include_payloads,
+            now=now,
+        )
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(concurrency, len(groups))) as pool:
+        futures = {
+            pool.submit(execute, aweme_id, rows): aweme_id
+            for aweme_id, rows in groups.items()
+        }
+        for future in as_completed(futures):
+            aweme_id = futures[future]
+            try:
+                results[aweme_id] = future.result()
+            except Exception as error:
+                results[aweme_id] = {
+                    **base_group_result(aweme_id, groups[aweme_id]),
+                    "status": "failed",
+                    "reason": getattr(error, "code", "creator_transaction_failed"),
+                    "message": str(error),
+                    "details": getattr(error, "details", {}),
+                }
+    return [results[aweme_id] for aweme_id in groups], unsupported
+
+
+def summarize(mode, template, link_result, material_result, group_results, unsupported):
+    skipped = [
+        *link_result["skipped"],
+        *material_result["skipped"],
+        *unsupported,
+    ]
+    statuses = {}
+    for row in group_results:
+        status = row["status"]
+        statuses[status] = statuses.get(status, 0) + 1
+    counts = {
+        "input_links": len(link_result["resolved"]) + len(link_result["skipped"]),
+        "resolved_links": len(link_result["resolved"]),
+        "matched_links": len(material_result["matched"]),
+        "skipped_links": len(skipped),
+        "creator_groups": len(group_results),
+        **statuses,
+    }
+    return {
+        "mode": mode,
+        "channel": "qianchuan",
+        "template": {
+            "template_id": template["template_id"],
+            "name": template["display_name"],
+            "advertiser_id": template["bindings"]["advertiser_id"],
+            "product_ids": template["bindings"]["product_ids"],
+        },
+        "counts": counts,
+        "results": group_results,
+        "skipped": skipped,
+        "query_failures": material_result["query_failures"],
+    }
+
+
+def execute(args, *, link_resolver=None, clients=None, now=None):
+    concurrency = validate_concurrency(args.concurrency)
+    if not args.work_url:
+        raise ValueError("at least one --work-url is required")
+    config_path = config_paths.resolve_config_path(args.config)
+    raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    template = qianchuan_product_templates.resolve_template(
+        raw_config,
+        args.plan_template,
+    )
+    link_result = resolve_work_links(
+        args.work_url,
+        resolver=link_resolver,
+        concurrency=concurrency,
+    )
+    if not link_result["resolved"]:
+        empty_material_result = {"matched": [], "skipped": [], "query_failures": []}
+        return summarize(
+            "submit" if args.submit else "dry_run",
+            template,
+            link_result,
+            empty_material_result,
+            [],
+            [],
+        ), 0
+
+    advertiser_id = template["bindings"]["advertiser_id"]
+    if clients is None:
+        runtime = channels.runtime_config(
+            raw_config,
+            channel="qianchuan",
+            capability="qianchuan_create",
+        )
+        runtime = token_manager.ensure_access_token(
+            config_path,
+            runtime,
+            channel="qianchuan",
+            advertiser_id=advertiser_id,
+            auth_account_id=args.auth_account_id,
+        )
+        api_client = OceanEngineClient(
+            get_path(runtime, "api.base_url"),
+            get_path(runtime, "api.access_token"),
+        )
+        video_client = OceanEngineClient(
+            get_path(runtime, "api.legacy_base_url")
+            or get_path(runtime, "oauth.token_base_url"),
+            get_path(runtime, "api.access_token"),
+        )
+    else:
+        api_client, video_client = clients
+
+    material_result = resolve_work_materials(
+        api_client,
+        video_client,
+        advertiser_id,
+        template["bindings"]["product_ids"],
+        link_result["resolved"],
+        concurrency=concurrency,
+    )
+    gateway = QianchuanPlanGateway(api_client)
+    plan_executor = QianchuanPlanExecutor(api_client)
+    lock = (
+        ProcessLock(
+            authorization_store.state_root()
+            / "locks"
+            / f"qianchuan-work-plans-{advertiser_id}.lock"
+        )
+        if args.submit
+        else nullcontext()
+    )
+    with lock:
+        group_results, unsupported = execute_plan_actions(
+            template,
+            material_result["matched"],
+            gateway,
+            plan_executor,
+            concurrency=concurrency,
+            submit=args.submit,
+            include_payloads=args.include_payloads,
+            now=now,
+        )
+    output = summarize(
+        "submit" if args.submit else "dry_run",
+        template,
+        link_result,
+        material_result,
+        group_results,
+        unsupported,
+    )
+    failed = bool(material_result["query_failures"]) or any(
+        row["status"] in {
+            "failed",
+            "blocked",
+            "create_failed",
+            "append_failed",
+            "created_partial",
+        }
+        for row in group_results
+    )
+    return output, 1 if failed else 0
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    result, exit_code = execute(args)
+    write_json(result, destination=args.out)
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

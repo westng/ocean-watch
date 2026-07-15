@@ -263,13 +263,26 @@ def save_authorization(
             channel_state = _channel_state(empty_state(), channel)
         accounts = []
         for row in authorized_accounts or []:
-            account_id = row.get("account_id") or row.get("advertiser_id")
+            account_id = (
+                row.get("account_id")
+                or row.get("account_string_id")
+                or row.get("shop_id")
+                or row.get("advertiser_id")
+            )
             if account_id is None:
                 continue
             account = {
                 key: copy.deepcopy(value)
                 for key, value in row.items()
-                if key in {"account_name", "account_role", "account_type", "advertiser_name", "is_valid"}
+                if key in {
+                    "account_name",
+                    "account_role",
+                    "account_type",
+                    "account_string_id",
+                    "shop_id",
+                    "advertiser_name",
+                    "is_valid",
+                }
             } | {
                 "account_id": normalize_id(account_id, "account_id"),
                 "advertiser_ids": [
@@ -323,7 +336,15 @@ def save_authorization(
     return authorization_id
 
 
-def replace_authorization_snapshot(channel, authorization_id, authorized_accounts, state_file=None):
+def replace_authorization_snapshot(
+    channel,
+    authorization_id,
+    authorized_accounts,
+    state_file=None,
+    rebind_existing=False,
+    synced_at=None,
+    discovery_issues=None,
+):
     with ProcessLock(channel_lock_path(channel, state_file)):
         channel_state = load_channel_state(channel, state_file)
         metadata = (channel_state.get("authorizations") or {}).get(authorization_id)
@@ -332,13 +353,25 @@ def replace_authorization_snapshot(channel, authorization_id, authorized_account
         current_owner = channel_state.get("account_index") or {}
         rows = []
         for row in authorized_accounts or []:
-            account_id = normalize_id(row.get("account_id") or row.get("advertiser_id"), "account_id")
-            if current_owner.get(account_id) not in {None, authorization_id}:
-                continue
+            account_id = normalize_id(
+                row.get("account_id")
+                or row.get("account_string_id")
+                or row.get("shop_id")
+                or row.get("advertiser_id"),
+                "account_id",
+            )
             rows.append({
                 key: copy.deepcopy(value)
                 for key, value in row.items()
-                if key in {"account_name", "account_role", "account_type", "advertiser_name", "is_valid"}
+                if key in {
+                    "account_name",
+                    "account_role",
+                    "account_type",
+                    "account_string_id",
+                    "shop_id",
+                    "advertiser_name",
+                    "is_valid",
+                }
             } | {
                 "account_id": account_id,
                 "advertiser_ids": [
@@ -346,8 +379,29 @@ def replace_authorization_snapshot(channel, authorization_id, authorized_account
                     for value in row.get("advertiser_ids") or []
                 ],
             })
+        conflicts = {
+            row["account_id"]: current_owner[row["account_id"]]
+            for row in rows
+            if current_owner.get(row["account_id"]) not in {None, authorization_id}
+        }
+        if conflicts and not rebind_existing:
+            raise AuthorizationError(
+                "authorized_account_conflict",
+                "authorized accounts already belong to another authorization; confirm rebind",
+                conflicts=conflicts,
+            )
+        if conflicts:
+            for old_authorization_id in set(conflicts.values()):
+                old = channel_state.get("authorizations", {}).get(old_authorization_id) or {}
+                old["authorized_accounts"] = [
+                    row
+                    for row in old.get("authorized_accounts") or []
+                    if conflicts.get(row.get("account_id")) != old_authorization_id
+                ]
         metadata["authorized_accounts"] = rows
         metadata["pending_account_sync"] = False
+        metadata["last_authorized_account_sync_at"] = synced_at
+        metadata["account_discovery_issues"] = copy.deepcopy(discovery_issues or [])
         rebuild_indexes(channel_state)
         _next_generation(channel_state)
         commit_channel_state(channel, channel_state, state_file)
@@ -564,6 +618,12 @@ def status(channel, advertiser_id=None):
             ],
             "advertiser_count": len(metadata.get("advertiser_ids") or []),
             "pending_account_sync": bool(metadata.get("pending_account_sync")),
+            "account_discovery_complete": not bool(
+                metadata.get("account_discovery_issues")
+            ),
+            "account_discovery_issues": copy.deepcopy(
+                metadata.get("account_discovery_issues") or []
+            ),
         })
     result = {
         "channel": channel,
@@ -581,6 +641,10 @@ def status(channel, advertiser_id=None):
         ),
         "pending_account_sync_count": sum(
             bool(metadata.get("pending_account_sync"))
+            for metadata in (channel_state.get("authorizations") or {}).values()
+        ),
+        "partial_account_discovery_count": sum(
+            bool(metadata.get("account_discovery_issues"))
             for metadata in (channel_state.get("authorizations") or {}).values()
         ),
         "authorizations": authorization_rows,

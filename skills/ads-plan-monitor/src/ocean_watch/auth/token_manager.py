@@ -4,11 +4,11 @@ import copy
 import datetime as dt
 import json
 import urllib.error
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
 import ocean_watch.auth.authorization_store as authorization_store
+import ocean_watch.auth.channel_adapters as channel_adapters
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.auth.migrate_channels as migrate_channels
@@ -19,13 +19,6 @@ from ocean_watch.core.process_lock import ProcessLock
 
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
 SECRET_KEYS = {"access_token", "refresh_token", "secret", "auth_code"}
-DEFAULT_OAUTH_BASE_URL = "https://ad.oceanengine.com/open_api"
-ACCESS_TOKEN_PATH = "/oauth2/access_token/"
-REFRESH_TOKEN_PATH = "/oauth2/refresh_token/"
-AUTHORIZED_ACCOUNT_PATH = "/oauth2/advertiser/get/"
-CUSTOMER_CENTER_ADVERTISER_PATH = "/2/customer_center/advertiser/list/"
-EBP_ADVERTISER_PATH = "/2/ebp/advertiser/list/"
-ADVERTISER_INFO_PATH = "/2/advertiser/info/"
 DEFAULT_REFRESH_MARGIN_SECONDS = 30 * 60
 DEFAULT_LOCK_TIMEOUT_SECONDS = 60
 
@@ -119,11 +112,19 @@ def advertiser_is_authorized(advertiser_id, authorized_ids):
 
 
 def oauth_base_url(config):
+    adapter = channel_adapter(config)
     return (
         get_path(config, "oauth.token_base_url")
         or get_path(config, "api.oauth_base_url")
-        or DEFAULT_OAUTH_BASE_URL
+        or adapter.token_base_url
     ).rstrip("/")
+
+
+def channel_adapter(config, capability=None):
+    return channel_adapters.get_adapter(
+        channels.selected_channel(config),
+        capability=capability,
+    )
 
 
 def post_json(base_url, path, payload):
@@ -142,23 +143,26 @@ def post_json(base_url, path, payload):
         return {"code": exc.code, "message": text}
 
 
-def get_json(base_url, path, params):
-    url = base_url.rstrip("/") + path + "?" + urllib.parse.urlencode(params)
-    request = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        text = exc.read().decode("utf-8", errors="replace")
-        return {"code": exc.code, "message": text}
-
-
-def get_api_json(config, path, params):
+def get_api_json(config, path, params, base_url=None):
     access_token = get_path(config, "api.access_token")
     if is_missing(access_token):
         raise RuntimeError("missing api.access_token")
     return get_business_json(
-        get_path(config, "api.base_url"),
+        base_url
+        or get_path(config, "api.base_url")
+        or channel_adapter(config).business_base_url,
+        access_token,
+        path,
+        params,
+    )
+
+
+def get_oauth_json(config, path, params):
+    access_token = get_path(config, "api.access_token")
+    if is_missing(access_token):
+        raise RuntimeError("missing api.access_token")
+    return get_business_json(
+        oauth_base_url(config),
         access_token,
         path,
         params,
@@ -198,6 +202,8 @@ def load_config(
     runtime = channels.runtime_config(raw_config, channel=channel, capability=capability)
     selected = channels.selected_channel(runtime, channel)
     advertiser_id = advertiser_id or get_path(runtime, "account.advertiser_id")
+    if is_missing(advertiser_id):
+        advertiser_id = None
     return authorization_store.attach_runtime(
         runtime,
         selected,
@@ -259,6 +265,8 @@ def update_token_fields(config, token_data):
 def normalize_authorized_accounts(rows):
     fields = (
         "account_id",
+        "account_string_id",
+        "shop_id",
         "account_name",
         "account_role",
         "account_type",
@@ -272,18 +280,6 @@ def normalize_authorized_accounts(rows):
             continue
         normalized.append({key: copy.deepcopy(row[key]) for key in fields if key in row})
     return normalized
-
-
-def positive_account_id(account):
-    for key in ("account_id", "account_string_id", "advertiser_id"):
-        value = account.get(key)
-        try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            continue
-        if parsed > 0:
-            return parsed
-    return None
 
 
 def response_ids(rows, keys):
@@ -303,23 +299,21 @@ def response_ids(rows, keys):
 
 
 def fetch_role_advertiser_ids(config, account):
-    role = account.get("account_role") or account.get("account_type") or "UNKNOWN"
-    source_id = positive_account_id(account)
-    if source_id is None:
-        return [], {"role": role, "status": "missing_account_id", "count": 0}
+    adapter = channel_adapter(config, capability="accounts")
+    role = channel_adapters.account_role(account)
     if role == "ADVERTISER":
-        return [source_id], {"role": role, "status": "ok", "count": 1}
-    if role in {"CUSTOMER_ADMIN", "CUSTOMER_OPERATOR"}:
-        path = CUSTOMER_CENTER_ADVERTISER_PATH
-        base_params = {"cc_account_id": source_id, "account_source": "AD"}
-        list_key = "list"
-        id_keys = ("advertiser_id", "account_id")
-    elif role in {"PLATFORM_ROLE_ENTERPRISE_BP_ADMIN", "PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR"}:
-        path = EBP_ADVERTISER_PATH
-        base_params = {"enterprise_organization_id": source_id, "account_source": "AD"}
-        list_key = "account_list"
-        id_keys = ("account_id", "advertiser_id")
-    else:
+        advertiser_id = adapter.direct_advertiser_id(account)
+        if advertiser_id is None:
+            return [], {"role": role, "status": "missing_account_id", "count": 0}
+        return [advertiser_id], {"role": role, "status": "ok", "count": 1}
+    expansion = adapter.role_expansion(account)
+    if expansion is None:
+        has_account_id = channel_adapters.first_positive_id(
+            account,
+            ("shop_id", "account_id", "account_string_id", "advertiser_id"),
+        )
+        if has_account_id is None:
+            return [], {"role": role, "status": "missing_account_id", "count": 0}
         return [], {"role": role, "status": "unsupported_role", "count": 0}
 
     identifiers = []
@@ -327,8 +321,9 @@ def fetch_role_advertiser_ids(config, account):
     while page <= 100:
         response = get_api_json(
             config,
-            path,
-            {**base_params, "page": page, "page_size": 100},
+            expansion.path,
+            {**expansion.base_params, "page": page, "page_size": 100},
+            base_url=expansion.base_url,
         )
         if response.get("code") != 0:
             return identifiers, {
@@ -336,10 +331,12 @@ def fetch_role_advertiser_ids(config, account):
                 "status": "api_error",
                 "code": response.get("code"),
                 "count": len(set(identifiers)),
+                "permission_optional": response.get("code")
+                in expansion.optional_permission_codes,
             }
         data = response.get("data") or {}
-        rows = data.get(list_key) or []
-        identifiers.extend(response_ids(rows, id_keys))
+        rows = data.get(expansion.list_key) or []
+        identifiers.extend(response_ids(rows, expansion.id_keys))
         page_info = data.get("page_info") or {}
         total_page = int(page_info.get("total_page") or 1)
         if page >= total_page or not rows:
@@ -350,13 +347,14 @@ def fetch_role_advertiser_ids(config, account):
 
 
 def verify_advertiser_ids(config, advertiser_ids):
+    adapter = channel_adapter(config, capability="accounts")
     verified = []
     errors = []
     for offset in range(0, len(advertiser_ids), 50):
         chunk = advertiser_ids[offset:offset + 50]
         response = get_api_json(
             config,
-            ADVERTISER_INFO_PATH,
+            adapter.advertiser_info_path,
             {"advertiser_ids": json.dumps(chunk, separators=(",", ":"))},
         )
         if response.get("code") != 0:
@@ -395,9 +393,24 @@ def build_authorized_account_snapshot(config, accounts):
     rows = []
     candidate_ids = []
     account_candidates = []
+    discovery_issues = []
     for account in accounts:
         identifiers, result = fetch_role_advertiser_ids(config, account)
         if result.get("status") != "ok":
+            if result.get("permission_optional"):
+                discovery_issues.append({
+                    "account_id": str(
+                        channel_adapters.first_positive_id(
+                            account,
+                            ("account_id", "account_string_id", "advertiser_id"),
+                        )
+                    ),
+                    "role": result["role"],
+                    "code": result.get("code"),
+                    "reason": "app_permission_missing",
+                })
+                account_candidates.append((account, []))
+                continue
             raise RuntimeError(
                 "Authorized account expansion did not produce a complete snapshot: "
                 + json.dumps(redact(result), ensure_ascii=False)
@@ -417,28 +430,34 @@ def build_authorized_account_snapshot(config, accounts):
             str(value) for value in identifiers if str(value) in verified
         ]
         rows.append(row)
-    return rows, list(dict.fromkeys(str(value) for value in verified_ids))
+    return (
+        rows,
+        list(dict.fromkeys(str(value) for value in verified_ids)),
+        discovery_issues,
+    )
 
 
 def fetch_authorized_accounts(config):
-    access_token = get_path(config, "api.access_token")
-    if is_missing(access_token):
-        raise RuntimeError("missing api.access_token for authorized account sync")
-    response = get_json(
-        oauth_base_url(config),
-        AUTHORIZED_ACCOUNT_PATH,
-        {"access_token": access_token},
+    adapter = channel_adapter(config, capability="accounts")
+    response = get_oauth_json(
+        config,
+        adapter.authorized_account_path,
+        {},
     )
     if response.get("code") != 0:
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
     accounts = normalize_authorized_accounts((response.get("data") or {}).get("list") or [])
     valid_accounts = [account for account in accounts if account.get("is_valid") is not False]
-    snapshot, advertiser_ids = build_authorized_account_snapshot(config, valid_accounts)
+    snapshot, advertiser_ids, discovery_issues = build_authorized_account_snapshot(
+        config,
+        valid_accounts,
+    )
     advertiser_ids = [int(value) for value in advertiser_ids]
     expansion_summary = {
-        "complete_snapshot": True,
+        "complete_snapshot": not discovery_issues,
         "candidate_advertiser_count": len(advertiser_ids),
         "verified_advertiser_count": len(advertiser_ids),
+        "account_discovery_issues": discovery_issues,
     }
     account_types = {}
     for account in accounts:
@@ -453,6 +472,7 @@ def update_authorized_accounts(config):
     api = updated.setdefault("api", {})
     api["oauth_authorized_accounts"] = accounts
     api["authorized_advertiser_ids"] = advertiser_ids
+    api["account_discovery_issues"] = expansion_summary["account_discovery_issues"]
     api["last_authorized_account_sync_at"] = now_utc().isoformat()
     return updated, {
         "oauth_authorized_account_count": len(accounts),
@@ -462,7 +482,7 @@ def update_authorized_accounts(config):
     }
 
 
-def sync_authorized_accounts(config_path, config=None):
+def sync_authorized_accounts(config_path, config=None, rebind_existing=False):
     config_path = Path(config_path).expanduser()
     config = copy.deepcopy(config) if config is not None else load_config(config_path)
     updated, summary = update_authorized_accounts(config)
@@ -472,6 +492,9 @@ def sync_authorized_accounts(config_path, config=None):
             authorization["channel"],
             authorization["authorization_id"],
             get_path(updated, "api.oauth_authorized_accounts", []),
+            rebind_existing=rebind_existing,
+            synced_at=get_path(updated, "api.last_authorized_account_sync_at"),
+            discovery_issues=get_path(updated, "api.account_discovery_issues", []),
         )
     else:
         save_credentials(updated)
@@ -503,7 +526,8 @@ def exchange_auth_code(config_path, auth_code, config=None, channel=None, rebind
         "grant_type": "auth_code",
         "auth_code": auth_code,
     }
-    response = post_json(oauth_base_url(config), ACCESS_TOKEN_PATH, payload)
+    adapter = channel_adapter(config, capability="oauth")
+    response = post_json(oauth_base_url(config), adapter.access_token_path, payload)
     if response.get("code") != 0:
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
 
@@ -511,14 +535,40 @@ def exchange_auth_code(config_path, auth_code, config=None, channel=None, rebind
     if is_missing(data.get("access_token")) or is_missing(data.get("refresh_token")):
         raise RuntimeError("OAuth authorization response did not include access_token and refresh_token")
     updated = update_token_fields(config, data)
-    updated, account_summary = update_authorized_accounts(updated)
     selected_channel = channels.selected_channel(updated, channel)
+    pending = copy.deepcopy(updated)
+    pending.setdefault("api", {})["pending_account_sync"] = True
     authorization_id = authorization_store.save_authorization(
         selected_channel,
-        updated["api"],
-        get_path(updated, "api.oauth_authorized_accounts", []),
+        pending["api"],
+        [],
         rebind_existing=rebind_existing,
     )
+    updated["_authorization"] = {
+        "channel": selected_channel,
+        "authorization_id": authorization_id,
+        "legacy": False,
+    }
+    authorization = copy.deepcopy(updated["_authorization"])
+    try:
+        updated, account_summary = update_authorized_accounts(updated)
+        updated["_authorization"] = authorization
+        authorization_store.replace_authorization_snapshot(
+            selected_channel,
+            authorization_id,
+            get_path(updated, "api.oauth_authorized_accounts", []),
+            rebind_existing=rebind_existing,
+            synced_at=get_path(updated, "api.last_authorized_account_sync_at"),
+            discovery_issues=get_path(updated, "api.account_discovery_issues", []),
+        )
+    except Exception as exc:
+        updated["_authorization"] = authorization
+        updated.setdefault("api", {})["pending_account_sync"] = True
+        account_summary = {
+            "sync_failed": True,
+            "error": str(exc),
+            "pending_account_sync": True,
+        }
     return updated, redact({
         "response_code": response.get("code"),
         "response_message": response.get("message"),
@@ -548,7 +598,8 @@ def refresh_access_token(config_path, config=None):
         "grant_type": "refresh_token",
         "refresh_token": get_path(config, "api.refresh_token"),
     }
-    response = post_json(oauth_base_url(config), REFRESH_TOKEN_PATH, payload)
+    adapter = channel_adapter(config, capability="oauth")
+    response = post_json(oauth_base_url(config), adapter.refresh_token_path, payload)
     if response.get("code") != 0:
         raise RuntimeError(json.dumps(redact(response), ensure_ascii=False))
 
@@ -642,6 +693,11 @@ def add_authorization_arguments(parser, include_local_authorization=False):
             "--authorization-id",
             help="Local authorization ID, used to sync a migrated pending authorization.",
         )
+        parser.add_argument(
+            "--rebind-existing",
+            action="store_true",
+            help="Move conflicting authorized accounts to this authorization during sync.",
+        )
 
 
 def main(argv=None):
@@ -693,7 +749,11 @@ def main(argv=None):
             authorization_id=args.authorization_id,
             allow_pending=True,
         )
-        config, _ = sync_authorized_accounts(config_path, config)
+        config, _ = sync_authorized_accounts(
+            config_path,
+            config,
+            rebind_existing=args.rebind_existing,
+        )
 
     status = {
         "channel": args.channel,
@@ -722,7 +782,11 @@ def main(argv=None):
         ),
         "authorization_status": authorization_store.status(
             args.channel,
-            advertiser_id=get_path(config, "account.advertiser_id"),
+            advertiser_id=(
+                None
+                if is_missing(get_path(config, "account.advertiser_id"))
+                else get_path(config, "account.advertiser_id")
+            ),
         ),
         "resolution_error": resolution_error,
     }

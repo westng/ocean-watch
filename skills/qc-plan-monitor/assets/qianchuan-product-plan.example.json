@@ -1,0 +1,14 @@
+{
+  "advertiser_id": 1234567890123456,
+  "name": "商品全域示例计划",
+  "marketing_goal": "VIDEO_PROM_GOODS",
+  "product_ids": [
+    1234567890123456789
+  ],
+  "delivery_setting": {
+    "smart_bid_type": "SMART_BID_CUSTOM",
+    "roi2_goal": 1.5,
+    "budget": 5000,
+    "video_schedule_type": "SCHEDULE_FROM_NOW"
+  }
+}
