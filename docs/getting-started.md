@@ -31,8 +31,10 @@ ocean-watch setup init --home-config
 默认用户配置位于：
 
 ```text
-~/.codex/ads-plan-monitor/config.json
+$CODEX_HOME/ads-plan-monitor/config.json
 ```
+
+未设置 `CODEX_HOME` 时，上述根目录默认为 `~/.codex`。
 
 开发仓库可以使用 `config/ads-plan-monitor/config.json`。该目录已被 Git 忽略。
 
@@ -71,7 +73,21 @@ http://127.0.0.1:8787/oauth/callback
 
 授权完成后，插件会同步官方授权主体，按角色展开真实广告主，并保存非敏感账户索引。同步失败时 Token 不会丢失，可按状态中的 `authorization_id` 执行 `auth sync-accounts` 重试。
 
-当前千川已开放授权、刷新 Token、账户发现、商品全域模板、按商品过滤的达人视频查询，以及根据作品链接新建、追加或删除商品全域计划自提素材；报表、策略和直播模板仍未开放。
+当前千川已开放授权、刷新 Token、账户发现、商品全域模板、按商品过滤的达人视频查询、根据作品链接新建、追加或删除商品全域计划自提素材，以及官方 MCP 全域计划报表；策略和直播模板仍未开放。
+
+## 配置负责账户
+
+授权账户可能很多，负责账户只保存用户日常管理的子集：
+
+```bash
+ocean-watch accounts add \
+  --channel qianchuan \
+  --advertiser-id ADVERTISER_ID \
+  --name ACCOUNT_NAME
+ocean-watch accounts list
+```
+
+之后在 Codex 中说“帮我看下我负责的账户消耗情况”，会执行 `accounts report`，并发查询所有启用的营销和千川账户。账户名称、ID 和启用状态属于本机非敏感业务配置，不进入开源仓库。
 
 ## 4. 检查就绪状态
 
@@ -81,6 +97,14 @@ ocean-watch setup validate --mode query
 ```
 
 查询就绪后即可查询素材和报表。创建计划还需要一个完整、已激活且绑定目标广告主的业务模板。
+
+千川商品全域计划消耗可直接查询：
+
+```bash
+ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
+```
+
+命令默认查询当天并显示消耗前十，总计仍覆盖全部分页计划。千川 OAuth Token 会在调用官方业务 MCP 前自动刷新，不需要单独配置 MCP API Key。
 
 ## 5. 创建业务模板
 

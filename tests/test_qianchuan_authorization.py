@@ -204,7 +204,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
             config_path.write_text(json.dumps(config), encoding="utf-8")
             with mock.patch.dict(
                 os.environ,
-                {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")},
+                {"CODEX_HOME": directory},
             ), mock.patch.object(authorization_store, "read_app", return_value={}), mock.patch.object(
                 credential_store,
                 "read_entry",
@@ -241,6 +241,30 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         parsed = urllib.parse.urlparse(url)
         self.assertEqual(parsed.netloc, "ad.oceanengine.com")
         self.assertNotIn("material_auth", urllib.parse.parse_qs(parsed.query))
+
+    def test_authorize_url_rejects_non_official_override(self):
+        config = qianchuan_runtime()
+        config["oauth"]["authorize_url"] = "https://example.com/oauth"
+
+        with self.assertRaisesRegex(RuntimeError, "official HTTPS"):
+            oauth_local_authorize.get_authorize_url(
+                config,
+                "http://127.0.0.1:8787/oauth/callback",
+                "QC.nonce",
+            )
+
+    def test_authorize_url_rejects_preconfigured_query(self):
+        config = qianchuan_runtime()
+        config["oauth"]["authorize_url"] = (
+            "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html?next=unexpected"
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "query or fragment"):
+            oauth_local_authorize.get_authorize_url(
+                config,
+                "http://127.0.0.1:8787/oauth/callback",
+                "QC.nonce",
+            )
 
     def test_shop_role_uses_qianchuan_permission_and_paginates(self):
         responses = [
@@ -340,7 +364,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
             os.environ,
-            {"ADS_PLAN_MONITOR_STATE_DIR": directory},
+            {"CODEX_HOME": directory},
         ), mock.patch.object(
             credential_store,
             "write_entry",
@@ -410,7 +434,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
             os.environ,
-            {"ADS_PLAN_MONITOR_STATE_DIR": directory},
+            {"CODEX_HOME": directory},
         ), mock.patch.object(
             credential_store,
             "write_entry",
@@ -478,7 +502,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(channels.migrate_config(valid_config())), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), mock.patch.object(
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), mock.patch.object(
                 credential_store,
                 "write_entry",
                 side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test",
@@ -522,7 +546,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(channels.migrate_config(valid_config())), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), mock.patch.object(
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), mock.patch.object(
                 credential_store,
                 "write_entry",
                 side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test",
@@ -557,7 +581,7 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(channels.migrate_config(valid_config())), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), mock.patch.object(
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), mock.patch.object(
                 credential_store,
                 "write_entry",
                 side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test",

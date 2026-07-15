@@ -22,19 +22,20 @@
 
 `ocean-watch` is an installable Codex Plugin with two independent business Skills: `ads-plan-monitor` for Ocean Engine Marketing and `qc-plan-monitor` for Qianchuan. They share one engineered CLI runtime without sharing authorization, advertiser, template, or creation transactions.
 
-Ocean Engine Marketing (`marketing`) supports authorization, materials, plans, reports, and strategy. Qianchuan (`qianchuan`) supports isolated app authorization, token refresh, advertiser discovery, product all-domain templates, product-filtered creator video discovery, and plan material creation, append, or removal from Douyin work links. Qianchuan reports, strategy, and live templates remain unavailable. The channels never share apps, tokens, accounts, templates, endpoints, or creation transactions.
+Ocean Engine Marketing (`marketing`) supports authorization, materials, plans, reports, and strategy. Qianchuan (`qianchuan`) supports isolated app authorization, token refresh, advertiser discovery, product all-domain templates, product-filtered creator video discovery, plan material creation, append, or removal from Douyin work links, and all-domain plan reporting through the official MCP. Qianchuan strategy and live templates remain unavailable. The channels never share apps, tokens, accounts, templates, endpoints, or creation transactions.
 
 ## Capabilities
 
 | Domain | Support |
 | --- | --- |
 | Marketing | `ads-plan-monitor`: OAuth, templates, uploaded/creator materials, plans, reports, strategy |
-| Qianchuan | `qc-plan-monitor`: OAuth, product templates, creator videos, work-link batches, and material append or removal |
+| Qianchuan | `qc-plan-monitor`: OAuth, product templates, creator videos, work-link plans, and all-domain plan reports |
 | Authorization | Isolated Marketing/Qianchuan OAuth, multiple authorization records, token refresh |
+| Responsible accounts | Local cross-channel account registry, enable/disable controls, concurrent spend summaries |
 | Templates | Default base, advertiser/product/platform/source bindings, guided creation and migration |
 | Materials | Uploaded videos, Marketing creator videos, and product-filtered Qianchuan creator videos |
 | Plans | Marketing uploaded/creator plans, Qianchuan create, append, or remove work materials, dry-run and explicit submit |
-| Reports | Active material joins, material metrics, spend rankings, custom reports |
+| Reports | Marketing material/custom reports and Qianchuan all-domain plan spend, GMV, orders, and ROI |
 | Strategy | Read-only evidence and operational recommendations |
 | Development | Official documentation MCP, OpenAPI schemas, and SDK examples |
 
@@ -57,6 +58,8 @@ Query authorized creator videos and create a creator-material plan
 Use qc-plan-monitor to authorize Qianchuan and dry-run a product all-domain plan
 Use qc-plan-monitor to find creator videos matching a Qianchuan product template
 Use qc-plan-monitor to dry-run removing a work from a Qianchuan plan
+Use qc-plan-monitor to query today's all-domain plan spend for a Qianchuan advertiser
+Show today's spend for the accounts I am responsible for
 ```
 
 ## Development
@@ -82,6 +85,8 @@ Commands follow `ocean-watch <domain> <action>`:
 ```bash
 ocean-watch auth status --channel marketing
 ocean-watch auth authorize --channel qianchuan
+ocean-watch accounts add --channel qianchuan --advertiser-id ADVERTISER_ID --name ACCOUNT_NAME
+ocean-watch accounts report
 ocean-watch qc-templates create
 ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
 ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
@@ -89,6 +94,7 @@ ocean-watch plans remove-qianchuan-work --advertiser-id ADVERTISER_ID --ad-id AD
 ocean-watch templates list
 ocean-watch materials videos --mode library-get --date today --fetch-all
 ocean-watch reports materials
+ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
@@ -99,7 +105,8 @@ Plan commands are dry-run by default. Online writes require an explicit `--submi
 
 - App secrets, access tokens, refresh tokens, and authorization codes never belong in Git config.
 - Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service.
-- Business config defaults to `~/.codex/ads-plan-monitor/config.json`.
+- User config, authorization state, and fallback credentials share `$CODEX_HOME/ads-plan-monitor/`; `CODEX_HOME` defaults to `~/.codex` when unset.
+- Official business API, OAuth, and MCP transports allow only official HTTPS hosts, reject redirects, and bound response sizes.
 - `config/`, `runs/`, logs, caches, and runtime batch manifests are not open-source artifacts.
 - Plugin development does not read real business state or call real accounts without a separate explicit execution request.
 
@@ -120,6 +127,7 @@ skills/ads-plan-monitor/
     ├── core/
     ├── api/
     ├── auth/
+    ├── accounts/
     ├── templates/
     ├── materials/
     ├── plans/
@@ -148,14 +156,18 @@ See [Architecture](docs/architecture.md) for module contracts and data flow.
 ## Quality checks
 
 ```bash
+python3 -m pip install -e ".[dev]"
 PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+ruff check skills/ads-plan-monitor/src tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+python3 -m build
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 git diff --check
 ```
 
-CI runs on Windows, macOS, and Linux with Python `3.9` and `3.12`.
+CI runs on Windows, macOS, and Linux with Python `3.9` and `3.12`. The release gate also builds the sdist and wheel, installs the wheel in isolated Python `3.9` and `3.12` environments, and runs first-time setup under a temporary `CODEX_HOME` to verify packaged resources and the installed CLI.
 
 ## License
 

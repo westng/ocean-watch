@@ -41,6 +41,7 @@ CHANNELS = {
             "accounts",
             "qianchuan_create",
             "qianchuan_materials",
+            "qianchuan_report",
         },
     },
 }

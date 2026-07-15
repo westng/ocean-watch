@@ -25,19 +25,20 @@
 
 `ocean-watch` 是一个可安装到 Codex 的巨量引擎广告投放自动化 Plugin，包含两个职责独立的 Skill：`ads-plan-monitor` 负责巨量营销，`qc-plan-monitor` 负责巨量千川。两者共享工程化 CLI 运行时，但不会混用授权、账户、模板或创建事务。
 
-巨量营销（`marketing`）已支持授权、素材、计划、报表和策略。巨量千川（`qianchuan`）已支持独立应用授权、Token 刷新、真实广告主发现、商品全域模板、按商品过滤的达人视频查询，以及根据抖音作品链接新建、追加或删除商品全域计划自提素材；千川报表、策略和直播模板仍未开放。两个渠道不会复用应用、Token、账户、模板或创建事务。
+巨量营销（`marketing`）已支持授权、素材、计划、报表和策略。巨量千川（`qianchuan`）已支持独立应用授权、Token 刷新、真实广告主发现、商品全域模板、按商品过滤的达人视频查询、根据抖音作品链接新建、追加或删除商品全域计划自提素材，以及通过官方 MCP 查询全域计划消耗；千川策略和直播模板仍未开放。两个渠道不会复用应用、Token、账户、模板或创建事务。
 
 ## 核心能力
 
 | 领域 | 能力 |
 | --- | --- |
 | 巨量营销 | `ads-plan-monitor`：授权、模板、上传/达人素材、计划、报表和策略 |
-| 巨量千川 | `qc-plan-monitor`：授权、商品全域模板、达人视频查询、作品链接批量创建、素材追加与删除 |
+| 巨量千川 | `qc-plan-monitor`：授权、商品全域模板、达人视频、作品链接计划处理与全域计划报表 |
 | 授权 | 营销/千川独立本地 OAuth、多授权账户索引、自动 Token 刷新 |
+| 负责账户 | 本地跨渠道常用账户簿、启停管理、并发消耗汇总与失败隔离 |
 | 模板 | 默认骨架、广告主/商品/平台/素材来源绑定、交互式创建与迁移 |
 | 素材 | 账户上传视频、营销达人授权视频、千川按商品过滤达人视频与可用性校验 |
 | 计划 | 营销上传/达人素材计划；千川作品链接新建、追加或删除全域素材；dry-run、显式在线提交 |
-| 报表 | 当前单元素材关联、素材维度数据、消耗排行与自定义报表 |
+| 报表 | 营销素材维度与自定义报表；千川全域计划消耗、成交金额、订单与 ROI |
 | 策略 | 基于只读投放数据提供停投、观察、放量等运营建议 |
 | 开发 | 官方文档 MCP、OpenAPI Schema 和 SDK 示例查询 |
 
@@ -60,6 +61,8 @@ codex plugin add ocean-watch@ocean-watch
 用 qc-plan-monitor 授权千川并预览商品全域计划
 用 qc-plan-monitor 查询抖音号下与模板商品匹配的视频
 用 qc-plan-monitor 按抖音作品链接预检删除指定千川计划素材
+用 qc-plan-monitor 查询指定千川账户今天的全域计划消耗
+帮我看下我负责的账户今天消耗情况
 ```
 
 ## 本地开发
@@ -85,6 +88,8 @@ ocean-watch --help
 ```bash
 ocean-watch auth status --channel marketing
 ocean-watch auth authorize --channel qianchuan
+ocean-watch accounts add --channel qianchuan --advertiser-id ADVERTISER_ID --name ACCOUNT_NAME
+ocean-watch accounts report
 ocean-watch qc-templates create
 ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
 ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
@@ -92,6 +97,7 @@ ocean-watch plans remove-qianchuan-work --advertiser-id ADVERTISER_ID --ad-id AD
 ocean-watch templates list
 ocean-watch materials videos --mode library-get --date today --fetch-all
 ocean-watch reports materials
+ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
@@ -102,7 +108,8 @@ ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 
 - App ID、Secret、Access Token、Refresh Token 和授权码不写入 Git 配置。
 - macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。
-- 业务配置默认位于 `~/.codex/ads-plan-monitor/config.json`；开发仓库可使用被忽略的 `config/ads-plan-monitor/config.json`。
+- 用户配置、授权状态和回退凭据统一位于 `$CODEX_HOME/ads-plan-monitor/`；未设置 `CODEX_HOME` 时默认为 `~/.codex`。开发仓库可使用被忽略的 `config/ads-plan-monitor/config.json`。
+- 官方业务 API、OAuth 和 MCP 只允许巨量官方 HTTPS 主机，传输层拒绝重定向并限制响应大小。
 - `config/`、`runs/`、缓存、日志和本地任务清单不属于开源包。
 - 开发 Plugin 时不会读取真实业务配置或调用真实账户；只有用户明确要求真实执行时才进入业务模式。
 
@@ -123,6 +130,7 @@ skills/ads-plan-monitor/
     ├── core/                   # 配置、错误、锁和公共数据工具
     ├── api/                    # 唯一官方业务 API Client
     ├── auth/                   # OAuth、Token 和授权账户
+    ├── accounts/               # 用户负责账户簿与管理命令
     ├── templates/              # 模板模型、校验与向导
     ├── materials/              # 上传素材与达人素材
     ├── plans/                  # Payload、统一事务执行器和批量调度
@@ -153,14 +161,18 @@ skills/qc-plan-monitor/
 ## 质量检查
 
 ```bash
+python3 -m pip install -e ".[dev]"
 PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+ruff check skills/ads-plan-monitor/src tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+python3 -m build
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 git diff --check
 ```
 
-CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行。
+CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行。发布门禁同时构建 sdist 与 wheel，并分别用 Python `3.9`、`3.12` 从 wheel 隔离安装，在临时 `CODEX_HOME` 中执行首次初始化，验证打包资源和安装态 CLI。
 
 ## License
 

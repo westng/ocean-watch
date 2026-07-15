@@ -107,7 +107,7 @@ class TokenRefreshTests(unittest.TestCase):
     def test_channel_refresh_returns_persisted_revision(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_store.write_app("marketing", "123", "secret")
@@ -168,7 +168,7 @@ class TokenRefreshTests(unittest.TestCase):
     def test_status_exposes_pending_authorization_without_using_it(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_id = authorization_store.save_authorization(
@@ -273,6 +273,67 @@ class TokenRefreshTests(unittest.TestCase):
         params = request.call_args.args[2]
         self.assertEqual(params["enterprise_organization_id"], 301)
         self.assertEqual(params["account_source"], "AD")
+
+    def test_role_expansion_reads_every_declared_page_after_empty_page(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        responses = [
+            {
+                "code": 0,
+                "data": {"list": [], "page_info": {"total_page": 2}},
+            },
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {"total_page": 2},
+                },
+            },
+        ]
+        with mock.patch.object(token_manager, "get_api_json", side_effect=responses) as request:
+            identifiers, result = token_manager.fetch_role_advertiser_ids(config, account)
+        self.assertEqual(identifiers, [201])
+        self.assertEqual(result["pages"], 2)
+        self.assertEqual(request.call_count, 2)
+
+    def test_role_expansion_rejects_malformed_pagination_metadata(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        responses = (
+            {"code": 0, "data": {"list": [{"advertiser_id": 201}]}},
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {"total_page": "invalid"},
+                },
+            },
+        )
+        for response in responses:
+            with self.subTest(response=response), mock.patch.object(
+                token_manager,
+                "get_api_json",
+                return_value=response,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Malformed pagination metadata"):
+                    token_manager.fetch_role_advertiser_ids(config, account)
+
+    def test_role_expansion_rejects_total_pages_above_safety_cap(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        response = {
+            "code": 0,
+            "data": {
+                "list": [{"advertiser_id": 201}],
+                "page_info": {
+                    "total_page": token_manager.MAX_ROLE_EXPANSION_PAGES + 1,
+                },
+            },
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response) as request:
+            with self.assertRaisesRegex(RuntimeError, "pagination safety cap"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+        request.assert_called_once()
 
     def test_advertiser_verification_batches_fifty_ids(self):
         config = self.expiring_config()

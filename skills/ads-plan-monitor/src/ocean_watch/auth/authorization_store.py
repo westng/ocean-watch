@@ -8,6 +8,7 @@ import secrets
 from pathlib import Path
 
 import ocean_watch.auth.credential_store as credential_store
+import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
 from ocean_watch.core.process_lock import ProcessLock
 
@@ -25,8 +26,7 @@ class AuthorizationError(RuntimeError):
 
 
 def state_root():
-    configured = os.environ.get("ADS_PLAN_MONITOR_STATE_DIR")
-    return Path(configured).expanduser() if configured else Path.home() / ".codex" / "ads-plan-monitor" / "state"
+    return config_paths.codex_home() / "ads-plan-monitor" / "state"
 
 
 def state_path():

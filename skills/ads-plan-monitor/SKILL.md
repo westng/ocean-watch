@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, advertiser-bound templates, uploaded or creator-authorized material discovery, single and concurrent batch plan creation, material performance reports, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、创建或迁移营销投放模板、查询上传/达人素材、创建营销计划、查询素材消耗排行、汇总报表, and 投放策略分析 through official APIs.
+description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation, performance reports, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、管理我负责的账户、跨渠道查询负责账户消耗、创建或迁移营销投放模板、查询上传/达人素材、创建营销计划、查询素材消耗排行、汇总报表, and 投放策略分析 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -20,6 +20,7 @@ This is one Skill with internal branches, not separate create/query/strategy ski
 4. `创建`: dry-run or submit project/promotion pairs, single or concurrent batch.
 5. `查询`: current promotion materials and material-level reports.
 6. `策略`: evidence-based recommendations; read-only unless the user explicitly requests a write.
+7. `负责账户`: local cross-channel account registry and concurrent spend summaries.
 
 This Skill owns only `marketing` (巨量营销): OAuth, account discovery, templates, materials, plans, reports, and strategy. Route every Qianchuan request to `$qc-plan-monitor`; never reuse Marketing credentials, endpoints, templates, or creation transactions for Qianchuan.
 
@@ -51,6 +52,9 @@ Core routes:
 | Creator batch | `plans batch-creator` |
 | Current material report | `reports materials` |
 | Report field discovery | `reports schema` |
+| List responsible accounts | `accounts list` |
+| Add responsible account | `accounts add` |
+| Query responsible-account spend | `accounts report` |
 
 ## Development Boundary
 
@@ -71,13 +75,27 @@ Config resolution order:
 1. Explicit `--config`.
 2. `ADS_PLAN_MONITOR_CONFIG`.
 3. Git checkout `config/ads-plan-monitor/config.json`.
-4. `~/.codex/ads-plan-monitor/config.json`.
+4. `$CODEX_HOME/ads-plan-monitor/config.json` (`CODEX_HOME` defaults to `~/.codex`).
 
 Project config is non-secret. Never ask the user to paste App Secret, Access Token, Refresh Token, auth code, or MCP identifiers into chat. Never print them.
 
 Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service. Plaintext fallback is disabled unless the user explicitly sets `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for development.
 
 Business commands resolve a Marketing authorization by target `advertiser_id` and optional official `auth_account_id`, refresh only that authorization, and never fall back across channels.
+
+## Responsible Accounts
+
+`managed_accounts` is a local, non-secret user preference. It is not the OAuth authorized-account snapshot and must never be overwritten by `auth sync-accounts`. Records are unique by `channel + advertiser_id` and contain name, advertiser ID, enabled state, and an optional `auth_account_id` that disambiguates overlapping OAuth authorizations.
+
+When the user says `我负责的账户`, `常用账户`, or asks to view spend without listing IDs, use:
+
+```bash
+ocean-watch accounts report
+```
+
+Use `--channel marketing` or `--channel qianchuan` only when the request names one channel. With no channel filter, query every enabled responsible account across both channels. The command uses bounded concurrency, preserves configured account order, retries documented transient read failures, and returns successful accounts even when another account fails. Sum spend across channels, but present GMV and ROI from `channel_summaries` because Marketing and Qianchuan use different official conversion definitions. Never replace this registry with all OAuth-authorized advertisers.
+
+Manage records with `accounts add/list/remove/enable/disable`. Real account names and IDs belong only in the user's ignored project or home config, never in tracked Skill files, examples, tests, or templates.
 
 Marketing OAuth state is `AD.<nonce>`. Require an exact state and channel match before exchanging or storing tokens.
 

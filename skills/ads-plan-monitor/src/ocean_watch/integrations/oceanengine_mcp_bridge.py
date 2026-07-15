@@ -5,13 +5,17 @@ import threading
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.credential_store as credential_store
+from ocean_watch.api.client import default_opener
 
 MCP_ORIGIN = "https://open.oceanengine.com/sse"
 ALLOWED_HOST = "open.oceanengine.com"
+DEFAULT_MAX_EVENT_BYTES = 4 * 1024 * 1024
+DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024
+READ_CHUNK_BYTES = 64 * 1024
 
 
 def build_url(app_id, developer_id):
@@ -29,10 +33,46 @@ def validated_message_endpoint(origin, endpoint):
     return resolved
 
 
+def response_header(response, name):
+    headers = getattr(response, "headers", {}) or {}
+    getter = getattr(headers, "get", None)
+    return getter(name) if callable(getter) else None
+
+
+def read_bounded_response(response, max_response_bytes):
+    content_length = response_header(response, "Content-Length")
+    try:
+        too_large = content_length is not None and int(content_length) > max_response_bytes
+    except (TypeError, ValueError):
+        too_large = False
+    if too_large:
+        raise RuntimeError("Official MCP response exceeded the size limit")
+    body = response.read(max_response_bytes + 1)
+    if len(body) > max_response_bytes:
+        raise RuntimeError("Official MCP response exceeded the size limit")
+    return body
+
+
 class LegacySseBridge:
-    def __init__(self, origin, message_handler=None):
+    def __init__(
+        self,
+        origin,
+        message_handler=None,
+        *,
+        opener=None,
+        max_event_bytes=DEFAULT_MAX_EVENT_BYTES,
+        max_response_bytes=DEFAULT_MAX_RESPONSE_BYTES,
+    ):
+        parsed = urlparse(str(origin))
+        if parsed.scheme != "https" or parsed.hostname != ALLOWED_HOST:
+            raise ValueError("Official MCP origin must use open.oceanengine.com over HTTPS")
         self.origin = origin
         self.message_handler = message_handler or self.write_message
+        self.opener = opener or default_opener
+        self.max_event_bytes = int(max_event_bytes)
+        self.max_response_bytes = int(max_response_bytes)
+        if self.max_event_bytes <= 0 or self.max_response_bytes <= 0:
+            raise ValueError("Official MCP response size limits must be positive")
         self.message_endpoint = None
         self.failure = None
         self.condition = threading.Condition()
@@ -68,20 +108,42 @@ class LegacySseBridge:
     def read_sse(self):
         request = Request(self.origin, headers={"Accept": "text/event-stream"})
         try:
-            with urlopen(request, timeout=300) as response:
+            with self.opener(request, timeout=300) as response:
                 event_name = ""
                 data_lines = []
-                for raw_line in response:
-                    line = raw_line.decode("utf-8").rstrip("\r\n")
+                event_bytes = 0
+                partial_line = bytearray()
+                while True:
+                    raw_line = response.readline(READ_CHUNK_BYTES)
+                    partial_line.extend(raw_line)
+                    if event_bytes + len(partial_line) > self.max_event_bytes:
+                        raise RuntimeError("Official MCP event exceeded the size limit")
+                    if raw_line and not raw_line.endswith((b"\n", b"\r")):
+                        continue
+
+                    complete_line = bytes(partial_line)
+                    partial_line.clear()
+                    if not raw_line and not complete_line:
+                        if data_lines:
+                            self.dispatch_event(event_name, "\n".join(data_lines))
+                        break
+
+                    event_bytes += len(complete_line)
+                    line = complete_line.decode("utf-8").rstrip("\r\n")
                     if not line:
                         if data_lines:
                             self.dispatch_event(event_name, "\n".join(data_lines))
                         event_name = ""
                         data_lines = []
+                        event_bytes = 0
                     elif line.startswith("event:"):
                         event_name = line[6:].strip()
                     elif line.startswith("data:"):
                         data_lines.append(line[5:].lstrip())
+                    if not raw_line:
+                        if data_lines:
+                            self.dispatch_event(event_name, "\n".join(data_lines))
+                        break
         except HTTPError as error:
             self.set_failure(f"Official MCP rejected the connection with HTTP {error.code}")
         except (URLError, OSError):
@@ -114,8 +176,8 @@ class LegacySseBridge:
             },
         )
         try:
-            with urlopen(request, timeout=30):
-                return
+            with self.opener(request, timeout=30) as response:
+                read_bounded_response(response, self.max_response_bytes)
         except HTTPError as error:
             raise RuntimeError(
                 f"Official MCP rejected a message with HTTP {error.code}"

@@ -151,11 +151,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     config_path = config_paths.resolve_config_path(args.config)
     config = config_store.load_json(config_path)
+    original_revision = config_store.json_revision(config)
     if args.action == "migrate":
         updated = product_templates.ensure_config(config)
         changed = updated != config
         if changed:
-            config_store.atomic_write_json(config_path, updated)
+            config_store.compare_and_swap_json(config_path, original_revision, updated)
         print(json.dumps({
             "migrated": changed,
             "schema_version": product_templates.SCHEMA_VERSION,
@@ -177,7 +178,7 @@ def main(argv=None):
 
     updated, result = run_create_wizard(config)
     if result.get("created"):
-        config_store.atomic_write_json(config_path, updated)
+        config_store.compare_and_swap_json(config_path, original_revision, updated)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

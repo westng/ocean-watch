@@ -12,7 +12,7 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
-python3 -m pip install -e .
+python3 -m pip install -e ".[dev]"
 ```
 
 项目最低支持 Python 3.9，CI 同时验证 3.9 和 3.12。
@@ -48,6 +48,9 @@ python3 -m pip install -e .
 ```bash
 PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+ruff check skills/ads-plan-monitor/src tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+python3 -m build
 python3 skills/ads-plan-monitor/run.py --version
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
@@ -55,11 +58,7 @@ python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/dev/nu
 git diff --check
 ```
 
-安装了 Ruff 时额外运行：
-
-```bash
-ruff check skills/ads-plan-monitor/src tests
-```
+发布前还必须分别在 Python `3.9` 和 `3.12` 的干净环境中安装生成的 wheel，并用临时 `CODEX_HOME` 执行 `ocean-watch setup init --home-config`，确认安装态资源和命令不依赖源码目录。
 
 ## Pull Request
 

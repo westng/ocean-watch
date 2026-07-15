@@ -21,14 +21,67 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install package and quality tools
-        run: python -m pip install --disable-pip-version-check -e . ruff
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
       - name: Compile package
         run: python -m compileall -q skills/ads-plan-monitor/src/ocean_watch
       - name: Lint package and tests
         run: ruff check skills/ads-plan-monitor/src tests
+      - name: Scan package security
+        run: bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
       - name: Verify CLI
         run: ocean-watch --version
       - name: Validate example JSON
-        run: python -c "from pathlib import Path; import json; [json.loads(Path(path).read_text(encoding='utf-8')) for path in ['.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'skills/ads-plan-monitor/assets/config.example.json', 'skills/ads-plan-monitor/assets/creator-batch-jobs.example.json']]"
+        run: python -c "from pathlib import Path; import json; [json.loads(Path(path).read_text(encoding='utf-8')) for path in ['.codex-plugin/plugin.json', '.agents/plugins/marketplace.json', 'skills/ads-plan-monitor/assets/config.example.json', 'skills/ads-plan-monitor/assets/creator-batch-jobs.example.json', 'skills/qc-plan-monitor/assets/qianchuan-product-plan.example.json', 'skills/qc-plan-monitor/assets/qianchuan-live-plan.example.json', 'skills/ads-plan-monitor/src/ocean_watch/resources/config.example.json']]"
+      - name: Validate Plugin and Skill metadata
+        run: python -m unittest tests.test_plugin_metadata -v
       - name: Run regression tests
         run: python -m unittest discover -s tests -v
+
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build source and wheel distributions
+        run: |
+          python -m pip install --disable-pip-version-check build
+          python -m build
+      - name: Install wheel only
+        run: python -m pip install --disable-pip-version-check --force-reinstall dist/*.whl
+      - name: Verify installed CLI and packaged setup resources
+        env:
+          CODEX_HOME: ${{ runner.temp }}/ocean-watch-codex-home
+        run: |
+          ocean-watch --version
+          ocean-watch setup init --home-config > "${RUNNER_TEMP}/ocean-watch-setup.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          output = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "ocean-watch-setup.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          config_path = Path(output["config"])
+          expected = Path(os.environ["CODEX_HOME"]) / "ads-plan-monitor" / "config.json"
+          if config_path != expected or not config_path.is_file():
+              raise SystemExit("wheel-installed setup did not create the CODEX_HOME config")
+          if not output["created_config_from_template"]:
+              raise SystemExit("wheel-installed setup did not load its packaged template")
+          commands = [
+              output["channel_migration_command"],
+              output["template_setup"]["list_command"],
+              output["template_setup"]["create_wizard_command"],
+              output["oauth_setup"]["local_authorize_command"],
+          ]
+          if any(not command.startswith("ocean-watch ") for command in commands):
+              raise SystemExit("wheel-installed setup emitted a source-only runner command")
+          PY

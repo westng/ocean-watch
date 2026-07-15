@@ -432,20 +432,15 @@ def set_copy_materials(config, template_name, titles=None, from_template=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Create, migrate, and list bound plan templates.")
+    parser.add_argument("command", choices=("list", "migrate", "create-wizard", "set-copy"))
     parser.add_argument("--config")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("list")
-    migrate_parser = subparsers.add_parser("migrate")
-    migrate_parser.add_argument(
+    parser.add_argument(
         "--confirm-remove-legacy-materials",
         action="store_true",
         help="Confirm that fixed legacy video IDs will be removed from business templates.",
     )
-    subparsers.add_parser("create-wizard")
-
-    set_copy = subparsers.add_parser("set-copy")
-    set_copy.add_argument("--template", required=True)
-    copy_source = set_copy.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--template")
+    copy_source = parser.add_mutually_exclusive_group()
     copy_source.add_argument(
         "--title",
         action="append",
@@ -456,9 +451,19 @@ def main(argv=None):
         help="Copy only copy materials from another plan template.",
     )
     args = parser.parse_args(argv)
+    if args.command == "set-copy":
+        if not args.template:
+            parser.error("--template is required for set-copy")
+        if args.title is None and args.from_template is None:
+            parser.error("one of --title or --from-template is required for set-copy")
+    elif args.template is not None or args.title is not None or args.from_template is not None:
+        parser.error("--template, --title, and --from-template are only valid for set-copy")
+    if args.command != "migrate" and args.confirm_remove_legacy_materials:
+        parser.error("--confirm-remove-legacy-materials is only valid for migrate")
 
     path = config_paths.resolve_config_path(args.config)
     config = load_config(path)
+    original_revision = config_store.json_revision(config)
     changed = False
     created_name = None
     wizard_result = None
@@ -492,7 +497,7 @@ def main(argv=None):
         }, ensure_ascii=False, indent=2))
         return 2
     if changed:
-        save_config(path, config)
+        config_store.compare_and_swap_json(path, original_revision, config)
 
     print(json.dumps({
         "config": str(path),

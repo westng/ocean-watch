@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
 
 SERVICE = "ads-plan-monitor"
@@ -42,7 +43,7 @@ def is_missing(value):
 
 
 def credentials_dir():
-    return Path.home() / ".codex" / "ads-plan-monitor"
+    return config_paths.codex_home() / "ads-plan-monitor"
 
 
 def fallback_path(account=ACCOUNT):
@@ -52,6 +53,13 @@ def fallback_path(account=ACCOUNT):
 
 def has_command(command):
     return shutil.which(command) is not None
+
+
+def command_path(command):
+    resolved = shutil.which(command)
+    if not resolved:
+        raise RuntimeError(f"required credential command is unavailable: {command}")
+    return resolved
 
 
 def backend_name():
@@ -105,7 +113,7 @@ def decode_stored_credentials(text):
 
 def macos_read(account=ACCOUNT):
     result = subprocess.run(
-        ["security", "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
+        [command_path("security"), "find-generic-password", "-s", SERVICE, "-a", account, "-w"],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -118,14 +126,14 @@ def macos_read(account=ACCOUNT):
 
 def macos_write(data, account=ACCOUNT):
     subprocess.run(
-        ["security", "delete-generic-password", "-s", SERVICE, "-a", account],
+        [command_path("security"), "delete-generic-password", "-s", SERVICE, "-a", account],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     subprocess.run(
         [
-            "security",
+            command_path("security"),
             "add-generic-password",
             "-U",
             "-s",
@@ -207,17 +215,12 @@ def windows_read(account=ACCOUNT):
 
 def windows_write(data, account=ACCOUNT):
     path = fallback_path(account).with_suffix(".dpapi")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(windows_protect(data) + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    config_store.atomic_write_text(path, windows_protect(data) + "\n", backup=False)
 
 
 def linux_read(account=ACCOUNT):
     result = subprocess.run(
-        ["secret-tool", "lookup", "service", SERVICE, "account", account],
+        [command_path("secret-tool"), "lookup", "service", SERVICE, "account", account],
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -231,7 +234,7 @@ def linux_read(account=ACCOUNT):
 
 def linux_write(data, account=ACCOUNT):
     subprocess.run(
-        ["secret-tool", "store", "--label", "Ads Plan Monitor OceanEngine OAuth", "service", SERVICE, "account", account],
+        [command_path("secret-tool"), "store", "--label", "Ads Plan Monitor OceanEngine OAuth", "service", SERVICE, "account", account],
         input=json.dumps(data, ensure_ascii=False),
         check=True,
         stdout=subprocess.DEVNULL,
@@ -249,12 +252,11 @@ def fallback_read(account=ACCOUNT):
 
 def fallback_write(data, account=ACCOUNT):
     path = fallback_path(account)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    config_store.atomic_write_text(
+        path,
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        backup=False,
+    )
 
 
 def read_entry(account=ACCOUNT):
@@ -349,15 +351,17 @@ def sensitive_config_fields(config):
 
 def migrate_from_config(config_path):
     path = Path(config_path).expanduser()
-    config = json.loads(path.read_text(encoding="utf-8"))
-    existing = read_credentials()
-    extracted = extract_credentials(config)
-    merged_credentials = {**existing, **extracted}
-    backend = None
-    if merged_credentials:
-        backend = write_credentials(merged_credentials)
-    cleaned = strip_sensitive_config(config)
-    config_store.atomic_write_json(path, cleaned)
+    with config_store.json_file_lock(path):
+        config = config_store.load_json(path)
+        existing = read_credentials()
+        extracted = extract_credentials(config)
+        merged_credentials = {**existing, **extracted}
+        backend = None
+        if merged_credentials:
+            backend = write_credentials(merged_credentials)
+        cleaned = strip_sensitive_config(config)
+        config_store.atomic_write_json(path, cleaned, backup=False)
+        path.with_suffix(path.suffix + ".bak").unlink(missing_ok=True)
     return {
         "config": str(path),
         "backend": backend or backend_name(),
@@ -432,27 +436,12 @@ def main(argv=None):
     parser.add_argument("--config")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--migrate-config", action="store_true")
-    parser.add_argument("--set-app", action="store_true")
-    parser.add_argument("--app-id")
-    parser.add_argument("--secret")
     parser.add_argument("--channel", default="marketing", choices=("marketing", "qianchuan"))
     args = parser.parse_args(argv)
     config_path = config_paths.resolve_config_path(args.config)
 
     if args.migrate_config:
         print(json.dumps(migrate_from_config(config_path), ensure_ascii=False, indent=2))
-        return 0
-
-    if args.set_app:
-        if not args.app_id or not args.secret:
-            raise ValueError(
-                "interactive app configuration is provided by ocean-watch auth set-app"
-            )
-        print(json.dumps(
-            configure_app(args.app_id, args.secret, channel=args.channel),
-            ensure_ascii=False,
-            indent=2,
-        ))
         return 0
 
     print(json.dumps(status(config_path, channel=args.channel), ensure_ascii=False, indent=2))

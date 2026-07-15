@@ -12,6 +12,9 @@ PRODUCT_MARKETING_GOAL = "VIDEO_PROM_GOODS"
 ALL_ACTIVE_STATUSES = "ALL"
 UNI_PROJECT = "UNI_PROJECT"
 MAX_PAGE_SIZE = 100
+PLAN_HISTORY_START_DATE = dt.date(2020, 1, 1)
+PLAN_HISTORY_WINDOW_DAYS = 180
+MAX_HISTORY_WINDOWS = 100
 
 
 def decimal_id(value, field):
@@ -21,14 +24,37 @@ def decimal_id(value, field):
     return text
 
 
-def page_count(page_info):
+def page_count(page_info, *, source, page, row_count, expected=None):
+    raw_total = page_info.get("total_page") if isinstance(page_info, dict) else None
     try:
-        return max(0, int(page_info.get("total_page") or 0))
+        total = int(raw_total)
     except (TypeError, ValueError):
+        total = -1
+    if (
+        isinstance(raw_total, bool)
+        or total < 0
+        or isinstance(raw_total, float) and raw_total != total
+    ):
         raise ApiError(
             "Qianchuan pagination returned an invalid total_page",
-            {"total_page": page_info.get("total_page")},
-        ) from None
+            {"source": source, "page": page, "total_page": raw_total},
+        )
+    if total == 0 and row_count:
+        raise ApiError(
+            "Qianchuan pagination contradicts returned rows",
+            {"source": source, "page": page, "total_page": total},
+        )
+    if expected is not None and total != expected:
+        raise ApiError(
+            "Qianchuan pagination changed during traversal",
+            {
+                "source": source,
+                "page": page,
+                "total_page": total,
+                "expected": expected,
+            },
+        )
+    return total
 
 
 def require_success(response, operation, **details):
@@ -49,50 +75,98 @@ class QianchuanPlanGateway:
     def __init__(self, client):
         self.client = client
 
-    def list_product_plans(self, advertiser_id, *, today=None, max_pages=100):
+    def list_product_plans(
+        self,
+        advertiser_id,
+        *,
+        today=None,
+        history_start=None,
+        max_pages=100,
+        max_windows=MAX_HISTORY_WINDOWS,
+    ):
         advertiser_id = decimal_id(advertiser_id, "advertiser_id")
         today = today or dt.date.today()
-        start_date = today - dt.timedelta(days=179)
+        history_start = history_start or PLAN_HISTORY_START_DATE
+        if history_start > today:
+            raise ConfigurationError("history_start must not be after today")
         plans = []
+        seen_plan_ids = set()
         request_ids = []
-        page = 1
         pages = 0
+        windows = 0
         truncated = False
-        while page <= max_pages:
-            response = require_success(
-                self.client.get(
-                    QIANCHUAN_PLAN_LIST_PATH,
-                    params={
-                        "advertiser_id": int(advertiser_id),
-                        "start_time": f"{start_date.isoformat()} 00:00:00",
-                        "end_time": f"{today.isoformat()} 23:59:59",
-                        "marketing_goal": PRODUCT_MARKETING_GOAL,
-                        "filtering": {"status": ALL_ACTIVE_STATUSES},
-                        "fields": ["stat_cost"],
-                        "order_type": "DESC",
-                        "order_field": "create_time",
-                        "page": page,
-                        "page_size": MAX_PAGE_SIZE,
-                        "adlab_scene": UNI_PROJECT,
-                    },
-                ),
-                "product plan list query",
-                advertiser_id=advertiser_id,
-                page=page,
+        window_end = today
+        while window_end >= history_start and windows < max_windows:
+            window_start = max(
+                history_start,
+                window_end - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1),
             )
-            pages += 1
-            if response.get("request_id"):
-                request_ids.append(response["request_id"])
-            plans.extend(get_path(response, "data.ad_list", []) or [])
-            total_pages = page_count(get_path(response, "data.page_info", {}) or {})
-            if total_pages == 0 or page >= total_pages:
+            windows += 1
+            page = 1
+            expected_pages = None
+            while page <= max_pages:
+                response = require_success(
+                    self.client.get(
+                        QIANCHUAN_PLAN_LIST_PATH,
+                        params={
+                            "advertiser_id": int(advertiser_id),
+                            "start_time": f"{window_start.isoformat()} 00:00:00",
+                            "end_time": f"{window_end.isoformat()} 23:59:59",
+                            "marketing_goal": PRODUCT_MARKETING_GOAL,
+                            "filtering": {"status": ALL_ACTIVE_STATUSES},
+                            "fields": ["stat_cost"],
+                            "order_type": "DESC",
+                            "order_field": "create_time",
+                            "page": page,
+                            "page_size": MAX_PAGE_SIZE,
+                            "adlab_scene": UNI_PROJECT,
+                        },
+                    ),
+                    "product plan list query",
+                    advertiser_id=advertiser_id,
+                    page=page,
+                    start_time=window_start.isoformat(),
+                    end_time=window_end.isoformat(),
+                )
+                pages += 1
+                if response.get("request_id"):
+                    request_ids.append(response["request_id"])
+                page_rows = get_path(response, "data.ad_list", []) or []
+                if not isinstance(page_rows, list):
+                    raise ApiError(
+                        "Qianchuan product plan rows must be a list",
+                        {"source": "product_plan_list", "page": page},
+                    )
+                for row in page_rows:
+                    ad_id = get_path(row, "ad_info.id")
+                    if ad_id is not None:
+                        normalized_ad_id = str(ad_id)
+                        if normalized_ad_id in seen_plan_ids:
+                            continue
+                        seen_plan_ids.add(normalized_ad_id)
+                    plans.append(row)
+                total_pages = page_count(
+                    get_path(response, "data.page_info"),
+                    source="product_plan_list",
+                    page=page,
+                    row_count=len(page_rows),
+                    expected=expected_pages,
+                )
+                expected_pages = total_pages
+                if total_pages == 0 or page >= total_pages:
+                    break
+                page += 1
+            else:
+                truncated = True
+            if truncated:
                 break
-            page += 1
-        else:
+            window_end = window_start - dt.timedelta(days=1)
+        if window_end >= history_start:
             truncated = True
         return {
             "plans": plans,
             "page_count": pages,
+            "window_count": windows,
             "request_ids": request_ids,
             "truncated": truncated,
         }
@@ -111,9 +185,24 @@ class QianchuanPlanGateway:
         )
         return response.get("data") or {}
 
-    def find_creator_plans(self, advertiser_id, aweme_ids, *, today=None):
+    def find_creator_plans(
+        self,
+        advertiser_id,
+        aweme_ids,
+        *,
+        today=None,
+        history_start=None,
+        max_pages=100,
+        max_windows=MAX_HISTORY_WINDOWS,
+    ):
         targets = {decimal_id(value, "aweme_id") for value in aweme_ids}
-        listed = self.list_product_plans(advertiser_id, today=today)
+        listed = self.list_product_plans(
+            advertiser_id,
+            today=today,
+            history_start=history_start,
+            max_pages=max_pages,
+            max_windows=max_windows,
+        )
         if listed["truncated"]:
             raise ApiError(
                 "Qianchuan product plan list query was truncated",
@@ -165,6 +254,7 @@ class QianchuanPlanGateway:
         page = 1
         pages = 0
         truncated = False
+        expected_pages = None
         while page <= max_pages:
             response = require_success(
                 self.client.get(
@@ -189,8 +279,21 @@ class QianchuanPlanGateway:
             pages += 1
             if response.get("request_id"):
                 request_ids.append(response["request_id"])
-            rows.extend(get_path(response, "data.ad_material_infos", []) or [])
-            total_pages = page_count(get_path(response, "data.page_info", {}) or {})
+            page_rows = get_path(response, "data.ad_material_infos", []) or []
+            if not isinstance(page_rows, list):
+                raise ApiError(
+                    "Qianchuan plan material rows must be a list",
+                    {"source": "plan_material_list", "page": page},
+                )
+            rows.extend(page_rows)
+            total_pages = page_count(
+                get_path(response, "data.page_info"),
+                source="plan_material_list",
+                page=page,
+                row_count=len(page_rows),
+                expected=expected_pages,
+            )
+            expected_pages = total_pages
             if total_pages == 0 or page >= total_pages:
                 break
             page += 1
@@ -235,6 +338,8 @@ class QianchuanPlanGateway:
 def existing_aweme_item_ids(material_rows):
     item_ids = set()
     for row in material_rows:
+        if row.get("material_status") == "DELETED":
+            continue
         video = get_path(row, "material_info.video_material", {}) or {}
         value = video.get("aweme_item_id")
         if value is not None and str(value) != "0":

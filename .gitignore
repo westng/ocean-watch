@@ -5,12 +5,31 @@ __pycache__/
 *.egg-info/
 *.pyc
 .DS_Store
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+build/
+dist/
+*.whl
 
 # Local credential fallback/cache files. Real tokens should live in the OS
 # credential store, not in this project.
 credentials.json
 credentials.dpapi
+oceanengine-app-*.json
+oceanengine-app-*.dpapi
+oceanengine-auth-*.json
+oceanengine-auth-*.dpapi
 .token.lock
+
+# Common CODEX_HOME locations used during local verification. Keep custom
+# CODEX_HOME directories outside the repository.
+/.codex/
+/ads-plan-monitor/
 
 # Local logs and temporary output.
 *.log

@@ -15,6 +15,7 @@ import ocean_watch.auth.channels as channels
 import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
+from ocean_watch.api.client import official_https_url
 
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8787/oauth/callback"
 APP_SETUP_PATH = "/oauth/setup"
@@ -296,6 +297,11 @@ def get_authorize_url(config, redirect_uri, state):
     channel = channels.selected_channel(config)
     adapter = channel_adapters.get_adapter(channel, capability="oauth")
     authorize_url = token_manager.get_path(config, "oauth.authorize_url") or adapter.authorize_url
+    if not official_https_url(authorize_url):
+        raise RuntimeError("OAuth authorize URL must use an official HTTPS host")
+    parsed = urllib.parse.urlparse(authorize_url)
+    if parsed.query or parsed.fragment:
+        raise RuntimeError("OAuth authorize URL must not contain a query or fragment")
     params = adapter.authorize_params(app_id, state, redirect_uri)
     return authorize_url + "?" + urllib.parse.urlencode(params)
 
@@ -366,20 +372,10 @@ def main(argv=None):
         parser.add_argument("--rebind-existing", action="store_true")
         parser.add_argument("--configure-app", action="store_true")
     parser.add_argument("--configure-app-only", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--app-id", help=argparse.SUPPRESS)
-    parser.add_argument("--secret", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     config_path = config_paths.resolve_config_path(args.config)
     config = token_manager.load_config(config_path, channel=args.channel, capability="oauth")
-    if bool(args.app_id) != bool(args.secret):
-        raise ValueError("--app-id and --secret must be provided together")
-    if args.app_id and args.secret:
-        result = credential_store.configure_app(args.app_id, args.secret, channel=args.channel)
-        if args.configure_app_only:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0
-
     app = authorization_store.read_app(args.channel)
     has_app = bool(app.get("app_id") and app.get("secret"))
     if has_app:

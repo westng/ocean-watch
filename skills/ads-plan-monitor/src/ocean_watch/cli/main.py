@@ -3,6 +3,7 @@ import json
 import sys
 
 from ocean_watch import __version__
+from ocean_watch.accounts import manage_accounts
 from ocean_watch.auth import (
     migrate_channels,
     oauth_local_authorize,
@@ -38,6 +39,8 @@ from ocean_watch.plans import (
 from ocean_watch.reports import (
     query_active_materials_report,
     query_custom_report,
+    query_managed_accounts_report,
+    query_qianchuan_plan_report,
     query_report_config,
 )
 from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
@@ -51,6 +54,16 @@ COMMANDS = {
     ("auth", "refresh"): (token_manager.main, ("--refresh",), "Refresh an access token"),
     ("auth", "sync-accounts"): (token_manager.main, ("--sync-accounts",), "Sync advertisers"),
     ("auth", "migrate"): (migrate_channels.main, (), "Migrate legacy channel state"),
+    ("accounts", "list"): (manage_accounts.main, ("list",), "List responsible accounts"),
+    ("accounts", "add"): (manage_accounts.main, ("add",), "Add or update a responsible account"),
+    ("accounts", "remove"): (manage_accounts.main, ("remove",), "Remove a responsible account"),
+    ("accounts", "enable"): (manage_accounts.main, ("enable",), "Enable a responsible account"),
+    ("accounts", "disable"): (manage_accounts.main, ("disable",), "Disable a responsible account"),
+    ("accounts", "report"): (
+        query_managed_accounts_report.main,
+        (),
+        "Query spend for responsible accounts",
+    ),
     ("templates", "list"): (manage_plan_templates.main, ("list",), "List plan templates"),
     ("templates", "create"): (manage_plan_templates.main, ("create-wizard",), "Create a template"),
     ("templates", "migrate"): (manage_plan_templates.main, ("migrate",), "Migrate templates"),
@@ -97,6 +110,11 @@ COMMANDS = {
     ("reports", "materials"): (query_active_materials_report.main, (), "Material performance"),
     ("reports", "schema"): (query_report_config.main, (), "Available report fields"),
     ("reports", "custom"): (query_custom_report.main, (), "Custom report"),
+    ("qc-reports", "plans"): (
+        query_qianchuan_plan_report.main,
+        (),
+        "Qianchuan all-domain plan performance through the official MCP",
+    ),
     ("discover", "projects"): (query_projects.main, (), "Find projects"),
     ("discover", "promotions"): (query_promotions.main, (), "Find promotions"),
     ("discover", "dpa"): (query_dpa.main, (), "Find DPA assets"),

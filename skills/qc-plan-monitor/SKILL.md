@@ -1,6 +1,6 @@
 ---
 name: qc-plan-monitor
-description: Dedicated 巨量千川 skill for local OAuth, token refresh, advertiser-bound product templates, creator video discovery, product all-domain plan creation, and material append or removal from Douyin work links through official Qianchuan APIs. Use for 千川初始化、千川授权、同步千川广告主、检查千川 Token、创建商品全域模板、按抖音号查询匹配商品的达人视频、按多个抖音作品链接批量新建或追加商品全域计划、按作品链接删除计划自提素材、创建商品或直播全域计划, or validating official Qianchuan payloads.
+description: Dedicated 巨量千川 skill for local OAuth, responsible-account lists across Qianchuan and Marketing, token refresh, product templates, creator video discovery, all-domain plan creation, work-link material changes, and official MCP reports. Use for 千川初始化、千川授权、管理我负责的账户、跨渠道查询负责账户消耗、同步千川广告主、检查千川 Token、创建商品全域模板、查询达人视频、批量新建或追加商品全域计划、删除计划素材、查询千川计划消耗和 ROI、创建商品或直播全域计划, or validating official Qianchuan payloads.
 ---
 
 # QC Plan Monitor
@@ -23,8 +23,9 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 7. Dry-run or explicitly submit one all-domain plan.
 8. Resolve multiple Douyin work links, group product-matched works by creator, then create or append product all-domain plans.
 9. Resolve Douyin work links to plan `material_id` values and remove verified custom materials.
+10. Query product all-domain plan spend, orders, GMV, and ROI through the official Qianchuan MCP.
 
-Qianchuan reports, strategy, and live templates are not implemented yet. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
+Qianchuan strategy and live templates are not implemented yet. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
 
 ## Command Entry
 
@@ -50,6 +51,9 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Create all-domain plan | `plans create-qianchuan` |
 | Create or append from work links | `plans batch-qianchuan-works` |
 | Remove plan materials by work link | `plans remove-qianchuan-work` |
+| Query all-domain plan spend | `qc-reports plans` |
+| Manage responsible accounts | `accounts add/list/remove/enable/disable` |
+| Query responsible-account spend | `accounts report` |
 
 ## Development Boundary
 
@@ -69,6 +73,25 @@ http://127.0.0.1:8787/oauth/callback
 OAuth state is `QC.<nonce>`. Require an exact state and channel match before token exchange or storage. The first authorization opens one local page that collects App ID and Secret together, stores them in the operating-system credential backend, and redirects to official OAuth.
 
 Business commands resolve the Qianchuan authorization bound to the target `advertiser_id`. Never fall back to a Marketing authorization. Use `--auth-account-id` only when multiple Qianchuan authorizations cover the same advertiser.
+
+`managed_accounts` is a separate local user preference shared by both Skills. A request for `我负责的账户` resolves enabled records from this registry, not every OAuth-authorized advertiser. Run `accounts report` without a channel filter for concurrent Marketing and Qianchuan results, or filter by the explicitly named channel. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files.
+
+## All-Domain Plan Reports
+
+Query plan performance with the advertiser-bound Qianchuan authorization:
+
+```bash
+ocean-watch qc-reports plans \
+  --advertiser-id ADVERTISER_ID \
+  --start-date YYYY-MM-DD \
+  --end-date YYYY-MM-DD
+```
+
+The command uses the official Streamable HTTP MCP at `https://open.oceanengine.com/qianchuan/mcp`. It injects the refreshed local Qianchuan `Access-Token` only in memory and restricts the remote server with `Tool-Range`. Never persist the token in Plugin metadata, Codex MCP configuration, command output, or report files.
+
+Use `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PRODUCT_AD` and dimension `ad_id` as the only financial source. Read each metric from its returned `Value` or `ValueStr`. Separately call `qianchuan_uni_promotion_list_v1` with `VIDEO_PROM_GOODS`, `UNI_PROJECT`, and `status=ALL` only to enrich report rows with plan names, statuses, creators, products, budgets, and ROI targets. Never display or infer money from plan-list `stats_info`; those internal fixed-point values are not report currency values. Use `qianchuan_report_uni_promotion_config_get_v1` to inspect available metric contracts, and do not substitute the standard Qianchuan plan report for all-domain plans.
+
+Default to the current day and ten report rows. `--top 0` returns all report rows. Summaries must use all paged report data, including rows beyond the display limit, and aggregate raw decimal metrics before display rounding. Treat report money values as CNY exactly as returned; do not apply a guessed scale. Fail closed on missing required metrics, invalid pagination, duplicate plan IDs, or malformed numeric values. Request `need_compensate_info=true` from the plan list and include each plan's status, cost-guarantee state and reason, bid mode, ROI target bid, daily budget, spend, actual ROI, GMV, and orders. For `status=ALL`, retain financial rows missing plan-list metadata and expose `metadata_available=false` plus `metadata_missing_count`; a specific status requires complete metadata. Return total spend, plans with spend, orders, GMV, weighted ROI, one-hour settled amount, and weighted one-hour settled ROI. Do not write a file unless `--out` is explicit.
 
 ## Product Template Contract
 
@@ -182,6 +205,9 @@ Block submission before token resolution when validation fails. Success requires
 - Product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1804363488115850`
 - Add product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1835232814536707`
 - Delete product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1804363891396633`
+- Qianchuan MCP business tools: `https://open.oceanengine.com/labels/12/docs/1839622960207943`
+- Qianchuan MCP tool list: `https://open.oceanengine.com/labels/12/docs/1847297003631945`
+- Qianchuan MCP guide and examples: `https://open.oceanengine.com/labels/12/docs/1849835441833027`
 
 Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details. If local notes conflict with official documentation or official MCP results, use the official source.
 
@@ -191,5 +217,6 @@ Read `references/official-api-notes.md` for confirmed endpoint and account-expan
 - Never print App Secret, Access Token, Refresh Token, auth code, or sensitive MCP URLs.
 - Keep dry-run independent of credentials and the HTTP client.
 - Show advertiser, goal, product count, budget, bid type, ROI, material counts, blocking fields, and endpoint before submission.
+- Present report summaries and rankings as Markdown tables in conversation; JSON remains the CLI boundary.
 - Batch work-link output must summarize created, appended, already-present, skipped, and failed groups only after the batch finishes.
 - Preserve official responses for diagnosis, but never expose stored credentials.

@@ -30,6 +30,13 @@ ocean-watch
 │   ├── refresh
 │   ├── sync-accounts
 │   └── migrate
+├── accounts
+│   ├── list
+│   ├── add
+│   ├── remove
+│   ├── enable
+│   ├── disable
+│   └── report
 ├── templates
 │   ├── list
 │   ├── create
@@ -58,6 +65,8 @@ ocean-watch
 │   ├── materials
 │   ├── schema
 │   └── custom
+├── qc-reports
+│   └── plans
 ├── discover
 │   ├── projects
 │   ├── promotions
@@ -76,6 +85,34 @@ ocean-watch
 ```bash
 ocean-watch plans batch-creator --help
 ```
+
+## 负责账户
+
+负责账户是用户主动维护的常用账户，不等于 OAuth 返回的全部授权账户：
+
+```bash
+ocean-watch accounts add \
+  --channel qianchuan \
+  --advertiser-id ADVERTISER_ID \
+  --auth-account-id AUTH_ACCOUNT_ID \
+  --name ACCOUNT_NAME
+ocean-watch accounts list
+ocean-watch accounts disable --channel qianchuan --advertiser-id ADVERTISER_ID
+ocean-watch accounts enable --channel qianchuan --advertiser-id ADVERTISER_ID
+ocean-watch accounts remove --channel qianchuan --advertiser-id ADVERTISER_ID
+```
+
+`--auth-account-id` 是可选的；当同一广告主出现在多个 OAuth 授权中时，用它固定账户所属授权。重复执行 `accounts add` 仅更新名称或显式传入的授权主体，不会重新启用已禁用账户。
+
+查询所有启用账户当天消耗：
+
+```bash
+ocean-watch accounts report
+ocean-watch accounts report --channel marketing
+ocean-watch accounts report --channel qianchuan --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+```
+
+默认跨渠道并发查询。营销使用无维度的 `BASIC_DATA` 账户聚合报表，千川使用商品全域计划报表汇总；单账户结果统一字段名，并附带 `metric_basis` 说明官方指标来源。总消耗可跨渠道相加；营销 `in_app_order_gmv` 与千川含券 ROI2 支付 GMV 口径不同，因此混合查询的顶层 `total_gmv`、`weighted_roi` 为 `null`，实际值按 `channel_summaries` 分渠道展示。单账户失败不会中止其他账户。只读请求会对业务临时错误 `40100`、`51010`，HTTP `429`/部分 `5xx`，以及明确标记可重试的超时或连接错误额外尝试两次，默认等待 1 秒、2 秒。只有显式传入 `--out` 才写文件。
 
 ## 初始化与授权
 
@@ -100,7 +137,7 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 
 营销和千川流程共用默认回调地址，通过 OAuth `state` 的 `AD`/`QC` 前缀区分渠道；用户无需维护两条回调路径。若账户同步失败，授权保留为 pending 状态，可用最后一条命令重试；确认迁移账户归属时增加 `--rebind-existing`。
 
-千川支持 `auth`、`qc-templates`、`qc-materials`、`plans create-qianchuan`、`plans batch-qianchuan-works` 和 `plans remove-qianchuan-work`。报表和营销计划命令不会回退使用千川授权。
+千川支持 `auth`、`qc-templates`、`qc-materials`、`qc-reports`、`plans create-qianchuan`、`plans batch-qianchuan-works` 和 `plans remove-qianchuan-work`。营销计划和报表命令不会回退使用千川授权。
 
 一般业务调用会自动刷新 Token；只有排错或主动验证时才需要 `auth refresh`。
 
@@ -254,6 +291,20 @@ ocean-watch reports custom \
 
 默认不写表格文件。Codex 应在对话中使用 Markdown 表格展示汇总和排行。
 
+千川商品全域计划报表通过官方 MCP 查询：
+
+```bash
+ocean-watch qc-reports plans \
+  --advertiser-id ADVERTISER_ID \
+  --start-date YYYY-MM-DD \
+  --end-date YYYY-MM-DD \
+  --top 10
+```
+
+默认日期为当天，营销目标为商品全域，计划范围为 `UNI_PROJECT`，并按消耗降序返回前十。`--top 0` 返回全部报表行；汇总始终基于所有分页结果。命令使用目标广告主绑定的千川 OAuth Token，调用官方 Streamable HTTP MCP。金额和 ROI 只读取全域报表返回值，计划列表补充计划状态、成本保障、出价方式、ROI 目标出价、预算、名称和业务归属，不推算其内部固定精度金额。输出同时包含总消耗、有消耗计划数、整体成交金额、订单数、加权支付 ROI、1 小时净成交金额和加权净成交 ROI。
+
+报表分页、计划 ID 和七个必需指标任一缺失、重复或非法时，命令拒绝返回不完整汇总。汇总先使用原始 `Decimal` 值跨全部页面计算，最后才按展示精度舍入。`--status ALL` 会保留历史财务行；计划列表无法补齐其元数据时，行内 `metadata_available=false`，汇总中的 `metadata_missing_count` 同步计数，名称、状态、成本保障、出价和预算保持为空。指定具体状态时必须解析到计划元数据，否则整次查询失败，避免错误筛选。
+
 ## 资产反查与 MCP
 
 ```bash
@@ -264,4 +315,4 @@ ocean-watch mcp configure
 ocean-watch mcp status
 ```
 
-官方 MCP 只用于开发文档、Schema 和 SDK 示例，不执行广告业务操作。
+`mcp configure/status` 管理的是开发文档 MCP。千川业务报表使用独立的官方业务 MCP 传输层，由 `qc-reports` 在内存中注入自动刷新的千川 Token，不把 Token 写入 Codex MCP 配置。

@@ -157,9 +157,16 @@ def main(argv=None):
         "attempts": attempts,
     }
     if args.write_config and result["resolved_count"] and not result["missing"]:
-        raw_config.setdefault("resolved_ids", {})["city_ids"] = [item["code"] for item in result["resolved"]]
-        raw_config.setdefault("resolved_ids", {})["city_names"] = [item["name"] for item in result["resolved"]]
-        config_store.atomic_write_json(config_path, raw_config)
+        def update(current):
+            current.setdefault("resolved_ids", {})["city_ids"] = [
+                item["code"] for item in result["resolved"]
+            ]
+            current.setdefault("resolved_ids", {})["city_names"] = [
+                item["name"] for item in result["resolved"]
+            ]
+            return current, None
+
+        config_store.update_json(config_path, update)
         result["config_updated"] = str(config_path)
 
     output = json.dumps(result, ensure_ascii=False, indent=2)

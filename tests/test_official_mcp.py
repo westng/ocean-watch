@@ -1,6 +1,8 @@
 import json
 import sys
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -29,6 +31,75 @@ class OfficialMcpTests(unittest.TestCase):
             oceanengine_mcp_bridge.validated_message_endpoint(
                 "https://open.oceanengine.com/sse", "https://example.com/messages"
             )
+
+    def test_bridge_rejects_untrusted_origin(self):
+        with self.assertRaisesRegex(ValueError, "open.oceanengine.com"):
+            oceanengine_mcp_bridge.LegacySseBridge("https://example.com/sse")
+
+    def test_bridge_default_transport_refuses_redirects(self):
+        request = mock.Mock()
+        with mock.patch.object(urllib.request, "build_opener") as build:
+            opener = build.return_value
+            opener.open.side_effect = urllib.error.HTTPError(
+                "https://open.oceanengine.com/sse",
+                302,
+                "redirect",
+                {},
+                None,
+            )
+            with self.assertRaises(urllib.error.HTTPError):
+                oceanengine_mcp_bridge.default_opener(request, 30)
+        handler = build.call_args.args[0]
+        self.assertIsNone(
+            handler.redirect_request(None, None, 302, "redirect", {}, "https://example.com")
+        )
+
+    def test_bridge_dispatches_final_sse_line_without_newline(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.readline.side_effect = [
+            b"event: message\n",
+            b'data: {"jsonrpc":"2.0","id":"final","result":{}}',
+            b"",
+        ]
+        messages = []
+        bridge = oceanengine_mcp_bridge.LegacySseBridge(
+            "https://open.oceanengine.com/sse",
+            message_handler=messages.append,
+            opener=lambda _request, timeout: response,
+        )
+
+        bridge.read_sse()
+
+        self.assertEqual(messages, [{"jsonrpc": "2.0", "id": "final", "result": {}}])
+
+    def test_bridge_rejects_oversized_event_and_post_response(self):
+        event_response = mock.MagicMock()
+        event_response.__enter__.return_value = event_response
+        event_response.__exit__.return_value = False
+        event_response.readline.side_effect = [b"data: " + (b"x" * 32), b""]
+        bridge = oceanengine_mcp_bridge.LegacySseBridge(
+            "https://open.oceanengine.com/sse",
+            opener=lambda _request, timeout: event_response,
+            max_event_bytes=16,
+        )
+        bridge.read_sse()
+        self.assertIn("size limit", bridge.failure)
+
+        post_response = mock.MagicMock()
+        post_response.__enter__.return_value = post_response
+        post_response.__exit__.return_value = False
+        post_response.headers = {"Content-Length": "32"}
+        post_response.read.return_value = b""
+        bridge = oceanengine_mcp_bridge.LegacySseBridge(
+            "https://open.oceanengine.com/sse",
+            opener=lambda _request, timeout: post_response,
+            max_response_bytes=16,
+        )
+        bridge.message_endpoint = "https://open.oceanengine.com/messages"
+        with self.assertRaisesRegex(RuntimeError, "size limit"):
+            bridge.send(b"{}")
 
     def test_status_is_redacted(self):
         with mock.patch.object(

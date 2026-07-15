@@ -24,6 +24,11 @@ class ConfigurationError(OceanWatchError):
         super().__init__("configuration_error", message, details, exit_code=2)
 
 
+class ConfigurationConflictError(OceanWatchError):
+    def __init__(self, message="configuration changed; reload and retry", details=None):
+        super().__init__("configuration_conflict", message, details, exit_code=2)
+
+
 class ApiError(OceanWatchError):
     def __init__(self, message, details=None):
         super().__init__("api_error", message, details)

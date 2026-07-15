@@ -11,18 +11,22 @@ Ocean Watch 将非敏感业务配置与敏感凭据分开：
 
 | 数据 | 默认位置 | 是否可提交 |
 | --- | --- | --- |
-| 业务配置 | `~/.codex/ads-plan-monitor/config.json` | 否 |
+| 业务配置 | `$CODEX_HOME/ads-plan-monitor/config.json` | 否 |
 | 开发业务配置 | `config/ads-plan-monitor/config.json` | 否 |
 | App、Token、MCP 标识符 | 操作系统凭据仓库 | 否 |
-| 授权账户索引、迁移状态 | `~/.codex/ads-plan-monitor/state/` | 否 |
+| 授权账户索引、迁移状态 | `$CODEX_HOME/ads-plan-monitor/state/` | 否 |
+| 显式启用的明文回退凭据 | `$CODEX_HOME/ads-plan-monitor/*.json` | 否 |
 | 运行结果和 batch journal | 用户指定路径或本机状态目录 | 否 |
 
-配置解析顺序：`--config`、`ADS_PLAN_MONITOR_CONFIG`、开发仓库配置、用户配置。
+`CODEX_HOME` 未设置时默认为 `~/.codex`。配置、授权状态和凭据目录始终使用同一个根；不要把自定义 `CODEX_HOME` 放进 Git 工作树。
+
+配置解析顺序：`--config`、`ADS_PLAN_MONITOR_CONFIG`、开发仓库配置、用户配置。安装在
+`$CODEX_HOME/plugins/cache` 下的插件即使携带仓库元数据，也始终读取用户配置，避免把插件缓存误判为开发仓库。
 
 ## 渠道
 
 - `marketing`：巨量营销，当前已经实现 OAuth、账户、素材、计划和报表。
-- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品全域模板、按商品过滤的达人视频查询，以及作品链接批量新建、追加或删除商品全域计划自提素材；报表和直播模板尚未实现。
+- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品全域模板、按商品过滤的达人视频查询、作品链接批量新建、追加或删除商品全域计划自提素材，以及官方 MCP 全域计划报表；直播模板尚未实现。
 
 渠道之间不共享 App、Secret、Token、账户或模板。旧配置迁移到巨量营销：
 
@@ -30,7 +34,7 @@ Ocean Watch 将非敏感业务配置与敏感凭据分开：
 ocean-watch auth migrate --config PATH
 ```
 
-迁移使用原子写入和 journal，可安全重复执行。旧授权缺少完整账户映射时，状态会显示 `pending_account_sync`，按输出中的本地授权 ID 执行：
+迁移在配置进程锁内读取、转存凭据、清理敏感字段并原子写入，可安全重复执行。模板向导使用配置 revision 做乐观并发控制；交互期间配置被其他进程修改时会返回 `configuration_conflict`，必须重新加载后再操作。旧授权缺少完整账户映射时，状态会显示 `pending_account_sync`，按输出中的本地授权 ID 执行：
 
 ```bash
 ocean-watch auth sync-accounts \
@@ -51,6 +55,8 @@ ocean-watch auth sync-accounts \
 | `channels.<channel>` | 非敏感 API、OAuth 地址和回调配置 |
 | `account.channel` | 当前业务账户渠道 |
 | `account.advertiser_id` | 当前广告主 |
+| `managed_account_schema_version` | 用户负责账户簿版本，当前为 `1` |
+| `managed_accounts.<channel>` | 该渠道下用户主动维护的负责账户列表 |
 | `plan_template_schema_version` | 计划模板版本，当前为 `3` |
 | `active_plan_template` | 未显式指定时使用的业务模板 |
 | `default_plan_template` | 创建模板的默认骨架，不可投放 |
@@ -61,6 +67,10 @@ ocean-watch auth sync-accounts \
 | `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
 
 以下字段不得写入配置：`app_id`、`secret`、`access_token`、`refresh_token`、`auth_code`、`developer_id`。
+
+公开端点覆盖只接受巨量官方 HTTPS 主机。业务 API、OAuth 和官方 MCP 客户端拒绝 HTTP 重定向并限制响应体大小，避免把 Token 或请求体转发到非预期主机。抖音作品短链解析是独立流程，只允许在官方 `douyin.com`、`iesdouyin.com` 域名范围内跳转。
+
+`managed_accounts` 只保存非敏感的账户名称、广告主 ID、启用状态，以及可选的 OAuth 授权主体 `auth_account_id`。唯一键是 `channel + advertiser_id`，所以相同数字 ID 可以在营销和千川分别存在。同一广告主同时出现在多个 OAuth 授权时，用 `--auth-account-id` 固定选择；账户变更会在进程锁内重新读取并原子写入，避免并发命令丢失更新。授权账户同步不得新增、删除或覆盖负责账户记录。
 
 ## 计划模板
 
@@ -257,4 +267,6 @@ ocean-watch mcp configure
 ocean-watch mcp status
 ```
 
-MCP 用于官方文档、OpenAPI Schema 和 SDK 示例，不执行广告业务。包含 App ID 和 Developer ID 的动态 URL 只在桥进程内存中构造，不写入 Plugin 清单或 Codex 配置。
+上述命令配置开发文档 MCP，用于官方文档、OpenAPI Schema 和 SDK 示例。包含 App ID 和 Developer ID 的动态 URL 只在桥进程内存中构造，不写入 Plugin 清单或 Codex 配置。
+
+千川计划报表使用官方业务 MCP `https://open.oceanengine.com/qianchuan/mcp`。插件复用目标广告主绑定的千川 OAuth `Access-Token`，调用前自动刷新，并通过 `Tool-Range` 限制为全域计划和报表工具。Token 不写入配置文件、Plugin 清单或 Codex MCP 配置，也不需要用户额外维护 MCP API Key。

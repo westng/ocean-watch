@@ -1,0 +1,102 @@
+{
+  "config_schema_version": 2,
+  "default_channel": "marketing",
+  "channels": {
+    "marketing": {
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+        "authorize_url": "https://ad.oceanengine.com/openapi/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api"
+      }
+    },
+    "qianchuan": {
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+        "authorize_url": "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api"
+      }
+    }
+  },
+  "account": {
+    "channel": "marketing",
+    "advertiser_id": "REPLACE_WITH_ADVERTISER_ID"
+  },
+  "active_plan_template": null,
+  "plan_templates": {},
+  "plan_template_schema_version": 3,
+  "qianchuan_product_template_schema_version": 2,
+  "active_qianchuan_product_template": null,
+  "qianchuan_product_templates": {},
+  "default_qianchuan_product_template": {
+    "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
+    "business_usable": false,
+    "bindings": {
+      "channel": "qianchuan",
+      "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+      "product_name": "REPLACE_WITH_PRODUCT_NAME",
+      "product_ids": []
+    },
+    "delivery_setting": {
+      "smart_bid_type": "SMART_BID_CUSTOM",
+      "roi2_goal": 1.7,
+      "qcpx_mode": "QCPX_MODE_ON",
+      "budget": 5000,
+      "video_schedule_type": "SCHEDULE_FROM_NOW",
+      "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
+    },
+    "material_strategy": {
+      "source_type": "CREATOR_RUNTIME_QUERY",
+      "persist_material_ids": false
+    }
+  },
+  "default_plan_template": {
+    "defaults": {
+      "operation": "ENABLE",
+      "project_name_template": "{material_date}_{product_name}_roi_详情页",
+      "promotion_name_template": "自动投放单元_{product_name}_{material_date}_{suffix}",
+      "daily_budget": 300,
+      "cpa_bid": 100,
+      "roi_goal": 1.5,
+      "landing_type": "SHOP",
+      "asset_type": "THIRDPARTY",
+      "marketing_goal": "VIDEO_AND_IMAGE",
+      "delivery_mode": "PROCEDURAL",
+      "ad_type": "ALL",
+      "gender": "NONE",
+      "ages": [],
+      "location_type": "CURRENT",
+      "district": "REGION",
+      "region_version": "2.3.2",
+      "hide_if_converted": "NO_EXCLUDE",
+      "schedule_type": "SCHEDULE_FROM_NOW",
+      "budget_mode": "BUDGET_MODE_DAY",
+      "pricing": "PRICING_OCPM",
+      "external_action": "AD_CONVERT_TYPE_APP_ORDER",
+      "deep_bid_type": "NET_ORDER_ROI",
+      "deep_bid_type_name": "净成交ROI",
+      "video_image_mode": "CREATIVE_IMAGE_MODE_VIDEO_VERTICAL",
+      "max_videos_per_project": 5,
+      "call_to_action_buttons": [
+        "立即购买"
+      ],
+      "product_info": {
+        "product_name_type": "CUSTOM",
+        "product_image_type": "CUSTOM",
+        "product_selling_point_type": "CUSTOM"
+      }
+    },
+    "materials": {},
+    "resolved_ids": {
+      "city_ids": []
+    },
+    "links": {},
+    "tracking_urls": {},
+    "titles": []
+  }
+}

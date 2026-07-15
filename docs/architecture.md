@@ -20,16 +20,20 @@ flowchart LR
     AdsSkill["ads-plan-monitor"] --> CLI["shared cli"]
     QcSkill["qc-plan-monitor"] --> CLI
     CLI --> Auth["auth"]
+    CLI --> Accounts["accounts"]
     CLI --> Templates["templates"]
     CLI --> Materials["materials"]
     CLI --> Plans["plans"]
     CLI --> Reports["reports"]
     CLI --> Discovery["discovery"]
     Auth --> Core["core"]
+    Accounts --> Core
+    Accounts --> Reports
     Templates --> Core
     Materials --> API["api"]
     Plans --> API
     Reports --> API
+    Reports --> McpClient["official MCP client"]
     Discovery --> API
     API --> Core
 ```
@@ -47,7 +51,21 @@ flowchart LR
 - HTTP 错误转换。
 - 网络错误转换为结构化 `ApiError`。
 
-OAuth Token endpoint 和官方 MCP 使用不同协议适配器，可以直接使用标准库网络，但必须遵守相同脱敏和错误边界。
+OAuth Token endpoint 和官方 MCP 使用不同协议适配器，可以直接使用标准库网络，但必须遵守相同脱敏和错误边界。`StreamableHttpMcpClient` 只负责 JSON-RPC、Streamable HTTP、SSE 兼容解析、`Tool-Range` 和协议错误；业务分页、字段选择、报表数值读取与汇总留在报表服务。
+
+## 负责账户
+
+`accounts/managed_accounts.py` 管理用户主动维护的跨渠道账户簿。它与 OAuth 授权索引、当前账户和模板绑定相互独立，唯一键为 `channel + advertiser_id`；授权同步不能修改账户簿。真实记录只保存在被忽略的项目配置或用户配置中。
+
+`query_managed_accounts_report` 按配置顺序调度启用账户并受控并发。营销账户读取无维度 `BASIC_DATA` 聚合，千川账户读取商品全域计划报表汇总。总消耗可跨渠道汇总；GMV、订单和 ROI 通过 `metric_basis` 保留渠道官方口径，并在 `channel_summaries` 分渠道聚合，避免把营销应用内成交与千川含券 ROI2 成交误当作完全可比。单账户失败结构化返回但不取消其他任务，官方只读限频可有限重试。
+
+配置更新统一经过文件级进程锁和原子替换；读改写操作在锁内重新读取。交互式模板向导先记录 revision，提交时使用 compare-and-swap，检测到并发修改后返回 `configuration_conflict`，不覆盖另一进程的结果。首次初始化使用锁内 create-if-missing，多个进程同时启动也只会有一个写入模板。
+
+## 千川全域报表
+
+`query_qianchuan_plan_report` 根据目标广告主解析并刷新千川 OAuth Token，再连接官方 `https://open.oceanengine.com/qianchuan/mcp`。Token 只存在于请求 Header 和进程内存，不进入 Plugin 清单、Codex MCP 配置或命令输出。
+
+财务指标只读取 `qianchuan_report_uni_promotion_data_get_v1` 的 `SITE_PROMOTION_PRODUCT_AD` 报表，使用 `ad_id` 维度和官方返回的 `metrics.Value/ValueStr`。`qianchuan_uni_promotion_list_v1` 只补充计划名称、状态、达人、商品、预算和目标 ROI；其 `stats_info` 是内部固定精度表示，不能用于展示或推算金额。报表层分别分页后按 `ad_id` 关联，再计算总消耗和加权 ROI；展示条数不影响汇总口径。
 
 ## 计划创建
 
@@ -98,6 +116,8 @@ sequenceDiagram
 每个渠道拥有独立应用、授权记录和广告主索引。一次 OAuth 授权对应一个本地 authorization record；业务命令根据目标 `advertiser_id` 解析正确 Token。
 
 `auth/channel_adapters.py` 定义渠道授权 URL、Token/账户端点及角色展开规则。营销适配器使用 `account_source=AD`；千川适配器增加店铺角色、`QC_AWEME` 权限和 `account_source=QIANCHUAN`。共享 OAuth 和授权存储层不判断具体业务角色。
+
+普通业务 API、OAuth 和两种 MCP 传输只接受巨量官方 HTTPS 主机，默认 opener 禁止重定向，JSON/SSE 响应均有大小上限。错误输出在进入结构化异常前脱敏 Token。抖音短链解析使用单独的官方域名白名单，不与广告 API 客户端共用信任边界。
 
 所有渠道共用 `http://127.0.0.1:8787/oauth/callback`。OAuth `state` 采用 `<渠道短码>.<随机值>`：巨量营销为 `AD`，巨量千川为 `QC`。回调处理器校验完整 `state` 后再解析渠道，解析结果必须与发起授权的渠道一致，Token 交换和存储使用回调确认后的渠道。
 

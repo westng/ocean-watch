@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+from importlib import resources
 
 import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.channels as channels
@@ -15,6 +16,7 @@ from ocean_watch.core.data import get_path, is_missing
 SECRET_KEYS = {"access_token", "refresh_token", "secret", "auth_code"}
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
+CONFIG_TEMPLATE = "config.example.json"
 
 
 def skill_root():
@@ -31,6 +33,19 @@ def default_project_config():
 
 def fallback_codex_config():
     return config_paths.home_config_path()
+
+
+def cli_command():
+    runner = skill_root() / "run.py"
+    return f'python3 "{runner}"' if runner.is_file() else "ocean-watch"
+
+
+def load_config_template():
+    source_template = skill_root() / "assets" / CONFIG_TEMPLATE
+    if source_template.is_file():
+        return json.loads(source_template.read_text(encoding="utf-8"))
+    packaged_template = resources.files("ocean_watch.resources").joinpath(CONFIG_TEMPLATE)
+    return json.loads(packaged_template.read_text(encoding="utf-8"))
 
 
 def apply_plan_template(config):
@@ -75,6 +90,14 @@ def next_action(query_missing, active_template, create_missing):
     return "ready"
 
 
+def configured_advertiser_id(config):
+    value = (config.get("account") or {}).get("advertiser_id")
+    if is_missing(value):
+        return None
+    text = str(value)
+    return text if text.isdigit() and int(text) > 0 else None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -84,7 +107,7 @@ def main(argv=None):
     parser.add_argument(
         "--home-config",
         action="store_true",
-        help="Use ~/.codex/ads-plan-monitor/config.json instead of the project-local config.",
+        help="Use $CODEX_HOME/ads-plan-monitor/config.json instead of project config.",
     )
     parser.add_argument(
         "--force",
@@ -93,7 +116,6 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    template = skill_root() / "assets" / "config.example.json"
     config_path = (
         fallback_codex_config()
         if args.home_config
@@ -101,14 +123,11 @@ def main(argv=None):
     )
     config_path = config_path.resolve()
 
-    created = False
-    if args.force or not config_path.exists():
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_store.atomic_write_json(
-            config_path,
-            json.loads(template.read_text(encoding="utf-8")),
-        )
-        created = True
+    created = config_store.initialize_json(
+        config_path,
+        load_config_template,
+        overwrite=args.force,
+    )
 
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     migrated_config = channels.migrate_config(raw_config)
@@ -118,7 +137,7 @@ def main(argv=None):
         config = migrated_config
     query_missing, create_missing, field_preview = check_fields(config)
     mcp_status = configure_official_mcp.status()
-    command = f'python3 "{skill_root() / "run.py"}"'
+    command = cli_command()
     template_rows = []
     for name, raw_template in sorted((migrated_config.get("plan_templates") or {}).items()):
         template = plan_templates.normalize_template(migrated_config, name, raw_template)
@@ -140,11 +159,12 @@ def main(argv=None):
             "binding_error": plan_templates.binding_error(template["bindings"]),
         })
     active_template = next((row for row in template_rows if row["active"]), None)
+    advertiser_id = configured_advertiser_id(migrated_config)
     channel_rows = []
     for row in channels.status_rows(migrated_config):
         channel_status = authorization_store.status(
             row["channel"],
-            advertiser_id=(migrated_config.get("account") or {}).get("advertiser_id"),
+            advertiser_id=advertiser_id,
         ) if row["implemented"] else {}
         channel_rows.append({**row, **channel_status})
 

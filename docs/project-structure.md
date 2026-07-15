@@ -19,6 +19,7 @@
 │   ├── run.py
 │   └── src/ocean_watch/
 │       ├── api/
+│       ├── accounts/
 │       ├── auth/
 │       ├── cli/
 │       ├── core/
@@ -56,7 +57,8 @@
 | `skills/ads-plan-monitor/references/` | 按需加载的官方 API 与模板说明 |
 | `skills/ads-plan-monitor/run.py` | Plugin 内无需安装的统一 CLI 启动器 |
 | `skills/ads-plan-monitor/src/ocean_watch/` | 可测试、可安装的应用包 |
-| `skills/qc-plan-monitor/SKILL.md` | 千川授权、商品模板、作品链接批量创建、素材追加与删除规则 |
+| `skills/ads-plan-monitor/src/ocean_watch/accounts/` | 跨渠道负责账户模型和管理 CLI |
+| `skills/qc-plan-monitor/SKILL.md` | 千川授权、商品模板、作品链接计划处理与官方 MCP 全域报表规则 |
 | `skills/qc-plan-monitor/assets/` | 千川脱敏 payload 示例 |
 | `skills/qc-plan-monitor/references/` | 千川官方 API 说明 |
 | `skills/qc-plan-monitor/run.py` | 复用共享 CLI 的千川 Skill 启动器 |

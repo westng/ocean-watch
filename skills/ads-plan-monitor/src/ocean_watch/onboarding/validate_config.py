@@ -51,10 +51,13 @@ def validate_config(raw_config, credentials=None):
         capability=query_capability(channel),
     )
     if credentials is None:
+        advertiser_id = (merged_config.get("account") or {}).get("advertiser_id")
+        if create_plan.contains_unresolved_value(advertiser_id):
+            advertiser_id = None
         merged_config = authorization_store.attach_runtime(
             merged_config,
             channel,
-            advertiser_id=(merged_config.get("account") or {}).get("advertiser_id"),
+            advertiser_id=advertiser_id,
         )
         app_credentials = authorization_store.read_app(channel)
         runtime_credentials = merged_config.get("api") or {}

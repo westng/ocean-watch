@@ -2,6 +2,20 @@
 
 All notable changes to Ocean Watch are documented here.
 
+## 0.9.0 - 2026-07-15
+
+### Added
+
+- Qianchuan all-domain plan spend reports through the official Streamable HTTP MCP.
+- Advertiser-bound Token refresh, restricted `Tool-Range`, paged all-domain report values, plan metadata enrichment, and weighted ROI summaries for `qc-reports plans`.
+- Local Marketing/Qianchuan responsible-account registry with channel-safe identity, enable/disable controls, concurrent account spend summaries, partial failures, and bounded retries for rate limits or transient service timeouts.
+
+### Changed
+
+- Unified project config, authorization state, and credential fallbacks under `CODEX_HOME`, with atomic locked writes and optimistic conflict detection for template wizards.
+- Restricted official API, OAuth, and MCP transports to approved HTTPS hosts, disabled redirects, bounded responses, and redacted transport errors.
+- Added wheel-only CI verification for packaged first-run resources and expanded generated-artifact ignore rules.
+
 ## 0.8.0 - 2026-07-14
 
 ### Added

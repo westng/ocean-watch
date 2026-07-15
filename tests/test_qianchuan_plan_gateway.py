@@ -1,5 +1,7 @@
 import copy
+import datetime as dt
 import unittest
+from unittest import mock
 
 from ocean_watch.plans import qianchuan_plan_gateway
 
@@ -80,6 +82,187 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         self.assertEqual(response["code"], 0)
         self.assertEqual(payload["multi_product_creative_list"], creatives)
         self.assertEqual(client.calls[-1][1], qianchuan_plan_gateway.QIANCHUAN_ADD_MATERIALS_PATH)
+
+    def test_creator_reconciliation_queries_history_and_deduplicates_plans(self):
+        today = dt.date(2026, 7, 15)
+        history_start = today - dt.timedelta(days=200)
+        old_plan = {
+            "ad_info": {"id": 7001, "name": "old plan"},
+            "room_info": [{"anchor_id": "9001"}],
+        }
+        other_plan = {
+            "ad_info": {"id": 8001, "name": "other plan"},
+            "room_info": [{"anchor_id": "9002"}],
+        }
+
+        def get(path, params=None):
+            if path == qianchuan_plan_gateway.QIANCHUAN_PLAN_DETAIL_PATH:
+                return {
+                    "code": 0,
+                    "data": {"ad_id": 7001, "aweme_id": 9001, "name": "old plan"},
+                }
+            if params["end_time"].startswith(today.isoformat()):
+                rows = [] if params["page"] == 1 else [other_plan, other_plan]
+                return {
+                    "code": 0,
+                    "data": {"ad_list": rows, "page_info": {"total_page": 2}},
+                }
+            return {
+                "code": 0,
+                "data": {"ad_list": [old_plan, old_plan], "page_info": {"total_page": 1}},
+            }
+
+        client = mock.Mock()
+        client.get.side_effect = get
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        found = gateway.find_creator_plans(
+            "1234567890123456",
+            ["9001"],
+            today=today,
+            history_start=history_start,
+        )
+
+        self.assertEqual([plan["ad_id"] for plan in found["matches"]["9001"]], ["7001"])
+        self.assertEqual(
+            [row["ad_info"]["id"] for row in found["list_query"]["plans"]],
+            [8001, 7001],
+        )
+        self.assertEqual(found["list_query"]["page_count"], 3)
+        self.assertEqual(found["list_query"]["window_count"], 2)
+        list_calls = [
+            call.kwargs["params"]
+            for call in client.get.call_args_list
+            if call.args[0] == qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH
+        ]
+        self.assertEqual([params["page"] for params in list_calls], [1, 2, 1])
+        for params in list_calls:
+            start = dt.date.fromisoformat(params["start_time"][:10])
+            end = dt.date.fromisoformat(params["end_time"][:10])
+            self.assertLessEqual((end - start).days, 179)
+
+    def test_creator_reconciliation_fails_closed_at_history_window_cap(self):
+        client = FakeClient()
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        today = dt.date(2026, 7, 15)
+        with self.assertRaisesRegex(Exception, "truncated"):
+            gateway.find_creator_plans(
+                "1234567890123456",
+                ["9001"],
+                today=today,
+                history_start=today - dt.timedelta(days=180),
+                max_windows=1,
+            )
+        self.assertFalse(any(
+            call[1] == qianchuan_plan_gateway.QIANCHUAN_PLAN_DETAIL_PATH
+            for call in client.calls
+        ))
+
+    def test_creator_reconciliation_fails_closed_at_page_cap(self):
+        client = mock.Mock()
+        client.get.return_value = {
+            "code": 0,
+            "data": {
+                "ad_list": [],
+                "page_info": {"total_page": 2},
+            },
+        }
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        today = dt.date(2026, 7, 15)
+        with self.assertRaisesRegex(Exception, "truncated"):
+            gateway.find_creator_plans(
+                "1234567890123456",
+                ["9001"],
+                today=today,
+                history_start=today,
+                max_pages=1,
+            )
+        client.get.assert_called_once()
+
+    def test_invalid_plan_pagination_fails_closed(self):
+        invalid_values = (None, -1, True, 1.5, "many")
+        for invalid in invalid_values:
+            with self.subTest(total_page=invalid):
+                client = mock.Mock()
+                client.get.return_value = {
+                    "code": 0,
+                    "data": {"ad_list": [], "page_info": {"total_page": invalid}},
+                }
+                gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+                with self.assertRaisesRegex(Exception, "invalid total_page"):
+                    gateway.find_creator_plans(
+                        "1234567890123456",
+                        ["9001"],
+                        today=dt.date(2026, 7, 15),
+                        history_start=dt.date(2026, 7, 15),
+                    )
+
+    def test_nonempty_plan_page_cannot_report_zero_pages(self):
+        client = mock.Mock()
+        client.get.return_value = {
+            "code": 0,
+            "data": {
+                "ad_list": [{"ad_info": {"id": 7001}}],
+                "page_info": {"total_page": 0},
+            },
+        }
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        with self.assertRaisesRegex(Exception, "contradicts"):
+            gateway.list_product_plans(
+                "1234567890123456",
+                today=dt.date(2026, 7, 15),
+                history_start=dt.date(2026, 7, 15),
+            )
+
+    def test_plan_pagination_change_fails_closed(self):
+        client = mock.Mock()
+        client.get.side_effect = [
+            {"code": 0, "data": {"ad_list": [], "page_info": {"total_page": 2}}},
+            {"code": 0, "data": {"ad_list": [], "page_info": {"total_page": 3}}},
+        ]
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        with self.assertRaisesRegex(Exception, "changed"):
+            gateway.list_product_plans(
+                "1234567890123456",
+                today=dt.date(2026, 7, 15),
+                history_start=dt.date(2026, 7, 15),
+            )
+
+    def test_invalid_material_pagination_fails_closed(self):
+        client = mock.Mock()
+        client.get.return_value = {
+            "code": 0,
+            "data": {"ad_material_infos": [], "page_info": {}},
+        }
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
+        with self.assertRaisesRegex(Exception, "invalid total_page"):
+            gateway.list_plan_video_materials("1234567890123456", "7001")
+
+    def test_deleted_material_does_not_block_readding_work(self):
+        deleted = {
+            "material_status": "DELETED",
+            "material_info": {"video_material": {"aweme_item_id": 101}},
+        }
+        active = {
+            "material_status": "DELIVERY_OK",
+            "material_info": {"video_material": {"aweme_item_id": 102}},
+        }
+        self.assertEqual(
+            qianchuan_plan_gateway.existing_aweme_item_ids([deleted, active]),
+            {"102"},
+        )
+
+    def test_active_and_deleted_rows_still_recognize_active_work(self):
+        rows = [
+            {
+                "material_status": "DELETED",
+                "material_info": {"video_material": {"aweme_item_id": 101}},
+            },
+            {
+                "material_status": "DELIVERY_OK",
+                "material_info": {"video_material": {"aweme_item_id": 101}},
+            },
+        ]
+        self.assertEqual(qianchuan_plan_gateway.existing_aweme_item_ids(rows), {"101"})
 
     def test_delete_materials_uses_material_ids_and_official_limit(self):
         client = FakeClient()

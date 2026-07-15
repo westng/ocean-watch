@@ -63,7 +63,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(config), encoding="utf-8")
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(Path(directory) / "state")}), \
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                     mock.patch.object(credential_store, "read_credentials", return_value={}), \
                     mock.patch.object(credential_store, "write_credentials"), \
                     mock.patch.object(credential_store, "read_entry", return_value={}):
@@ -90,7 +90,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_authorizations_resolve_by_advertiser_without_overwrite(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             first = authorization_store.save_authorization(
@@ -111,7 +111,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_explicit_account_must_cover_advertiser(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_store.save_authorization(
@@ -126,7 +126,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_duplicate_account_requires_explicit_rebind(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_store.save_authorization(
@@ -165,7 +165,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
             "authorized_advertiser_ids": ["101"],
         }
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
@@ -179,7 +179,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_runtime_resolves_different_tokens_for_different_advertisers(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_store.write_app("marketing", "app", "secret")
@@ -205,8 +205,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(valid_config()), encoding="utf-8")
-            state_dir = Path(directory) / "state"
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(state_dir)}), \
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                     mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
                     mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                     mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
@@ -228,7 +227,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_channel_manifest_commit_keeps_previous_generation(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_id = authorization_store.save_authorization(
@@ -255,7 +254,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_manifest_pointer_failure_retries_with_new_generation(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             real_atomic_write = config_store.atomic_write_json
@@ -296,7 +295,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_business_runtime_never_falls_back_to_legacy_token(self):
         legacy = {"access_token": "legacy-token", "refresh_token": "legacy-refresh"}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
                 mock.patch.object(credential_store, "read_entry", return_value={}):
             runtime = authorization_store.attach_runtime(
@@ -310,7 +309,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_pending_legacy_authorization_can_only_be_selected_for_sync(self):
         entries = {}
         with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": directory}), \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                 mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
                 mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
             authorization_id = authorization_store.save_authorization(
@@ -351,7 +350,6 @@ class ChannelAuthorizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(valid_config()), encoding="utf-8")
-            state_dir = Path(directory) / "state"
             real_atomic_write = config_store.atomic_write_json
             failed_once = False
 
@@ -362,7 +360,7 @@ class ChannelAuthorizationTests(unittest.TestCase):
                     raise OSError("injected config commit failure")
                 return real_atomic_write(path, data, backup=backup)
 
-            with mock.patch.dict(os.environ, {"ADS_PLAN_MONITOR_STATE_DIR": str(state_dir)}), \
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
                     mock.patch.object(credential_store, "read_credentials", return_value=legacy), \
                     mock.patch.object(credential_store, "write_credentials", return_value="test"), \
                     mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \

@@ -84,42 +84,45 @@ def prepare_legacy_credentials(raw):
 def migrate(config_path, confirm_remove_legacy_materials=False):
     config_path = Path(config_path).expanduser()
     with ProcessLock(migration_lock_path()):
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
-        migrated = prepare_config(
-            raw,
-            confirm_remove_legacy_materials=confirm_remove_legacy_materials,
-        )
-        journal = load_or_create_journal(config_path)
-        extracted = prepare_legacy_credentials(raw)
-
-        credential_result = journal.get("credential_result") or {}
-        if journal["credentials"] != "committed":
-            credential_result = authorization_store.migrate_legacy_marketing(
-                legacy=credential_store.read_credentials(),
-                authorization_id=journal["authorization_id"],
+        with config_store.json_file_lock(config_path):
+            raw = config_store.load_json(config_path)
+            migrated = prepare_config(
+                raw,
+                confirm_remove_legacy_materials=confirm_remove_legacy_materials,
             )
-            journal["credential_result"] = credential_result
-            journal["credentials"] = "committed"
-            write_journal(journal)
+            journal = load_or_create_journal(config_path)
+            extracted = prepare_legacy_credentials(raw)
 
-        if journal["config"] != "committed" or raw != migrated:
-            config_store.atomic_write_json(config_path, migrated)
-            journal["config"] = "committed"
-            write_journal(journal)
+            credential_result = journal.get("credential_result") or {}
+            if journal["credentials"] != "committed":
+                credential_result = authorization_store.migrate_legacy_marketing(
+                    legacy=credential_store.read_credentials(),
+                    authorization_id=journal["authorization_id"],
+                )
+                journal["credential_result"] = credential_result
+                journal["credentials"] = "committed"
+                write_journal(journal)
 
-        if journal["activation"] != ACTIVE:
-            journal["activation"] = ACTIVE
-            write_journal(journal)
+            if journal["config"] != "committed" or raw != migrated:
+                config_store.atomic_write_json(config_path, migrated, backup=False)
+                if extracted:
+                    config_path.with_suffix(config_path.suffix + ".bak").unlink(missing_ok=True)
+                journal["config"] = "committed"
+                write_journal(journal)
 
-        return {
-            "config": str(config_path),
-            "migration_id": journal["migration_id"],
-            "config_schema_version": migrated["config_schema_version"],
-            "default_channel": migrated["default_channel"],
-            "credential_migration": credential_result,
-            "config_sensitive_fields_migrated": sorted(extracted),
-            "activation": journal["activation"],
-        }
+            if journal["activation"] != ACTIVE:
+                journal["activation"] = ACTIVE
+                write_journal(journal)
+
+            return {
+                "config": str(config_path),
+                "migration_id": journal["migration_id"],
+                "config_schema_version": migrated["config_schema_version"],
+                "default_channel": migrated["default_channel"],
+                "credential_migration": credential_result,
+                "config_sensitive_fields_migrated": sorted(extracted),
+                "activation": journal["activation"],
+            }
 
 
 def assert_migration_ready(config_path):

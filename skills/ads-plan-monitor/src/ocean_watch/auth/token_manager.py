@@ -3,8 +3,6 @@ import argparse
 import copy
 import datetime as dt
 import json
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import ocean_watch.auth.authorization_store as authorization_store
@@ -13,6 +11,7 @@ import ocean_watch.auth.channels as channels
 import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.auth.migrate_channels as migrate_channels
 import ocean_watch.core.config_paths as config_paths
+from ocean_watch.api.client import OceanEngineClient
 from ocean_watch.api.client import get_json as get_business_json
 from ocean_watch.core.data import get_path
 from ocean_watch.core.process_lock import ProcessLock
@@ -21,6 +20,7 @@ PLACEHOLDER_PREFIX = "REPLACE_WITH"
 SECRET_KEYS = {"access_token", "refresh_token", "secret", "auth_code"}
 DEFAULT_REFRESH_MARGIN_SECONDS = 30 * 60
 DEFAULT_LOCK_TIMEOUT_SECONDS = 60
+MAX_ROLE_EXPANSION_PAGES = 100
 
 
 def is_missing(value):
@@ -128,19 +128,7 @@ def channel_adapter(config, capability=None):
 
 
 def post_json(base_url, path, payload):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        base_url.rstrip("/") + path,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        text = exc.read().decode("utf-8", errors="replace")
-        return {"code": exc.code, "message": text}
+    return OceanEngineClient(base_url).post(path, payload=payload)
 
 
 def get_api_json(config, path, params, base_url=None):
@@ -318,7 +306,8 @@ def fetch_role_advertiser_ids(config, account):
 
     identifiers = []
     page = 1
-    while page <= 100:
+    expected_total_pages = None
+    while True:
         response = get_api_json(
             config,
             expansion.path,
@@ -337,9 +326,36 @@ def fetch_role_advertiser_ids(config, account):
         data = response.get("data") or {}
         rows = data.get(expansion.list_key) or []
         identifiers.extend(response_ids(rows, expansion.id_keys))
-        page_info = data.get("page_info") or {}
-        total_page = int(page_info.get("total_page") or 1)
-        if page >= total_page or not rows:
+        page_info = data.get("page_info")
+        raw_total_pages = (
+            page_info.get("total_page")
+            if isinstance(page_info, dict) and "total_page" in page_info
+            else None
+        )
+        try:
+            total_pages = int(raw_total_pages)
+        except (TypeError, ValueError):
+            total_pages = 0
+        if (
+            isinstance(raw_total_pages, bool)
+            or total_pages <= 0
+            or isinstance(raw_total_pages, float) and raw_total_pages != total_pages
+        ):
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+        if total_pages > MAX_ROLE_EXPANSION_PAGES:
+            raise RuntimeError(
+                "Advertiser role expansion exceeds the pagination safety cap: "
+                f"{total_pages} pages"
+            )
+        if expected_total_pages is None:
+            expected_total_pages = total_pages
+        elif total_pages != expected_total_pages:
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+        if page >= total_pages:
             break
         page += 1
     unique_ids = list(dict.fromkeys(identifiers))
