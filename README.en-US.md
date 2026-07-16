@@ -62,6 +62,21 @@ Use qc-plan-monitor to query today's all-domain plan spend for a Qianchuan adver
 Show today's spend for the accounts I am responsible for
 ```
 
+Installation does not open or listen on the OAuth callback URI. On first authorization, `auth authorize` starts a temporary local server and opens the actual entry URL. `http://127.0.0.1:8787/oauth/callback` is only for official-console registration and the official redirect; users should not open it directly.
+
+Run the environment check before first use:
+
+```bash
+ocean-watch setup doctor
+```
+
+It verifies Python `3.9+`, Windows/macOS/Linux, Codex CLI availability, the secure credential backend, and the OAuth callback port. When Python is missing, Codex must stop after system-level detection and ask the user to install it; the Plugin does not silently install runtimes.
+
+### Developer requirements
+
+- Register as an Ocean Engine developer before using the SDK. See the [Developer Quick Start](https://open.oceanengine.com/labels/7/docs/1696710498372623).
+- Obtain the required API access first. Every SDK capability is limited by the permission groups granted to the application.
+
 ## Development
 
 Run the unified CLI without installing the package:

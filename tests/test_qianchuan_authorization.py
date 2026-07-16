@@ -82,6 +82,142 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertIn("form-action 'self'", headers["Content-Security-Policy"])
 
+    def test_root_is_a_diagnostic_page_and_keeps_session_alive(self):
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            qianchuan_runtime(),
+        )
+        try:
+            status, _, body = self.request_local_server(server, "GET", "/")
+            self.assertEqual(status, 200)
+            self.assertIn("本地授权服务已启动", body)
+            self.assertIn("不是配置或授权入口", body)
+            self.assertIsNone(server.result)
+        finally:
+            server.server_close()
+
+    def test_empty_callback_is_diagnostic_and_keeps_session_alive(self):
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            qianchuan_runtime(),
+        )
+        try:
+            status, _, body = self.request_local_server(
+                server,
+                "GET",
+                "/oauth/callback",
+            )
+            self.assertEqual(status, 200)
+            self.assertIn("正在等待官方授权回调", body)
+            self.assertIn("回调地址不是授权入口", body)
+            self.assertIsNone(server.result)
+        finally:
+            server.server_close()
+
+    def test_callback_accepts_trailing_slash_from_official_redirect(self):
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            qianchuan_runtime(),
+        )
+        query = urllib.parse.urlencode({"state": "QC.nonce", "auth_code": "code-1"})
+        try:
+            status, _, body = self.request_local_server(
+                server,
+                "GET",
+                f"/oauth/callback/?{query}",
+            )
+            self.assertEqual(status, 200)
+            self.assertIn("授权成功", body)
+            self.assertEqual(server.result["auth_code"], "code-1")
+        finally:
+            server.server_close()
+
+    def test_unknown_callback_path_returns_clear_diagnostic(self):
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            qianchuan_runtime(),
+        )
+        try:
+            status, _, body = self.request_local_server(server, "GET", "/callback")
+            self.assertEqual(status, 404)
+            self.assertIn("授权地址无效", body)
+            self.assertNotIn("Not found", body)
+            self.assertIsNone(server.result)
+        finally:
+            server.server_close()
+
+    def test_unknown_post_path_returns_clear_diagnostic(self):
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            qianchuan_runtime(),
+        )
+        try:
+            status, _, body = self.request_local_server(
+                server,
+                "POST",
+                "/oauth/callback",
+                body="x=1",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Length": "3",
+                },
+            )
+            self.assertEqual(status, 404)
+            self.assertIn("授权地址无效", body)
+            self.assertNotIn("Not found", body)
+            self.assertIsNone(server.result)
+        finally:
+            server.server_close()
+
+    def test_no_open_output_distinguishes_start_url_from_callback_uri(self):
+        config = qianchuan_runtime()
+        config["api"].pop("app_id")
+        config["api"].pop("secret")
+        output = StringIO()
+        with mock.patch.object(
+            token_manager,
+            "load_config",
+            return_value=config,
+        ), mock.patch.object(
+            authorization_store,
+            "read_app",
+            return_value={},
+        ), mock.patch.object(
+            oauth_local_authorize.webbrowser,
+            "open",
+        ) as open_browser, redirect_stdout(output), self.assertRaises(TimeoutError):
+            oauth_local_authorize.main([
+                "--channel",
+                "qianchuan",
+                "--redirect-uri",
+                "http://127.0.0.1:0/oauth/callback",
+                "--print-url",
+                "--no-open",
+                "--timeout",
+                "0",
+            ])
+
+        result = json.loads(output.getvalue())
+        start_url = urllib.parse.urlparse(result["start_url"])
+        self.assertEqual(start_url.path, oauth_local_authorize.APP_SETUP_PATH)
+        self.assertNotEqual(result["start_url"], result["redirect_uri"])
+        self.assertEqual(result["start_url_usage"], "open_this_url_to_begin")
+        self.assertEqual(
+            result["redirect_uri_usage"],
+            "official_registration_and_callback_only_do_not_open_directly",
+        )
+        open_browser.assert_not_called()
+
     def test_app_setup_rejects_invalid_session_without_storing_credentials(self):
         server = oauth_local_authorize.create_local_server(
             "http://127.0.0.1:0/oauth/callback",

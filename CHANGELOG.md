@@ -2,6 +2,18 @@
 
 All notable changes to Ocean Watch are documented here.
 
+## 0.9.1 - 2026-07-16
+
+### Fixed
+
+- Deferred local OAuth until first use instead of treating the loopback callback as an installation-time authentication page.
+- Added clear loopback diagnostics for direct, empty, trailing-slash, and unknown callback requests without terminating a valid authorization session.
+
+### Added
+
+- Added `setup doctor` and first-run environment reporting for Python, operating-system, Codex CLI, secure credential backend, and OAuth callback-port readiness.
+- Added explicit Ocean Engine developer registration and API-permission prerequisites.
+
 ## 0.9.0 - 2026-07-15
 
 ### Added

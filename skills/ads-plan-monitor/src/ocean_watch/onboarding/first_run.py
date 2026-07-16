@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import sys
 from importlib import resources
 
 import ocean_watch.auth.authorization_store as authorization_store
@@ -9,6 +10,7 @@ import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
 import ocean_watch.integrations.configure_official_mcp as configure_official_mcp
+import ocean_watch.onboarding.environment_check as environment_check
 import ocean_watch.onboarding.validate_config as validate_config
 import ocean_watch.templates.plan_templates as plan_templates
 from ocean_watch.core.data import get_path, is_missing
@@ -37,7 +39,7 @@ def fallback_codex_config():
 
 def cli_command():
     runner = skill_root() / "run.py"
-    return f'python3 "{runner}"' if runner.is_file() else "ocean-watch"
+    return f'"{sys.executable}" "{runner}"' if runner.is_file() else "ocean-watch"
 
 
 def load_config_template():
@@ -136,6 +138,10 @@ def main(argv=None):
     except ValueError:
         config = migrated_config
     query_missing, create_missing, field_preview = check_fields(config)
+    environment = environment_check.environment_report(
+        config_path,
+        channel=channels.selected_channel(migrated_config),
+    )
     mcp_status = configure_official_mcp.status()
     command = cli_command()
     template_rows = []
@@ -176,6 +182,9 @@ def main(argv=None):
         "channels": channel_rows,
         "config": str(config_path),
         "created_config_from_template": created,
+        "environment": environment,
+        "environment_ready": environment["ok"],
+        "environment_check_command": f'{command} setup doctor --config "{config_path}"',
         "next_action": next_action(query_missing, active_template, create_missing),
         "ok_for_query_data": not query_missing,
         "ok_for_create_plan": not query_missing and not create_missing,
@@ -209,6 +218,7 @@ def main(argv=None):
             "channel": "marketing",
             "channel_display_name": "巨量营销",
             "redirect_uri": get_path(migrated_config, "channels.marketing.oauth.redirect_uri"),
+            "redirect_uri_usage": "Register this exact URI in the official console; do not open it directly.",
             "credential_backend": credential_store.backend_name(),
             "local_authorize_command": f'{command} auth authorize --config "{config_path}" --channel marketing',
             "replace_app_command": f'{command} auth set-app --config "{config_path}" --channel marketing',

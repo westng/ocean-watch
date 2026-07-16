@@ -21,6 +21,7 @@ python3 skills/qc-plan-monitor/run.py
 ```text
 ocean-watch
 ├── setup
+│   ├── doctor
 │   ├── init
 │   └── validate
 ├── auth
@@ -117,6 +118,7 @@ ocean-watch accounts report --channel qianchuan --start-date YYYY-MM-DD --end-da
 ## 初始化与授权
 
 ```bash
+ocean-watch setup doctor
 ocean-watch setup init --home-config
 ocean-watch setup validate --mode all
 ocean-watch auth authorize --channel marketing
@@ -134,6 +136,8 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 ```
 
 首次执行 `auth authorize` 时，如果当前渠道没有应用配置，浏览器会打开一张本地表单，同屏收集 App ID 和 Secret，保存后直接跳转官方 OAuth。需要主动更换应用时使用 `auth set-app --channel CHANNEL`，它会打开相同表单但不发起授权。
+
+授权是首次使用流程，不在 Plugin 安装阶段执行。`http://127.0.0.1:8787/oauth/callback` 只用于开放平台登记和官方回调，不是手动访问入口；本地服务仅在授权命令运行期间存在。浏览器未自动打开时执行 `auth authorize --channel CHANNEL --print-url --no-open`，只打开输出中的 `start_url`，并保持命令运行。
 
 营销和千川流程共用默认回调地址，通过 OAuth `state` 的 `AD`/`QC` 前缀区分渠道；用户无需维护两条回调路径。若账户同步失败，授权保留为 pending 状态，可用最后一条命令重试；确认迁移账户归属时增加 `--rebind-existing`。
 

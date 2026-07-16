@@ -8,12 +8,19 @@ from pathlib import Path
 from unittest import mock
 
 from ocean_watch.cli import main as cli
+from ocean_watch.onboarding import environment_check
 from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
 
 from tests.support import business_template_config
 
 
 class CliTests(unittest.TestCase):
+    def test_exposes_environment_doctor(self):
+        handler, prefix, description = cli.COMMANDS[("setup", "doctor")]
+        self.assertIs(handler, environment_check.main)
+        self.assertEqual(prefix, ())
+        self.assertIn("runtime", description)
+
     def test_forwards_domain_arguments(self):
         handler = mock.Mock(return_value=0)
         with mock.patch.dict(cli.COMMANDS, {

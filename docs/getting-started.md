@@ -12,9 +12,17 @@ codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-安装或升级后新建 Codex 任务。巨量营销使用 `ads-plan-monitor`，巨量千川使用 `qc-plan-monitor`。初始化不会调用业务写接口。
+安装或升级后新建 Codex 任务。巨量营销使用 `ads-plan-monitor`，巨量千川使用 `qc-plan-monitor`。初始化不会调用业务写接口，安装阶段也不会触发 OAuth。
 
 ## 2. 初始化配置
+
+先检查运行环境：
+
+```bash
+ocean-watch setup doctor
+```
+
+该命令只读取本机运行信息，不读取 Token、不调用官方 API，也不启动 OAuth。阻断项包含 Python 版本、操作系统、安全凭据后端和回调端口；Codex CLI 缺失或版本过低会作为独立警告返回。没有 Python 时，先安装 Python `3.9+` 并重新打开 Codex。
 
 从源码运行：
 
@@ -68,6 +76,8 @@ ocean-watch auth set-app --channel qianchuan
 ```text
 http://127.0.0.1:8787/oauth/callback
 ```
+
+这个地址只用于开放平台登记和官方授权完成后的回跳，不是授权入口，不要在安装后直接打开。运行 `auth authorize` 时插件才会临时监听该端口，并自动打开应用配置页或官方授权页；命令必须保持运行直到回调完成。自动打开失败时，使用 `--print-url --no-open`，只打开输出中的 `start_url`。
 
 营销和千川应用可以配置同一个回调地址。插件通过官方原样返回的 OAuth `state` 区分渠道：`AD.<随机值>` 表示巨量营销，`QC.<随机值>` 表示巨量千川，并校验完整随机值防止串号。
 

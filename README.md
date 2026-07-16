@@ -65,6 +65,21 @@ codex plugin add ocean-watch@ocean-watch
 帮我看下我负责的账户今天消耗情况
 ```
 
+安装阶段不会打开或监听 OAuth 回调地址。首次授权时由 `auth authorize` 临时启动本地服务并打开正确入口；`http://127.0.0.1:8787/oauth/callback` 只用于开放平台登记和接收官方回调，不是需要手动访问的网页。
+
+首次使用先检查环境：
+
+```bash
+ocean-watch setup doctor
+```
+
+检测覆盖 Python `3.9+`、Windows/macOS/Linux、Codex CLI、安全凭据仓库和 OAuth 回调端口。若尚未安装 Python，Codex 会先通过系统命令探测并停止后续流程，提示用户安装 Python；插件不会静默安装运行环境。
+
+### 开发者条件
+
+- 使用 SDK 需要首先注册成为巨量引擎开发者，请参考[开发者快速入门文档](https://open.oceanengine.com/labels/7/docs/1696710498372623)
+- 使用 SDK 需要先拥有 API 的访问权限，所有 SDK 的使用与应用拥有的权限组相关联
+
 ## 本地开发
 
 仓库提供一个统一 CLI。无需安装即可运行：

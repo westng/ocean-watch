@@ -38,6 +38,7 @@ Core routes:
 
 | Request | Command |
 | --- | --- |
+| Check local environment | `setup doctor` |
 | First run | `setup init` |
 | Validate config | `setup validate --mode query|create-preview|create-submit|all` |
 | Marketing OAuth | `auth authorize --channel marketing` |
@@ -67,6 +68,12 @@ Classify the request before touching local state:
 - When intent is ambiguous in a development conversation, remain in development mode.
 
 Never use browser-admin automation. Use official APIs and the bundled CLI.
+
+## First-Use Environment Check
+
+Before the first Python command on a new computer, detect a supported interpreter with ordinary system commands. On macOS/Linux, try `python3 --version` and then `python --version`. On Windows, try `py -3 --version`, `python --version`, and `python3 --version`. Require Python `3.9+`; if none is available, stop and tell the user to install Python and reopen Codex. Do not claim that the Plugin can install Python automatically.
+
+After finding Python, run `setup doctor` before setup or authorization. It checks the Python version, Windows/macOS/Linux support, Codex CLI availability, secure credential backend, and whether the configured loopback callback port can be bound. Resolve every `blocking_check` before OAuth or business commands; warnings may be reported without blocking ordinary Plugin use. `setup init` includes the same environment report for first-run guidance.
 
 ## Config And Secrets
 
@@ -100,6 +107,8 @@ Manage records with `accounts add/list/remove/enable/disable`. Real account name
 Marketing OAuth state is `AD.<nonce>`. Require an exact state and channel match before exchanging or storing tokens.
 
 If the selected channel has no app credentials, `auth authorize` opens one local setup page that collects App ID and Secret together, stores them in the OS credential backend, then redirects to official OAuth. Do not split these fields into separate Codex prompts. `auth set-app` opens the same form only for an explicit app replacement.
+
+OAuth is first-use setup, not Plugin-install authentication. Run `auth authorize` and keep that command alive while the browser flow completes. The loopback `redirect_uri` is only an exact value to register in the official console and an endpoint for the official callback; never present it as a URL the user should open. If automatic browser launch fails, rerun with `--print-url --no-open` and open only the returned `start_url`.
 
 ## Official References
 

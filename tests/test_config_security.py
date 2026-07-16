@@ -200,7 +200,7 @@ class ConfigAndCredentialTests(unittest.TestCase):
     def test_checkout_first_run_uses_local_runner(self):
         with mock.patch.object(first_run, "skill_root", return_value=MARKETING_SKILL):
             command = first_run.cli_command()
-        self.assertIn("python3", command)
+        self.assertIn(str(first_run.sys.executable), command)
         self.assertIn(str(MARKETING_SKILL / "run.py"), command)
 
     def test_packaged_first_run_accepts_unconfigured_advertiser_placeholder(self):
@@ -220,12 +220,28 @@ class ConfigAndCredentialTests(unittest.TestCase):
             first_run.configure_official_mcp,
             "status",
             return_value={"ready": False},
-        ), redirect_stdout(StringIO()) as output:
+        ), mock.patch.object(
+            first_run.environment_check,
+            "environment_report",
+            return_value={
+                "ok": True,
+                "mode": "environment_check",
+                "checks": [],
+                "blocking_checks": [],
+                "warnings": [],
+            },
+        ) as doctor, redirect_stdout(StringIO()) as output:
             exit_code = first_run.main(["--home-config"])
 
         result = json.loads(output.getvalue())
         self.assertEqual(exit_code, 0)
         self.assertTrue(result["created_config_from_template"])
+        self.assertTrue(result["environment_ready"])
+        self.assertIn("setup doctor", result["environment_check_command"])
+        doctor.assert_called_once_with(
+            mock.ANY,
+            channel="marketing",
+        )
         self.assertEqual(result["next_action"], "edit_config")
         self.assertTrue(result["template_setup"]["list_command"].startswith("ocean-watch "))
         self.assertTrue(all(call.kwargs["advertiser_id"] is None for call in status.call_args_list))

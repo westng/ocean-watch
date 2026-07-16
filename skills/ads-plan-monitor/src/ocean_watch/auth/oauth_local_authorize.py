@@ -20,6 +20,7 @@ from ocean_watch.api.client import official_https_url
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8787/oauth/callback"
 APP_SETUP_PATH = "/oauth/setup"
 MAX_FORM_BYTES = 4096
+CALLBACK_QUERY_FIELDS = ("state", "auth_code", "code", "error", "message")
 
 
 class OAuthStateError(ValueError):
@@ -65,6 +66,17 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/":
+            self.respond(
+                "本地授权服务已启动",
+                detail=(
+                    "请继续当前应用配置流程。这个地址不是配置或授权入口。"
+                    if self.server.requires_app_configuration
+                    else "请在官方授权页面完成授权。这个地址不是配置或授权入口，只负责接收官方回调。"
+                ),
+            )
+            return
+
         if parsed.path == APP_SETUP_PATH and self.server.requires_app_configuration:
             params = urllib.parse.parse_qs(parsed.query)
             setup_token = (params.get("setup_token") or [""])[0]
@@ -82,13 +94,21 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             return
 
         expected_path = urllib.parse.urlparse(self.server.redirect_uri).path
-        if parsed.path != expected_path:
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not found")
+        if normalize_callback_path(parsed.path) != normalize_callback_path(expected_path):
+            self.respond(
+                "授权地址无效",
+                status=404,
+                detail="请返回 Codex 重新运行授权命令，不要手动修改本地回调地址。",
+            )
             return
 
         params = urllib.parse.parse_qs(parsed.query)
+        if not any(params.get(field) for field in CALLBACK_QUERY_FIELDS):
+            self.respond(
+                "正在等待官方授权回调",
+                detail="回调地址不是授权入口，请返回官方授权页面继续，或在 Codex 中重新运行授权命令。",
+            )
+            return
         state = (params.get("state") or [""])[0]
         auth_code = (params.get("auth_code") or params.get("code") or [""])[0]
         error = (params.get("error") or params.get("message") or [""])[0]
@@ -134,7 +154,11 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path != APP_SETUP_PATH or not self.server.requires_app_configuration:
-            self.respond("Not found", status=404)
+            self.respond(
+                "授权地址无效",
+                status=404,
+                detail="请返回 Codex 重新运行授权命令，不要手动修改本地授权地址。",
+            )
             return
         content_type = self.headers.get("Content-Type", "")
         try:
@@ -198,7 +222,12 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
-    def respond(self, message, status=200):
+    def respond(
+        self,
+        message,
+        status=200,
+        detail="这个本地页面只用于接收官方回调，不会展示或保存 token。",
+    ):
         body = f"""<!doctype html>
 <html lang=\"zh-CN\">
 <head>
@@ -211,8 +240,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <main>
-    <h1>{message}</h1>
-    <p>这个本地页面只用于接收官方回调，不会展示或保存 token。</p>
+    <h1>{html.escape(message)}</h1>
+    <p>{html.escape(detail)}</p>
   </main>
 </body>
 </html>
@@ -241,6 +270,11 @@ def validate_app_credentials(app_id, secret):
         raise ValueError("app_id and secret are required")
     if len(str(app_id)) > 128 or len(str(secret)) > 512:
         raise ValueError("app credentials exceed the allowed length")
+
+
+def normalize_callback_path(path):
+    normalized = str(path or "/")
+    return normalized.rstrip("/") or "/"
 
 
 def render_app_setup_page(channel_display_name, setup_token, error=None):
@@ -409,7 +443,9 @@ def main(argv=None):
         print(json.dumps({
             "mode": "app_configuration" if requires_app_configuration else "oauth_local_authorize",
             "redirect_uri": redirect_uri,
+            "redirect_uri_usage": "official_registration_and_callback_only_do_not_open_directly",
             "start_url": start_url,
+            "start_url_usage": "open_this_url_to_begin",
             "requires_app_configuration": requires_app_configuration,
             "safe_note": "Do not paste app secrets or tokens in chat.",
         }, ensure_ascii=False, indent=2), flush=True)

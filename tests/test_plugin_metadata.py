@@ -67,7 +67,7 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertEqual(entry["source"], {"source": "local", "path": "."})
         self.assertEqual(entry["category"], self.manifest["interface"]["category"])
         self.assertIn(entry["policy"]["installation"], {"AVAILABLE", "INSTALLED_BY_DEFAULT"})
-        self.assertIn(entry["policy"]["authentication"], {"ON_INSTALL", "ON_USE"})
+        self.assertEqual(entry["policy"]["authentication"], "ON_USE")
 
     def test_each_skill_has_consistent_agent_metadata(self):
         skill_roots = sorted(path.parent for path in (REPO_ROOT / "skills").glob("*/SKILL.md"))

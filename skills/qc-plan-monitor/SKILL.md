@@ -39,6 +39,7 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 
 | Request | Command |
 | --- | --- |
+| Check local environment | `setup doctor --channel qianchuan` |
 | Start Qianchuan OAuth | `auth authorize --channel qianchuan` |
 | Replace Qianchuan app | `auth set-app --channel qianchuan` |
 | Token/account status | `auth status --channel qianchuan` |
@@ -62,6 +63,12 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 - Do not read real local credentials, mutate business config, or call real APIs unless the user explicitly requests business execution.
 - Never automate the Qianchuan web admin. Use official APIs only.
 
+## First-Use Environment Check
+
+On a new computer, detect Python before invoking `run.py`: macOS/Linux should try `python3 --version` then `python --version`; Windows should try `py -3 --version`, `python --version`, then `python3 --version`. Require Python `3.9+`. If no supported interpreter exists, stop and ask the user to install Python and reopen Codex.
+
+Then run `setup doctor --channel qianchuan`. Resolve blocking Python, operating-system, secure credential backend, or loopback callback-port checks before Qianchuan OAuth. Codex CLI availability is reported separately and may be a warning when the Skill is already running inside Codex.
+
 ## Authorization
 
 Qianchuan uses its own app, credential slots, authorization records, and advertiser index. It shares only the local callback URI with Marketing:
@@ -71,6 +78,8 @@ http://127.0.0.1:8787/oauth/callback
 ```
 
 OAuth state is `QC.<nonce>`. Require an exact state and channel match before token exchange or storage. The first authorization opens one local page that collects App ID and Secret together, stores them in the operating-system credential backend, and redirects to official OAuth.
+
+OAuth starts on first use, not during Plugin installation. Run `auth authorize` and keep the process alive until the browser returns. Register the loopback callback URI in the official console, but never ask the user to open that URI directly. If the browser does not open automatically, rerun with `--print-url --no-open` and open only `start_url`.
 
 Business commands resolve the Qianchuan authorization bound to the target `advertiser_id`. Never fall back to a Marketing authorization. Use `--auth-account-id` only when multiple Qianchuan authorizations cover the same advertiser.
 

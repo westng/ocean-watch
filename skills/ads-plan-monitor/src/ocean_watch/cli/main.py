@@ -26,7 +26,7 @@ from ocean_watch.materials import (
     query_qianchuan_creator_videos,
     query_videos,
 )
-from ocean_watch.onboarding import first_run, validate_config
+from ocean_watch.onboarding import environment_check, first_run, validate_config
 from ocean_watch.plans import (
     batch_create_creator_plans,
     batch_create_from_today_videos,
@@ -46,6 +46,7 @@ from ocean_watch.reports import (
 from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
 
 COMMANDS = {
+    ("setup", "doctor"): (environment_check.main, (), "Check local runtime requirements"),
     ("setup", "init"): (first_run.main, (), "Initialize local configuration"),
     ("setup", "validate"): (validate_config.main, (), "Validate configuration readiness"),
     ("auth", "set-app"): (oauth_local_authorize.main, ("--configure-app-only",), "Store app credentials"),

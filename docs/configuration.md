@@ -192,6 +192,9 @@ ocean-watch auth set-app --channel qianchuan
 
 默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台设置完全一致。
 
+- Plugin 安装不触发 OAuth；首次使用相应渠道时才运行 `auth authorize`。
+- 回调地址不是授权入口，不应手动打开。授权命令启动后，只打开浏览器自动进入的页面；自动打开失败时使用 `--print-url --no-open` 并打开 `start_url`。
+- 本地服务只在授权命令运行期间监听，授权完成或超时后关闭。
 - 巨量营销和巨量千川共用这一条回调地址，不需要分别申请路径。
 - OAuth `state` 使用 `AD.<随机值>` 表示巨量营销，使用 `QC.<随机值>` 表示巨量千川。
 - 回调必须同时匹配完整随机 `state` 和当前授权渠道，否则拒绝交换 Token。
