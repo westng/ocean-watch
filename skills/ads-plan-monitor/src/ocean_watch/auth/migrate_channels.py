@@ -10,6 +10,7 @@ import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
 import ocean_watch.templates.plan_templates as plan_templates
+import ocean_watch.templates.qianchuan_product_templates as qianchuan_product_templates
 from ocean_watch.core.process_lock import ProcessLock
 
 JOURNAL_SCHEMA_VERSION = 1
@@ -70,6 +71,7 @@ def prepare_config(raw, confirm_remove_legacy_materials=False):
             prepared,
             confirm_remove_legacy_materials=confirm_remove_legacy_materials,
         )
+    prepared = qianchuan_product_templates.ensure_config(prepared)
     return channels.migrate_config(prepared)
 
 
@@ -144,7 +146,7 @@ def main(argv=None):
     parser.add_argument(
         "--confirm-remove-legacy-materials",
         action="store_true",
-        help="Confirm removal of fixed video IDs while upgrading plan templates to schema v3.",
+        help="Confirm removal of fixed video IDs while upgrading plan templates.",
     )
     args = parser.parse_args(argv)
     config_path = config_paths.resolve_config_path(args.config)

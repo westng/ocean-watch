@@ -24,6 +24,10 @@ This is one Skill with internal branches, not separate create/query/strategy ski
 
 This Skill owns only `marketing` (巨量营销): OAuth, account discovery, templates, materials, plans, reports, and strategy. Route every Qianchuan request to `$qc-plan-monitor`; never reuse Marketing credentials, endpoints, templates, or creation transactions for Qianchuan.
 
+For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, do not assume Marketing from the active account, existing authorization, or default channel. Run the shared `templates create` entry without `--channel` and ask the user to choose `巨量营销` or `巨量千川` before showing source templates. An unconfigured or unauthorized channel remains selectable for template creation; clearly state that authorization is required before real delivery. After Marketing is selected, ask `混剪素材（账户上传）` or `原生素材（达人授权）` before showing source templates, and show only business templates bound to that material mode.
+
+Template advertiser selection must ignore placeholder IDs. When the selected channel has multiple authorized advertisers, require an exact advertiser ID and reject IDs outside that channel's advertiser index. Auto-fill only when exactly one authorized advertiser exists or a reusable source-template advertiser is still authorized. An unauthorized channel may save an unverified template binding, but the preview must show `UNVERIFIED` and real delivery must revalidate after OAuth.
+
 ## Command Entry
 
 Use the unified launcher from this Skill root:
@@ -44,7 +48,7 @@ Core routes:
 | Marketing OAuth | `auth authorize --channel marketing` |
 | Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status | `auth status --channel marketing` |
-| Create/list templates | `templates create` / `templates list` |
+| Create/list Marketing templates | `templates create --channel marketing` / `templates list` |
 | Uploaded videos | `materials videos` |
 | Creator videos | `materials creator` |
 | Single upload plan | `plans create` |
@@ -108,7 +112,11 @@ Marketing OAuth state is `AD.<nonce>`. Require an exact state and channel match 
 
 If the selected channel has no app credentials, `auth authorize` opens one local setup page that collects App ID and Secret together, stores them in the OS credential backend, then redirects to official OAuth. Do not split these fields into separate Codex prompts. `auth set-app` opens the same form only for an explicit app replacement.
 
-OAuth is first-use setup, not Plugin-install authentication. Run `auth authorize` and keep that command alive while the browser flow completes. The loopback `redirect_uri` is only an exact value to register in the official console and an endpoint for the official callback; never present it as a URL the user should open. If automatic browser launch fails, rerun with `--print-url --no-open` and open only the returned `start_url`.
+OAuth is first-use setup, not Plugin-install authentication. Run `auth authorize` and keep that command alive while the browser flow completes. The loopback `redirect_uri` is only an exact value to register in the official console and an endpoint for the official callback; never present it as a URL the user should open.
+
+When Codex starts OAuth, always use `--print-url --no-open` and return only `start_url` as the temporary entry page. Let the user open it in the browser profile that already holds the intended Ocean Engine account. Do not invoke the operating system's default browser or use the in-app browser unless the user explicitly asks for it.
+
+After presenting `start_url`, keep the authorization command running and continue polling the same process; do not end the task while it is waiting for the callback. As soon as OAuth completes, proactively run `auth status` and report the channel, authorization result, authorized-subject count, verified advertiser count, pending/partial sync counts, and advertiser-to-Token mapping result. Never wait for the user to ask whether authorization succeeded, and never include credentials in the feedback.
 
 ## Official References
 
@@ -128,22 +136,35 @@ Official MCP is documentation-only. Use `mcp configure`/`mcp status`; continue u
 
 ## Template Contract
 
-Schema v3 has one `default_plan_template` and advertiser-bound business templates.
+Schema v5 has one `default_plan_template` and advertiser-bound business templates.
 
 - The default template is a creation base only and must never submit a plan.
 - New business templates must use the interactive `templates create` wizard.
 - Every business template binds `channel`, `advertiser_id`, `platform`, `traffic_source`, `product_id`, and `product_name`.
 - Every template binds `material_strategy.source_type` to `ACCOUNT_UPLOAD` or `CREATOR_AUTHORIZED`.
+- The Marketing creation base uses `product_info.product_image_type=DPA` with the upgraded-product image field `images_url`; the standard wizard does not ask users for image IDs.
+- `CUSTOM` product images remain an advanced configuration. When a manually edited or cloned template selects `CUSTOM`, one or more `overrides.resolved_ids.product_image_ids` are still required by the official API.
+- The wizard explicitly collects daily budget, net-order ROI goal, gender, age targeting, and 6–9-position custom product selling points, then shows their official payload values before confirmation.
+- The bundled Marketing default targets the 29 top-level regions outside Hong Kong, Macao, Taiwan, Xinjiang, and Tibet. The official payload receives this allowlist through `resolved_ids.city_ids`; do not invent an exclusion field.
 - Target channel and advertiser must match the template before token resolution or API calls.
 - Dynamic video, cover, item, and material IDs belong to the current run, not the template.
+- Before an online write, resolve a missing event asset only from official same-advertiser,
+  same-product projects. If more than one valid asset remains, block and require an explicit
+  selection instead of guessing.
+- Standard template creation does not ask for product image IDs. At runtime, verify the selected
+  DPA product fields; when those fields are unavailable, reuse product images and non-empty brand
+  IDs only from an official same-advertiser, same-product promotion. If neither source is available,
+  block before project creation.
 - Titles live in `copy_materials.titles`; each title must contain 5–30 characters.
 - New product or advertiser cloning clears account/product-owned assets according to the wizard preview.
 
-Suggested template name:
+All business-template channels share `渠道-广告账户ID-商品名-商品ID-模版类型`. For Marketing, the generated name is:
 
 ```text
-平台-CID-商品名-商品ID-素材来源
+巨量营销-广告账户ID-商品名-商品ID-模版类型
 ```
+
+The template type is `混剪素材` for `ACCOUNT_UPLOAD` and `原生素材` for `CREATOR_AUTHORIZED`. The wizard generates this name from the confirmed bindings. Do not ask for or accept a free-form replacement.
 
 Online project and promotion names must expose `混剪` for `ACCOUNT_UPLOAD` and `原生` for `CREATOR_AUTHORIZED`.
 
@@ -156,8 +177,11 @@ Creation is always a two-step official transaction:
 
 Default to dry-run. Submit only after explicit online-write permission, using `--submit`. Before submission:
 
-- Apply the named or active business template.
+- Apply the business template explicitly named by the user or confirmed in the current conversation. Never fall back to an active/default business template.
 - Apply explicit user overrides.
+- Resolve and report account/product runtime assets before creating the project. Runtime fallback
+  data enriches the in-memory payload only and is never written into credentials or dynamic
+  material fields.
 - Query and revalidate current material availability.
 - Block unresolved values such as `REPLACE_WITH`, `TODO`, `待填`, or unsupported placeholders.
 - Show advertiser, template, project/promotion names, budget/bid/ROI when present, material count, product ID, operation, missing fields, and endpoints.
@@ -180,10 +204,22 @@ If project creation succeeds and promotion creation fails, preserve `project_id`
 - Homepage visibility does not imply cooperation authorization.
 - Re-query the authorization snapshot immediately before creation.
 - Reject inactive, expired, expiring-too-soon, incomplete, cross-advertiser, mixed-creator, or missing materials.
+- If the current authorization snapshot alone omits `video_cover_id`, recover it only from a unique
+  official promotion material under the same advertiser with the same `item_id`, `material_id`, and
+  `MATERIAL_STATUS_OK`. Keep this value runtime-only; block unresolved or ambiguous covers, and
+  report that the authorization period remains a create-time-only check. If official creation has
+  already rejected the work as outside its authorization period, block retries until a refreshed
+  authorization snapshot supplies its own cover; preserve the created project for promotion-only resume.
 - One normal native promotion contains one `aweme_id`; all selected items in a unit must belong to that creator.
 - Exclude clear product mismatches. Ambiguous materials require explicit user confirmation.
 - Creator batch jobs must record `product_match.status` as `MATCHED` or `USER_CONFIRMED` plus concise evidence.
 - Use `plans batch-creator` for multiple creators. Its local journal skips completed jobs and resumes promotion failures.
+- Before every creator batch write, run `plans batch-creator --preflight` with the same manifest and
+  journal. Show the user the batch ID, already-completed count, ready count, blocked rows, planned
+  operation per ready row, and the project-capacity warning; then submit only within the user's
+  explicit confirmed scope. The official project list does not reliably expose quota occupancy,
+  so never claim that capacity is available from a read-only count. `/v3.0/project/create/` is the
+  final capacity check against the known per-advertiser project limit.
 
 ## Query And Reporting
 

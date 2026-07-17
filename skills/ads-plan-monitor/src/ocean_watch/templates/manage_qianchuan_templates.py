@@ -4,7 +4,9 @@ import json
 
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
+from ocean_watch.auth import authorization_store
 from ocean_watch.templates import qianchuan_product_templates as product_templates
+from ocean_watch.templates import template_advertiser_binding
 
 
 def prompt_value(input_fn, label, default=None, required=False):
@@ -58,7 +60,6 @@ def create_template(
     product_name,
     product_ids,
     source=None,
-    activate=True,
     template_id=None,
 ):
     config = product_templates.ensure_config(config)
@@ -68,28 +69,32 @@ def create_template(
         product_ids=product_ids,
         source=source,
         template_id=template_id,
-        active=activate,
+        active=True,
     )
     for existing in (config.get(product_templates.TEMPLATES_KEY) or {}).values():
         if existing.get("display_name") == template["display_name"]:
             raise ValueError(f"Qianchuan product template already exists: {template['display_name']}")
     config.setdefault(product_templates.TEMPLATES_KEY, {})[template["template_id"]] = template
-    if activate:
-        config[product_templates.ACTIVE_TEMPLATE_KEY] = template["template_id"]
     return config, template
 
 
-def run_create_wizard(config, input_fn=input, output_fn=print):
+def run_create_wizard(
+    config,
+    input_fn=input,
+    output_fn=print,
+    authorization_state=None,
+):
     config = product_templates.ensure_config(config)
     source_id, source = select_source(config, input_fn, output_fn)
     bindings = source.get("bindings") or {}
-    advertiser_id = prompt_value(
-        input_fn,
-        "千川广告主 ID",
-        bindings.get("advertiser_id")
-        if not str(bindings.get("advertiser_id") or "").startswith("REPLACE_WITH")
-        else None,
-        required=True,
+    advertiser_id, advertiser_verification = (
+        template_advertiser_binding.prompt_advertiser_id(
+            "qianchuan",
+            (bindings.get("advertiser_id"),),
+            input_fn=input_fn,
+            output_fn=output_fn,
+            channel_state=authorization_state,
+        )
     )
     product_name = prompt_value(
         input_fn,
@@ -106,17 +111,17 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
         inherited_ids,
         required=True,
     )
-    activate = prompt_yes_no(input_fn, "保存后设为当前千川商品模板", default=True)
     candidate = product_templates.build_business_template(
         advertiser_id=advertiser_id,
         product_name=product_name,
         product_ids=product_ids,
         source=source,
-        active=activate,
+        active=True,
     )
     preview = {
         "source_template": source_id,
         "template": candidate,
+        "advertiser_binding_verification": advertiser_verification,
         "omitted_fields": [
             "aweme_id",
             "product_channel_info",
@@ -132,14 +137,12 @@ def run_create_wizard(config, input_fn=input, output_fn=print):
         product_name=product_name,
         product_ids=product_ids,
         source=source,
-        activate=activate,
         template_id=candidate["template_id"],
     )
     return updated, {
         "created": True,
         "template_id": template["template_id"],
         "name": template["display_name"],
-        "active": activate,
         "template": template,
     }
 
@@ -171,12 +174,14 @@ def main(argv=None):
                 "business_usable": False,
                 "template": normalized[product_templates.DEFAULT_TEMPLATE_KEY],
             },
-            "active_template_id": normalized.get(product_templates.ACTIVE_TEMPLATE_KEY),
             "templates": product_templates.list_templates(normalized),
         }, ensure_ascii=False, indent=2))
         return 0
 
-    updated, result = run_create_wizard(config)
+    updated, result = run_create_wizard(
+        config,
+        authorization_state=authorization_store.load_channel_state("qianchuan"),
+    )
     if result.get("created"):
         config_store.compare_and_swap_json(config_path, original_revision, updated)
     print(json.dumps(result, ensure_ascii=False, indent=2))

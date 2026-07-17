@@ -29,6 +29,7 @@ class RoleExpansion:
 class ChannelAdapter:
     channel = None
     authorize_url = None
+    authorize_navigation_origins = ()
     token_base_url = DEFAULT_TOKEN_BASE_URL
     business_base_url = DEFAULT_BUSINESS_BASE_URL
     access_token_path = ACCESS_TOKEN_PATH
@@ -53,6 +54,7 @@ class ChannelAdapter:
 class MarketingChannelAdapter(ChannelAdapter):
     channel = "marketing"
     authorize_url = "https://ad.oceanengine.com/openapi/audit/oauth.html"
+    authorize_navigation_origins = ("https://open.oceanengine.com",)
 
     def role_expansion(self, account):
         role = account_role(account)

@@ -5,14 +5,15 @@ from decimal import Decimal, InvalidOperation
 
 from ocean_watch.core.data import is_missing
 from ocean_watch.core.errors import ConfigurationError
+from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 MAX_PRODUCTS = 30
 TEMPLATE_TYPE = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 MATERIAL_SOURCE_TYPE = "CREATOR_RUNTIME_QUERY"
 DEFAULT_TEMPLATE_KEY = "default_qianchuan_product_template"
 TEMPLATES_KEY = "qianchuan_product_templates"
-ACTIVE_TEMPLATE_KEY = "active_qianchuan_product_template"
+LEGACY_ACTIVE_TEMPLATE_KEY = "active_qianchuan_product_template"
 SCHEMA_VERSION_KEY = "qianchuan_product_template_schema_version"
 
 DEFAULT_DELIVERY_SETTING = {
@@ -45,23 +46,46 @@ def default_template():
 
 def ensure_config(config):
     normalized = copy.deepcopy(config)
-    current_version = int(normalized.get(SCHEMA_VERSION_KEY) or 1)
+    try:
+        current_version = int(normalized.get(SCHEMA_VERSION_KEY) or 1)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(f"{SCHEMA_VERSION_KEY} must be an integer") from exc
+    if current_version > SCHEMA_VERSION:
+        raise ConfigurationError(
+            f"Qianchuan product template schema {current_version} is newer than "
+            f"supported {SCHEMA_VERSION}"
+        )
     if current_version < 2:
         normalized[DEFAULT_TEMPLATE_KEY] = default_template()
         for template in (normalized.get(TEMPLATES_KEY) or {}).values():
             bindings = template.get("bindings") or {}
             bindings.pop("shop_name", None)
+    if current_version < 3:
+        migrated_names = {}
+        for template_id, template in (normalized.get(TEMPLATES_KEY) or {}).items():
+            bindings = template.get("bindings") or {}
             product_ids = bindings.get("product_ids") or []
             if bindings.get("advertiser_id") and bindings.get("product_name") and product_ids:
-                template["display_name"] = display_name(
+                name = display_name(
                     str(bindings["advertiser_id"]),
                     str(bindings["product_name"]),
                     [str(value) for value in product_ids],
                 )
+                if name in migrated_names and migrated_names[name] != template_id:
+                    raise ConfigurationError(
+                        "Qianchuan product template naming collision during schema v3 migration",
+                        {
+                            "display_name": name,
+                            "template_ids": [migrated_names[name], template_id],
+                        },
+                    )
+                migrated_names[name] = template_id
+                template["display_name"] = name
+    if current_version < 4:
+        normalized.pop(LEGACY_ACTIVE_TEMPLATE_KEY, None)
     normalized[SCHEMA_VERSION_KEY] = SCHEMA_VERSION
     normalized.setdefault(DEFAULT_TEMPLATE_KEY, default_template())
     normalized.setdefault(TEMPLATES_KEY, {})
-    normalized.setdefault(ACTIVE_TEMPLATE_KEY, None)
     return normalized
 
 
@@ -107,7 +131,13 @@ def required_text(value, field):
 
 
 def display_name(advertiser_id, product_name, product_ids):
-    return f"{advertiser_id}-商品全域-{product_name}-{'/'.join(product_ids)}"
+    return business_template_names.format_business_template_name(
+        "qianchuan",
+        advertiser_id,
+        product_name,
+        product_ids,
+        "商品全域",
+    )
 
 
 def validate_delivery_setting(setting):
@@ -245,7 +275,6 @@ def validate_business_template(template):
 def list_templates(config):
     config = ensure_config(config)
     rows = []
-    active_id = config.get(ACTIVE_TEMPLATE_KEY)
     for template_id, raw in sorted((config.get(TEMPLATES_KEY) or {}).items()):
         template = validate_business_template(raw)
         if template["template_id"] != template_id:
@@ -257,7 +286,6 @@ def list_templates(config):
         rows.append({
             "template_id": template_id,
             "name": template["display_name"],
-            "active": template_id == active_id,
             "status": template["status"],
             "advertiser_id": bindings["advertiser_id"],
             "product_name": bindings["product_name"],
@@ -271,9 +299,8 @@ def list_templates(config):
 def resolve_template(config, selector=None):
     config = ensure_config(config)
     templates = config.get(TEMPLATES_KEY) or {}
-    selector = selector or config.get(ACTIVE_TEMPLATE_KEY)
     if is_missing(selector):
-        raise ConfigurationError("no active Qianchuan product template")
+        raise ConfigurationError("an explicit Qianchuan product template is required")
     if selector in templates:
         return validate_business_template(templates[selector])
     matches = [

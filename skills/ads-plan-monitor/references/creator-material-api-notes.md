@@ -59,6 +59,16 @@ and available product context with `bindings.product_name`. Exclude clear confli
 such as a fiber-drink video under a protein-powder template. Treat generic or
 ambiguous titles as requiring user confirmation instead of silently selecting them.
 
+The authorization relationship endpoint can temporarily omit `video_cover_id` even when an
+existing official promotion still contains a valid cover for the same work. During plan preflight,
+recover a missing cover only when `/v3.0/promotion/list/` yields one distinct cover under the same
+advertiser, `item_id`, and `material_id`, with `material_status=MATERIAL_STATUS_OK`. Never persist
+the recovered cover in a template, and block when no match or multiple cover IDs remain.
+Historical cover recovery does not prove that the work is still inside its authorization period;
+`/v3.0/promotion/create/` performs the final check. After that endpoint rejects a work as outside
+the authorization period, keep the created project for promotion-only resume and block retries
+until the refreshed relationship snapshot returns its own cover.
+
 ## Promotion payload
 
 Creator-authorized videos use the normal `promotion_materials.video_material_list`, but each selected item contains:

@@ -2,6 +2,32 @@
 
 All notable changes to Ocean Watch are documented here.
 
+## Unreleased
+
+### Changed
+
+- Added a resumable Marketing creator-batch preflight that reports completed, ready, retry, and blocked jobs before submission while treating project capacity as a create-time-only check.
+- Updated the Marketing default template to target the 29 top-level regions outside Hong Kong, Macao, Taiwan, Xinjiang, and Tibet.
+- Changed the Marketing creation base to official DPA product images so the standard wizard no longer asks users for image IDs; advanced `CUSTOM` image templates retain strict image-ID validation.
+- Unified business-template names as `渠道-广告账户ID-商品名-商品ID-模版类型`; Qianchuan Schema v3 migrates existing display names without changing template IDs or bindings.
+- Removed active/default business-template pointers. Marketing Schema v5 and Qianchuan Schema v4 require every creation workflow to select a real business template explicitly; default templates remain creation skeletons only.
+- Added explicit Marketing wizard fields and previews for daily budget, net-order ROI goal, gender, and age targeting.
+- Added validated custom product-selling-point collection so Marketing templates satisfy the official 6–9-position payload rule before activation.
+- Changed Codex OAuth guidance to return a temporary local start URL so users can choose the browser profile bound to the intended Ocean Engine account.
+- Required Codex to keep polling OAuth after returning the start URL and proactively report account synchronization and Token-mapping results.
+- Added a shared template-creation router that asks for Marketing or Qianchuan before entering a channel-specific source-template wizard, independent of authorization state.
+- Split Marketing template creation into mixed/account-upload and native/creator-authorized modes before source-template selection, with mode-filtered source lists.
+- Added channel-index validation for template advertiser bindings, removed placeholder defaults, and exposed verified or unverified binding status in wizard previews.
+
+### Fixed
+
+- Recovered creator cover IDs at runtime from unique same-advertiser, same-item, same-material official promotions when the current authorization snapshot omits the field, with create-time authorization warnings and guarded promotion-only retries after official authorization rejection.
+- Bound project and promotion discovery to an explicit advertiser ID for correct multi-account Token selection and official request parameters.
+- Fixed Chromium OAuth setup stalls caused by idle connections, incomplete official redirect origins, and duplicate form submissions.
+- Accepted the official empty advertiser-page contract (`total_page: 0`, `total_number: 0`) while retaining strict checks for inconsistent pagination data.
+- Resolved missing Marketing event assets from unique same-account, same-product projects and added a guarded DPA-image fallback from matching official promotions, blocking ambiguous or unavailable assets before project creation.
+- Corrected Qianchuan plan reconciliation and report metadata queries to use one legal recent-180-day data period while traversing every declared plan page, instead of sending invalid historical data windows.
+
 ## 0.9.1 - 2026-07-16
 
 ### Fixed

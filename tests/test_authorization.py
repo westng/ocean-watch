@@ -15,7 +15,7 @@ from ocean_watch.auth import (
 from ocean_watch.core import config_store
 from ocean_watch.templates import plan_templates
 
-from tests.support import business_template_config, valid_config
+from tests.support import business_template_config, only_plan_template_name, valid_config
 
 
 class ChannelAuthorizationTests(unittest.TestCase):
@@ -69,7 +69,12 @@ class ChannelAuthorizationTests(unittest.TestCase):
                     mock.patch.object(credential_store, "read_entry", return_value={}):
                 migrate_channels.migrate(config_path)
             migrated = json.loads(config_path.read_text(encoding="utf-8"))
-        bindings = migrated["plan_templates"]["legacy"]["bindings"]
+        migrated_name = (
+            "巨量营销-1234567890-test product-product-1-混剪素材"
+        )
+        template = migrated["plan_templates"][migrated_name]
+        bindings = template["bindings"]
+        self.assertEqual(template["display_name"], migrated_name)
         self.assertEqual(bindings["channel"], "marketing")
         self.assertEqual(bindings["platform"], "示例平台")
         self.assertEqual(bindings["product_id"], "product-1")
@@ -82,10 +87,10 @@ class ChannelAuthorizationTests(unittest.TestCase):
     def test_template_channel_mismatch_is_rejected(self):
         config = business_template_config()
         config["account"]["channel"] = "marketing"
-        name = config["active_plan_template"]
+        name = only_plan_template_name(config)
         config["plan_templates"][name]["bindings"]["channel"] = "qianchuan"
         with self.assertRaisesRegex(ValueError, "bound to channel qianchuan"):
-            plan_templates.apply(config)
+            plan_templates.apply(config, name)
 
     def test_authorizations_resolve_by_advertiser_without_overwrite(self):
         entries = {}
@@ -105,6 +110,71 @@ class ChannelAuthorizationTests(unittest.TestCase):
             )
             resolved_first, _, token_first = authorization_store.resolve("marketing", "201")
             resolved_second, _, token_second = authorization_store.resolve("marketing", "202")
+        self.assertEqual((resolved_first, token_first["access_token"]), (first, "one"))
+        self.assertEqual((resolved_second, token_second["access_token"]), (second, "two"))
+
+    def test_same_advertiser_id_resolves_independently_per_channel(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            marketing_id = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "marketing-token"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            qianchuan_id = authorization_store.save_authorization(
+                "qianchuan",
+                {"access_token": "qianchuan-token"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            marketing = authorization_store.attach_runtime(
+                channels.runtime_config(valid_config(), "marketing"),
+                "marketing",
+                advertiser_id="201",
+            )
+            qianchuan = authorization_store.attach_runtime(
+                channels.runtime_config(valid_config(), "qianchuan"),
+                "qianchuan",
+                advertiser_id="201",
+            )
+        self.assertEqual(marketing["api"]["access_token"], "marketing-token")
+        self.assertEqual(qianchuan["api"]["access_token"], "qianchuan-token")
+        self.assertEqual(marketing["_authorization"]["authorization_id"], marketing_id)
+        self.assertEqual(qianchuan["_authorization"]["authorization_id"], qianchuan_id)
+        self.assertEqual(marketing["account"]["advertiser_id"], "201")
+        self.assertEqual(qianchuan["account"]["advertiser_id"], "201")
+
+    def test_overlapping_authorizations_require_auth_account_id(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
+                mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+            first = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "one"},
+                [{"account_id": "101", "advertiser_ids": ["201"]}],
+            )
+            second = authorization_store.save_authorization(
+                "marketing",
+                {"access_token": "two"},
+                [{"account_id": "102", "advertiser_ids": ["201"]}],
+            )
+            with self.assertRaises(authorization_store.AuthorizationError) as raised:
+                authorization_store.resolve("marketing", advertiser_id="201")
+            resolved_first, _, token_first = authorization_store.resolve(
+                "marketing",
+                advertiser_id="201",
+                auth_account_id="101",
+            )
+            resolved_second, _, token_second = authorization_store.resolve(
+                "marketing",
+                advertiser_id="201",
+                auth_account_id="102",
+            )
+        self.assertEqual(raised.exception.code, "authorization_ambiguous")
         self.assertEqual((resolved_first, token_first["access_token"]), (first, "one"))
         self.assertEqual((resolved_second, token_second["access_token"]), (second, "two"))
 
@@ -305,6 +375,33 @@ class ChannelAuthorizationTests(unittest.TestCase):
             )
         self.assertNotIn("access_token", runtime["api"])
         self.assertNotIn("refresh_token", runtime["api"])
+
+    def test_runtime_drops_previous_channel_authorization_when_target_is_unresolved(self):
+        stale = channels.runtime_config(valid_config(), "marketing")
+        stale["api"].update({
+            "app_id": "marketing-app",
+            "secret": "marketing-secret",
+            "access_token": "marketing-token",
+            "refresh_token": "marketing-refresh",
+        })
+        stale["_authorization"] = {
+            "channel": "marketing",
+            "authorization_id": "marketing-authorization",
+        }
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
+                mock.patch.object(credential_store, "read_entry", return_value={}):
+            runtime = authorization_store.attach_runtime(
+                stale,
+                "qianchuan",
+                advertiser_id="201",
+            )
+        for field in ("app_id", "secret", "access_token", "refresh_token"):
+            self.assertNotIn(field, runtime["api"])
+        self.assertNotIn("_authorization", runtime)
+        self.assertEqual(runtime["account"]["channel"], "qianchuan")
+        self.assertEqual(runtime["account"]["advertiser_id"], "201")
+        self.assertEqual(runtime["_channel"]["id"], "qianchuan")
 
     def test_pending_legacy_authorization_can_only_be_selected_for_sync(self):
         entries = {}

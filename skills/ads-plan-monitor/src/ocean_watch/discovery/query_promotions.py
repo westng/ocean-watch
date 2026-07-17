@@ -7,11 +7,13 @@ import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
 from ocean_watch.api.client import get_json
 from ocean_watch.core.data import get_path
+from ocean_watch.core.identifiers import require_advertiser_id
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config")
+    parser.add_argument("--advertiser-id")
     parser.add_argument("--out")
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--page-size", type=int, default=20)
@@ -23,11 +25,12 @@ def main(argv=None):
 
     config_path = config_paths.resolve_config_path(args.config)
     config = json.loads(config_path.read_text(encoding="utf-8"))
+    advertiser_id = require_advertiser_id(config, args.advertiser_id)
     config = token_manager.ensure_access_token(
         config_path,
         config,
         channel=args.channel,
-        advertiser_id=(config.get("account") or {}).get("advertiser_id"),
+        advertiser_id=advertiser_id,
         auth_account_id=args.auth_account_id,
     )
     filtering = {}
@@ -60,7 +63,7 @@ def main(argv=None):
         "promotion_modify_time",
     ]
     params = {
-        "advertiser_id": get_path(config, "account.advertiser_id"),
+        "advertiser_id": advertiser_id,
         "filtering": filtering or None,
         "fields": fields,
         "page": args.page,

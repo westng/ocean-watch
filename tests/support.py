@@ -3,6 +3,23 @@ from types import SimpleNamespace
 from ocean_watch.templates import plan_templates
 
 
+class PromptAnswers:
+    def __init__(self, answers):
+        self.answers = {
+            prefix: list(value) if isinstance(value, (list, tuple)) else [value]
+            for prefix, value in answers.items()
+        }
+
+    def __call__(self, prompt):
+        matches = [prefix for prefix in self.answers if prompt.startswith(prefix)]
+        if len(matches) != 1:
+            raise AssertionError(f"unexpected or ambiguous wizard prompt: {prompt}")
+        values = self.answers[matches[0]]
+        if not values:
+            raise AssertionError(f"no answer remaining for wizard prompt: {prompt}")
+        return values.pop(0)
+
+
 def valid_config():
     return {
         "api": {
@@ -76,7 +93,7 @@ def payload_args(**overrides):
 
 def business_template_config():
     migrated = plan_templates.migrate(valid_config())
-    name = "平台-CID-商品-product-1"
+    name = "巨量营销-1234567890-test product-unique-product-1-混剪素材"
     migrated["plan_templates"] = {
         name: {
             "display_name": name,
@@ -95,5 +112,11 @@ def business_template_config():
             "overrides": {},
         }
     }
-    migrated["active_plan_template"] = name
     return migrated
+
+
+def only_plan_template_name(config):
+    names = list((config.get("plan_templates") or {}).keys())
+    if len(names) != 1:
+        raise AssertionError(f"expected exactly one plan template, found {names}")
+    return names[0]

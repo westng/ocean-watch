@@ -7,6 +7,7 @@ import re
 import secrets
 from pathlib import Path
 
+import ocean_watch.auth.channels as channels
 import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
@@ -16,6 +17,10 @@ STATE_SCHEMA_VERSION = 2
 ID_PATTERN = re.compile(r"0|[1-9][0-9]*\Z")
 APP_ACCOUNT_PREFIX = "oceanengine-app"
 AUTH_ACCOUNT_PREFIX = "oceanengine-auth"
+RUNTIME_AUTH_API_FIELDS = frozenset(credential_store.SENSITIVE_KEYS) | frozenset({
+    "account_discovery_issues",
+    "pending_account_sync",
+})
 
 
 class AuthorizationError(RuntimeError):
@@ -202,6 +207,34 @@ def write_verified_entry(account, data):
             f"credential read-back verification failed for {account}",
         )
     return backend
+
+
+def clear_runtime_authorization(config):
+    runtime = copy.deepcopy(config)
+    api = runtime.setdefault("api", {})
+    for field in RUNTIME_AUTH_API_FIELDS:
+        api.pop(field, None)
+    runtime.pop("_authorization", None)
+    return runtime
+
+
+def merge_runtime_authorization(runtime, attached):
+    merged = clear_runtime_authorization(runtime)
+    merged.setdefault("api", {}).update(copy.deepcopy(attached.get("api") or {}))
+    if "oauth" in attached:
+        merged["oauth"] = copy.deepcopy(attached.get("oauth") or {})
+    merged.pop("_channel", None)
+    if "_channel" in attached:
+        merged["_channel"] = copy.deepcopy(attached["_channel"])
+    attached_account = attached.get("account") or {}
+    for field in ("channel", "advertiser_id"):
+        if attached_account.get(field) is not None:
+            merged.setdefault("account", {})[field] = copy.deepcopy(
+                attached_account[field]
+            )
+    if attached.get("_authorization") is not None:
+        merged["_authorization"] = copy.deepcopy(attached["_authorization"])
+    return merged
 
 
 def _channel_state(state, channel):
@@ -574,7 +607,18 @@ def attach_runtime(
     authorization_id=None,
     allow_pending=False,
 ):
-    runtime = copy.deepcopy(config)
+    channel, definition = channels.get(channel)
+    runtime = clear_runtime_authorization(config)
+    runtime.setdefault("account", {})["channel"] = channel
+    runtime["_channel"] = {
+        "id": channel,
+        "display_name": definition["display_name"],
+    }
+    if advertiser_id is not None:
+        runtime["account"]["advertiser_id"] = normalize_id(
+            advertiser_id,
+            "advertiser_id",
+        )
     api = runtime.setdefault("api", {})
     api.update(read_app(channel))
     try:

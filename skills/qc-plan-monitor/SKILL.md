@@ -27,6 +27,10 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 
 Qianchuan strategy and live templates are not implemented yet. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
 
+For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, ask for the channel before entering either template-source wizard. Use the shared `templates create` entry without `--channel`; authorization state is displayed but must not silently select a channel or prevent an unauthorized channel from creating a draft template.
+
+Ignore placeholder advertiser IDs during template creation. Validate an entered Qianchuan advertiser against the local Qianchuan advertiser index when authorization exists; if Qianchuan is not yet authorized, allow the template binding but mark it `UNVERIFIED` in the preview and block real delivery until authorization validation succeeds.
+
 ## Command Entry
 
 Use the launcher from this Skill root:
@@ -108,8 +112,9 @@ Qianchuan product templates are independent from Marketing templates.
 
 - `default_qianchuan_product_template` is a creation skeleton and can never create a real plan.
 - New business templates use the `qc-templates create` wizard and choose the default skeleton or an existing Qianchuan product template as the source.
+- Qianchuan business templates have no active/default pointer. Every material query or plan-creation workflow must provide an explicit template ID or confirmed display name.
 - Every business template binds one Qianchuan advertiser, product name, and 1–30 product IDs.
-- Display names use `广告主ID-商品全域-产品-商品ID1/商品ID2`.
+- Display names use the shared `渠道-广告账户ID-商品名-商品ID-模版类型` rule: `巨量千川-广告账户ID-商品名-商品ID1/商品ID2-商品全域`.
 - Product IDs are deduplicated in input order and enforce the official maximum of 30.
 - Defaults are custom bidding, ROI `1.7`, budget `5000`, smart coupon on, long-term delivery, and net payment ROI optimization.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
@@ -148,6 +153,8 @@ Follow only redirects that remain under the official `douyin.com` or `iesdouyin.
 List authorized product creators once. Resolve works in batches of 50 by querying every authorized numeric `aweme_id`, then query each resolved creator again with every template product. Skip invalid links, unauthorized works, disabled creators, product mismatches, unsupported material types, and duplicate input without stopping the batch.
 
 Before writing, list current product all-domain plans and confirm candidates through plan detail. Treat paused plans as existing and deleted plans as absent. The official product all-domain contract allows one plan per creator:
+
+The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. Always use one legal period inside the latest 180 days and traverse every declared page. There is no fixed plan-count cap; do not split the query into older data-period windows and do not stop after an arbitrary number of plans.
 
 - No plan: create from template delivery settings and the first 100 eligible homepage works.
 - Homepage-work creation omits `creative_card` by default and must never send an empty card object. The official field table makes the whole card conditional on merchant account type, while the verified creator-homepage flow accepts omission. If a future account reports the whole card as missing, return that account-specific failure instead of inventing selling points.

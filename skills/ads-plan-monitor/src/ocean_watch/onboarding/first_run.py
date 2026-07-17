@@ -50,18 +50,14 @@ def load_config_template():
     return json.loads(packaged_template.read_text(encoding="utf-8"))
 
 
-def apply_plan_template(config):
-    return plan_templates.apply(config)
-
-
 def redacted_value(value, key):
     if key.split(".")[-1] in SECRET_KEYS and not is_missing(value):
         return "<redacted>"
     return value
 
 
-def check_fields(config):
-    result = validate_config.validate_config(config)
+def check_fields(config, plan_template=None):
+    result = validate_config.validate_config(config, plan_template=plan_template)
     selected_channel = channels.selected_channel(config)
     runtime = channels.runtime_config(
         config,
@@ -82,14 +78,12 @@ def check_fields(config):
     return result["missing_query_required"], create_missing, field_preview
 
 
-def next_action(query_missing, active_template, create_missing):
+def next_action(query_missing, templates):
     if query_missing:
         return "edit_config"
-    if not active_template:
+    if not templates:
         return "create_business_template"
-    if create_missing:
-        return "complete_active_template"
-    return "ready"
+    return "select_business_template"
 
 
 def configured_advertiser_id(config):
@@ -133,11 +127,7 @@ def main(argv=None):
 
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     migrated_config = channels.migrate_config(raw_config)
-    try:
-        config = apply_plan_template(migrated_config)
-    except ValueError:
-        config = migrated_config
-    query_missing, create_missing, field_preview = check_fields(config)
+    query_missing, create_missing, field_preview = check_fields(migrated_config)
     environment = environment_check.environment_report(
         config_path,
         channel=channels.selected_channel(migrated_config),
@@ -151,7 +141,6 @@ def main(argv=None):
         template_rows.append({
             "name": name,
             "channel": template["bindings"].get("channel"),
-            "active": name == raw_config.get("active_plan_template"),
             "advertiser_id": template["bindings"].get("advertiser_id"),
             "platform": template["bindings"].get("platform"),
             "product_id": template["bindings"].get("product_id"),
@@ -164,7 +153,6 @@ def main(argv=None):
             "copy_title_count": len(copy_titles),
             "binding_error": plan_templates.binding_error(template["bindings"]),
         })
-    active_template = next((row for row in template_rows if row["active"]), None)
     advertiser_id = configured_advertiser_id(migrated_config)
     channel_rows = []
     for row in channels.status_rows(migrated_config):
@@ -185,13 +173,9 @@ def main(argv=None):
         "environment": environment,
         "environment_ready": environment["ok"],
         "environment_check_command": f'{command} setup doctor --config "{config_path}"',
-        "next_action": next_action(query_missing, active_template, create_missing),
+        "next_action": next_action(query_missing, template_rows),
         "ok_for_query_data": not query_missing,
-        "ok_for_create_plan": not query_missing and not create_missing,
-        "active_plan_template": migrated_config.get("active_plan_template"),
-        "active_template_advertiser_id": (
-            active_template.get("advertiser_id") if active_template else None
-        ),
+        "create_plan_requires_explicit_template": True,
         "available_plan_templates": template_rows,
         "plan_template_schema_version": migrated_config.get("plan_template_schema_version", 1),
         "template_migration_required": (
@@ -203,6 +187,7 @@ def main(argv=None):
         "template_setup": {
             "rule": "Each business template belongs to exactly one advertiser_id and cannot create plans for another advertiser.",
             "default_template_usage": "default_plan_template is a creation base shown by create-wizard and never participates in business delivery.",
+            "business_template_selection": "Every create command must name a business template explicitly; there is no active or default business template.",
             "list_command": f'{command} templates list --config "{config_path}"',
             "migrate_command": f'{command} templates migrate --config "{config_path}"',
             "create_wizard_command": f'{command} templates create --config "{config_path}"',

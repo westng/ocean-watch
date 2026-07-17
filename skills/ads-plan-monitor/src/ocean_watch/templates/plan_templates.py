@@ -2,8 +2,11 @@
 import copy
 
 from ocean_watch.core.data import deep_merge
+from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
+MATERIAL_STRATEGY_SCHEMA_VERSION = 3
+NAMING_SCHEMA_VERSION = 4
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
 REQUIRED_BINDINGS = ("channel", "advertiser_id", "platform", "traffic_source", "product_id", "product_name")
 SHARED_RESOLVED_ID_FIELDS = ("city_ids", "city_names")
@@ -191,7 +194,10 @@ def normalize_template(config, name, template):
             "overrides": overrides,
             "legacy": False,
         }
-        if not normalized["material_strategy"] and schema_version < SCHEMA_VERSION:
+        if (
+            not normalized["material_strategy"]
+            and schema_version < MATERIAL_STRATEGY_SCHEMA_VERSION
+        ):
             normalized["material_strategy"] = legacy_material_strategy(config, template)
         return normalized
     overrides = {
@@ -239,11 +245,11 @@ def shared_default_bundle(bundle):
 def apply(config, template_name=None, advertiser_id=None, require_template=None, channel=None):
     effective = copy.deepcopy(config)
     templates = config.get("plan_templates") or {}
-    selected = template_name or config.get("active_plan_template")
+    selected = template_name
     schema_version = int(config.get("plan_template_schema_version") or 1)
     schema_v2 = schema_version >= 2
-    schema_v3 = schema_version >= SCHEMA_VERSION
-    require_template = schema_v2 if require_template is None else require_template
+    schema_v3 = schema_version >= MATERIAL_STRATEGY_SCHEMA_VERSION
+    require_template = True if require_template is None else require_template
 
     base = default_bundle(config)
     for section in TEMPLATE_SECTIONS:
@@ -253,7 +259,7 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None,
     if not selected:
         if require_template:
             raise ValueError(
-                "no business plan template selected; the default template cannot create plans"
+                "no business plan template selected; pass an explicit plan template"
             )
         effective["_selected_plan_template"] = None
         return effective
@@ -273,7 +279,7 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None,
     fixed_fields = fixed_material_fields(template)
     if schema_v3 and fixed_fields:
         raise ValueError(
-            "schema v3 templates cannot store runtime material IDs: "
+            "plan templates cannot store runtime material IDs: "
             + ", ".join(fixed_fields)
         )
 
@@ -324,6 +330,53 @@ def apply(config, template_name=None, advertiser_id=None, require_template=None,
     return effective
 
 
+def canonical_template_name(template):
+    return business_template_names.format_marketing_template_name(
+        template["bindings"].get("advertiser_id"),
+        template["bindings"].get("product_name"),
+        template["bindings"].get("product_id"),
+        template["material_strategy"].get("source_type"),
+    )
+
+
+def migrate_names(config):
+    templates = config.get("plan_templates") or {}
+    name_map = {}
+    canonical_owners = {}
+    for old_name, raw_template in templates.items():
+        normalized = normalize_template(config, old_name, raw_template)
+        new_name = canonical_template_name(normalized)
+        if new_name in canonical_owners and canonical_owners[new_name] != old_name:
+            raise ValueError(
+                "plan template naming collision after schema v4 migration: "
+                f"{canonical_owners[new_name]}, {old_name} -> {new_name}"
+            )
+        name_map[old_name] = new_name
+        canonical_owners[new_name] = old_name
+
+    migrated = copy.deepcopy(config)
+    renamed = {}
+    for old_name, raw_template in templates.items():
+        new_name = name_map[old_name]
+        template = copy.deepcopy(raw_template)
+        template["display_name"] = new_name
+        created_from = template.get("created_from")
+        if isinstance(created_from, dict) and created_from.get("template") in name_map:
+            created_from["template"] = name_map[created_from["template"]]
+        copy_materials = template.get("copy_materials")
+        if (
+            isinstance(copy_materials, dict)
+            and copy_materials.get("copied_from_template") in name_map
+        ):
+            copy_materials["copied_from_template"] = name_map[
+                copy_materials["copied_from_template"]
+            ]
+        renamed[new_name] = template
+    migrated["plan_templates"] = renamed
+    migrated["plan_template_schema_version"] = NAMING_SCHEMA_VERSION
+    return migrated
+
+
 def migrate(config, confirm_remove_legacy_materials=False):
     try:
         input_version = int(config.get("plan_template_schema_version") or 1)
@@ -335,6 +388,10 @@ def migrate(config, confirm_remove_legacy_materials=False):
         )
     if input_version == SCHEMA_VERSION:
         validated = copy.deepcopy(config)
+        if "active_plan_template" in validated:
+            raise ValueError(
+                "schema v5 does not support active_plan_template; migrate the config"
+            )
         for name, raw_template in (validated.get("plan_templates") or {}).items():
             normalized = normalize_template(validated, name, raw_template)
             error = binding_error(normalized["bindings"]) or material_strategy_error(
@@ -345,13 +402,24 @@ def migrate(config, confirm_remove_legacy_materials=False):
             fixed_fields = fixed_material_fields(normalized)
             if fixed_fields:
                 raise ValueError(
-                    f"invalid plan template {name}: schema v3 templates cannot store "
+                    f"invalid plan template {name}: plan templates cannot store "
                     "runtime material IDs: " + ", ".join(fixed_fields)
                 )
-        active = validated.get("active_plan_template")
-        if active is not None and active not in (validated.get("plan_templates") or {}):
-            raise ValueError(f"active plan template not found: {active}")
+            canonical_name = canonical_template_name(normalized)
+            if name != canonical_name or normalized["display_name"] != canonical_name:
+                raise ValueError(
+                    f"invalid plan template {name}: expected canonical name {canonical_name}"
+                )
         return validated
+
+    if input_version == NAMING_SCHEMA_VERSION:
+        migrated = copy.deepcopy(config)
+        migrated.pop("active_plan_template", None)
+        migrated["plan_template_schema_version"] = SCHEMA_VERSION
+        return migrate(migrated, confirm_remove_legacy_materials)
+
+    if input_version >= MATERIAL_STRATEGY_SCHEMA_VERSION:
+        return migrate(migrate_names(config), confirm_remove_legacy_materials)
 
     migrated = copy.deepcopy(config)
     original_base = default_bundle(config)
@@ -404,7 +472,7 @@ def migrate(config, confirm_remove_legacy_materials=False):
     if legacy_material_templates and not confirm_remove_legacy_materials:
         raise LegacyMaterialSelectionError(sorted(legacy_material_templates))
 
-    migrated["plan_template_schema_version"] = SCHEMA_VERSION
+    migrated["plan_template_schema_version"] = MATERIAL_STRATEGY_SCHEMA_VERSION
     migrated["default_plan_template"] = base
     migrated["plan_templates"] = templates
     for section in TEMPLATE_SECTIONS:

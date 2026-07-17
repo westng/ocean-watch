@@ -99,6 +99,55 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertIsInstance(payload, dict)
         self.assertIn("channels", payload)
 
+    def test_default_marketing_regions_exclude_requested_top_level_regions(self):
+        asset = load_json(
+            REPO_ROOT / "skills" / "ads-plan-monitor" / "assets" / "config.example.json"
+        )
+        resource = resources.files("ocean_watch.resources").joinpath("config.example.json")
+        with resource.open(encoding="utf-8") as stream:
+            packaged = json.load(stream)
+        self.assertEqual(packaged, asset)
+
+        resolved = asset["default_plan_template"]["resolved_ids"]
+        product_info = asset["default_plan_template"]["defaults"]["product_info"]
+        self.assertEqual(product_info["product_image_type"], "DPA")
+        self.assertEqual(product_info["product_image_fields"], ["images_url"])
+        self.assertNotIn("product_image_ids", resolved)
+        expected = [
+            (11, "北京"),
+            (12, "天津"),
+            (13, "河北"),
+            (14, "山西"),
+            (15, "内蒙古"),
+            (21, "辽宁"),
+            (22, "吉林"),
+            (23, "黑龙江"),
+            (31, "上海"),
+            (32, "江苏"),
+            (33, "浙江"),
+            (34, "安徽"),
+            (35, "福建"),
+            (36, "江西"),
+            (37, "山东"),
+            (41, "河南"),
+            (42, "湖北"),
+            (43, "湖南"),
+            (44, "广东"),
+            (45, "广西"),
+            (46, "海南"),
+            (50, "重庆"),
+            (51, "四川"),
+            (52, "贵州"),
+            (53, "云南"),
+            (61, "陕西"),
+            (62, "甘肃"),
+            (63, "青海"),
+            (64, "宁夏"),
+        ]
+        self.assertEqual(len(resolved["city_ids"]), len(resolved["city_names"]))
+        self.assertEqual(list(zip(resolved["city_ids"], resolved["city_names"])), expected)
+        self.assertTrue({54, 65, 71, 81, 82}.isdisjoint(resolved["city_ids"]))
+
 
 if __name__ == "__main__":
     unittest.main()

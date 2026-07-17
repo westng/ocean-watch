@@ -7,9 +7,11 @@ from pathlib import Path
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
+import ocean_watch.materials.creator_cover_resolver as creator_cover_resolver
 import ocean_watch.materials.creator_materials as creator_materials
 import ocean_watch.materials.query_videos as query_videos
 import ocean_watch.plans.create_plan as create_plan
+import ocean_watch.plans.marketing_runtime_assets as marketing_runtime_assets
 import ocean_watch.templates.plan_templates as plan_templates
 from ocean_watch.core.data import get_path
 from ocean_watch.plans.executor import PlanExecutionRequest, PlanExecutor
@@ -85,6 +87,8 @@ def execute(args, config_path=None, progress_callback=None):
     config_path = Path(config_path or config_paths.resolve_config_path(args.config))
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     raw_config = channels.runtime_config(raw_config, channel=args.channel, capability="create")
+    runtime_asset_resolution = None
+    creator_cover_resolution = None
 
     try:
         config = plan_templates.apply(
@@ -109,6 +113,7 @@ def execute(args, config_path=None, progress_callback=None):
             advertiser_id=advertiser_id,
             auth_account_id=args.auth_account_id,
         )
+        config, runtime_asset_resolution = marketing_runtime_assets.resolve(config)
         query = creator_materials.fetch_candidates(
             query_videos.get_json,
             get_path(config, "api.base_url"),
@@ -123,6 +128,14 @@ def execute(args, config_path=None, progress_callback=None):
                 1,
             ),
         )
+
+        if args.item_id or strategy.get("selection_mode") == "LATEST":
+            query["candidates"], creator_cover_resolution = (
+                creator_cover_resolver.resolve_missing_covers(
+                    query["candidates"],
+                    config,
+                )
+            )
 
         if not args.item_id and strategy.get("selection_mode") != "LATEST":
             return {
@@ -152,12 +165,15 @@ def execute(args, config_path=None, progress_callback=None):
             args.submit,
         )
     except (ValueError, creator_materials.CreatorMaterialError) as exc:
-        return {
+        result = {
             "mode": "submit" if args.submit else "dry_run",
             "error_code": getattr(exc, "code", "creator_plan_invalid"),
             "error": str(exc),
             "details": getattr(exc, "details", {}),
-        }, 2
+        }
+        if creator_cover_resolution is not None:
+            result["creator_cover_resolution"] = creator_cover_resolution
+        return result, 2
 
     result = {
         "mode": "submit" if args.submit else "dry_run",
@@ -181,6 +197,10 @@ def execute(args, config_path=None, progress_callback=None):
         "promotion_payload": promotion_payload,
         "missing_fields": missing,
     }
+    if runtime_asset_resolution is not None:
+        result["runtime_asset_resolution"] = runtime_asset_resolution
+    if creator_cover_resolution is not None:
+        result["creator_cover_resolution"] = creator_cover_resolution
 
     submit_failed = False
     if args.submit:

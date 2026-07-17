@@ -42,6 +42,10 @@
 | 策略 | 基于只读投放数据提供停投、观察、放量等运营建议 |
 | 开发 | 官方文档 MCP、OpenAPI Schema 和 SDK 示例查询 |
 
+所有业务模板统一按 `渠道-广告账户ID-商品名-商品ID-模版类型` 自动命名。营销业务模板由向导绑定广告主、商品、平台和素材模式；创建骨架使用官方 DPA 商品库主图，不要求用户填写图片 ID，向导会明确预览预算、净成交 ROI、性别和年龄后再保存。提交前会从官方接口校验转化资产和 DPA 字段；必要时仅复用同广告主、同商品投放的商品主图，候选不唯一或无可靠来源时在创建项目前阻断。
+
+默认模板只是创建骨架，真实业务模板没有“当前”或“默认”状态；创建计划时必须明确指定模板。
+
 ## 安装 Plugin
 
 需要 Codex CLI `0.144.1` 或更高版本，以及 Python `3.9+`：
@@ -105,6 +109,7 @@ ocean-watch auth status --channel marketing
 ocean-watch auth authorize --channel qianchuan
 ocean-watch accounts add --channel qianchuan --advertiser-id ADVERTISER_ID --name ACCOUNT_NAME
 ocean-watch accounts report
+ocean-watch templates create
 ocean-watch qc-templates create
 ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
 ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
@@ -117,7 +122,7 @@ ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
-创建命令默认只预览。只有显式传入 `--submit` 才会调用在线写接口。
+创建命令默认只预览。批量达人创建提供独立 `--preflight`，会结合断点日志列出已完成、待创建、续建和阻断项；项目容量由官方创建接口最终确认。只有显式传入 `--submit` 才会调用在线写接口。
 
 ## 安全边界
 

@@ -43,7 +43,7 @@ def payload_args():
     )
 
 
-def validate_config(raw_config, credentials=None):
+def validate_config(raw_config, credentials=None, plan_template=None):
     channel = channels.selected_channel(raw_config)
     merged_config = channels.runtime_config(
         raw_config,
@@ -78,11 +78,14 @@ def validate_config(raw_config, credentials=None):
         query_missing.append("local access_token or refresh_token")
 
     template_error = None
-    selected_template = raw_config.get("active_plan_template")
+    selected_template = plan_template
     preview_missing = []
     submit_missing = []
     try:
-        effective_config = create_plan.apply_plan_template(merged_config)
+        effective_config = create_plan.apply_plan_template(
+            merged_config,
+            template_name=plan_template,
+        )
         selected = effective_config.get("_selected_plan_template") or {}
         selected_template = selected.get("name")
         project_payload, promotion_payload = create_plan.build_payloads(effective_config, payload_args())
@@ -123,7 +126,7 @@ def validate_config(raw_config, credentials=None):
         "create-submit": not template_error and not submit_missing,
     }
     return {
-        "active_plan_template": selected_template,
+        "selected_plan_template": selected_template,
         "channel": channel,
         "plan_template_error": template_error,
         "ok_for_query_data": readiness["query"],
@@ -147,6 +150,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Config path; overrides environment and defaults.")
     parser.add_argument("--mode", choices=MODES, default="all")
+    parser.add_argument(
+        "--plan-template",
+        help="Explicit business template required for create-preview or create-submit validation.",
+    )
     args = parser.parse_args(argv)
 
     path = config_paths.resolve_config_path(args.config)
@@ -159,7 +166,7 @@ def main(argv=None):
         parser.error(f"invalid config {path}: {exc}")
 
     try:
-        result = validate_config(raw_config)
+        result = validate_config(raw_config, plan_template=args.plan_template)
     except channels.ChannelError as exc:
         print(json.dumps({
             "config": str(path),

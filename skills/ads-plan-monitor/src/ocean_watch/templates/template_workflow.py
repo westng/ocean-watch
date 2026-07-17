@@ -2,7 +2,9 @@
 import argparse
 import copy
 
+import ocean_watch.auth.channels as channels
 import ocean_watch.plans.create_plan as create_plan
+import ocean_watch.templates.business_template_names as business_template_names
 import ocean_watch.templates.plan_templates as plan_templates
 
 ACCOUNT_FIELDS = {
@@ -14,6 +16,7 @@ DYNAMIC_MATERIAL_FIELDS = {
     "materials.video_cover_ids",
 }
 PRODUCT_FIELDS = {
+    "defaults.product_info",
     "resolved_ids.brand_info",
     "resolved_ids.category_name",
     "resolved_ids.brand_name",
@@ -62,6 +65,10 @@ PAYLOAD_REQUIRED_FIELDS = {
 }
 MIN_TITLE_LENGTH = 5
 MAX_TITLE_LENGTH = 30
+MIN_SELLING_POINT_LENGTH = 6
+MAX_SELLING_POINT_LENGTH = 9
+MAX_SELLING_POINT_COUNT = 10
+DEFAULT_DPA_PRODUCT_IMAGE_FIELDS = ["images_url"]
 
 
 def material_source_label(source_type):
@@ -71,9 +78,18 @@ def material_source_label(source_type):
     }.get(source_type, source_type)
 
 
-def template_name(platform, traffic_source, product_name, product_id, source_type=None):
-    base = f"{platform}-{traffic_source}-{product_name}-{product_id}"
-    return f"{base}-{material_source_label(source_type)}" if source_type else base
+def template_name(
+    advertiser_id,
+    product_name,
+    product_id,
+    source_type,
+):
+    return business_template_names.format_marketing_template_name(
+        advertiser_id,
+        product_name,
+        product_id,
+        source_type,
+    )
 
 
 def normalize_titles(titles):
@@ -90,6 +106,45 @@ def normalize_titles(titles):
         normalized.append(value)
     if not normalized:
         raise ValueError("at least one non-empty copy title is required")
+    return normalized
+
+
+def normalize_product_selling_points(values):
+    if isinstance(values, str):
+        values = values.replace("，", ",").split(",")
+    normalized = []
+    for item in values or []:
+        value = str(item).strip()
+        if not value or value in normalized:
+            continue
+        positions = create_plan.official_text_positions(value)
+        if not MIN_SELLING_POINT_LENGTH <= positions <= MAX_SELLING_POINT_LENGTH:
+            raise ValueError(
+                "product selling point length must be "
+                f"{MIN_SELLING_POINT_LENGTH}-{MAX_SELLING_POINT_LENGTH} positions: {value}"
+            )
+        normalized.append(value)
+    if not normalized:
+        raise ValueError("at least one product selling point is required")
+    if len(normalized) > MAX_SELLING_POINT_COUNT:
+        raise ValueError(
+            f"at most {MAX_SELLING_POINT_COUNT} product selling points are allowed"
+        )
+    return normalized
+
+
+def normalize_product_image_ids(values):
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = values.replace("，", ",").split(",")
+    elif not isinstance(values, (list, tuple)):
+        values = [values]
+    normalized = []
+    for item in values:
+        value = str(item).strip()
+        if value and value not in normalized:
+            normalized.append(value)
     return normalized
 
 
@@ -247,7 +302,17 @@ def build_template(config, values, source_name=None):
         "product_id": bindings["product_id"],
         **SOURCE_NAME_TEMPLATES[material_strategy["source_type"]],
     })
+    for field in ("daily_budget", "roi_goal", "gender", "ages"):
+        if values.get(field) is not None:
+            overrides["defaults"][field] = copy.deepcopy(values[field])
+    if values.get("product_info") is not None:
+        overrides["defaults"]["product_info"] = copy.deepcopy(values["product_info"])
     overrides.setdefault("resolved_ids", {})["unique_product_id"] = bindings["product_id"]
+    product_image_ids = values.get("product_image_ids")
+    if product_image_ids is not None:
+        overrides["resolved_ids"]["product_image_ids"] = normalize_product_image_ids(
+            product_image_ids
+        )
 
     field_map = {
         "source_name": ("defaults", "source", False),
@@ -268,9 +333,8 @@ def build_template(config, values, source_name=None):
     if provenance["policy"].endswith("new_product") and not titles:
         copy_materials = {"titles": []}
 
-    name = values.get("name") or template_name(
-        bindings["platform"],
-        bindings["traffic_source"],
+    name = template_name(
+        bindings["advertiser_id"],
         bindings["product_name"],
         bindings["product_id"],
         material_strategy["source_type"],
@@ -317,6 +381,11 @@ def validate_candidate(config, name, template):
         candidate,
         name,
         advertiser_id=template["bindings"]["advertiser_id"],
+    )
+    effective = channels.runtime_config(
+        effective,
+        channel=template["bindings"].get("channel") or "marketing",
+        capability="create",
     )
     missing = [
         field

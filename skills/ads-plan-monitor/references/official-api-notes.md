@@ -59,15 +59,25 @@ Required headers:
 - `title_material_list` accepts at most 10 title materials.
 - `title_material_list[].title` length is 5-30 characters by official counting rules; two English characters count as one position. The 55-character rule in this schema belongs to search keyword `bidword_list[].default_word`, not the creative title.
 - `source` is conditionally required for `landing_type=SHOP`.
+- `promotion_materials.product_info.product_image_type` supports `DPA` and `CUSTOM`.
+- `DPA` requires `product_image_fields` from product-library metadata; the upgraded product schema exposes the product image collection as `images_url`.
+- `CUSTOM` requires one or more account image IDs in `image_ids`; those IDs are not video or cover IDs.
 - `brand_info` can contain `yuntu_category_id`, `brand_name_id`, `ecom_brand_id`, or `cdp_brand_id` depending on account asset linkage.
 - Promotion success returns `data.promotion_id`.
 
 ## Still Requires Runtime Lookup
 
 - Available optimization target combination for the account and product chain.
+- Event asset IDs must be resolved within the target advertiser. A same-product project can be
+  used only when it leaves one valid candidate; ambiguous candidates require user selection.
 - Exact ROI field combination for automatic ecommerce APP order flow.
 - City IDs from administrative region API.
 - Video IDs, cover image IDs, and product image IDs from material APIs.
 - Product status and product platform fields.
 - Brand and category IDs.
 - Duplicate project/promotion names.
+
+For a standard DPA image template, query the upgraded-product metadata before creating the
+project. If the configured field collection is empty, a same-advertiser and same-product official
+promotion may supply reusable `image_ids` and non-empty `brand_info`; otherwise block before the
+project transaction. Do not persist this runtime fallback as video material state.

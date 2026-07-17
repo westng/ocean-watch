@@ -286,6 +286,41 @@ def response_ids(rows, keys):
     return identifiers
 
 
+def nonnegative_integer(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if (
+        isinstance(value, bool)
+        or parsed < 0
+        or isinstance(value, float) and value != parsed
+    ):
+        return None
+    return parsed
+
+
+def role_expansion_total_pages(data, rows, role):
+    page_info = data.get("page_info")
+    if not isinstance(page_info, dict) or "total_page" not in page_info:
+        raise RuntimeError(
+            f"Malformed pagination metadata while expanding advertiser role {role}"
+        )
+    total_pages = nonnegative_integer(page_info.get("total_page"))
+    if total_pages is None:
+        raise RuntimeError(
+            f"Malformed pagination metadata while expanding advertiser role {role}"
+        )
+
+    if total_pages == 0:
+        total_number = nonnegative_integer(page_info.get("total_number"))
+        if rows or total_number != 0:
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+    return total_pages
+
+
 def fetch_role_advertiser_ids(config, account):
     adapter = channel_adapter(config, capability="accounts")
     role = channel_adapters.account_role(account)
@@ -326,24 +361,7 @@ def fetch_role_advertiser_ids(config, account):
         data = response.get("data") or {}
         rows = data.get(expansion.list_key) or []
         identifiers.extend(response_ids(rows, expansion.id_keys))
-        page_info = data.get("page_info")
-        raw_total_pages = (
-            page_info.get("total_page")
-            if isinstance(page_info, dict) and "total_page" in page_info
-            else None
-        )
-        try:
-            total_pages = int(raw_total_pages)
-        except (TypeError, ValueError):
-            total_pages = 0
-        if (
-            isinstance(raw_total_pages, bool)
-            or total_pages <= 0
-            or isinstance(raw_total_pages, float) and raw_total_pages != total_pages
-        ):
-            raise RuntimeError(
-                f"Malformed pagination metadata while expanding advertiser role {role}"
-            )
+        total_pages = role_expansion_total_pages(data, rows, role)
         if total_pages > MAX_ROLE_EXPANSION_PAGES:
             raise RuntimeError(
                 "Advertiser role expansion exceeds the pagination safety cap: "
@@ -648,7 +666,15 @@ def ensure_access_token(
 ):
     config_path = Path(config_path).expanduser()
     runtime_config = copy.deepcopy(config) if config is not None else None
-    if config is None or channel is not None or is_missing(get_path(config, "api.access_token")):
+    selection_requested = any(
+        value is not None
+        for value in (channel, advertiser_id, auth_account_id, authorization_id)
+    )
+    if (
+        config is None
+        or selection_requested
+        or is_missing(get_path(config, "api.access_token"))
+    ):
         credential_config = load_config(
             config_path,
             channel=channel,
@@ -660,10 +686,10 @@ def ensure_access_token(
         if runtime_config is None:
             config = credential_config
         else:
-            config = runtime_config
-            config.setdefault("api", {}).update(credential_config.get("api") or {})
-            if credential_config.get("_authorization"):
-                config["_authorization"] = copy.deepcopy(credential_config["_authorization"])
+            config = authorization_store.merge_runtime_authorization(
+                runtime_config,
+                credential_config,
+            )
     else:
         config = copy.deepcopy(config)
     if not force_refresh and token_has_ttl(config, margin_seconds=margin_seconds):
@@ -683,10 +709,10 @@ def ensure_access_token(
             authorization_id=authorization_id,
             allow_pending=allow_pending,
         )
-        locked_config = copy.deepcopy(config)
-        locked_config.setdefault("api", {}).update(locked_credentials.get("api") or {})
-        if locked_credentials.get("_authorization"):
-            locked_config["_authorization"] = copy.deepcopy(locked_credentials["_authorization"])
+        locked_config = authorization_store.merge_runtime_authorization(
+            config,
+            locked_credentials,
+        )
         if not force_refresh and token_has_ttl(locked_config, margin_seconds=margin_seconds):
             return locked_config
         refreshed, _ = refresh_access_token(config_path, locked_config)

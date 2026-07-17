@@ -83,9 +83,8 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         self.assertEqual(payload["multi_product_creative_list"], creatives)
         self.assertEqual(client.calls[-1][1], qianchuan_plan_gateway.QIANCHUAN_ADD_MATERIALS_PATH)
 
-    def test_creator_reconciliation_queries_history_and_deduplicates_plans(self):
+    def test_creator_reconciliation_uses_recent_data_period_and_all_pages(self):
         today = dt.date(2026, 7, 15)
-        history_start = today - dt.timedelta(days=200)
         old_plan = {
             "ad_info": {"id": 7001, "name": "old plan"},
             "room_info": [{"anchor_id": "9001"}],
@@ -101,15 +100,10 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
                     "code": 0,
                     "data": {"ad_id": 7001, "aweme_id": 9001, "name": "old plan"},
                 }
-            if params["end_time"].startswith(today.isoformat()):
-                rows = [] if params["page"] == 1 else [other_plan, other_plan]
-                return {
-                    "code": 0,
-                    "data": {"ad_list": rows, "page_info": {"total_page": 2}},
-                }
+            rows = [] if params["page"] == 1 else [other_plan, old_plan, old_plan]
             return {
                 "code": 0,
-                "data": {"ad_list": [old_plan, old_plan], "page_info": {"total_page": 1}},
+                "data": {"ad_list": rows, "page_info": {"total_page": 2}},
             }
 
         client = mock.Mock()
@@ -119,7 +113,6 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             "1234567890123456",
             ["9001"],
             today=today,
-            history_start=history_start,
         )
 
         self.assertEqual([plan["ad_id"] for plan in found["matches"]["9001"]], ["7001"])
@@ -127,35 +120,21 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             [row["ad_info"]["id"] for row in found["list_query"]["plans"]],
             [8001, 7001],
         )
-        self.assertEqual(found["list_query"]["page_count"], 3)
-        self.assertEqual(found["list_query"]["window_count"], 2)
+        self.assertEqual(found["list_query"]["page_count"], 2)
+        self.assertEqual(found["list_query"]["data_period"], {
+            "start_date": "2026-01-17",
+            "end_date": "2026-07-15",
+        })
         list_calls = [
             call.kwargs["params"]
             for call in client.get.call_args_list
             if call.args[0] == qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH
         ]
-        self.assertEqual([params["page"] for params in list_calls], [1, 2, 1])
+        self.assertEqual([params["page"] for params in list_calls], [1, 2])
         for params in list_calls:
             start = dt.date.fromisoformat(params["start_time"][:10])
             end = dt.date.fromisoformat(params["end_time"][:10])
-            self.assertLessEqual((end - start).days, 179)
-
-    def test_creator_reconciliation_fails_closed_at_history_window_cap(self):
-        client = FakeClient()
-        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)
-        today = dt.date(2026, 7, 15)
-        with self.assertRaisesRegex(Exception, "truncated"):
-            gateway.find_creator_plans(
-                "1234567890123456",
-                ["9001"],
-                today=today,
-                history_start=today - dt.timedelta(days=180),
-                max_windows=1,
-            )
-        self.assertFalse(any(
-            call[1] == qianchuan_plan_gateway.QIANCHUAN_PLAN_DETAIL_PATH
-            for call in client.calls
-        ))
+            self.assertEqual((end - start).days, 179)
 
     def test_creator_reconciliation_fails_closed_at_page_cap(self):
         client = mock.Mock()
@@ -173,7 +152,6 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
                 "1234567890123456",
                 ["9001"],
                 today=today,
-                history_start=today,
                 max_pages=1,
             )
         client.get.assert_called_once()
@@ -193,7 +171,6 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
                         "1234567890123456",
                         ["9001"],
                         today=dt.date(2026, 7, 15),
-                        history_start=dt.date(2026, 7, 15),
                     )
 
     def test_nonempty_plan_page_cannot_report_zero_pages(self):
@@ -210,7 +187,6 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             gateway.list_product_plans(
                 "1234567890123456",
                 today=dt.date(2026, 7, 15),
-                history_start=dt.date(2026, 7, 15),
             )
 
     def test_plan_pagination_change_fails_closed(self):
@@ -224,7 +200,6 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             gateway.list_product_plans(
                 "1234567890123456",
                 today=dt.date(2026, 7, 15),
-                history_start=dt.date(2026, 7, 15),
             )
 
     def test_invalid_material_pagination_fails_closed(self):

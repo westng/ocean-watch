@@ -90,6 +90,8 @@ sequenceDiagram
 
 上传素材和达人素材只负责选择、校验并把来源特有字段注入 promotion payload。批量模块只负责并发调度、journal 和汇总，不重复实现项目/单元提交。
 
+`marketing_runtime_assets` 是营销创建路径共享的提交前解析层。它先按广告主、商品、落地类型、营销目标和优化目标匹配官方历史项目；模板缺少转化资产时，仅在候选唯一时自动补齐。商品模板使用 `DPA` 主图时，解析层先验证商品库字段；字段不可用时，只能从同广告主、同商品的官方历史单元复用图片和非空品牌 ID。候选不唯一或无可用商品图片时，在 `project/create` 之前阻断，不猜测资产，也不留下只有项目没有单元的孤立记录。解析结果只存在于本次运行内存，不写入 Token、动态素材字段或业务模板。
+
 千川全域计划不进入上述营销事务。`QianchuanPlanExecutor` 单独调用官方 `/v1.0/qianchuan/uni_aweme/ad/create/`，以 `code: 0` 和 `data.ad_id` 作为成功条件。`qianchuan_creator_accounts` 负责授权达人分页，`query_qianchuan_creator_videos` 负责官方视频查询，`douyin_work_links` 只负责受限短链跳转，`qianchuan_work_materials` 通过“作品归属、模板商品”两阶段查询建立运行时素材集合。
 
 `batch_qianchuan_work_plans` 按数值 `aweme_id` 聚合运行时素材。`QianchuanPlanGateway` 一次读取商品全域计划，再通过详情精确确认达人；已有计划先拉取全部视频素材并按 `aweme_item_id` 去重，只调用素材追加接口。没有计划才走创建接口。不同达人受控并发，同一达人串行；在线提交持有广告主级进程锁。整个流程不保存本地计划映射，因此重试时仍以官方计划和素材状态恢复幂等。
@@ -98,7 +100,7 @@ sequenceDiagram
 
 ## 模板模型
 
-模板 Schema v3 包含：
+营销模板 Schema v5 包含：
 
 - `default_plan_template`：跨业务默认骨架，不可投放。
 - `plan_templates`：真实业务模板。
@@ -109,7 +111,9 @@ sequenceDiagram
 
 模板绑定是执行约束。目标渠道或广告主不匹配时，创建在 Token 刷新和 API 调用前停止。
 
-千川商品模板使用独立 Schema v2。`qianchuan_product_templates` 以稳定 `template_id` 存储业务模板，绑定广告主、产品和最多 30 个商品；显示名称以广告主 ID 开头，`default_qianchuan_product_template` 只作为向导骨架。模板只保存投放设置和 `CREATOR_RUNTIME_QUERY` 策略，达人及素材 ID 只能存在于单次创建运行中。
+Schema v4 将现有营销模板迁移到共享命名规则，并同步更新模板键、显示名称和模板间来源引用；发生规范名称碰撞时整次迁移失败，不覆盖任何模板。Schema v5 删除历史 `active_plan_template` 指针，创建计划必须显式选择业务模板。
+
+千川商品模板使用独立 Schema v4。`qianchuan_product_templates` 以稳定 `template_id` 存储业务模板，绑定广告主、产品和最多 30 个商品；显示名称遵循共享的 `渠道-广告账户ID-商品名-商品ID-模版类型` 规则，`default_qianchuan_product_template` 只作为向导骨架。v2 升级只重算显示名称，不改变模板 ID 或业务绑定，v4 删除历史默认业务模板指针。模板只保存投放设置和 `CREATOR_RUNTIME_QUERY` 策略，达人及素材 ID 只能存在于单次创建运行中。
 
 ## 授权与凭据
 

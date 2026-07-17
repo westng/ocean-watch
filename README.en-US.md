@@ -39,6 +39,10 @@ Ocean Engine Marketing (`marketing`) supports authorization, materials, plans, r
 | Strategy | Read-only evidence and operational recommendations |
 | Development | Official documentation MCP, OpenAPI schemas, and SDK examples |
 
+All business templates use `Channel-AdvertiserID-ProductName-ProductID-TemplateType`. The Marketing wizard binds the advertiser, product, platform, and material mode. Its creation base uses official DPA product images, so users do not enter image IDs; budget, net-order ROI, gender, and age targeting are shown before confirmation. Before submission, official APIs validate the event asset and DPA fields. Product images may be reused only from an official promotion matching both advertiser and product; ambiguous or missing assets block before project creation.
+
+Default templates are creation skeletons only. Real business templates have no active/default state and every plan-creation command must select one explicitly.
+
 ## Install
 
 Requires Codex CLI `0.144.1+` and Python `3.9+`:
@@ -102,6 +106,7 @@ ocean-watch auth status --channel marketing
 ocean-watch auth authorize --channel qianchuan
 ocean-watch accounts add --channel qianchuan --advertiser-id ADVERTISER_ID --name ACCOUNT_NAME
 ocean-watch accounts report
+ocean-watch templates create
 ocean-watch qc-templates create
 ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
 ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
@@ -114,7 +119,7 @@ ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
-Plan commands are dry-run by default. Online writes require an explicit `--submit`.
+Plan commands are dry-run by default. Creator batches provide a dedicated `--preflight` that combines live validation with the local journal to report completed, pending, resumable, and blocked jobs. Project capacity is confirmed only by the official create endpoint. Online writes require an explicit `--submit`.
 
 ## Security
 

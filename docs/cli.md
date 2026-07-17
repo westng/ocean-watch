@@ -137,7 +137,7 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 
 首次执行 `auth authorize` 时，如果当前渠道没有应用配置，浏览器会打开一张本地表单，同屏收集 App ID 和 Secret，保存后直接跳转官方 OAuth。需要主动更换应用时使用 `auth set-app --channel CHANNEL`，它会打开相同表单但不发起授权。
 
-授权是首次使用流程，不在 Plugin 安装阶段执行。`http://127.0.0.1:8787/oauth/callback` 只用于开放平台登记和官方回调，不是手动访问入口；本地服务仅在授权命令运行期间存在。浏览器未自动打开时执行 `auth authorize --channel CHANNEL --print-url --no-open`，只打开输出中的 `start_url`，并保持命令运行。
+授权是首次使用流程，不在 Plugin 安装阶段执行。`http://127.0.0.1:8787/oauth/callback` 只用于开放平台登记和官方回调，不是手动访问入口；本地服务仅在授权命令运行期间存在。在 Codex 中执行 `auth authorize --channel CHANNEL --print-url --no-open`，将输出中的临时 `start_url` 交给用户在目标账户对应的浏览器分组中打开，并保持命令运行。
 
 营销和千川流程共用默认回调地址，通过 OAuth `state` 的 `AD`/`QC` 前缀区分渠道；用户无需维护两条回调路径。若账户同步失败，授权保留为 pending 状态，可用最后一条命令重试；确认迁移账户归属时增加 `--rebind-existing`。
 
@@ -150,12 +150,20 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 ```bash
 ocean-watch templates list
 ocean-watch templates create
+ocean-watch templates create --channel marketing
+ocean-watch templates create --channel marketing --material-source-type ACCOUNT_UPLOAD
+ocean-watch templates create --channel marketing --material-source-type CREATOR_AUTHORIZED
+ocean-watch templates create --channel qianchuan
 ocean-watch templates migrate --confirm-remove-legacy-materials
 ocean-watch templates set-copy --template TEMPLATE --title TITLE
 ocean-watch templates set-copy --template TARGET --from-template SOURCE
 ```
 
-新业务模板只能通过 `templates create` 交互式向导创建。`set-copy` 只修改标题文案，不复制链接、账户资产或投放参数。
+未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`，再显示同模式的来源模板；选择千川则进入千川商品全域来源向导。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
+
+真实业务模板不存在当前或默认指针。所有计划创建命令必须显式传 `--plan-template`；多营销账户批量创建使用 `--account-template ADVERTISER_ID=TEMPLATE_NAME` 为每个账户明确映射。
+
+营销向导会收集日预算、净成交 ROI、性别、年龄和官方要求的 6–9 位置产品卖点，并按 `巨量营销-广告账户ID-商品名-商品ID-模版类型` 自动生成名称；模版类型为“混剪素材”或“原生素材”。创建骨架的商品图来源是 `DPA` 商品库字段 `images_url`，因此不会询问图片 ID。提交前会验证 DPA 字段，并在不可用时从同广告主、同商品的官方单元自动解析主图；无可靠来源时在项目创建前阻断。缺失的转化资产也只从同账户、同商品项目解析，多个候选不会自动选择。
 
 千川商品全域模板使用独立命令：
 
@@ -165,7 +173,7 @@ ocean-watch qc-templates create
 ocean-watch qc-templates migrate
 ```
 
-向导从不可投放的默认骨架或已有千川商品模板复制创建，绑定广告主、产品和 1–30 个商品 ID。多个商品 ID 使用 `/` 分隔，名称使用 `广告主ID-商品全域-产品-商品ID`。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+向导从不可投放的默认骨架或已有千川商品模板复制创建，绑定广告主、产品和 1–30 个商品 ID。多个商品 ID 使用 `/` 分隔，名称使用 `巨量千川-广告账户ID-商品名-商品ID-商品全域`。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
 
 ## 上传素材
 
@@ -277,10 +285,15 @@ ocean-watch plans batch-upload \
 ```bash
 ocean-watch plans batch-creator \
   --jobs-file /path/to/creator-jobs.json \
+  --preflight \
   --concurrency 4
 ```
 
-格式见 `skills/ads-plan-monitor/assets/creator-batch-jobs.example.json`。每个任务必须记录商品匹配结论和证据。提交时写入本机非敏感 journal，重复执行会跳过已完成任务，并从已创建项目续建失败单元。
+格式见 `skills/ads-plan-monitor/assets/creator-batch-jobs.example.json`。每个任务必须记录商品匹配结论和证据。`--preflight` 不调用写接口，会读取同一批次已有 journal，明确返回已完成跳过、本次可创建、项目已创建后续建单元、完整重试和阻断任务；确认后把 `--preflight` 改为 `--submit`。提交时写入本机非敏感 journal，重复执行会跳过已完成任务，并从已创建项目续建失败单元。
+
+巨量营销项目上限已知为每广告主 200 个，但官方项目列表不能可靠表示配额占用。预检会把容量标记为 `CREATE_TIME_ONLY`，最终由 `/v3.0/project/create/` 判定，不会根据列表数量承诺剩余容量。
+
+达人授权快照缺少 `video_cover_id` 时，预检只会从同广告主、同 `item_id`、同 `material_id` 且状态正常的官方历史单元解析唯一封面，并标记授权期仍需创建接口最终确认。如果单元创建已经返回“不在授权期间”，断点会保留已创建项目并阻断重复提交；重新授权且当前快照恢复自身封面后，只续建单元，不会再创建项目。
 
 ## 报表
 
@@ -312,8 +325,8 @@ ocean-watch qc-reports plans \
 ## 资产反查与 MCP
 
 ```bash
-ocean-watch discover projects --name NAME
-ocean-watch discover promotions --project-id PROJECT_ID
+ocean-watch discover projects --advertiser-id ADVERTISER_ID --name NAME
+ocean-watch discover promotions --advertiser-id ADVERTISER_ID --project-id PROJECT_ID
 ocean-watch discover cities --city-csv cities.csv
 ocean-watch mcp configure
 ocean-watch mcp status

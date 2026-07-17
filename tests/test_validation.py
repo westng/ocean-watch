@@ -16,34 +16,48 @@ from ocean_watch.onboarding import first_run, validate_config
 from ocean_watch.plans import batch_create_from_today_videos
 from ocean_watch.templates import plan_templates
 
-from tests.support import business_template_config, valid_config
+from tests.support import business_template_config, only_plan_template_name, valid_config
 
 
 class ExitAndValidationTests(unittest.TestCase):
+    def legacy_template_config(self):
+        config = valid_config()
+        config["defaults"]["product_id"] = "unique-product-1"
+        name = "legacy"
+        config["plan_templates"] = {
+            name: {**plan_templates.section_bundle(config)},
+        }
+        return config, name
+
     def test_no_qualified_videos_is_failure(self):
         self.assertEqual(batch_create_from_today_videos.batch_exit_code([{"status": "no_qualified_videos"}]), 1)
         self.assertEqual(batch_create_from_today_videos.batch_exit_code([{"status": "completed"}]), 0)
 
     def test_validator_modes_are_independent(self):
-        config = valid_config()
+        config, name = self.legacy_template_config()
         credentials = {
             "app_id": "app",
             "secret": "secret",
             "access_token": "token",
         }
-        result = validate_config.validate_config(config, credentials)
+        result = validate_config.validate_config(config, credentials, plan_template=name)
         self.assertTrue(validate_config.mode_is_ready(result, "all"))
 
         incomplete = copy.deepcopy(config)
-        incomplete["links"]["open_url"] = "https://example.com/open"
-        result = validate_config.validate_config(incomplete, credentials)
+        incomplete["plan_templates"][name]["links"]["open_url"] = (
+            "https://example.com/open"
+        )
+        result = validate_config.validate_config(
+            incomplete,
+            credentials,
+            plan_template=name,
+        )
         self.assertTrue(validate_config.mode_is_ready(result, "query"))
         self.assertFalse(validate_config.mode_is_ready(result, "create-submit"))
         self.assertFalse(validate_config.mode_is_ready(result, "all"))
 
     def test_v2_without_business_template_keeps_query_ready(self):
         config = plan_templates.migrate(valid_config())
-        config["active_plan_template"] = None
         credentials = {
             "app_id": "app",
             "secret": "secret",
@@ -52,17 +66,22 @@ class ExitAndValidationTests(unittest.TestCase):
         result = validate_config.validate_config(config, credentials)
         self.assertTrue(validate_config.mode_is_ready(result, "query"))
         self.assertFalse(validate_config.mode_is_ready(result, "create-preview"))
-        self.assertIn("default template cannot create plans", result["plan_template_error"])
+        self.assertIn("explicit plan template", result["plan_template_error"])
 
     def test_v2_mismatched_template_keeps_query_ready(self):
         config = business_template_config()
+        name = only_plan_template_name(config)
         config["account"]["advertiser_id"] = 999
         credentials = {
             "app_id": "app",
             "secret": "secret",
             "access_token": "token",
         }
-        result = validate_config.validate_config(config, credentials)
+        result = validate_config.validate_config(
+            config,
+            credentials,
+            plan_template=name,
+        )
         self.assertTrue(validate_config.mode_is_ready(result, "query"))
         self.assertFalse(validate_config.mode_is_ready(result, "create-submit"))
         self.assertIn("bound to advertiser 1234567890", result["plan_template_error"])
@@ -76,28 +95,26 @@ class ExitAndValidationTests(unittest.TestCase):
 
     def test_first_run_blocks_unknown_template(self):
         config = valid_config()
-        config["active_plan_template"] = "missing-template"
         credentials = {"app_id": "app", "secret": "secret", "access_token": "token"}
         with mock.patch.object(credential_store, "read_credentials", return_value=credentials):
-            _, create_missing, _ = first_run.check_fields(config)
+            _, create_missing, _ = first_run.check_fields(
+                config,
+                plan_template="missing-template",
+            )
         self.assertTrue(any(item.startswith("plan template:") for item in create_missing))
 
-    def test_first_run_distinguishes_missing_and_incomplete_templates(self):
+    def test_first_run_requires_template_selection(self):
         self.assertEqual(
-            first_run.next_action(["account.advertiser_id"], None, []),
+            first_run.next_action(["account.advertiser_id"], []),
             "edit_config",
         )
         self.assertEqual(
-            first_run.next_action([], None, ["links.landing_page_url"]),
+            first_run.next_action([], []),
             "create_business_template",
         )
         self.assertEqual(
-            first_run.next_action([], {"name": "draft"}, ["links.landing_page_url"]),
-            "complete_active_template",
-        )
-        self.assertEqual(
-            first_run.next_action([], {"name": "ready"}, []),
-            "ready",
+            first_run.next_action([], [{"name": "ready"}]),
+            "select_business_template",
         )
 
     def test_validator_main_returns_selected_mode_status(self):

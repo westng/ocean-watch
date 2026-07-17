@@ -2,6 +2,7 @@ import copy
 import http.client
 import json
 import os
+import socket
 import tempfile
 import threading
 import unittest
@@ -81,6 +82,38 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertIn("巨量千川应用配置", body)
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertIn("form-action 'self'", headers["Content-Security-Policy"])
+        self.assertIn(
+            "https://qianchuan.jinritemai.com",
+            headers["Content-Security-Policy"],
+        )
+
+    def test_marketing_app_setup_allows_the_official_redirect_chain(self):
+        config = channels.runtime_config(
+            channels.migrate_config(valid_config()),
+            "marketing",
+            capability="oauth",
+        )
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "AD.nonce",
+            "marketing",
+            config,
+            requires_app_configuration=True,
+        )
+        try:
+            path = urllib.parse.urlparse(oauth_local_authorize.app_setup_url(server))
+            status, headers, _ = self.request_local_server(
+                server,
+                "GET",
+                path.path + "?" + path.query,
+            )
+        finally:
+            server.server_close()
+
+        self.assertEqual(status, 200)
+        content_security_policy = headers["Content-Security-Policy"]
+        self.assertIn("https://ad.oceanengine.com", content_security_policy)
+        self.assertIn("https://open.oceanengine.com", content_security_policy)
 
     def test_root_is_a_diagnostic_page_and_keeps_session_alive(self):
         server = oauth_local_authorize.create_local_server(
@@ -283,6 +316,8 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         finally:
             server.server_close()
         self.assertEqual(status, 303)
+        self.assertEqual(headers["Content-Length"], "0")
+        self.assertEqual(headers["Connection"], "close")
         configure.assert_called_once_with("new-app", "new-secret", channel="qianchuan")
         redirect = urllib.parse.urlparse(headers["Location"])
         params = urllib.parse.parse_qs(redirect.query)
@@ -290,6 +325,98 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertEqual(params["app_id"], ["new-app"])
         self.assertEqual(params["state"], ["QC.nonce"])
         self.assertNotIn("new-secret", headers["Location"])
+
+    def test_repeated_app_setup_submission_redirects_without_storing_twice(self):
+        config = qianchuan_runtime()
+        config["api"].pop("app_id")
+        config["api"].pop("secret")
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            config,
+            requires_app_configuration=True,
+        )
+        body = urllib.parse.urlencode({
+            "setup_token": server.setup_token,
+            "app_id": "new-app",
+            "secret": "new-secret",
+        })
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": str(len(body.encode("utf-8"))),
+        }
+        try:
+            with mock.patch.object(
+                credential_store,
+                "configure_app",
+                return_value={"backend": "test"},
+            ) as configure:
+                first_status, first_headers, _ = self.request_local_server(
+                    server,
+                    "POST",
+                    oauth_local_authorize.APP_SETUP_PATH,
+                    body=body,
+                    headers=headers,
+                )
+                second_status, second_headers, second_body = self.request_local_server(
+                    server,
+                    "POST",
+                    oauth_local_authorize.APP_SETUP_PATH,
+                    body=body,
+                    headers=headers,
+                )
+        finally:
+            server.server_close()
+
+        self.assertEqual(first_status, 303)
+        self.assertEqual(second_status, 303)
+        self.assertEqual(first_headers["Location"], second_headers["Location"])
+        self.assertNotIn("授权地址无效", second_body)
+        configure.assert_called_once_with("new-app", "new-secret", channel="qianchuan")
+
+    def test_idle_browser_connection_does_not_block_app_setup(self):
+        config = qianchuan_runtime()
+        config["api"].pop("app_id")
+        config["api"].pop("secret")
+        server = oauth_local_authorize.create_local_server(
+            "http://127.0.0.1:0/oauth/callback",
+            "QC.nonce",
+            "qianchuan",
+            config,
+            requires_app_configuration=True,
+        )
+        idle_connection = socket.create_connection(server.server_address, timeout=2)
+        idle_worker = threading.Thread(target=server.handle_request)
+        idle_worker.start()
+        idle_worker.join(timeout=1)
+        body = urllib.parse.urlencode({
+            "setup_token": server.setup_token,
+            "app_id": "new-app",
+            "secret": "new-secret",
+        })
+        try:
+            self.assertFalse(idle_worker.is_alive())
+            with mock.patch.object(
+                credential_store,
+                "configure_app",
+                return_value={"backend": "test"},
+            ):
+                status, _, _ = self.request_local_server(
+                    server,
+                    "POST",
+                    oauth_local_authorize.APP_SETUP_PATH,
+                    body=body,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Content-Length": str(len(body.encode("utf-8"))),
+                    },
+                )
+        finally:
+            idle_connection.close()
+            idle_worker.join(timeout=2)
+            server.server_close()
+        self.assertEqual(status, 303)
 
     def test_app_setup_server_rejects_non_loopback_redirect(self):
         with self.assertRaisesRegex(ValueError, "loopback"):
@@ -426,6 +553,54 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertEqual(result["pages"], 2)
         self.assertEqual(request.call_args_list[0].args[1], channel_adapters.QIANCHUAN_SHOP_ADVERTISER_PATH)
         self.assertEqual(request.call_args_list[0].args[2]["permission"], ["QC_AWEME"])
+
+    def test_empty_role_expansion_accepts_official_zero_page_contract(self):
+        response = {
+            "code": 0,
+            "data": {
+                "list": [],
+                "page_info": {
+                    "page": 1,
+                    "page_size": 100,
+                    "total_number": 0,
+                    "total_page": 0,
+                },
+            },
+        }
+        account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            identifiers, result = token_manager.fetch_role_advertiser_ids(
+                qianchuan_runtime(),
+                account,
+            )
+
+        self.assertEqual(identifiers, [])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["pages"], 1)
+
+    def test_zero_page_role_expansion_rejects_inconsistent_data(self):
+        account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
+        invalid_data = [
+            {
+                "list": [{"advertiser_id": 201}],
+                "page_info": {"total_number": 1, "total_page": 0},
+            },
+            {
+                "list": [],
+                "page_info": {"total_number": 1, "total_page": 0},
+            },
+            {
+                "list": [],
+                "page_info": {"total_page": 0},
+            },
+        ]
+        for data in invalid_data:
+            with self.subTest(data=data), mock.patch.object(
+                token_manager,
+                "get_api_json",
+                return_value={"code": 0, "data": data},
+            ), self.assertRaisesRegex(RuntimeError, "Malformed pagination metadata"):
+                token_manager.fetch_role_advertiser_ids(qianchuan_runtime(), account)
 
     def test_qianchuan_agent_role_expands_managed_advertisers(self):
         response = {

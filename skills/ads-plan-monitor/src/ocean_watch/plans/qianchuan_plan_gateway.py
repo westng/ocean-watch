@@ -12,9 +12,7 @@ PRODUCT_MARKETING_GOAL = "VIDEO_PROM_GOODS"
 ALL_ACTIVE_STATUSES = "ALL"
 UNI_PROJECT = "UNI_PROJECT"
 MAX_PAGE_SIZE = 100
-PLAN_HISTORY_START_DATE = dt.date(2020, 1, 1)
 PLAN_HISTORY_WINDOW_DAYS = 180
-MAX_HISTORY_WINDOWS = 100
 
 
 def decimal_id(value, field):
@@ -80,93 +78,79 @@ class QianchuanPlanGateway:
         advertiser_id,
         *,
         today=None,
-        history_start=None,
         max_pages=100,
-        max_windows=MAX_HISTORY_WINDOWS,
     ):
         advertiser_id = decimal_id(advertiser_id, "advertiser_id")
         today = today or dt.date.today()
-        history_start = history_start or PLAN_HISTORY_START_DATE
-        if history_start > today:
-            raise ConfigurationError("history_start must not be after today")
+        period_start = today - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1)
         plans = []
         seen_plan_ids = set()
         request_ids = []
         pages = 0
-        windows = 0
         truncated = False
-        window_end = today
-        while window_end >= history_start and windows < max_windows:
-            window_start = max(
-                history_start,
-                window_end - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1),
+        page = 1
+        expected_pages = None
+        while page <= max_pages:
+            response = require_success(
+                self.client.get(
+                    QIANCHUAN_PLAN_LIST_PATH,
+                    params={
+                        "advertiser_id": int(advertiser_id),
+                        "start_time": f"{period_start.isoformat()} 00:00:00",
+                        "end_time": f"{today.isoformat()} 23:59:59",
+                        "marketing_goal": PRODUCT_MARKETING_GOAL,
+                        "filtering": {"status": ALL_ACTIVE_STATUSES},
+                        "fields": ["stat_cost"],
+                        "order_type": "DESC",
+                        "order_field": "create_time",
+                        "page": page,
+                        "page_size": MAX_PAGE_SIZE,
+                        "adlab_scene": UNI_PROJECT,
+                    },
+                ),
+                "product plan list query",
+                advertiser_id=advertiser_id,
+                page=page,
+                start_time=period_start.isoformat(),
+                end_time=today.isoformat(),
             )
-            windows += 1
-            page = 1
-            expected_pages = None
-            while page <= max_pages:
-                response = require_success(
-                    self.client.get(
-                        QIANCHUAN_PLAN_LIST_PATH,
-                        params={
-                            "advertiser_id": int(advertiser_id),
-                            "start_time": f"{window_start.isoformat()} 00:00:00",
-                            "end_time": f"{window_end.isoformat()} 23:59:59",
-                            "marketing_goal": PRODUCT_MARKETING_GOAL,
-                            "filtering": {"status": ALL_ACTIVE_STATUSES},
-                            "fields": ["stat_cost"],
-                            "order_type": "DESC",
-                            "order_field": "create_time",
-                            "page": page,
-                            "page_size": MAX_PAGE_SIZE,
-                            "adlab_scene": UNI_PROJECT,
-                        },
-                    ),
-                    "product plan list query",
-                    advertiser_id=advertiser_id,
-                    page=page,
-                    start_time=window_start.isoformat(),
-                    end_time=window_end.isoformat(),
+            pages += 1
+            if response.get("request_id"):
+                request_ids.append(response["request_id"])
+            page_rows = get_path(response, "data.ad_list", []) or []
+            if not isinstance(page_rows, list):
+                raise ApiError(
+                    "Qianchuan product plan rows must be a list",
+                    {"source": "product_plan_list", "page": page},
                 )
-                pages += 1
-                if response.get("request_id"):
-                    request_ids.append(response["request_id"])
-                page_rows = get_path(response, "data.ad_list", []) or []
-                if not isinstance(page_rows, list):
-                    raise ApiError(
-                        "Qianchuan product plan rows must be a list",
-                        {"source": "product_plan_list", "page": page},
-                    )
-                for row in page_rows:
-                    ad_id = get_path(row, "ad_info.id")
-                    if ad_id is not None:
-                        normalized_ad_id = str(ad_id)
-                        if normalized_ad_id in seen_plan_ids:
-                            continue
-                        seen_plan_ids.add(normalized_ad_id)
-                    plans.append(row)
-                total_pages = page_count(
-                    get_path(response, "data.page_info"),
-                    source="product_plan_list",
-                    page=page,
-                    row_count=len(page_rows),
-                    expected=expected_pages,
-                )
-                expected_pages = total_pages
-                if total_pages == 0 or page >= total_pages:
-                    break
-                page += 1
-            else:
-                truncated = True
-            if truncated:
+            for row in page_rows:
+                ad_id = get_path(row, "ad_info.id")
+                if ad_id is not None:
+                    normalized_ad_id = str(ad_id)
+                    if normalized_ad_id in seen_plan_ids:
+                        continue
+                    seen_plan_ids.add(normalized_ad_id)
+                plans.append(row)
+            total_pages = page_count(
+                get_path(response, "data.page_info"),
+                source="product_plan_list",
+                page=page,
+                row_count=len(page_rows),
+                expected=expected_pages,
+            )
+            expected_pages = total_pages
+            if total_pages == 0 or page >= total_pages:
                 break
-            window_end = window_start - dt.timedelta(days=1)
-        if window_end >= history_start:
+            page += 1
+        else:
             truncated = True
         return {
             "plans": plans,
             "page_count": pages,
-            "window_count": windows,
+            "data_period": {
+                "start_date": period_start.isoformat(),
+                "end_date": today.isoformat(),
+            },
             "request_ids": request_ids,
             "truncated": truncated,
         }
@@ -191,17 +175,13 @@ class QianchuanPlanGateway:
         aweme_ids,
         *,
         today=None,
-        history_start=None,
         max_pages=100,
-        max_windows=MAX_HISTORY_WINDOWS,
     ):
         targets = {decimal_id(value, "aweme_id") for value in aweme_ids}
         listed = self.list_product_plans(
             advertiser_id,
             today=today,
-            history_start=history_start,
             max_pages=max_pages,
-            max_windows=max_windows,
         )
         if listed["truncated"]:
             raise ApiError(

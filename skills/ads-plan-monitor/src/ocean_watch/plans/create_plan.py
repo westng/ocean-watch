@@ -8,6 +8,7 @@ from pathlib import Path
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
+import ocean_watch.plans.marketing_runtime_assets as marketing_runtime_assets
 import ocean_watch.templates.plan_templates as plan_templates
 from ocean_watch.core.data import get_path, is_missing
 from ocean_watch.plans.executor import PlanExecutionRequest, PlanExecutor
@@ -188,7 +189,10 @@ def build_payloads(config, args):
 
     product_image_ids = get_path(config, "resolved_ids.product_image_ids", [])
     if product_image_type == "DPA":
-        product_info["product_image_fields"] = product_info_defaults.get("product_image_fields", ["product_image"])
+        product_info["product_image_fields"] = product_info_defaults.get(
+            "product_image_fields",
+            ["images_url"],
+        )
     elif product_image_ids:
         product_info["image_ids"] = product_image_ids
     if product_name_type == "DPA":
@@ -277,7 +281,12 @@ def missing_fields(config, project_payload, promotion_payload, submit):
     if is_missing(promotion_payload["promotion_materials"]["video_material_list"]):
         missing.append("materials.video_ids")
     product_image_type = get_path(config, "defaults.product_info.product_image_type")
-    if product_image_type != "DPA" and is_missing(get_path(config, "resolved_ids.product_image_ids")):
+    if product_image_type == "DPA":
+        if contains_unresolved_value(
+            get_path(config, "defaults.product_info.product_image_fields")
+        ):
+            missing.append("defaults.product_info.product_image_fields")
+    elif is_missing(get_path(config, "resolved_ids.product_image_ids")):
         missing.append("resolved_ids.product_image_ids")
     if contains_unresolved_value(get_path(config, "links.landing_page_url")):
         missing.append("links.landing_page_url")
@@ -293,9 +302,9 @@ def missing_fields(config, project_payload, promotion_payload, submit):
         "promotion_materials.product_info.selling_points",
         [],
     )
-    if selling_points and any(
-        not 6 <= official_text_positions(value) <= 9
-        for value in selling_points
+    if selling_points and (
+        len(selling_points) > 10
+        or any(not 6 <= official_text_positions(value) <= 9 for value in selling_points)
     ):
         missing.append("defaults.product_info.selling_points")
     product_id = get_path(config, "defaults.product_id")
@@ -329,6 +338,7 @@ def main(argv=None):
     raw_config = json.loads(config_path.read_text(encoding="utf-8"))
     raw_config = channels.runtime_config(raw_config, channel=args.channel, capability="create")
     submit_failed = False
+    runtime_asset_resolution = None
     try:
         config = plan_templates.apply(
             raw_config,
@@ -354,11 +364,14 @@ def main(argv=None):
                 advertiser_id=args.advertiser_id,
                 channel=args.channel,
             )
+            config, runtime_asset_resolution = marketing_runtime_assets.resolve(config)
     except ValueError as exc:
         print(json.dumps({
             "mode": "submit" if args.submit else "dry_run",
             "config": str(config_path),
+            "error_code": getattr(exc, "code", "plan_configuration_invalid"),
             "error": str(exc),
+            "details": getattr(exc, "details", {}),
             "available_plan_templates": sorted((raw_config.get("plan_templates") or {}).keys()),
         }, ensure_ascii=False, indent=2))
         return 2
@@ -389,6 +402,8 @@ def main(argv=None):
         "missing_fields": missing,
         "preflight_summary": preflight_summary,
     }
+    if runtime_asset_resolution is not None:
+        result["runtime_asset_resolution"] = runtime_asset_resolution
 
     if args.submit:
         blocking = missing_fields(config, project_payload, promotion_payload, True)

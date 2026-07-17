@@ -9,7 +9,11 @@ from unittest import mock
 
 from ocean_watch.cli import main as cli
 from ocean_watch.onboarding import environment_check
-from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
+from ocean_watch.templates import (
+    manage_plan_templates,
+    manage_qianchuan_templates,
+    template_channel_router,
+)
 
 from tests.support import business_template_config
 
@@ -39,6 +43,112 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         handler.assert_called_once_with(["list", "--config", "example.json"])
 
+    def test_template_create_routes_explicit_marketing_channel(self):
+        with mock.patch.object(
+            template_channel_router.manage_plan_templates,
+            "main",
+            return_value=0,
+        ) as handler:
+            code = cli.main([
+                "templates",
+                "create",
+                "--channel",
+                "marketing",
+                "--material-source-type",
+                "ACCOUNT_UPLOAD",
+                "--config",
+                "example.json",
+            ])
+
+        self.assertEqual(code, 0)
+        handler.assert_called_once_with([
+            "create-wizard",
+            "--config",
+            "example.json",
+            "--material-source-type",
+            "ACCOUNT_UPLOAD",
+        ])
+
+    def test_template_create_routes_explicit_qianchuan_channel(self):
+        with mock.patch.object(
+            template_channel_router.manage_qianchuan_templates,
+            "main",
+            return_value=0,
+        ) as handler:
+            code = cli.main([
+                "templates",
+                "create",
+                "--channel",
+                "qianchuan",
+                "--config",
+                "example.json",
+            ])
+
+        self.assertEqual(code, 0)
+        handler.assert_called_once_with(["create-wizard", "--config", "example.json"])
+
+    def test_template_create_prompts_for_channel_before_source_template(self):
+        output = []
+        statuses = {
+            "marketing": {
+                "authorization_count": 1,
+                "authorized_advertiser_count": 196,
+            },
+            "qianchuan": {
+                "authorization_count": 0,
+                "authorized_advertiser_count": 0,
+            },
+        }
+        with mock.patch.object(
+            template_channel_router.authorization_store,
+            "load_channel_state",
+            side_effect=lambda channel: {
+                "authorizations": {
+                    str(index): {}
+                    for index in range(statuses[channel]["authorization_count"])
+                },
+                "advertiser_index": {
+                    str(index + 1): []
+                    for index in range(statuses[channel]["authorized_advertiser_count"])
+                },
+            },
+        ):
+            selected = template_channel_router.select_channel(
+                input_fn=lambda _: "1",
+                output_fn=output.append,
+            )
+
+        self.assertEqual(selected, "qianchuan")
+        rendered = "\n".join(output)
+        self.assertIn("巨量营销（已授权，196 个广告主）", rendered)
+        self.assertIn("巨量千川（未授权，可先创建模板，投放前需授权）", rendered)
+
+    def test_marketing_material_mode_is_selected_before_source_wizard(self):
+        answers = iter(["0", "1"])
+        with mock.patch.object(
+            template_channel_router.authorization_store,
+            "load_channel_state",
+            return_value={},
+        ), mock.patch.object(
+            template_channel_router.manage_plan_templates,
+            "main",
+            return_value=0,
+        ) as handler:
+            code = template_channel_router.main(
+                ["create", "--config", "example.json"],
+                input_fn=lambda _: next(answers),
+                output_fn=lambda _: None,
+            )
+
+        self.assertEqual(code, 0)
+        handler.assert_called_once_with([
+            "create-wizard",
+            "--config",
+            "example.json",
+            "--material-source-type",
+            "CREATOR_AUTHORIZED",
+        ])
+
     def test_structures_unexpected_errors(self):
         handler = mock.Mock(side_effect=RuntimeError("failed"))
         with mock.patch.dict(cli.COMMANDS, {
@@ -55,7 +165,13 @@ class CliTests(unittest.TestCase):
             initial = business_template_config()
             path.write_text(json.dumps(initial), encoding="utf-8")
 
-            def concurrent_wizard(config):
+            def concurrent_wizard(
+                config,
+                material_source_type=None,
+                authorization_state=None,
+            ):
+                self.assertEqual(material_source_type, "ACCOUNT_UPLOAD")
+                self.assertIsInstance(authorization_state, dict)
                 concurrent = copy.deepcopy(config)
                 concurrent["concurrent_update"] = "preserved"
                 path.write_text(json.dumps(concurrent), encoding="utf-8")
@@ -71,6 +187,10 @@ class CliTests(unittest.TestCase):
                 code = cli.main([
                     "templates",
                     "create",
+                    "--channel",
+                    "marketing",
+                    "--material-source-type",
+                    "ACCOUNT_UPLOAD",
                     "--config",
                     str(path),
                 ])
@@ -88,7 +208,8 @@ class CliTests(unittest.TestCase):
             path = Path(directory) / "config.json"
             path.write_text("{}\n", encoding="utf-8")
 
-            def concurrent_wizard(config):
+            def concurrent_wizard(config, authorization_state=None):
+                self.assertIsInstance(authorization_state, dict)
                 path.write_text(
                     json.dumps({"concurrent_update": "preserved"}),
                     encoding="utf-8",

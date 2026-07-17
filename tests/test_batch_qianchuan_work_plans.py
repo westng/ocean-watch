@@ -174,7 +174,6 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
     def test_command_returns_one_final_summary_without_local_files(self):
         config = qianchuan_product_templates.ensure_config({})
         config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
-        config[qianchuan_product_templates.ACTIVE_TEMPLATE_KEY] = "qcpt_test"
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config_path.write_text(json.dumps(config), encoding="utf-8")

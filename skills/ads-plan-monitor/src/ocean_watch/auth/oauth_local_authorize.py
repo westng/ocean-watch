@@ -4,10 +4,11 @@ import html
 import ipaddress
 import json
 import secrets
+import threading
 import time
 import urllib.parse
 import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.channel_adapters as channel_adapters
@@ -27,6 +28,11 @@ class OAuthStateError(ValueError):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
+
+
+class OAuthHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    block_on_close = False
 
 
 def build_oauth_state(channel, nonce=None):
@@ -153,7 +159,10 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path != APP_SETUP_PATH or not self.server.requires_app_configuration:
+        if parsed.path != APP_SETUP_PATH or not (
+            self.server.requires_app_configuration
+            or self.server.app_configuration_completed
+        ):
             self.respond(
                 "授权地址无效",
                 status=404,
@@ -181,46 +190,64 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         if not secrets.compare_digest(setup_token, self.server.setup_token):
             self.respond("配置会话无效，请关闭页面后重新运行授权。", status=403)
             return
-        app_id = (form.get("app_id") or [""])[0].strip()
-        secret = (form.get("secret") or [""])[0].strip()
-        try:
-            validate_app_credentials(app_id, secret)
-            credential_store.configure_app(app_id, secret, channel=self.server.expected_channel)
-            self.server.config.setdefault("api", {}).update({
-                "app_id": app_id,
-                "secret": secret,
-            })
-        except (RuntimeError, ValueError):
-            self.respond_html(render_app_setup_page(
-                self.server.channel_display_name,
-                self.server.setup_token,
-                error="保存失败，请检查两个字段并确认系统凭据库可用。",
-            ), status=400)
-            return
 
-        self.server.requires_app_configuration = False
-        if self.server.configure_app_only:
-            self.server.result = {
-                "ok": True,
-                "mode": "app_configured",
-                "channel": self.server.expected_channel,
-            }
-            self.respond("应用配置已安全保存，可以关闭这个页面。")
-            return
+        with self.server.app_configuration_lock:
+            if not self.server.app_configuration_completed:
+                app_id = (form.get("app_id") or [""])[0].strip()
+                secret = (form.get("secret") or [""])[0].strip()
+                try:
+                    validate_app_credentials(app_id, secret)
+                    credential_store.configure_app(
+                        app_id,
+                        secret,
+                        channel=self.server.expected_channel,
+                    )
+                    self.server.config.setdefault("api", {}).update({
+                        "app_id": app_id,
+                        "secret": secret,
+                    })
+                    if not self.server.configure_app_only:
+                        self.server.app_authorize_url = get_authorize_url(
+                            self.server.config,
+                            self.server.redirect_uri,
+                            self.server.expected_state,
+                        )
+                except (RuntimeError, ValueError):
+                    self.respond_html(render_app_setup_page(
+                        self.server.channel_display_name,
+                        self.server.setup_token,
+                        error="保存失败，请检查两个字段并确认系统凭据库可用。",
+                    ), status=400)
+                    return
 
-        authorize_url = get_authorize_url(
-            self.server.config,
-            self.server.redirect_uri,
-            self.server.expected_state,
-        )
-        self.send_response(303)
-        self.send_header("Location", authorize_url)
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.end_headers()
+                self.server.app_configuration_completed = True
+                self.server.requires_app_configuration = False
+
+            if self.server.configure_app_only:
+                self.server.result = {
+                    "ok": True,
+                    "mode": "app_configured",
+                    "channel": self.server.expected_channel,
+                }
+                self.respond("应用配置已安全保存，可以关闭这个页面。")
+                return
+
+            authorize_url = self.server.app_authorize_url
+
+        self.redirect(authorize_url)
 
     def log_message(self, format, *args):
         return
+
+    def redirect(self, location):
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.close_connection = True
 
     def respond(
         self,
@@ -257,7 +284,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; "
-            "form-action 'self'; frame-ancestors 'none'",
+            f"form-action 'self' {' '.join(self.server.authorize_origins)}; "
+            "frame-ancestors 'none'",
         )
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -360,14 +388,29 @@ def create_local_server(
             raise ValueError("OAuth redirect URI must use a loopback host") from error
     port = parsed.port if parsed.port is not None else 80
     _, channel_definition = channels.get(channel, capability="oauth")
-    server = HTTPServer((host, port), OAuthCallbackHandler)
+    adapter = channel_adapters.get_adapter(channel, capability="oauth")
+    authorize_url = token_manager.get_path(config, "oauth.authorize_url") or adapter.authorize_url
+    if not official_https_url(authorize_url):
+        raise RuntimeError("OAuth authorize URL must use an official HTTPS host")
+    parsed_authorize_url = urllib.parse.urlparse(authorize_url)
+    authorize_origins = {
+        f"{parsed_authorize_url.scheme}://{parsed_authorize_url.netloc}",
+        *adapter.authorize_navigation_origins,
+    }
+    if not all(official_https_url(origin) for origin in authorize_origins):
+        raise RuntimeError("OAuth navigation origins must use official HTTPS hosts")
+    server = OAuthHTTPServer((host, port), OAuthCallbackHandler)
     server.redirect_uri = redirect_uri
     server.expected_state = state
     server.expected_channel = channel
     server.channel_display_name = channel_definition["display_name"]
+    server.authorize_origins = tuple(sorted(authorize_origins))
     server.config = config
     server.requires_app_configuration = requires_app_configuration
     server.configure_app_only = configure_app_only
+    server.app_configuration_completed = False
+    server.app_configuration_lock = threading.Lock()
+    server.app_authorize_url = None
     server.setup_token = secrets.token_urlsafe(24)
     server.result = None
     return server

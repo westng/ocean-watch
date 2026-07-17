@@ -43,7 +43,11 @@ from ocean_watch.reports import (
     query_qianchuan_plan_report,
     query_report_config,
 )
-from ocean_watch.templates import manage_plan_templates, manage_qianchuan_templates
+from ocean_watch.templates import (
+    manage_plan_templates,
+    manage_qianchuan_templates,
+    template_channel_router,
+)
 
 COMMANDS = {
     ("setup", "doctor"): (environment_check.main, (), "Check local runtime requirements"),
@@ -66,7 +70,11 @@ COMMANDS = {
         "Query spend for responsible accounts",
     ),
     ("templates", "list"): (manage_plan_templates.main, ("list",), "List plan templates"),
-    ("templates", "create"): (manage_plan_templates.main, ("create-wizard",), "Create a template"),
+    ("templates", "create"): (
+        template_channel_router.main,
+        ("create",),
+        "Create a channel-specific template",
+    ),
     ("templates", "migrate"): (manage_plan_templates.main, ("migrate",), "Migrate templates"),
     ("templates", "set-copy"): (manage_plan_templates.main, ("set-copy",), "Set copy materials"),
     ("qc-templates", "list"): (

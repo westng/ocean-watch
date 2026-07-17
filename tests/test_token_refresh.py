@@ -77,6 +77,36 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertEqual(result["_authorization"]["authorization_id"], "authorization-1")
         refresh.assert_not_called()
 
+    def test_unresolved_target_cannot_reuse_a_previous_channel_token(self):
+        stale = channels.runtime_config(valid_config(), "marketing")
+        stale["api"].update({
+            "app_id": "123",
+            "secret": "marketing-secret",
+            "access_token": "marketing-token",
+            "refresh_token": "marketing-refresh",
+            "access_token_expires_at": "2999-01-01T00:00:00+00:00",
+            "refresh_token_expires_at": "2999-01-01T00:00:00+00:00",
+        })
+        stale["_authorization"] = {
+            "channel": "marketing",
+            "authorization_id": "marketing-authorization",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                json.dumps(channels.migrate_config(valid_config())),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
+                    mock.patch.object(credential_store, "read_entry", return_value={}):
+                with self.assertRaisesRegex(RuntimeError, "missing OAuth refresh fields"):
+                    token_manager.ensure_access_token(
+                        config_path,
+                        stale,
+                        channel="qianchuan",
+                        advertiser_id="201",
+                    )
+
     def test_expired_refresh_token_requires_authorization(self):
         config = self.expiring_config()
         config["api"]["refresh_token_expires_at"] = "2000-01-01T00:00:00+00:00"
@@ -140,6 +170,69 @@ class TokenRefreshTests(unittest.TestCase):
         self.assertEqual(updated["api"]["access_token"], "new-access")
         self.assertEqual(updated["api"]["refresh_token"], "new-refresh")
         self.assertEqual(revision, 2)
+
+    def test_refresh_updates_only_the_selected_authorization(self):
+        entries = {}
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                json.dumps(channels.migrate_config(valid_config())),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {"CODEX_HOME": directory}), \
+                    mock.patch.object(credential_store, "write_entry", side_effect=lambda account, data: entries.__setitem__(account, copy.deepcopy(data)) or "test"), \
+                    mock.patch.object(credential_store, "read_entry", side_effect=lambda account: copy.deepcopy(entries.get(account, {}))):
+                authorization_store.write_app("marketing", "123", "secret")
+                first = authorization_store.save_authorization(
+                    "marketing",
+                    {
+                        "access_token": "access-one",
+                        "refresh_token": "refresh-one",
+                        "access_token_expires_at": "2000-01-01T00:00:00+00:00",
+                        "refresh_token_expires_at": "2999-01-01T00:00:00+00:00",
+                    },
+                    [{"account_id": "101", "advertiser_ids": ["201"]}],
+                )
+                second = authorization_store.save_authorization(
+                    "marketing",
+                    {
+                        "access_token": "access-two",
+                        "refresh_token": "refresh-two",
+                        "access_token_expires_at": "2000-01-01T00:00:00+00:00",
+                        "refresh_token_expires_at": "2999-01-01T00:00:00+00:00",
+                    },
+                    [{"account_id": "102", "advertiser_ids": ["202"]}],
+                )
+                response = {
+                    "code": 0,
+                    "data": {
+                        "access_token": "new-access-one",
+                        "refresh_token": "new-refresh-one",
+                        "expires_in": 3600,
+                        "refresh_token_expires_in": 7200,
+                    },
+                }
+                with mock.patch.object(token_manager, "post_json", return_value=response) as post:
+                    updated = token_manager.ensure_access_token(
+                        config_path,
+                        channel="marketing",
+                        advertiser_id="201",
+                    )
+                _, _, first_token = authorization_store.resolve(
+                    "marketing",
+                    advertiser_id="201",
+                )
+                _, _, second_token = authorization_store.resolve(
+                    "marketing",
+                    advertiser_id="202",
+                )
+                state = authorization_store.load_channel_state("marketing")
+        self.assertEqual(updated["account"]["advertiser_id"], "201")
+        self.assertEqual(first_token["access_token"], "new-access-one")
+        self.assertEqual(second_token["access_token"], "access-two")
+        self.assertEqual(state["authorizations"][first]["token_revision"], 2)
+        self.assertEqual(state["authorizations"][second]["token_revision"], 1)
+        self.assertEqual(post.call_args.args[2]["refresh_token"], "refresh-one")
 
     def test_token_refresh_does_not_resync_accounts(self):
         config = self.expiring_config()

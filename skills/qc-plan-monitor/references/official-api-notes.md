@@ -72,6 +72,7 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - `search_key_words` is optional on `/v1.0/qianchuan/uni_aweme/authorized/get/`, so a batch may list all product all-domain creators once.
 - `/v1.0/qianchuan/file/video/aweme/get/` accepts up to 50 `filtering.aweme_item_ids` and an optional `filtering.product_id`. Resolve creator ownership first, then verify each template product.
 - `/v1.0/qianchuan/uni_promotion/list/` uses `marketing_goal=VIDEO_PROM_GOODS`, `filtering.status=ALL`, and `adlab_scene=UNI_PROJECT`. `ALL` includes paused plans and excludes deleted plans.
+- Plan-list `start_time` and `end_time` are required data-period fields and must remain inside the latest 180 days. They do not filter plan creation time; creation dates have separate optional fields. Query one legal recent data period and traverse all declared pages because the API defines no fixed plan-count ceiling.
 - Plan detail returns exact `aweme_id`, `product_infos`, status, and operation status. Never choose among multiple exact creator matches.
 - Plan material list returns `material_info.video_material.aweme_item_id`; query `material_status=ALL` and deduplicate before any write.
 - Add materials with `/v1.0/qianchuan/uni_promotion/ad/material/add/`. Existing plans receive no budget, ROI, status, schedule, name, or other plan fields.

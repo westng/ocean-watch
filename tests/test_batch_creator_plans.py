@@ -61,7 +61,7 @@ def creator_config():
         "titles": ["这是达人素材测试文案"],
     }
     config = plan_templates.migrate(base)
-    name = "平台-CID-测试商品-1001-达人素材"
+    name = "巨量营销-1234567890123456-test product-1001-原生素材"
     config["plan_templates"] = {
         name: {
             "display_name": name,
@@ -93,7 +93,6 @@ def creator_config():
             },
         }
     }
-    config["active_plan_template"] = name
     return config, name
 
 
@@ -126,13 +125,14 @@ def manifest(template_name, jobs=None):
     }
 
 
-def cli_args(config_path, jobs_path, journal_path, submit=False):
+def cli_args(config_path, jobs_path, journal_path, submit=False, preflight=False):
     return SimpleNamespace(
         config=str(config_path),
         jobs_file=str(jobs_path),
         concurrency=2,
         journal=str(journal_path),
         submit=submit,
+        preflight=preflight,
         include_payloads=False,
         out=None,
         channel="marketing",
@@ -224,6 +224,129 @@ class CreatorBatchTests(unittest.TestCase):
         self.assertEqual(execute.call_count, 2)
         self.assertFalse(self.journal_path.exists())
 
+    def test_preflight_uses_journal_to_report_resume_plan_without_writing(self):
+        self.write_manifest()
+        args = cli_args(
+            self.config_path,
+            self.jobs_path,
+            self.journal_path,
+            preflight=True,
+        )
+        _, jobs = batch_create_creator_plans.load_jobs(
+            self.config_path,
+            self.jobs_path,
+            "marketing",
+        )
+        fingerprint = batch_create_creator_plans.batch_fingerprint(jobs)
+        journal = batch_create_creator_plans.new_journal(fingerprint, jobs)
+        first_key = batch_create_creator_plans.job_key(jobs[0])
+        journal["jobs"][first_key].update({
+            "status": "completed",
+            "project_id": "project-one",
+            "promotion_id": "promotion-one",
+        })
+        self.journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+        with mock.patch.object(
+            create_creator_plan,
+            "execute",
+            side_effect=lambda creator_args, **_: fake_preflight(creator_args),
+        ) as execute:
+            result, exit_code = batch_create_creator_plans.run_batch(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["mode"], "preflight")
+        self.assertEqual(result["counts"], {"skipped_completed": 1, "ready": 1})
+        self.assertEqual(result["preflight"]["already_completed"], 1)
+        self.assertEqual(result["preflight"]["ready_to_submit"], 1)
+        self.assertEqual(
+            result["preflight"]["project_capacity"]["status"],
+            "CREATE_TIME_ONLY",
+        )
+        self.assertEqual(execute.call_count, 1)
+
+    def test_preflight_marks_failed_project_for_full_retry(self):
+        self.write_manifest()
+        args = cli_args(
+            self.config_path,
+            self.jobs_path,
+            self.journal_path,
+            preflight=True,
+        )
+        _, jobs = batch_create_creator_plans.load_jobs(
+            self.config_path,
+            self.jobs_path,
+            "marketing",
+        )
+        fingerprint = batch_create_creator_plans.batch_fingerprint(jobs)
+        journal = batch_create_creator_plans.new_journal(fingerprint, jobs)
+        first_key = batch_create_creator_plans.job_key(jobs[0])
+        journal["jobs"][first_key]["status"] = "project_failed"
+        self.journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+        with mock.patch.object(
+            create_creator_plan,
+            "execute",
+            side_effect=lambda creator_args, **_: fake_preflight(creator_args),
+        ):
+            result, exit_code = batch_create_creator_plans.run_batch(args)
+
+        self.assertEqual(exit_code, 0)
+        first = next(row for row in result["results"] if row["aweme_id"] == "creator-one")
+        self.assertEqual(first["planned_operation"], "retry_project_and_promotion")
+        self.assertEqual(first["previous_status"], "project_failed")
+
+    def test_preflight_blocks_known_authorization_failure_until_snapshot_has_cover(self):
+        self.write_manifest()
+        args = cli_args(
+            self.config_path,
+            self.jobs_path,
+            self.journal_path,
+            preflight=True,
+        )
+        _, jobs = batch_create_creator_plans.load_jobs(
+            self.config_path,
+            self.jobs_path,
+            "marketing",
+        )
+        fingerprint = batch_create_creator_plans.batch_fingerprint(jobs)
+        journal = batch_create_creator_plans.new_journal(fingerprint, jobs)
+        first_key = batch_create_creator_plans.job_key(jobs[0])
+        journal["jobs"][first_key].update({
+            "status": "promotion_failed",
+            "project_id": "project-one",
+            "last_response": {
+                "code": 40000,
+                "message": "视频/图文[8101]不在授权期间，无法使用",
+            },
+        })
+        self.journal_path.write_text(json.dumps(journal), encoding="utf-8")
+
+        def recovered_cover_preflight(creator_args, **_):
+            result, code = fake_preflight(creator_args)
+            result["creator_cover_resolution"] = {
+                "status": "resolved",
+                "source": "matching_official_promotion",
+                "resolved": [{"item_id": creator_args.item_id[0]}],
+            }
+            return result, code
+
+        with mock.patch.object(
+            create_creator_plan,
+            "execute",
+            side_effect=recovered_cover_preflight,
+        ):
+            result, exit_code = batch_create_creator_plans.run_batch(args)
+
+        self.assertEqual(exit_code, 2)
+        first = next(row for row in result["results"] if row["aweme_id"] == "creator-one")
+        self.assertEqual(first["status"], "blocked")
+        self.assertEqual(first["error_code"], "creator_reauthorization_required")
+        self.assertEqual(
+            result["preflight"]["creator_authorization"]["status"],
+            "CREATE_TIME_ONLY",
+        )
+
     def test_submit_resumes_partial_job_and_skips_completed_job(self):
         self.write_manifest()
         args = cli_args(
@@ -272,6 +395,7 @@ class CreatorBatchTests(unittest.TestCase):
             first, first_code = batch_create_creator_plans.run_batch(args)
         self.assertEqual(first_code, 1)
         self.assertEqual(first["counts"], {"promotion_failed": 1, "created": 1})
+        self.assertFalse(first["preflight"]["confirmation_required"])
         journal = json.loads(self.journal_path.read_text(encoding="utf-8"))
         first_key = next(key for key in journal["jobs"] if "creator-one" in key)
         self.assertEqual(journal["jobs"][first_key]["project_id"], "project-creator-one")

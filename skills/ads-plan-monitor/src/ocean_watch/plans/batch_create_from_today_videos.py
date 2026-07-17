@@ -13,6 +13,7 @@ import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.materials.query_videos as query_videos
 import ocean_watch.plans.create_plan as create_plan
+import ocean_watch.plans.marketing_runtime_assets as marketing_runtime_assets
 import ocean_watch.templates.plan_templates as plan_templates
 from ocean_watch.core.data import get_path, is_missing, split_csv
 from ocean_watch.plans.executor import PlanExecutionRequest, PlanExecutor
@@ -109,11 +110,10 @@ def resolve_account_jobs(config, accounts_arg, mapping_args, fallback_template=N
             template_name = fallback_template
         if not template_name:
             candidates = bound_templates.get(str(advertiser_id), [])
-            if len(candidates) != 1:
-                raise ValueError(
-                    f"advertiser {advertiser_id} needs an explicit template mapping; candidates={candidates}"
-                )
-            template_name = candidates[0]
+            raise ValueError(
+                f"advertiser {advertiser_id} needs an explicit template mapping; "
+                f"candidates={candidates}"
+            )
         effective = plan_templates.apply(
             config,
             template_name,
@@ -543,6 +543,10 @@ def process_account(raw_config, config_path, advertiser_id, template_name, args)
         return result
 
     try:
+        base_config, runtime_asset_resolution = marketing_runtime_assets.resolve(base_config)
+        result["runtime_asset_resolution"] = runtime_asset_resolution
+        base_url = get_path(base_config, "api.base_url")
+        token = get_path(base_config, "api.access_token")
         library = fetch_library_videos(base_url, token, advertiser_id, args)
         result["video_query"] = {
             "endpoint": VIDEO_LIBRARY_PATH,
@@ -625,6 +629,12 @@ def process_account(raw_config, config_path, advertiser_id, template_name, args)
             result["status"] = "completed" if result["failed_group_count"] == 0 and result["blocked_group_count"] == 0 else "completed_with_errors"
         else:
             result["status"] = "planned" if result["blocked_group_count"] == 0 else "planned_with_blocks"
+        return result
+    except marketing_runtime_assets.MarketingRuntimeAssetError as exc:
+        result["status"] = "blocked"
+        result["error_code"] = exc.code
+        result["error"] = str(exc)
+        result["details"] = exc.details
         return result
     except Exception as exc:
         result["status"] = "failed"

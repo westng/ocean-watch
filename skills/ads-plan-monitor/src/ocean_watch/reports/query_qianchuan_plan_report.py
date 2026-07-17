@@ -20,9 +20,7 @@ DEFAULT_ADLAB_SCENE = "UNI_PROJECT"
 REPORT_DATA_TOPIC = "SITE_PROMOTION_PRODUCT_AD"
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGES = 500
-PLAN_HISTORY_START_DATE = dt.date(2020, 1, 1)
 PLAN_HISTORY_WINDOW_DAYS = 180
-MAX_METADATA_WINDOWS = 100
 
 DEFAULT_FIELDS = [
     "stat_cost",
@@ -272,8 +270,6 @@ def fetch_plan_metadata(
     page_size=DEFAULT_PAGE_SIZE,
     max_pages=MAX_PAGES,
     today_value=None,
-    history_start=PLAN_HISTORY_START_DATE,
-    max_windows=MAX_METADATA_WINDOWS,
     allow_missing=False,
 ):
     rows = []
@@ -282,8 +278,6 @@ def fetch_plan_metadata(
     request_ids = []
     page_count = 0
     today_value = today_value or dt.date.today()
-    if history_start > today_value:
-        raise ApiError("Qianchuan metadata history start is after today")
     if not target_ids:
         return {
             "rows": [],
@@ -293,76 +287,59 @@ def fetch_plan_metadata(
             "missing_ad_ids": [],
         }
 
-    window_end = today_value
-    windows = 0
-    while window_end >= history_start and found_ids != target_ids:
-        if windows >= max_windows:
-            raise ApiError(
-                "Qianchuan plan metadata history search was incomplete",
-                {
-                    "source": "plan_metadata",
-                    "missing_ad_ids": sorted(target_ids - found_ids),
-                    "max_windows": max_windows,
-                },
-            )
-        window_start = max(
-            history_start,
-            window_end - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1),
+    period_start = today_value - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1)
+    page = 1
+    expected_pages = None
+    expected_total = None
+    accumulated_rows = 0
+    while True:
+        payload = client.call_tool(
+            PLAN_LIST_TOOL,
+            {
+                "advertiser_id": int(advertiser_id),
+                "start_time": f"{period_start.isoformat()} 00:00:00",
+                "end_time": f"{today_value.isoformat()} 23:59:59",
+                "marketing_goal": marketing_goal,
+                "adlab_scene": adlab_scene,
+                "fields": ["stat_cost"],
+                "filtering": {"status": "ALL", "having_cost": "ALL"},
+                "need_compensate_info": True,
+                "order_field": "create_time",
+                "order_type": "DESC",
+                "page": page,
+                "page_size": page_size,
+            },
         )
-        windows += 1
-        page = 1
-        expected_pages = None
-        expected_total = None
-        window_row_count = 0
-        while True:
-            payload = client.call_tool(
-                PLAN_LIST_TOOL,
-                {
-                    "advertiser_id": int(advertiser_id),
-                    "start_time": f"{window_start.isoformat()} 00:00:00",
-                    "end_time": f"{window_end.isoformat()} 23:59:59",
-                    "marketing_goal": marketing_goal,
-                    "adlab_scene": adlab_scene,
-                    "fields": ["stat_cost"],
-                    "filtering": {"status": "ALL", "having_cost": "ALL"},
-                    "need_compensate_info": True,
-                    "order_field": "create_time",
-                    "order_type": "DESC",
-                    "page": page,
-                    "page_size": page_size,
-                },
+        if payload.get("request_id"):
+            request_ids.append(payload["request_id"])
+        data = payload.get("data") or {}
+        page_rows = data.get("ad_list") or []
+        if not isinstance(page_rows, list):
+            raise ApiError(
+                "Qianchuan plan metadata rows must be a list",
+                {"source": "plan_metadata", "page": page},
             )
-            if payload.get("request_id"):
-                request_ids.append(payload["request_id"])
-            data = payload.get("data") or {}
-            page_rows = data.get("ad_list") or []
-            if not isinstance(page_rows, list):
-                raise ApiError(
-                    "Qianchuan plan metadata rows must be a list",
-                    {"source": "plan_metadata", "page": page},
-                )
-            for row in page_rows:
-                ad_id = str((row.get("ad_info") or {}).get("id"))
-                if ad_id in target_ids and ad_id not in found_ids:
-                    rows.append(row)
-                    found_ids.add(ad_id)
-            page_count += 1
-            window_row_count += len(page_rows)
-            expected_pages, expected_total = page_state(
-                data,
-                source="plan_metadata",
-                page=page,
-                max_pages=max_pages,
-                total_key="total_num",
-                accumulated_rows=window_row_count,
-                row_count=len(page_rows),
-                expected_pages=expected_pages,
-                expected_total=expected_total,
-            )
-            if page >= expected_pages:
-                break
-            page += 1
-        window_end = window_start - dt.timedelta(days=1)
+        for row in page_rows:
+            ad_id = str((row.get("ad_info") or {}).get("id"))
+            if ad_id in target_ids and ad_id not in found_ids:
+                rows.append(row)
+                found_ids.add(ad_id)
+        page_count += 1
+        accumulated_rows += len(page_rows)
+        expected_pages, expected_total = page_state(
+            data,
+            source="plan_metadata",
+            page=page,
+            max_pages=max_pages,
+            total_key="total_num",
+            accumulated_rows=accumulated_rows,
+            row_count=len(page_rows),
+            expected_pages=expected_pages,
+            expected_total=expected_total,
+        )
+        if page >= expected_pages or found_ids == target_ids:
+            break
+        page += 1
 
     missing_ids = target_ids - found_ids
     if missing_ids and not allow_missing:

@@ -14,7 +14,13 @@ from ocean_watch.auth import token_manager
 from ocean_watch.materials import creator_materials, query_creator_materials
 from ocean_watch.plans import create_creator_plan, create_plan
 from ocean_watch.plans import executor as plan_executor
-from ocean_watch.templates import manage_plan_templates, plan_templates, template_workflow
+from ocean_watch.templates import (
+    manage_plan_templates,
+    plan_templates,
+    template_workflow,
+)
+
+from tests.support import PromptAnswers
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads(
@@ -94,7 +100,7 @@ def payload_args():
 def creator_template_config():
     source = payload_config()
     config = plan_templates.migrate(source)
-    name = "示例平台-CID-示例商品-product-1-达人素材"
+    name = "巨量营销-1234567890123456-test product-product-1-原生素材"
     config["plan_templates"] = {
         name: {
             "display_name": name,
@@ -129,7 +135,6 @@ def creator_template_config():
             },
         }
     }
-    config["active_plan_template"] = name
     return config, name
 
 
@@ -324,35 +329,37 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
 
     def test_template_wizard_creates_creator_bound_template(self):
         config, _ = creator_template_config()
-        answers = iter([
-            "0",
-            "1234567890123456",
-            "示例平台",
-            "",
-            "新商品",
-            "product-2",
-            "2",
-            "1",
-            "5",
-            "",
-            "1",
-            "",
-            "这是一条达人模板文案",
-            "",
-            "test source",
-            "https://landing.test/page",
-            "testapp://open",
-            "https://tracking.test/impression",
-            "https://tracking.test/click",
-            "y",
-            "n",
-        ])
+        answers = PromptAnswers({
+            "请选择来源编号": "0",
+            "广告主 ID": "1234567890123456",
+            "平台": "示例平台",
+            "流量来源": "",
+            "商品名称": "新商品",
+            "商品 ID": "product-2",
+            "产品卖点": "新商品值得推荐",
+            "日预算": "",
+            "净成交 ROI 出价": "",
+            "性别": "",
+            "年龄": "",
+            "素材来源": "2",
+            "素材选择方式": "1",
+            "每单元素材数量": "5",
+            "达人 ID 白名单": "",
+            "授权至少剩余天数": "1",
+            "输入文案标题": ["这是一条达人模板文案", ""],
+            "计划来源": "test source",
+            "落地页链接": "https://landing.test/page",
+            "直达链接": "testapp://open",
+            "展示监测链接": "https://tracking.test/impression",
+            "点击/有效触点监测链接": "https://tracking.test/click",
+            "确认创建此业务模板": "y",
+        })
         updated, result = manage_plan_templates.run_create_wizard(
             config,
-            input_fn=lambda _: next(answers),
+            input_fn=answers,
             output_fn=lambda _: None,
         )
-        name = "示例平台-CID-新商品-product-2-达人素材"
+        name = "巨量营销-1234567890123456-新商品-product-2-原生素材"
         strategy = updated["plan_templates"][name]["material_strategy"]
         self.assertTrue(result["confirmed"])
         self.assertEqual(strategy["source_type"], "CREATOR_AUTHORIZED")
@@ -370,35 +377,37 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
 
     def test_template_wizard_accepts_unlimited_creator_materials(self):
         config, _ = creator_template_config()
-        answers = iter([
-            "0",
-            "1234567890123456",
-            "示例平台",
-            "",
-            "不限素材商品",
-            "product-3",
-            "2",
-            "1",
-            "不限",
-            "",
-            "1",
-            "",
-            "这是一条不限素材模板文案",
-            "",
-            "test source",
-            "https://landing.test/page",
-            "testapp://open",
-            "https://tracking.test/impression",
-            "https://tracking.test/click",
-            "y",
-            "n",
-        ])
+        answers = PromptAnswers({
+            "请选择来源编号": "0",
+            "广告主 ID": "1234567890123456",
+            "平台": "示例平台",
+            "流量来源": "",
+            "商品名称": "不限素材商品",
+            "商品 ID": "product-3",
+            "产品卖点": "",
+            "日预算": "",
+            "净成交 ROI 出价": "",
+            "性别": "",
+            "年龄": "",
+            "素材来源": "2",
+            "素材选择方式": "1",
+            "每单元素材数量": "不限",
+            "达人 ID 白名单": "",
+            "授权至少剩余天数": "1",
+            "输入文案标题": ["这是一条不限素材模板文案", ""],
+            "计划来源": "test source",
+            "落地页链接": "https://landing.test/page",
+            "直达链接": "testapp://open",
+            "展示监测链接": "https://tracking.test/impression",
+            "点击/有效触点监测链接": "https://tracking.test/click",
+            "确认创建此业务模板": "y",
+        })
         updated, result = manage_plan_templates.run_create_wizard(
             config,
-            input_fn=lambda _: next(answers),
+            input_fn=answers,
             output_fn=lambda _: None,
         )
-        name = "示例平台-CID-不限素材商品-product-3-达人素材"
+        name = "巨量营销-1234567890123456-不限素材商品-product-3-原生素材"
         self.assertTrue(result["confirmed"])
         self.assertIsNone(
             updated["plan_templates"][name]["material_strategy"][
@@ -442,16 +451,17 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             "material_strategy.creator_filters.creator_ids",
             template["created_from"]["cleared_fields"],
         )
-        self.assertTrue(name.endswith("-达人素材"))
+        self.assertTrue(name.endswith("-原生素材"))
 
     def test_standard_create_entry_rejects_creator_template_before_token_use(self):
-        config, _ = creator_template_config()
+        config, name = creator_template_config()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text(json.dumps(config), encoding="utf-8")
             argv = [
                 "ocean-watch plans create",
                 "--config", str(path),
+                "--plan-template", name,
                 "--submit",
             ]
             with mock.patch.object(sys, "argv", argv), \

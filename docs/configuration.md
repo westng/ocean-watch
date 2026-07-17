@@ -57,13 +57,11 @@ ocean-watch auth sync-accounts \
 | `account.advertiser_id` | 当前广告主 |
 | `managed_account_schema_version` | 用户负责账户簿版本，当前为 `1` |
 | `managed_accounts.<channel>` | 该渠道下用户主动维护的负责账户列表 |
-| `plan_template_schema_version` | 计划模板版本，当前为 `3` |
-| `active_plan_template` | 未显式指定时使用的业务模板 |
+| `plan_template_schema_version` | 营销计划模板版本，当前为 `5` |
 | `default_plan_template` | 创建模板的默认骨架，不可投放 |
 | `plan_templates` | 广告主绑定的真实业务模板 |
-| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `2` |
+| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `4` |
 | `default_qianchuan_product_template` | 千川商品全域默认骨架，不可投放 |
-| `active_qianchuan_product_template` | 当前千川商品模板 ID |
 | `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
 
 以下字段不得写入配置：`app_id`、`secret`、`access_token`、`refresh_token`、`auth_code`、`developer_id`。
@@ -74,11 +72,23 @@ ocean-watch auth sync-accounts \
 
 ## 计划模板
 
-业务模板建议命名：
+巨量营销默认模板的地域定向由行政区树的省级节点生成。官方 `audience.city` 是包含列表，因此默认配置写入港、澳、台、新疆、西藏之外的 29 个省级地域 ID，并在 `resolved_ids.city_names` 保存对应名称；不会添加官方接口不存在的“排除地域”字段。业务模板可以通过覆盖 `resolved_ids.city_ids` 和 `resolved_ids.city_names` 自定义地域。
+
+所有渠道的业务模板统一命名：
 
 ```text
-平台-CID-商品名-商品ID-素材来源
+渠道-广告账户ID-商品名-商品ID-模版类型
 ```
+
+渠道段当前使用“巨量营销”或“巨量千川”。营销业务模板具体为：
+
+```text
+巨量营销-广告账户ID-商品名-商品ID-模版类型
+```
+
+`ACCOUNT_UPLOAD` 的模版类型显示为“混剪素材”，`CREATOR_AUTHORIZED` 显示为“原生素材”。名称由向导根据确认后的绑定信息自动生成，不接受自由名称。平台和流量来源仍保存在 `bindings` 中，但不进入名称。真实归属由 `bindings` 决定，不依赖名称解析。
+
+真实业务模板没有“当前”或“默认”状态。所有创建计划命令必须显式提供模板名称或模板 ID；`default_plan_template` 和 `default_qianchuan_product_template` 只用于复制创建新模板，永远不参与投放。
 
 真实归属由 `bindings` 决定，不依赖名称解析：
 
@@ -105,7 +115,7 @@ ocean-watch auth sync-accounts \
 - `ACCOUNT_UPLOAD`：账户上传素材，在线名称使用“混剪”。
 - `CREATOR_AUTHORIZED`：达人合作授权素材，在线名称使用“原生”。
 
-具体视频、封面、作品和 material ID 属于本次运行，不能写回 Schema v3 模板。
+具体视频、封面、作品和 material ID 属于本次运行，不能写回营销 Schema v5 模板。
 
 ### 创建模板
 
@@ -113,7 +123,13 @@ ocean-watch auth sync-accounts \
 ocean-watch templates create
 ```
 
-向导必须完成来源选择、目标绑定、素材来源、复制策略、逐字段预览和最终确认。复制策略：
+共享入口首先选择 `marketing` 或 `qianchuan`，再进入对应渠道向导。授权状态只作为提示；未授权渠道仍可创建模板，但不能执行真实投放。营销向导在来源模板之前先选择 `ACCOUNT_UPLOAD`（混剪）或 `CREATOR_AUTHORIZED`（原生），来源列表只显示同模式模板，然后完成目标绑定、日预算、净成交 ROI、性别、年龄、产品卖点、素材规则、文案、链接、逐字段预览和最终确认。产品卖点按官方规则限制为每条 6–9 个位置、最多 10 条。广告主占位符不会成为默认值；已有授权索引时必须选择该渠道覆盖的广告主，未授权渠道的预览标记为 `UNVERIFIED`。
+
+创建骨架使用官方商品库主图：`product_image_type=DPA`、`product_image_fields=["images_url"]`，标准向导不要求用户填写图片 ID。提交前会通过官方接口验证该商品字段；字段不可用时，插件只会从同广告主、同商品的已有官方单元复用主图和非空品牌 ID，并在内存中转为 `CUSTOM` payload。没有可复用单元时会在创建项目前阻断。高级配置仍可显式使用 `CUSTOM`，并在 `overrides.resolved_ids.product_image_ids` 配置账户图片素材 ID；这些 ID 不是视频或封面 ID。
+
+转化资产同样属于广告主边界。模板已绑定 `event_asset_ids` 时直接使用；缺失时，提交前只从同广告主、同商品的官方项目解析。唯一候选可自动补齐，多个有效候选必须由用户明确选择，不能按列表顺序猜测。
+
+复制策略：
 
 | 目标变化 | 保留 | 清理 |
 | --- | --- | --- |
@@ -143,7 +159,7 @@ ocean-watch templates set-copy --template TARGET --from-template SOURCE
 
 ## 千川商品模板
 
-千川商品模板与营销 Schema v3 完全独立：
+千川商品模板与营销 Schema v5 完全独立：
 
 ```bash
 ocean-watch qc-templates list
@@ -153,7 +169,7 @@ ocean-watch qc-templates create
 模板绑定一个千川广告主、产品名称和 1–30 个商品 ID。用户可见名称为：
 
 ```text
-广告主ID-商品全域-产品-商品ID1/商品ID2
+巨量千川-广告账户ID-商品名-商品ID1/商品ID2-商品全域
 ```
 
 默认投放参数：
@@ -193,7 +209,8 @@ ocean-watch auth set-app --channel qianchuan
 默认回调地址为 `http://127.0.0.1:8787/oauth/callback`，必须与开放平台设置完全一致。
 
 - Plugin 安装不触发 OAuth；首次使用相应渠道时才运行 `auth authorize`。
-- 回调地址不是授权入口，不应手动打开。授权命令启动后，只打开浏览器自动进入的页面；自动打开失败时使用 `--print-url --no-open` 并打开 `start_url`。
+- 回调地址不是授权入口，不应手动打开。在 Codex 中使用 `--print-url --no-open`，只把临时 `start_url` 交给用户，由用户在对应巨量账户的浏览器分组中打开。
+- Codex 返回临时地址后必须保持授权进程并持续等待回调；授权完成后主动输出账户同步和广告主到 Token 的映射结果。
 - 本地服务只在授权命令运行期间监听，授权完成或超时后关闭。
 - 巨量营销和巨量千川共用这一条回调地址，不需要分别申请路径。
 - OAuth `state` 使用 `AD.<随机值>` 表示巨量营销，使用 `QC.<随机值>` 表示巨量千川。
