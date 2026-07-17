@@ -120,11 +120,14 @@ ocean-watch reports materials
 ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
+ocean-watch setup work-metadata --endpoint https://YOUR_PRIVATE_HOST/PATH --home-config
 ```
 
 `templates list` 会一次从本地配置列出巨量营销和巨量千川模板，不调用官方接口。可用 `--channel` 筛选渠道，或用 `--include-details` 查看完整配置。
 
 创建命令默认只预览。批量达人创建提供独立 `--preflight`，会结合断点日志列出已完成、待创建、续建和阻断项；项目容量由官方创建接口最终确认。只有显式传入 `--submit` 才会调用在线写接口。
+
+千川作品链接解析服务是可选的本机配置，开源仓库不包含真实地址。配置后只向该服务发送公开抖音链接，并读取作品 ID、公开抖音号、数值 UID 和商品 ID；不发送广告主 ID、Token、模板或本地状态。接口返回非空商品 ID 且未命中模板绑定的任一商品时，该作品会在读取投放凭据前直接跳过，不能新建计划或追加素材；商品命中或为空仍必须经过千川官方接口复核。未配置或使用 `--no-link-metadata-api` 时，自动回退到受限短链跳转和完整官方查询。请求与响应字段见[配置文档](docs/configuration.md#千川作品解析服务)。
 
 ## 安全边界
 
@@ -132,6 +135,7 @@ ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 - macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。
 - 用户配置、授权状态和回退凭据统一位于 `$CODEX_HOME/ads-plan-monitor/`；未设置 `CODEX_HOME` 时默认为 `~/.codex`。开发仓库可使用被忽略的 `config/ads-plan-monitor/config.json`。
 - 官方业务 API、OAuth 和 MCP 只允许巨量官方 HTTPS 主机，传输层拒绝重定向并限制响应大小。
+- 可选千川作品解析地址只保存在本机配置，不进入仓库；启用后只发送公开抖音链接，不发送凭据、广告账户或模板数据。
 - `config/`、`runs/`、缓存、日志和本地任务清单不属于开源包。
 - 开发 Plugin 时不会读取真实业务配置或调用真实账户；只有用户明确要求真实执行时才进入业务模式。
 

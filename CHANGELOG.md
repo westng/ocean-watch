@@ -6,6 +6,7 @@ All notable changes to Ocean Watch are documented here.
 
 ### Changed
 
+- Accelerated Qianchuan work-link preflight with an optional local-only metadata endpoint, public-link identity and product hints, bounded default concurrency, a 30-day advertiser-scoped owner-hint cache, mandatory official revalidation, and stage-level latency metrics. The private endpoint is no longer present in tracked source or documentation.
 - Added one fast local `templates list` command that returns compact Marketing and Qianchuan template summaries from a single config read, with optional channel filtering and full details.
 - Added a resumable Marketing creator-batch preflight that reports completed, ready, retry, and blocked jobs before submission while treating project capacity as a create-time-only check.
 - Updated the Marketing default template to target the 29 top-level regions outside Hong Kong, Macao, Taiwan, Xinjiang, and Tibet.
@@ -28,6 +29,7 @@ All notable changes to Ocean Watch are documented here.
 - Accepted the official empty advertiser-page contract (`total_page: 0`, `total_number: 0`) while retaining strict checks for inconsistent pagination data.
 - Resolved missing Marketing event assets from unique same-account, same-product projects and added a guarded DPA-image fallback from matching official promotions, blocking ambiguous or unavailable assets before project creation.
 - Corrected Qianchuan plan reconciliation and report metadata queries to use one legal recent-180-day data period while traversing every declared plan page, instead of sending invalid historical data windows.
+- Fixed Qianchuan creator-plan reconciliation when plan lists return a visible Douyin ID but plan details return the numeric `aweme_id`, preventing an existing plan from being misclassified as a new plan.
 
 ## 0.9.1 - 2026-07-16
 

@@ -152,6 +152,8 @@ ocean-watch templates list
 ocean-watch templates list --channel marketing
 ocean-watch templates list --channel qianchuan
 ocean-watch templates list --include-details
+ocean-watch templates show --channel marketing --template TEMPLATE_NAME
+ocean-watch templates show --channel qianchuan --template TEMPLATE_ID_OR_NAME
 ocean-watch templates create
 ocean-watch templates create --channel marketing
 ocean-watch templates create --channel marketing --material-source-type ACCOUNT_UPLOAD
@@ -163,6 +165,8 @@ ocean-watch templates set-copy --template TARGET --from-template SOURCE
 ```
 
 `templates list` 只读取一次本地配置，默认同时返回巨量营销和巨量千川的精简业务模板、渠道计数和默认骨架。该命令不请求官方接口；只有排查完整配置时才使用 `--include-details`。
+
+`templates show` 是单模板快速查询入口，只读本地配置且不请求官方接口。营销模板使用完整模板名称，千川模板可使用 `template_id` 或完整模板名称；结果返回完整绑定、投放设置、素材策略和 `ready_for_plan_creation` 状态。
 
 未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`，再显示同模式的来源模板；选择千川则进入千川商品全域来源向导。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
 
@@ -258,8 +262,10 @@ ocean-watch plans batch-qianchuan-works \
   --plan-template TEMPLATE_ID \
   --work-url DOUYIN_WORK_URL_1 \
   --work-url DOUYIN_WORK_URL_2 \
-  --concurrency 4
+  --concurrency 8
 ```
+
+可选解析服务通过 `setup work-metadata --endpoint URL --home-config` 写入本机配置，仓库不提供真实地址。配置后，千川作品链路只发送公开抖音链接并读取作品 ID、抖音号、数值 UID 和商品 ID；不传广告主、Token 或模板数据。返回非空商品 ID 且不在模板商品集合时直接跳过，不得新建或追加；匹配或空值仍由官方接口复核。未配置或使用 `--no-link-metadata-api` 时走安全兜底。命令默认使用 8 并发（上限 10）执行必要的官方素材校验。首次官方校验成功后，会在 `$CODEX_HOME/ads-plan-monitor/state/cache/` 保存 30 天的作品达人查询提示。缓存过期或失效时自动回退到全量官方扫描。`performance` 会分别展示链接解析、凭据准备、素材校验和计划对账耗时，并通过 `link_metadata.configured/enabled` 标识本次是否启用本机服务。
 
 命令跟随抖音短链并提取作品 ID，通过官方接口批量确认授权达人和模板商品匹配，再按数值 `aweme_id` 分组。达人没有商品全域计划时按模板新建；已有计划（包括暂停）时只调用素材追加接口，预算、ROI、状态和名称保持不变。计划素材已存在、链接无效、达人未授权或商品不匹配时跳过，并在整批结束后统一反馈。默认 dry-run，真实写入增加 `--submit`；只有显式传入 `--out` 才写文件。
 

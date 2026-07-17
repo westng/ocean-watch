@@ -70,6 +70,28 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         self.assertEqual(list_call[2]["filtering"]["status"], "ALL")
         self.assertEqual(list_call[2]["adlab_scene"], "UNI_PROJECT")
 
+    def test_visible_douyin_id_selects_candidate_then_detail_confirms_aweme_id(self):
+        class VisibleIdClient(FakeClient):
+            def get(self, path, params=None):
+                response = super().get(path, params=params)
+                if path == qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH:
+                    response["data"]["ad_list"][0]["room_info"][0]["anchor_id"] = (
+                        "creator-one"
+                    )
+                return response
+
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(VisibleIdClient())
+        found = gateway.find_creator_plans(
+            "1234567890123456",
+            ["9001"],
+            aweme_show_ids={"9001": "creator-one"},
+        )
+
+        self.assertEqual(
+            [row["ad_id"] for row in found["matches"]["9001"]],
+            ["7001"],
+        )
+
     def test_add_materials_uses_dedicated_official_endpoint(self):
         client = FakeClient()
         gateway = qianchuan_plan_gateway.QianchuanPlanGateway(client)

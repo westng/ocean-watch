@@ -27,6 +27,11 @@
     "channel": "marketing",
     "advertiser_id": "REPLACE_WITH_ADVERTISER_ID"
   },
+  "integrations": {
+    "qianchuan_work_metadata": {
+      "endpoint": ""
+    }
+  },
   "plan_templates": {},
   "plan_template_schema_version": 5,
   "qianchuan_product_template_schema_version": 4,

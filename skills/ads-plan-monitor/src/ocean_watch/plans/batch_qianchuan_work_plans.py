@@ -2,6 +2,7 @@
 import argparse
 import datetime as dt
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 
@@ -13,9 +14,12 @@ from ocean_watch.api import OceanEngineClient
 from ocean_watch.core.data import get_path
 from ocean_watch.core.output import write_json
 from ocean_watch.core.process_lock import ProcessLock
+from ocean_watch.integrations import qianchuan_work_metadata
+from ocean_watch.materials import qianchuan_work_owner_cache
 from ocean_watch.materials.douyin_work_links import (
-    DEFAULT_CONCURRENCY,
     MAX_CONCURRENCY,
+    DouyinWorkLinkResolver,
+    DouyinWorkMetadataResolver,
     resolve_work_links,
 )
 from ocean_watch.materials.qianchuan_work_materials import resolve_work_materials
@@ -32,6 +36,7 @@ from ocean_watch.templates import qianchuan_product_templates
 
 MAX_MATERIALS_PER_WRITE = 100
 VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
+DEFAULT_QIANCHUAN_CONCURRENCY = 8
 
 
 def build_parser():
@@ -41,8 +46,17 @@ def build_parser():
     parser.add_argument("--config")
     parser.add_argument("--plan-template", required=True)
     parser.add_argument("--work-url", action="append", default=[])
-    parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_QIANCHUAN_CONCURRENCY,
+    )
     parser.add_argument("--auth-account-id")
+    parser.add_argument(
+        "--no-link-metadata-api",
+        action="store_true",
+        help="Disable the configured public Douyin work metadata hint service.",
+    )
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--include-payloads", action="store_true")
     parser.add_argument("--out")
@@ -54,6 +68,27 @@ def validate_concurrency(value):
     if value < 1 or value > MAX_CONCURRENCY:
         raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
     return value
+
+
+def filter_link_product_hints(link_result, allowed_product_ids):
+    allowed = {str(value) for value in allowed_product_ids}
+    resolved = []
+    skipped = list(link_result["skipped"])
+    for row in link_result["resolved"]:
+        product_hint = row.get("product_hint") or {}
+        hinted_product_id = str(product_hint.get("product_id") or "")
+        if hinted_product_id and hinted_product_id not in allowed:
+            skipped.append({
+                **row,
+                "status": "skipped",
+                "reason": "link_metadata_product_mismatch",
+                "message": "作品绑定商品与投放模板商品不匹配",
+                "hinted_product_id": hinted_product_id,
+                "template_product_ids": sorted(allowed),
+            })
+            continue
+        resolved.append(row)
+    return {"resolved": resolved, "skipped": skipped}
 
 
 def weighted_truncate(value, maximum):
@@ -376,7 +411,14 @@ def execute_plan_actions(
     groups = group_by_creator(eligible)
     if not groups:
         return [], unsupported
-    discovery = gateway.find_creator_plans(advertiser_id, groups)
+    discovery = gateway.find_creator_plans(
+        advertiser_id,
+        groups,
+        aweme_show_ids={
+            aweme_id: str(rows[0]["creator"].get("aweme_show_id") or "")
+            for aweme_id, rows in groups.items()
+        },
+    )
 
     def execute(aweme_id, rows):
         plans = discovery["matches"].get(aweme_id) or []
@@ -462,6 +504,7 @@ def summarize(mode, template, link_result, material_result, group_results, unsup
 
 
 def execute(args, *, link_resolver=None, clients=None, now=None):
+    started_at = time.monotonic()
     concurrency = validate_concurrency(args.concurrency)
     if not args.work_url:
         raise ValueError("at least one --work-url is required")
@@ -471,21 +514,52 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
         raw_config,
         args.plan_template,
     )
+    metadata_disabled = getattr(args, "no_link_metadata_api", False)
+    metadata_configured = qianchuan_work_metadata.is_configured(raw_config)
+    metadata_endpoint = (
+        None
+        if metadata_disabled
+        else qianchuan_work_metadata.endpoint_from_config(raw_config)
+    )
+    metadata_enabled = metadata_endpoint is not None
+    if link_resolver is None and metadata_enabled:
+        link_resolver = DouyinWorkLinkResolver(
+            metadata_resolver=DouyinWorkMetadataResolver(
+                metadata_endpoint,
+            )
+        )
     link_result = resolve_work_links(
         args.work_url,
         resolver=link_resolver,
         concurrency=concurrency,
     )
+    link_result = filter_link_product_hints(
+        link_result,
+        template["bindings"]["product_ids"],
+    )
+    links_finished_at = time.monotonic()
     if not link_result["resolved"]:
         empty_material_result = {"matched": [], "skipped": [], "query_failures": []}
-        return summarize(
+        result = summarize(
             "submit" if args.submit else "dry_run",
             template,
             link_result,
             empty_material_result,
             [],
             [],
-        ), 0
+        )
+        result["performance"] = {
+            "link_resolution_seconds": round(links_finished_at - started_at, 3),
+            "credential_resolution_seconds": 0.0,
+            "material_resolution_seconds": 0.0,
+            "plan_reconciliation_seconds": 0.0,
+            "total_seconds": round(time.monotonic() - started_at, 3),
+            "link_metadata": {
+                "configured": metadata_configured,
+                "enabled": metadata_enabled,
+            },
+        }
+        return result, 0
 
     advertiser_id = template["bindings"]["advertiser_id"]
     if clients is None:
@@ -513,6 +587,17 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
     else:
         api_client, video_client = clients
 
+    cached_owner_hints = qianchuan_work_owner_cache.load_owner_hints(
+        advertiser_id,
+        [row["aweme_item_id"] for row in link_result["resolved"]],
+    )
+    link_owner_hints = {
+        row["aweme_item_id"]: row["owner_hint"]
+        for row in link_result["resolved"]
+        if row.get("owner_hint")
+    }
+    owner_hints = {**cached_owner_hints, **link_owner_hints}
+    material_started_at = time.monotonic()
     material_result = resolve_work_materials(
         api_client,
         video_client,
@@ -520,7 +605,21 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
         template["bindings"]["product_ids"],
         link_result["resolved"],
         concurrency=concurrency,
+        owner_hints=owner_hints,
     )
+    cache_write_count = 0
+    cache_warning = None
+    try:
+        cache_write_count = qianchuan_work_owner_cache.update_owner_hints(
+            advertiser_id,
+            material_result.get("resolved_owner_hints"),
+        )
+    except (OSError, TimeoutError) as error:
+        cache_warning = {
+            "code": "owner_hint_cache_write_failed",
+            "message": str(error)[:256],
+        }
+    material_finished_at = time.monotonic()
     gateway = QianchuanPlanGateway(api_client)
     plan_executor = QianchuanPlanExecutor(api_client)
     lock = (
@@ -543,6 +642,7 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
             include_payloads=args.include_payloads,
             now=now,
         )
+    plans_finished_at = time.monotonic()
     output = summarize(
         "submit" if args.submit else "dry_run",
         template,
@@ -551,6 +651,34 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
         group_results,
         unsupported,
     )
+    output["performance"] = {
+        "link_resolution_seconds": round(links_finished_at - started_at, 3),
+        "credential_resolution_seconds": round(
+            material_started_at - links_finished_at,
+            3,
+        ),
+        "material_resolution_seconds": round(
+            material_finished_at - material_started_at,
+            3,
+        ),
+        "plan_reconciliation_seconds": round(
+            plans_finished_at - material_finished_at,
+            3,
+        ),
+        "total_seconds": round(plans_finished_at - started_at, 3),
+        "owner_hint_cache": {
+            **(material_result.get("owner_hint_summary") or {}),
+            "loaded": len(owner_hints),
+            "loaded_from_cache": len(cached_owner_hints),
+            "loaded_from_link_metadata": len(link_owner_hints),
+            "stored": cache_write_count,
+            "warning": cache_warning,
+        },
+        "link_metadata": {
+            "configured": metadata_configured,
+            "enabled": metadata_enabled,
+        },
+    }
     failed = bool(material_result["query_failures"]) or any(
         row["status"] in {
             "failed",

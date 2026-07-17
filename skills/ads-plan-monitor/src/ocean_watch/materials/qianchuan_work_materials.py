@@ -1,14 +1,20 @@
 import copy
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ocean_watch.core.errors import ApiError
-from ocean_watch.materials.qianchuan_creator_accounts import list_authorized_awemes
+from ocean_watch.materials.qianchuan_creator_accounts import (
+    list_authorized_awemes,
+    resolve_authorized_aweme,
+)
 from ocean_watch.materials.query_qianchuan_creator_videos import (
     compact_video,
     fetch_creator_videos,
 )
 
 MAX_ITEM_IDS_PER_QUERY = 50
+RATE_LIMIT_CODE = 40100
+RATE_LIMIT_RETRY_DELAYS = (1, 2, 4)
 
 
 def chunks(values, size):
@@ -33,20 +39,39 @@ def compact_query_error(error, *, aweme_id, product_id=None):
     }
 
 
-def run_video_queries(client, advertiser_id, tasks, concurrency):
+def is_rate_limit_error(error):
+    details = getattr(error, "details", {}) or {}
+    return details.get("code") == RATE_LIMIT_CODE
+
+
+def run_video_queries(
+    client,
+    advertiser_id,
+    tasks,
+    concurrency,
+    *,
+    retry_rate_limits=False,
+):
     results = []
     failures = []
 
     def query(task):
-        response = fetch_creator_videos(
-            client,
-            advertiser_id,
-            task["creator"]["aweme_id"],
-            product_id=task.get("product_id"),
-            aweme_item_ids=task["item_ids"],
-            count=MAX_ITEM_IDS_PER_QUERY,
-        )
-        return task, response
+        delays = RATE_LIMIT_RETRY_DELAYS if retry_rate_limits else ()
+        for attempt in range(len(delays) + 1):
+            try:
+                response = fetch_creator_videos(
+                    client,
+                    advertiser_id,
+                    task["creator"]["aweme_id"],
+                    product_id=task.get("product_id"),
+                    aweme_item_ids=task["item_ids"],
+                    count=MAX_ITEM_IDS_PER_QUERY,
+                )
+                return task, response
+            except Exception as error:
+                if attempt >= len(delays) or not is_rate_limit_error(error):
+                    raise
+                time.sleep(delays[attempt])
 
     with ThreadPoolExecutor(max_workers=min(concurrency, max(1, len(tasks)))) as pool:
         futures = {pool.submit(query, task): task for task in tasks}
@@ -63,6 +88,73 @@ def run_video_queries(client, advertiser_id, tasks, concurrency):
     return results, failures
 
 
+def normalize_owner_hints(owner_hints, work_by_id):
+    result = {}
+    for item_id, value in (owner_hints or {}).items():
+        item_id = str(item_id)
+        if item_id not in work_by_id:
+            continue
+        if isinstance(value, dict):
+            aweme_id = str(value.get("aweme_id") or "")
+            aweme_show_id = str(value.get("aweme_show_id") or "").strip()
+        else:
+            aweme_id = str(value or "")
+            aweme_show_id = ""
+        if aweme_id.isdigit():
+            result[item_id] = {
+                "aweme_id": aweme_id,
+                "aweme_show_id": aweme_show_id or None,
+            }
+    return result
+
+
+def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
+    show_ids = sorted({
+        hint["aweme_show_id"]
+        for hint in hints.values()
+        if hint.get("aweme_show_id")
+    })
+    resolved_by_show_id = {}
+    failures = []
+
+    def query(show_id):
+        for attempt in range(len(RATE_LIMIT_RETRY_DELAYS) + 1):
+            try:
+                return show_id, resolve_authorized_aweme(
+                    client,
+                    advertiser_id,
+                    show_id,
+                )
+            except Exception as error:
+                if (
+                    attempt >= len(RATE_LIMIT_RETRY_DELAYS)
+                    or not is_rate_limit_error(error)
+                ):
+                    raise
+                time.sleep(RATE_LIMIT_RETRY_DELAYS[attempt])
+
+    with ThreadPoolExecutor(max_workers=min(concurrency, max(1, len(show_ids)))) as pool:
+        futures = {pool.submit(query, show_id): show_id for show_id in show_ids}
+        for future in as_completed(futures):
+            show_id = futures[future]
+            try:
+                _, creator = future.result()
+                resolved_by_show_id[show_id] = creator
+            except Exception:
+                failures.append(show_id)
+
+    creators_by_item = {}
+    for item_id, hint in hints.items():
+        creator = resolved_by_show_id.get(hint.get("aweme_show_id"))
+        if (
+            creator
+            and creator.get("aweme_id") == hint["aweme_id"]
+            and creator_is_usable(creator)
+        ):
+            creators_by_item[item_id] = creator
+    return creators_by_item, failures, len(show_ids)
+
+
 def resolve_work_materials(
     authorized_client,
     video_client,
@@ -72,6 +164,7 @@ def resolve_work_materials(
     *,
     concurrency=4,
     max_creator_pages=100,
+    owner_hints=None,
 ):
     product_ids = [str(value) for value in product_ids]
     work_by_id = {row["aweme_item_id"]: copy.deepcopy(row) for row in work_rows}
@@ -84,50 +177,106 @@ def resolve_work_materials(
             "query_failures": [],
         }
 
-    creator_result = list_authorized_awemes(
-        authorized_client,
-        advertiser_id,
-        max_pages=max_creator_pages,
-    )
-    if creator_result["truncated"]:
-        raise ApiError(
-            "Qianchuan authorized creator query was truncated",
-            {
-                "advertiser_id": str(advertiser_id),
-                "page_count": creator_result["page_count"],
-            },
+    supplied_hints = normalize_owner_hints(owner_hints, work_by_id)
+    hinted_creators, hint_auth_failures, hint_auth_query_count = (
+        resolve_authorized_hint_creators(
+            authorized_client,
+            advertiser_id,
+            supplied_hints,
+            concurrency,
         )
-    creators = [
-        creator for creator in creator_result["creators"]
-        if creator_is_usable(creator)
+    )
+    eligible_hints = {
+        item_id: creator["aweme_id"]
+        for item_id, creator in hinted_creators.items()
+    }
+    creators_by_id = {
+        creator["aweme_id"]: creator for creator in hinted_creators.values()
+    }
+    hinted_items_by_creator = {}
+    for item_id, aweme_id in eligible_hints.items():
+        hinted_items_by_creator.setdefault(aweme_id, []).append(item_id)
+    hinted_tasks = [
+        {"creator": creators_by_id[aweme_id], "item_ids": item_chunk}
+        for aweme_id, item_ids in hinted_items_by_creator.items()
+        for item_chunk in chunks(item_ids, MAX_ITEM_IDS_PER_QUERY)
     ]
-    disabled_creators = [
-        creator for creator in creator_result["creators"]
-        if not creator_is_usable(creator)
-    ]
-
-    ownership_tasks = [
-        {"creator": creator, "item_ids": item_chunk}
-        for creator in creators
-        for item_chunk in chunks(work_ids, MAX_ITEM_IDS_PER_QUERY)
-    ]
-    ownership_results, ownership_failures = run_video_queries(
+    hinted_results, hinted_failures = run_video_queries(
         video_client,
         advertiser_id,
-        ownership_tasks,
+        hinted_tasks,
         concurrency,
+        retry_rate_limits=True,
     )
     owners_by_item = {}
-    for task, response in ownership_results:
-        requested = set(task["item_ids"])
-        for item in response["videos"]:
-            item_id = str(item.get("aweme_item_id") or "")
-            if item_id not in requested:
-                continue
-            owners_by_item.setdefault(item_id, {})[task["creator"]["aweme_id"]] = {
-                "creator": copy.deepcopy(task["creator"]),
-                "material": compact_video(item),
-            }
+
+    def collect_owners(query_results):
+        for task, response in query_results:
+            requested = set(task["item_ids"])
+            for item in response["videos"]:
+                item_id = str(item.get("aweme_item_id") or "")
+                if item_id not in requested:
+                    continue
+                owners_by_item.setdefault(item_id, {})[task["creator"]["aweme_id"]] = {
+                    "creator": copy.deepcopy(task["creator"]),
+                    "material": compact_video(item),
+                }
+
+    collect_owners(hinted_results)
+    verified_hint_ids = {
+        item_id
+        for item_id, aweme_id in eligible_hints.items()
+        if aweme_id in (owners_by_item.get(item_id) or {})
+    }
+    broad_item_ids = [item_id for item_id in work_ids if item_id not in verified_hint_ids]
+    creator_result = {"creators": [], "page_count": 0, "truncated": False}
+    broad_creators = []
+    disabled_creators = []
+    if broad_item_ids:
+        creator_result = list_authorized_awemes(
+            authorized_client,
+            advertiser_id,
+            max_pages=max_creator_pages,
+        )
+        if creator_result["truncated"]:
+            raise ApiError(
+                "Qianchuan authorized creator query was truncated",
+                {
+                    "advertiser_id": str(advertiser_id),
+                    "page_count": creator_result["page_count"],
+                },
+            )
+        broad_creators = [
+            creator for creator in creator_result["creators"]
+            if creator_is_usable(creator)
+        ]
+        disabled_creators = [
+            creator for creator in creator_result["creators"]
+            if not creator_is_usable(creator)
+        ]
+    creators_by_id.update({
+        creator["aweme_id"]: creator for creator in broad_creators
+    })
+    creators = list(creators_by_id.values())
+    broad_tasks = []
+    for creator in broad_creators:
+        creator_item_ids = [
+            item_id
+            for item_id in broad_item_ids
+            if eligible_hints.get(item_id) != creator["aweme_id"]
+        ]
+        broad_tasks.extend(
+            {"creator": creator, "item_ids": item_chunk}
+            for item_chunk in chunks(creator_item_ids, MAX_ITEM_IDS_PER_QUERY)
+        )
+    broad_results, broad_failures = run_video_queries(
+        video_client,
+        advertiser_id,
+        broad_tasks,
+        concurrency,
+    )
+    collect_owners(broad_results)
+    ownership_failures = [*hinted_failures, *broad_failures]
 
     skipped = []
     resolved_owners = {}
@@ -175,6 +324,7 @@ def resolve_work_materials(
         advertiser_id,
         product_tasks,
         concurrency,
+        retry_rate_limits=True,
     )
     matches_by_item = {}
     for task, response in product_results:
@@ -246,9 +396,27 @@ def resolve_work_materials(
         "skipped": sorted(skipped, key=lambda row: row["input_index"]),
         "creators": creators,
         "disabled_creators": disabled_creators,
+        "query_failures": impacting_failures,
+        "resolved_owner_hints": {
+            item_id: {
+                "aweme_id": owner["creator"]["aweme_id"],
+                "aweme_show_id": owner["creator"].get("aweme_show_id"),
+            }
+            for item_id, owner in resolved_owners.items()
+        },
+        "owner_hint_summary": {
+            "supplied": len(supplied_hints),
+            "eligible": len(eligible_hints),
+            "verified": len(verified_hint_ids),
+            "stale": len(supplied_hints) - len(verified_hint_ids),
+            "broad_scan_work_count": len(broad_item_ids),
+            "authorized_hint_query_count": hint_auth_query_count,
+            "authorized_hint_failure_count": len(hint_auth_failures),
+            "official_video_query_count": len(hinted_tasks) + len(broad_tasks),
+        },
         "authorized_creator_query": {
+            "mode": "broad_scan" if broad_item_ids else "targeted_hint",
             "page_count": creator_result["page_count"],
             "truncated": creator_result["truncated"],
         },
-        "query_failures": impacting_failures,
     }

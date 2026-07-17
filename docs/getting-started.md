@@ -192,7 +192,17 @@ ocean-watch plans batch-qianchuan-works \
   --work-url DOUYIN_WORK_URL_2
 ```
 
-插件解析短链后，通过官方接口识别授权达人并过滤模板商品。达人没有计划时按模板新建；已有计划（包括暂停）时只追加未存在的作品素材。默认 dry-run，确认真实执行后增加 `--submit`。无效链接、未授权作品、商品不匹配和已存在素材会跳过，整批结束后统一返回结果。原始商品和直播 payload 示例仍位于 `skills/qc-plan-monitor/assets/`。
+如需加速预检，先把私有解析地址写入本机配置：
+
+```bash
+ocean-watch setup work-metadata \
+  --endpoint https://YOUR_PRIVATE_HOST/PATH \
+  --home-config
+```
+
+插件只向本机配置的服务发送公开抖音链接，提前取得作品、达人和商品提示。非空商品 ID 未命中模板绑定的任一商品时，会在读取投放凭据和官方素材查询前直接跳过，不能新建计划或追加素材；商品匹配或为空仍必须通过千川官方接口复核。未配置或使用 `--no-link-metadata-api` 时，回退到受限短链跳转和完整官方查询。
+
+官方复核完成后，达人没有计划时按模板新建；已有计划（包括暂停）时只追加未存在的作品素材。默认 dry-run，确认真实执行后增加 `--submit`。无效链接、未授权作品、商品不匹配和已存在素材会跳过，整批结束后统一返回结果。原始商品和直播 payload 示例仍位于 `skills/qc-plan-monitor/assets/`。
 
 删除某个计划中的自提作品素材：
 

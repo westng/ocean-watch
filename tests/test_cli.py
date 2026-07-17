@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from ocean_watch.cli import main as cli
+from ocean_watch.integrations import qianchuan_work_metadata
 from ocean_watch.onboarding import environment_check
 from ocean_watch.templates import (
     list_channel_templates,
@@ -20,6 +21,12 @@ from tests.support import business_template_config
 
 
 class CliTests(unittest.TestCase):
+    def test_exposes_local_qianchuan_work_metadata_configuration(self):
+        handler, prefix, description = cli.COMMANDS[("setup", "work-metadata")]
+        self.assertIs(handler, qianchuan_work_metadata.main)
+        self.assertEqual(prefix, ())
+        self.assertIn("local Qianchuan work metadata", description)
+
     def test_exposes_environment_doctor(self):
         handler, prefix, description = cli.COMMANDS[("setup", "doctor")]
         self.assertIs(handler, environment_check.main)
@@ -49,6 +56,12 @@ class CliTests(unittest.TestCase):
         self.assertIs(handler, list_channel_templates.main)
         self.assertEqual(prefix, ())
         self.assertIn("Marketing and Qianchuan", description)
+
+    def test_template_show_uses_shared_channel_reader(self):
+        handler, prefix, description = cli.COMMANDS[("templates", "show")]
+        self.assertIs(handler, list_channel_templates.show_main)
+        self.assertEqual(prefix, ())
+        self.assertIn("one Marketing or Qianchuan", description)
 
     def test_template_create_routes_explicit_marketing_channel(self):
         with mock.patch.object(

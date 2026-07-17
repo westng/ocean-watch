@@ -63,6 +63,43 @@ class ListChannelTemplatesTests(unittest.TestCase):
         self.assertEqual(result["summary"]["business_template_count"], 1)
         self.assertEqual(result["summary"]["default_skeleton_count"], 1)
 
+    def test_shows_one_marketing_template_with_full_details(self):
+        config = all_channel_config()
+        name = next(iter(config["plan_templates"]))
+
+        result = list_channel_templates.show_template(
+            config,
+            channel="marketing",
+            selector=name,
+        )
+
+        self.assertEqual(result["channel"], "marketing")
+        self.assertTrue(result["ready_for_plan_creation"])
+        self.assertEqual(result["template"]["name"], name)
+        self.assertIn("delivery_settings", result["template"])
+        self.assertIn("material_strategy", result["template"])
+
+    def test_shows_one_qianchuan_template_by_id(self):
+        result = list_channel_templates.show_template(
+            all_channel_config(),
+            channel="qianchuan",
+            selector="qcpt_example",
+        )
+
+        self.assertEqual(result["channel"], "qianchuan")
+        self.assertTrue(result["ready_for_plan_creation"])
+        self.assertEqual(result["template"]["template_id"], "qcpt_example")
+        self.assertIn("delivery_setting", result["template"])
+        self.assertIn("material_strategy", result["template"])
+
+    def test_show_rejects_unknown_template(self):
+        with self.assertRaisesRegex(Exception, "not found"):
+            list_channel_templates.show_template(
+                all_channel_config(),
+                channel="marketing",
+                selector="missing-template",
+            )
+
     def test_cli_is_read_only_and_details_are_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
@@ -84,3 +121,25 @@ class ListChannelTemplatesTests(unittest.TestCase):
             self.assertIn("copy_materials", marketing)
             qianchuan = result["channels"]["qianchuan"]["templates"][0]
             self.assertIn("delivery_setting", qianchuan)
+
+    def test_show_cli_is_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            config = all_channel_config()
+            path.write_text(json.dumps(config), encoding="utf-8")
+            before = path.read_bytes()
+
+            with redirect_stdout(StringIO()) as output:
+                code = list_channel_templates.show_main([
+                    "--config",
+                    str(path),
+                    "--channel",
+                    "qianchuan",
+                    "--template",
+                    "qcpt_example",
+                ])
+
+            result = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(result["template"]["template_id"], "qcpt_example")

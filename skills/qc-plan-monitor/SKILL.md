@@ -44,6 +44,7 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Request | Command |
 | --- | --- |
 | Check local environment | `setup doctor --channel qianchuan` |
+| Configure private work metadata | `setup work-metadata --endpoint URL --home-config` |
 | Start Qianchuan OAuth | `auth authorize --channel qianchuan` |
 | Replace Qianchuan app | `auth set-app --channel qianchuan` |
 | Token/account status | `auth status --channel qianchuan` |
@@ -51,6 +52,7 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Sync advertisers | `auth sync-accounts --channel qianchuan` |
 | List product templates | `qc-templates list` |
 | List Marketing and Qianchuan templates | `templates list` |
+| Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
 | Create product template | `qc-templates create` |
 | Migrate product templates | `qc-templates migrate` |
 | Query product-matched creator videos | `qc-materials creator-videos` |
@@ -121,6 +123,8 @@ Qianchuan product templates are independent from Marketing templates.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
 - `material_strategy.source_type` is `CREATOR_RUNTIME_QUERY`; creator information and materials belong to the creation run.
 
+Use `templates show --channel qianchuan --template TEMPLATE_ID_OR_NAME` for a complete, read-only single-template query. It returns bindings, delivery settings, material strategy, and readiness from one local config read without credentials or official API calls. Use the same shared command with `--channel marketing` and an exact Marketing template name for Marketing details.
+
 Use `plans create-qianchuan --plan-template TEMPLATE_ID` to build a material-free base payload for low-level preflight. It reports `runtime_creator_materials` and blocks template-only submission. Use `plans batch-qianchuan-works` for the complete runtime work-query and material-injection workflow.
 
 ## Creator Material Discovery
@@ -153,7 +157,15 @@ Follow only redirects that remain under the official `douyin.com` or `iesdouyin.
 
 List authorized product creators once. Resolve works in batches of 50 by querying every authorized numeric `aweme_id`, then query each resolved creator again with every template product. Skip invalid links, unauthorized works, disabled creators, product mismatches, unsupported material types, and duplicate input without stopping the batch.
 
+The first successful official ownership check stores only the non-sensitive `aweme_item_id`, visible Douyin ID, and numeric `aweme_id` relationship in the local state cache for 30 days. A later preflight or confirmed submission uses that relationship only as a query hint: it must use the official authorization endpoint to resolve the visible Douyin ID exactly, then re-query the hinted creator with the current work and template products. Missing, expired, disabled, or stale hints fall back to the complete official creator scan. Cache read or write failures are non-blocking and must be exposed in `performance.owner_hint_cache`; they never weaken validation or fail an otherwise valid batch. The default bounded concurrency is 8, with an explicit maximum of 10. Only the small targeted authorization, ownership, and product checks may retry official rate-limit code `40100` with bounded backoff; never retry every request in a broad creator scan.
+
+The optional public-link metadata endpoint must come from local config at `integrations.qianchuan_work_metadata.endpoint`; never hard-code, persist in tracked files, or print the endpoint. Configure it with `setup work-metadata --endpoint URL --home-config`. Its response provides `video_info_id`, `author.unique_id`, `author.uid`, and optional `product_info_id`. Send only the public Douyin link; never send advertiser IDs, credentials, template payloads, or local state. Treat author fields as targeted official-query hints. A non-empty `product_info_id` outside the template's product ID set is an immediate product mismatch: skip it before authorization queries and never create or append it. An empty product hint continues to official validation, and a matching hint must still pass the official product-filtered creator-video query. Ignore remote cover, playback URL, avatar, and title for plan creation and persistence. Missing config, resolver failure, or `--no-link-metadata-api` restores safe Douyin redirect plus broad official discovery.
+
+Return `performance` timings for link resolution, credential preparation, material resolution, plan reconciliation, and the whole command. Use these fields when diagnosing latency instead of describing the whole preflight as link parsing. Do not create user-facing result files unless `--out` is explicit; the internal owner-hint cache is the only permitted automatic local optimization state.
+
 Before writing, list current product all-domain plans and confirm candidates through plan detail. Treat paused plans as existing and deleted plans as absent. The official product all-domain contract allows one plan per creator:
+
+The plan list exposes the visible Douyin ID in `room_info.anchor_id`, while plan detail exposes the numeric `aweme_id`. Use both identities to select list candidates, then require the numeric detail `aweme_id` to match before treating a plan as existing. Never compare only one identifier type and never create a new plan merely because the list uses the visible ID.
 
 The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. Always use one legal period inside the latest 180 days and traverse every declared page. There is no fixed plan-count cap; do not split the query into older data-period windows and do not stop after an arbitrary number of plans.
 

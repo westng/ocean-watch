@@ -4,6 +4,7 @@ import json
 
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
+from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import (
     manage_plan_templates,
     qianchuan_product_templates,
@@ -132,6 +133,34 @@ def list_all_templates(config, *, channel="all", include_details=False):
     }
 
 
+def show_template(config, *, channel, selector):
+    if channel == "marketing":
+        matches = [
+            row
+            for row in manage_plan_templates.list_templates(config)
+            if row["name"] == selector
+        ]
+        if not matches:
+            raise ConfigurationError(
+                "Marketing plan template not found",
+                {"channel": channel, "selector": selector},
+            )
+        template = matches[0]
+        ready = template["binding_error"] is None
+    else:
+        template = qianchuan_product_templates.resolve_template(config, selector)
+        ready = template["status"] == "active"
+    return {
+        "ok": True,
+        "source": "local_config",
+        "channel": channel,
+        "display_name": "巨量营销" if channel == "marketing" else "巨量千川",
+        "selector": selector,
+        "ready_for_plan_creation": ready,
+        "template": template,
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="List Marketing and Qianchuan templates from one local config read."
@@ -146,6 +175,26 @@ def main(argv=None):
         config,
         channel=args.channel,
         include_details=args.include_details,
+    )
+    result["config"] = str(path)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def show_main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Show one Marketing or Qianchuan template from local config."
+    )
+    parser.add_argument("--config")
+    parser.add_argument("--channel", choices=CHANNELS, required=True)
+    parser.add_argument("--template", required=True)
+    args = parser.parse_args(argv)
+    path = config_paths.resolve_config_path(args.config)
+    config = config_store.load_json(path)
+    result = show_template(
+        config,
+        channel=args.channel,
+        selector=args.template,
     )
     result["config"] = str(path)
     print(json.dumps(result, ensure_ascii=False, indent=2))

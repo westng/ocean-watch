@@ -117,11 +117,14 @@ ocean-watch reports materials
 ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
 ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
+ocean-watch setup work-metadata --endpoint https://YOUR_PRIVATE_HOST/PATH --home-config
 ```
 
 `templates list` reads the local config once and returns both Marketing and Qianchuan templates without calling an official API. Use `--channel` to filter or `--include-details` for the full configuration.
 
 Plan commands are dry-run by default. Creator batches provide a dedicated `--preflight` that combines live validation with the local journal to report completed, pending, resumable, and blocked jobs. Project capacity is confirmed only by the official create endpoint. Online writes require an explicit `--submit`.
+
+The Qianchuan work metadata service is an optional local setting; its real endpoint is not included in the open-source repository. When configured, only the public Douyin link is sent and the plugin reads the work ID, public Douyin ID, numeric UID, and product ID. Advertiser IDs, tokens, templates, and local state are never sent. A non-empty product ID that matches none of the template products is skipped before credentials are loaded and can never create a plan or append material. Matching or empty hints still require official Qianchuan verification. An absent configuration or `--no-link-metadata-api` falls back to restricted Douyin redirects plus complete official discovery. See the [configuration contract](docs/configuration.md#千川作品解析服务).
 
 ## Security
 
@@ -129,6 +132,7 @@ Plan commands are dry-run by default. Creator batches provide a dedicated `--pre
 - Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service.
 - User config, authorization state, and fallback credentials share `$CODEX_HOME/ads-plan-monitor/`; `CODEX_HOME` defaults to `~/.codex` when unset.
 - Official business API, OAuth, and MCP transports allow only official HTTPS hosts, reject redirects, and bound response sizes.
+- The optional Qianchuan metadata endpoint exists only in local config; when enabled it receives public Douyin links but no credentials, advertiser IDs, or template data.
 - `config/`, `runs/`, logs, caches, and runtime batch manifests are not open-source artifacts.
 - Plugin development does not read real business state or call real accounts without a separate explicit execution request.
 

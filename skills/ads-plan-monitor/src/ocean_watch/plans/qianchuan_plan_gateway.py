@@ -174,10 +174,19 @@ class QianchuanPlanGateway:
         advertiser_id,
         aweme_ids,
         *,
+        aweme_show_ids=None,
         today=None,
         max_pages=100,
     ):
         targets = {decimal_id(value, "aweme_id") for value in aweme_ids}
+        show_ids = {
+            target: str((aweme_show_ids or {}).get(target) or "").strip()
+            for target in targets
+        }
+        aliases = {
+            target: {value for value in (target, show_ids[target]) if value}
+            for target in targets
+        }
         listed = self.list_product_plans(
             advertiser_id,
             today=today,
@@ -202,8 +211,9 @@ class QianchuanPlanGateway:
                 for room in (row.get("room_info") or [])
                 if room.get("anchor_id") is not None
             }
-            for target in targets.intersection(anchor_ids):
-                candidate_ids[target].append(ad_id)
+            for target, target_aliases in aliases.items():
+                if target_aliases.intersection(anchor_ids):
+                    candidate_ids[target].append(ad_id)
 
         matches = {target: [] for target in targets}
         for target, ad_ids in candidate_ids.items():
