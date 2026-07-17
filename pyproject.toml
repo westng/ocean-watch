@@ -43,7 +43,6 @@ where = ["skills/ads-plan-monitor/src"]
 [tool.ruff]
 target-version = "py39"
 line-length = 100
-exclude = ["docs/superpowers/specs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

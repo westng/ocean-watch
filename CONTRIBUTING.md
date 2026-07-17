@@ -1,11 +1,8 @@
 # Contributing
 
-> Organization: westng
-> Project: ocean-watch
-> Plugin: ocean-watch
-> Skill: ads-plan-monitor
-
 感谢参与 Ocean Watch。请把仓库当作面向陌生贡献者的公共工程维护：模块职责、命令契约、错误语义和测试应当在不依赖历史对话的情况下可以理解。
+
+开始前请先阅读[架构说明](docs/architecture.md)和[文档中心](docs/README.md)。
 
 ## 开发环境
 
@@ -34,6 +31,7 @@ python3 -m pip install -e ".[dev]"
 - 详细 API 字段放 `references/`。
 - 用户安装、配置和命令放 `README` 与 `docs/`。
 - 修改 CLI、配置 Schema 或行为时，同步中英文 README 和对应文档。
+- 已完成的阶段性设计稿通过 Git 历史追溯，不长期保留在正式文档目录。
 - 示例只能使用明显占位符，不能出现真实账户、商品、品牌、链接或凭据。
 
 ## 测试

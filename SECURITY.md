@@ -1,10 +1,5 @@
 # Security
 
-> Organization: westng
-> Project: ocean-watch
-> Plugin: ocean-watch
-> Skill: ads-plan-monitor
-
 `ocean-watch` 调用巨量引擎官方 API，可能接触广告账户、素材、投放链接和 OAuth 凭据。请把本仓库当作公开仓库维护，不要提交任何真实密钥或运行产物。
 
 ## 不要提交

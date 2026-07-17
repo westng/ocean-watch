@@ -1,9 +1,6 @@
 # CLI 参考
 
-> Organization: westng
-> Project: ocean-watch
-> Plugin: ocean-watch
-> Skills: ads-plan-monitor, qc-plan-monitor
+本文记录统一 CLI 的命令结构和主要行为。首次使用请先阅读[快速开始](getting-started.md)；配置位置、模板 Schema 和凭据边界见[配置与授权](configuration.md)。具体参数始终以对应命令的 `--help` 为准。
 
 ## 入口
 
@@ -23,7 +20,8 @@ ocean-watch
 ├── setup
 │   ├── doctor
 │   ├── init
-│   └── validate
+│   ├── validate
+│   └── work-metadata
 ├── auth
 │   ├── set-app
 │   ├── authorize
@@ -40,6 +38,7 @@ ocean-watch
 │   └── report
 ├── templates
 │   ├── list
+│   ├── show
 │   ├── create
 │   ├── migrate
 │   └── set-copy

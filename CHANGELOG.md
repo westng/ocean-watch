@@ -6,6 +6,7 @@ All notable changes to Ocean Watch are documented here.
 
 ### Changed
 
+- Consolidated long-lived documentation around one index and four maintained guides, added task-oriented examples for everyday users, and removed duplicated project-tree documentation and completed implementation design drafts.
 - Accelerated Qianchuan work-link preflight with an optional local-only metadata endpoint, public-link identity and product hints, bounded default concurrency, a 30-day advertiser-scoped owner-hint cache, mandatory official revalidation, and stage-level latency metrics. The private endpoint is no longer present in tracked source or documentation.
 - Added one fast local `templates list` command that returns compact Marketing and Qianchuan template summaries from a single config read, with optional channel filtering and full details.
 - Added a resumable Marketing creator-batch preflight that reports completed, ready, retry, and blocked jobs before submission while treating project capacity as a create-time-only check.

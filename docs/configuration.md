@@ -1,9 +1,6 @@
 # 配置与授权
 
-> Organization: westng
-> Project: ocean-watch
-> Plugin: ocean-watch
-> Skills: ads-plan-monitor, qc-plan-monitor
+本文说明配置文件、业务模板、OAuth 和凭据存储。首次安装流程见[快速开始](getting-started.md)，命令参数见 [CLI 参考](cli.md)。
 
 ## 存储边界
 

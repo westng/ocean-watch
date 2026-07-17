@@ -4,44 +4,26 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Ocean Engine monitoring assistant</p>
-
-<p align="center">
-  An open-source Codex Plugin for OAuth, material discovery, plan creation, reporting, and delivery analysis through official APIs
-</p>
+<p align="center">Ocean Engine delivery and monitoring for Codex</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
-  <a href="skills/ads-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-ads--plan--monitor-4B5563" alt="Ads Plan Monitor Skill"></a>
-  <a href="skills/qc-plan-monitor/SKILL.md"><img src="https://img.shields.io/badge/Skill-qc--plan--monitor-2563EB" alt="QC Plan Monitor Skill"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
-[中文](./README.md) | English
+[中文](README.md) | English
 
-`ocean-watch` is an installable Codex Plugin with two independent business Skills: `ads-plan-monitor` for Ocean Engine Marketing and `qc-plan-monitor` for Qianchuan. They share one engineered CLI runtime without sharing authorization, advertiser, template, or creation transactions.
+`ocean-watch` uses official Ocean Engine APIs for OAuth, account management, material discovery, plan creation, reporting, and delivery analysis. Its two Skills share one CLI runtime but never share apps, tokens, accounts, templates, or creation transactions.
 
-Ocean Engine Marketing (`marketing`) supports authorization, materials, plans, reports, and strategy. Qianchuan (`qianchuan`) supports isolated app authorization, token refresh, advertiser discovery, product all-domain templates, product-filtered creator video discovery, plan material creation, append, or removal from Douyin work links, and all-domain plan reporting through the official MCP. Qianchuan strategy and live templates remain unavailable. The channels never share apps, tokens, accounts, templates, endpoints, or creation transactions.
+| Skill | Channel | Support |
+| --- | --- | --- |
+| `ads-plan-monitor` | Ocean Engine Marketing | OAuth, responsible accounts, uploaded/creator materials, templates, plans, reports, strategy |
+| `qc-plan-monitor` | Qianchuan | OAuth, responsible accounts, product all-domain templates, creator videos, work-link plans, all-domain reports |
 
-## Capabilities
+Qianchuan strategy and live templates are not available yet. Creation commands are dry-run by default and require an explicit `--submit` for online writes.
 
-| Domain | Support |
-| --- | --- |
-| Marketing | `ads-plan-monitor`: OAuth, templates, uploaded/creator materials, plans, reports, strategy |
-| Qianchuan | `qc-plan-monitor`: OAuth, product templates, creator videos, work-link plans, and all-domain plan reports |
-| Authorization | Isolated Marketing/Qianchuan OAuth, multiple authorization records, token refresh |
-| Responsible accounts | Local cross-channel account registry, enable/disable controls, concurrent spend summaries |
-| Templates | Default base, advertiser/product/platform/source bindings, guided creation and migration |
-| Materials | Uploaded videos, Marketing creator videos, and product-filtered Qianchuan creator videos |
-| Plans | Marketing uploaded/creator plans, Qianchuan create, append, or remove work materials, dry-run and explicit submit |
-| Reports | Marketing material/custom reports and Qianchuan all-domain plan spend, GMV, orders, and ROI |
-| Strategy | Read-only evidence and operational recommendations |
-| Development | Official documentation MCP, OpenAPI schemas, and SDK examples |
-
-All business templates use `Channel-AdvertiserID-ProductName-ProductID-TemplateType`. The Marketing wizard binds the advertiser, product, platform, and material mode. Its creation base uses official DPA product images, so users do not enter image IDs; budget, net-order ROI, gender, and age targeting are shown before confirmation. Before submission, official APIs validate the event asset and DPA fields. Product images may be reused only from an official promotion matching both advertiser and product; ambiguous or missing assets block before project creation.
-
-Default templates are creation skeletons only. Real business templates have no active/default state and every plan-creation command must select one explicitly.
+Daily users do not need to memorize commands, parameters, or Skill names. Describe the desired result in Codex; it will select the channel, ask for missing information, and show a preview before any write.
 
 ## Install
 
@@ -52,42 +34,122 @@ codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-Start a new Codex task after installation or upgrade, then ask:
+Start a new Codex task after installation or upgrade. For first use, ask: `Initialize Ocean Engine monitoring and guide me through Marketing authorization.`
 
-```text
-Initialize ads-plan-monitor
-Show today's top ten materials by spend
-Create one unit per five videos uploaded today, dry-run first
-Query authorized creator videos and create a creator-material plan
-Use qc-plan-monitor to authorize Qianchuan and dry-run a product all-domain plan
-Use qc-plan-monitor to find creator videos matching a Qianchuan product template
-Use qc-plan-monitor to dry-run removing a work from a Qianchuan plan
-Use qc-plan-monitor to query today's all-domain plan spend for a Qianchuan advertiser
-Show today's spend for the accounts I am responsible for
-```
-
-Installation does not open or listen on the OAuth callback URI. On first authorization, `auth authorize` starts a temporary local server and opens the actual entry URL. `http://127.0.0.1:8787/oauth/callback` is only for official-console registration and the official redirect; users should not open it directly.
-
-Run the environment check before first use:
+Codex checks the local environment during first use. To run the check manually:
 
 ```bash
 ocean-watch setup doctor
 ```
 
-It verifies Python `3.9+`, Windows/macOS/Linux, Codex CLI availability, the secure credential backend, and the OAuth callback port. When Python is missing, Codex must stop after system-level detection and ask the user to install it; the Plugin does not silently install runtimes.
+See the Chinese [Getting started guide](docs/getting-started.md) for the complete workflow. Installation never starts OAuth; the temporary callback server starts only when `auth authorize` runs.
 
-### Developer requirements
+## Everyday examples
 
-- Register as an Ocean Engine developer before using the SDK. See the [Developer Quick Start](https://open.oceanengine.com/labels/7/docs/1696710498372623).
-- Obtain the required API access first. Every SDK capability is limited by the permission groups granted to the application.
+Send requests like these directly to Codex, replacing placeholders with your own account, template, product, and work links.
 
-## Development
+### First-time setup
 
-Run the unified CLI without installing the package:
+```text
+Check my Qianchuan environment and guide me through authorization.
+```
+
+Codex checks the runtime, secure credential backend, and OAuth port, then guides you through the channel-specific app and authorization flow. Marketing and Qianchuan are authorized separately.
+
+### Daily account overview
+
+```text
+Show today's spend for all accounts I am responsible for. Summarize by channel and identify accounts that could not be queried.
+```
+
+Accounts are queried concurrently and failures are isolated. Marketing and Qianchuan GMV/ROI remain separate because their official metric definitions differ.
+
+### Create Marketing plans from uploaded videos
+
+```text
+Find today's uploaded videos for my sunscreen account. Group five videos per unit and use my mixed-material template. Preview only—do not submit.
+```
+
+Codex displays the advertiser, template, groups, budget, ROI, and plan count. A later explicit confirmation is required before online creation.
+
+### Use creator-authorized materials
+
+```text
+Find currently authorized videos for this creator and advertiser, then preflight a native-material plan.
+```
+
+Public homepage visibility is kept separate from advertiser-specific delivery authorization. Batch preflight reports ready, completed, resumable, and blocked jobs before submission.
+
+### Process Qianchuan plans from Douyin links
+
+```text
+Check these Douyin work links against my sunscreen Qianchuan template. Create a plan when the creator has none, otherwise append only missing materials. Preflight first.
+```
+
+Official APIs verify creator authorization, work ownership, and product matching. Invalid, unauthorized, mismatched, or existing materials are skipped and explained.
+
+### Remove a Qianchuan work safely
+
+```text
+Preflight removing this Douyin work from plan AD_ID. Show the exact materials and any linked impact before doing anything.
+```
+
+Only custom-selected materials can be removed. Codex waits for confirmation and verifies the official deletion state afterward.
+
+### Review performance
+
+```text
+Show the last seven days of Marketing material spend, highlight high-spend low-conversion materials, and recommend pause, observe, or scale actions.
+```
+
+Reports stay in the conversation unless an output file is explicitly requested. Recommendations are read-only and never modify plans automatically.
+
+## Confirmation rules
+
+- Account, material, template, and report queries are read-only.
+- Create, append, and remove workflows preview first and require explicit confirmation.
+- Templates, tokens, and materials cannot cross channel or advertiser boundaries.
+- Partial skips or failures are reported without hiding successful results.
+
+## Advanced: CLI overview
+
+Everyday users do not need the CLI. It is available for scripts, precise arguments, and diagnostics:
+
+```text
+ocean-watch
+├── setup          # Diagnostics and initialization
+├── auth           # Marketing/Qianchuan OAuth and tokens
+├── accounts       # Responsible accounts and spend
+├── templates      # Unified lookup and Marketing templates
+├── qc-templates   # Qianchuan product templates
+├── materials      # Marketing materials
+├── qc-materials   # Qianchuan creator materials
+├── plans          # Single and batch plan workflows
+├── reports        # Marketing reports
+├── qc-reports     # Qianchuan all-domain reports
+├── discover       # Official asset discovery
+└── mcp            # Developer-documentation MCP
+```
+
+Every level supports `--help`. The full command reference is in [docs/cli.md](docs/cli.md).
+
+## Security
+
+- App secrets, access tokens, refresh tokens, and authorization codes never belong in Git configuration.
+- Credentials use Keychain on macOS, DPAPI on Windows, and Secret Service on Linux.
+- User configuration and state live under `$CODEX_HOME/ads-plan-monitor/`.
+- Official business traffic is restricted to approved Ocean Engine HTTPS hosts. The optional local Qianchuan metadata service receives public Douyin links only.
+- Reports, caches, logs, job files, and journals are not open-source repository content.
+
+See [Security](SECURITY.md) and [Configuration](docs/configuration.md).
+
+## For developers
+
+Run the shared CLI without installing the package:
 
 ```bash
 python3 skills/ads-plan-monitor/run.py --help
-python3 skills/ads-plan-monitor/run.py setup init --home-config
+python3 skills/qc-plan-monitor/run.py --help
 ```
 
 Or install an editable package:
@@ -95,105 +157,33 @@ Or install an editable package:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
-python3 -m pip install -e .
+python3 -m pip install -e ".[dev]"
 ocean-watch --help
 ```
 
-Commands follow `ocean-watch <domain> <action>`:
-
-```bash
-ocean-watch auth status --channel marketing
-ocean-watch auth authorize --channel qianchuan
-ocean-watch accounts add --channel qianchuan --advertiser-id ADVERTISER_ID --name ACCOUNT_NAME
-ocean-watch accounts report
-ocean-watch templates create
-ocean-watch qc-templates create
-ocean-watch qc-materials creator-videos --plan-template TEMPLATE_ID --douyin-id DOUYIN_SHOW_ID
-ocean-watch plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
-ocean-watch plans remove-qianchuan-work --advertiser-id ADVERTISER_ID --ad-id AD_ID --work-url DOUYIN_WORK_URL
-ocean-watch templates list
-ocean-watch materials videos --mode library-get --date today --fetch-all
-ocean-watch reports materials
-ocean-watch qc-reports plans --advertiser-id ADVERTISER_ID
-ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
-ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
-ocean-watch setup work-metadata --endpoint https://YOUR_PRIVATE_HOST/PATH --home-config
-```
-
-`templates list` reads the local config once and returns both Marketing and Qianchuan templates without calling an official API. Use `--channel` to filter or `--include-details` for the full configuration.
-
-Plan commands are dry-run by default. Creator batches provide a dedicated `--preflight` that combines live validation with the local journal to report completed, pending, resumable, and blocked jobs. Project capacity is confirmed only by the official create endpoint. Online writes require an explicit `--submit`.
-
-The Qianchuan work metadata service is an optional local setting; its real endpoint is not included in the open-source repository. When configured, only the public Douyin link is sent and the plugin reads the work ID, public Douyin ID, numeric UID, and product ID. Advertiser IDs, tokens, templates, and local state are never sent. A non-empty product ID that matches none of the template products is skipped before credentials are loaded and can never create a plan or append material. Matching or empty hints still require official Qianchuan verification. An absent configuration or `--no-link-metadata-api` falls back to restricted Douyin redirects plus complete official discovery. See the [configuration contract](docs/configuration.md#千川作品解析服务).
-
-## Security
-
-- App secrets, access tokens, refresh tokens, and authorization codes never belong in Git config.
-- Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service.
-- User config, authorization state, and fallback credentials share `$CODEX_HOME/ads-plan-monitor/`; `CODEX_HOME` defaults to `~/.codex` when unset.
-- Official business API, OAuth, and MCP transports allow only official HTTPS hosts, reject redirects, and bound response sizes.
-- The optional Qianchuan metadata endpoint exists only in local config; when enabled it receives public Douyin links but no credentials, advertiser IDs, or template data.
-- `config/`, `runs/`, logs, caches, and runtime batch manifests are not open-source artifacts.
-- Plugin development does not read real business state or call real accounts without a separate explicit execution request.
-
-See [Security](SECURITY.md) and [Configuration](docs/configuration.md).
-
-## Architecture
-
-The project uses two business Skills and one shared `src/` CLI runtime. `OceanEngineClient` is the only ordinary business API transport, while channel-specific services keep Marketing and Qianchuan transactions separate.
-
-```text
-skills/ads-plan-monitor/
-├── SKILL.md
-├── assets/
-├── references/
-├── run.py
-└── src/ocean_watch/
-    ├── cli/
-    ├── core/
-    ├── api/
-    ├── auth/
-    ├── accounts/
-    ├── templates/
-    ├── materials/
-    ├── plans/
-    ├── reports/
-    └── discovery/
-skills/qc-plan-monitor/
-├── SKILL.md
-├── assets/
-├── references/
-└── run.py
-```
-
-See [Architecture](docs/architecture.md) for module contracts and data flow.
+The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. See [Architecture](docs/architecture.md) for module boundaries.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md)
-- [CLI reference](docs/cli.md)
-- [Configuration and authorization](docs/configuration.md)
-- [Architecture](docs/architecture.md)
-- [Project structure](docs/project-structure.md)
+- [Documentation index](docs/README.md)
+- [Getting started](docs/getting-started.md) (Chinese)
+- [CLI reference](docs/cli.md) (Chinese)
+- [Configuration](docs/configuration.md) (Chinese)
+- [Architecture](docs/architecture.md) (Chinese)
 - [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
 ## Quality checks
 
 ```bash
-python3 -m pip install -e ".[dev]"
-PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
 python3 -m build
-python3 -m json.tool .codex-plugin/plugin.json >/dev/null
-python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 git diff --check
 ```
 
-CI runs on Windows, macOS, and Linux with Python `3.9` and `3.12`. The release gate also builds the sdist and wheel, installs the wheel in isolated Python `3.9` and `3.12` environments, and runs first-time setup under a temporary `CODEX_HOME` to verify packaged resources and the installed CLI.
+CI covers Python `3.9` and `3.12` on Windows, macOS, and Linux, including first-run checks from an installed wheel.
 
 ## License
 

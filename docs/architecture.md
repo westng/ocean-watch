@@ -1,9 +1,6 @@
 # 架构说明
 
-> Organization: westng
-> Project: ocean-watch
-> Plugin: ocean-watch
-> Skills: ads-plan-monitor, qc-plan-monitor
+本文面向贡献者，说明共享运行时的职责和依赖规则。用户操作请从[文档中心](README.md)开始。
 
 ## 设计原则
 
