@@ -10,6 +10,7 @@ from unittest import mock
 from ocean_watch.cli import main as cli
 from ocean_watch.onboarding import environment_check
 from ocean_watch.templates import (
+    list_channel_templates,
     manage_plan_templates,
     manage_qianchuan_templates,
     template_channel_router,
@@ -42,6 +43,12 @@ class CliTests(unittest.TestCase):
             code = cli.main(["templates", "list", "--config", "example.json"])
         self.assertEqual(code, 0)
         handler.assert_called_once_with(["list", "--config", "example.json"])
+
+    def test_template_list_uses_single_all_channel_reader(self):
+        handler, prefix, description = cli.COMMANDS[("templates", "list")]
+        self.assertIs(handler, list_channel_templates.main)
+        self.assertEqual(prefix, ())
+        self.assertIn("Marketing and Qianchuan", description)
 
     def test_template_create_routes_explicit_marketing_channel(self):
         with mock.patch.object(

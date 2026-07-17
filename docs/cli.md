@@ -149,6 +149,9 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 
 ```bash
 ocean-watch templates list
+ocean-watch templates list --channel marketing
+ocean-watch templates list --channel qianchuan
+ocean-watch templates list --include-details
 ocean-watch templates create
 ocean-watch templates create --channel marketing
 ocean-watch templates create --channel marketing --material-source-type ACCOUNT_UPLOAD
@@ -158,6 +161,8 @@ ocean-watch templates migrate --confirm-remove-legacy-materials
 ocean-watch templates set-copy --template TEMPLATE --title TITLE
 ocean-watch templates set-copy --template TARGET --from-template SOURCE
 ```
+
+`templates list` 只读取一次本地配置，默认同时返回巨量营销和巨量千川的精简业务模板、渠道计数和默认骨架。该命令不请求官方接口；只有排查完整配置时才使用 `--include-details`。
 
 未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`，再显示同模式的来源模板；选择千川则进入千川商品全域来源向导。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
 

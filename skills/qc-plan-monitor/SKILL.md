@@ -50,6 +50,7 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Refresh token | `auth refresh --channel qianchuan` |
 | Sync advertisers | `auth sync-accounts --channel qianchuan` |
 | List product templates | `qc-templates list` |
+| List Marketing and Qianchuan templates | `templates list` |
 | Create product template | `qc-templates create` |
 | Migrate product templates | `qc-templates migrate` |
 | Query product-matched creator videos | `qc-materials creator-videos` |

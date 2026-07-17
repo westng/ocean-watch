@@ -6,6 +6,7 @@ All notable changes to Ocean Watch are documented here.
 
 ### Changed
 
+- Added one fast local `templates list` command that returns compact Marketing and Qianchuan template summaries from a single config read, with optional channel filtering and full details.
 - Added a resumable Marketing creator-batch preflight that reports completed, ready, retry, and blocked jobs before submission while treating project capacity as a create-time-only check.
 - Updated the Marketing default template to target the 29 top-level regions outside Hong Kong, Macao, Taiwan, Xinjiang, and Tibet.
 - Changed the Marketing creation base to official DPA product images so the standard wizard no longer asks users for image IDs; advanced `CUSTOM` image templates retain strict image-ID validation.

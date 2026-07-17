@@ -48,7 +48,8 @@ Core routes:
 | Marketing OAuth | `auth authorize --channel marketing` |
 | Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status | `auth status --channel marketing` |
-| Create/list Marketing templates | `templates create --channel marketing` / `templates list` |
+| List all channel templates | `templates list` |
+| Create Marketing template | `templates create --channel marketing` |
 | Uploaded videos | `materials videos` |
 | Creator videos | `materials creator` |
 | Single upload plan | `plans create` |
@@ -137,6 +138,8 @@ Official MCP is documentation-only. Use `mcp configure`/`mcp status`; continue u
 ## Template Contract
 
 Schema v5 has one `default_plan_template` and advertiser-bound business templates.
+
+`templates list` is the fast shared read path for Marketing and Qianchuan. It reads the local config once, calls no official API, and returns compact business-template rows plus default-skeleton counts. Use `--channel marketing` or `--channel qianchuan` to filter, and `--include-details` only when full template diagnostics are needed.
 
 - The default template is a creation base only and must never submit a plan.
 - New business templates must use the interactive `templates create` wizard.

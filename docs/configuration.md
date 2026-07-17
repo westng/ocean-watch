@@ -72,6 +72,8 @@ ocean-watch auth sync-accounts \
 
 ## 计划模板
 
+`ocean-watch templates list` 是全渠道的本地快速查询入口，一次读取配置后同时返回营销和千川模板，不触发 Token 刷新或官方 API 请求。默认输出精简字段；`--channel` 可筛选渠道，`--include-details` 用于完整诊断。
+
 巨量营销默认模板的地域定向由行政区树的省级节点生成。官方 `audience.city` 是包含列表，因此默认配置写入港、澳、台、新疆、西藏之外的 29 个省级地域 ID，并在 `resolved_ids.city_names` 保存对应名称；不会添加官方接口不存在的“排除地域”字段。业务模板可以通过覆盖 `resolved_ids.city_ids` 和 `resolved_ids.city_names` 自定义地域。
 
 所有渠道的业务模板统一命名：

@@ -44,6 +44,7 @@ from ocean_watch.reports import (
     query_report_config,
 )
 from ocean_watch.templates import (
+    list_channel_templates,
     manage_plan_templates,
     manage_qianchuan_templates,
     template_channel_router,
@@ -69,7 +70,11 @@ COMMANDS = {
         (),
         "Query spend for responsible accounts",
     ),
-    ("templates", "list"): (manage_plan_templates.main, ("list",), "List plan templates"),
+    ("templates", "list"): (
+        list_channel_templates.main,
+        (),
+        "List Marketing and Qianchuan templates",
+    ),
     ("templates", "create"): (
         template_channel_router.main,
         ("create",),

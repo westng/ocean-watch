@@ -122,6 +122,8 @@ ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
+`templates list` 会一次从本地配置列出巨量营销和巨量千川模板，不调用官方接口。可用 `--channel` 筛选渠道，或用 `--include-details` 查看完整配置。
+
 创建命令默认只预览。批量达人创建提供独立 `--preflight`，会结合断点日志列出已完成、待创建、续建和阻断项；项目容量由官方创建接口最终确认。只有显式传入 `--submit` 才会调用在线写接口。
 
 ## 安全边界

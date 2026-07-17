@@ -119,6 +119,8 @@ ocean-watch plans create --plan-template TEMPLATE --video-id VIDEO_ID
 ocean-watch plans create-qianchuan --payload-file QIANCHUAN_PAYLOAD.json
 ```
 
+`templates list` reads the local config once and returns both Marketing and Qianchuan templates without calling an official API. Use `--channel` to filter or `--include-details` for the full configuration.
+
 Plan commands are dry-run by default. Creator batches provide a dedicated `--preflight` that combines live validation with the local journal to report completed, pending, resumable, and blocked jobs. Project capacity is confirmed only by the official create endpoint. Online writes require an explicit `--submit`.
 
 ## Security
