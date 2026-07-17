@@ -1,22 +1,12 @@
 from ocean_watch.core.data import get_path, is_missing
 from ocean_watch.core.errors import ApiError, ConfigurationError
+from ocean_watch.core.pagination import declared_page_count
+from ocean_watch.core.validation import positive_integer
 
 QIANCHUAN_UNI_AWEME_AUTHORIZED_PATH = "/v1.0/qianchuan/uni_aweme/authorized/get/"
 PRODUCT_ALL_DOMAIN_GOAL = "VIDEO_PROM_GOODS"
 CREATE_SCENE = "CREATE"
 MAX_PAGE_SIZE = 100
-
-
-def positive_integer(value, field, maximum=None):
-    if isinstance(value, bool):
-        raise ConfigurationError(f"{field} must be a positive integer")
-    text = str(value or "").strip()
-    if not text.isdigit() or int(text) <= 0:
-        raise ConfigurationError(f"{field} must be a positive integer")
-    parsed = int(text)
-    if maximum is not None and parsed > maximum:
-        raise ConfigurationError(f"{field} must not exceed {maximum}")
-    return parsed
 
 
 def compact_authorized_aweme(item):
@@ -102,6 +92,7 @@ def list_authorized_awemes(
     *,
     page_size=MAX_PAGE_SIZE,
     max_pages=100,
+    search_keywords=None,
 ):
     advertiser_id = positive_integer(advertiser_id, "advertiser_id")
     page_size = positive_integer(page_size, "page_size", maximum=MAX_PAGE_SIZE)
@@ -117,11 +108,18 @@ def list_authorized_awemes(
             advertiser_id,
             page=page,
             page_size=page_size,
+            search_keywords=search_keywords,
         )
         pages += 1
         if response.get("request_id"):
             request_ids.append(response["request_id"])
-        for item in get_path(response, "data.aweme_id_list", []) or []:
+        page_items = get_path(response, "data.aweme_id_list", []) or []
+        if not isinstance(page_items, list):
+            raise ApiError(
+                "Qianchuan authorized creator rows must be a list",
+                {"page": page},
+            )
+        for item in page_items:
             row = compact_authorized_aweme(item)
             if row.get("aweme_id"):
                 rows[row["aweme_id"]] = row
@@ -131,7 +129,12 @@ def list_authorized_awemes(
         if total_page is None:
             more_pages = False
             break
-        total_page = positive_integer(total_page, "page_info.total_page")
+        total_page = declared_page_count(
+            page_info,
+            source="qianchuan_authorized_creators",
+            page=page,
+            row_count=len(page_items),
+        )
         more_pages = page < total_page
         if not more_pages:
             break
@@ -140,6 +143,11 @@ def list_authorized_awemes(
     return {
         "endpoint": QIANCHUAN_UNI_AWEME_AUTHORIZED_PATH,
         "advertiser_id": str(advertiser_id),
+        "search_keywords": (
+            str(search_keywords).strip()
+            if not is_missing(search_keywords)
+            else None
+        ),
         "creators": list(rows.values()),
         "page_count": pages,
         "request_ids": request_ids,
@@ -179,21 +187,31 @@ def resolve_authorized_aweme(
         pages += 1
         if response.get("request_id"):
             request_ids.append(response["request_id"])
-        for item in get_path(response, "data.aweme_id_list", []) or []:
+        page_items = get_path(response, "data.aweme_id_list", []) or []
+        if not isinstance(page_items, list):
+            raise ApiError(
+                "Qianchuan authorized creator rows must be a list",
+                {"page": page},
+            )
+        for item in page_items:
             row = compact_authorized_aweme(item)
             candidates.append(row)
             match_field = exact_match(row, requested)
             if match_field and row.get("aweme_id"):
                 matches[row["aweme_id"]] = {**row, "match_field": match_field}
-        if matches:
-            break
-
         page_info = get_path(response, "data.page_info", {}) or {}
         total_page = page_info.get("total_page")
         if total_page is None:
             break
-        total_page = positive_integer(total_page, "page_info.total_page")
+        total_page = declared_page_count(
+            page_info,
+            source="qianchuan_authorized_creator_resolver",
+            page=page,
+            row_count=len(page_items),
+        )
         more_pages = page < total_page
+        if matches:
+            break
         if not more_pages:
             break
         page += 1

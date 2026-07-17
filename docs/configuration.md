@@ -23,7 +23,7 @@ Ocean Watch 将非敏感业务配置与敏感凭据分开：
 ## 渠道
 
 - `marketing`：巨量营销，当前已经实现 OAuth、账户、素材、计划和报表。
-- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品全域模板、按商品过滤的达人视频查询、作品链接批量新建、追加或删除商品全域计划自提素材，以及官方 MCP 全域计划报表；直播模板尚未实现。
+- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品/直播全域模板、达人和商品查询、作品链接批量新建/追加/删除、计划参数调整、官方 MCP 全域计划报表与 OpenAPI 素材报表。
 
 渠道之间不共享 App、Secret、Token、账户或模板。旧配置迁移到巨量营销：
 
@@ -61,6 +61,9 @@ ocean-watch auth sync-accounts \
 | `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `4` |
 | `default_qianchuan_product_template` | 千川商品全域默认骨架，不可投放 |
 | `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
+| `qianchuan_live_template_schema_version` | 千川直播模板版本，当前为 `1` |
+| `default_qianchuan_live_template` | 千川直播全域默认骨架，不可投放 |
+| `qianchuan_live_templates` | 绑定千川广告主与直播账号的业务模板 |
 
 以下字段不得写入配置：`app_id`、`secret`、`access_token`、`refresh_token`、`auth_code`、`developer_id`。
 
@@ -175,7 +178,7 @@ Accept: application/json
 
 `ACCOUNT_UPLOAD` 的模版类型显示为“混剪素材”，`CREATOR_AUTHORIZED` 显示为“原生素材”。名称由向导根据确认后的绑定信息自动生成，不接受自由名称。平台和流量来源仍保存在 `bindings` 中，但不进入名称。真实归属由 `bindings` 决定，不依赖名称解析。
 
-真实业务模板没有“当前”或“默认”状态。所有创建计划命令必须显式提供模板名称或模板 ID；`default_plan_template` 和 `default_qianchuan_product_template` 只用于复制创建新模板，永远不参与投放。
+真实业务模板没有“当前”或“默认”状态。所有创建计划命令必须显式提供模板名称或模板 ID；`default_plan_template`、`default_qianchuan_product_template` 和 `default_qianchuan_live_template` 只用于复制创建新模板，永远不参与投放。
 
 真实归属由 `bindings` 决定，不依赖名称解析：
 

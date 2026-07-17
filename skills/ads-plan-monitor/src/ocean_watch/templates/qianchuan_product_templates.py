@@ -240,6 +240,37 @@ def build_business_template(
     }
 
 
+def validate_default_template(template):
+    if not isinstance(template, dict):
+        raise ConfigurationError("Qianchuan product default template must be an object")
+    if template.get("template_type") != TEMPLATE_TYPE:
+        raise ConfigurationError("invalid Qianchuan product default template type")
+    if template.get("business_usable") is not False:
+        raise ConfigurationError("Qianchuan product default template cannot be business usable")
+    bindings = template.get("bindings")
+    if not isinstance(bindings, dict) or bindings.get("channel") != "qianchuan":
+        raise ConfigurationError("Qianchuan product default template channel must be qianchuan")
+    if not is_missing(bindings.get("advertiser_id")):
+        raise ConfigurationError("Qianchuan product default template must not bind an advertiser")
+    if not is_missing(bindings.get("product_name")):
+        raise ConfigurationError("Qianchuan product default template must not bind a product name")
+    if bindings.get("product_ids") not in (None, []):
+        raise ConfigurationError("Qianchuan product default template must not bind products")
+    validate_delivery_setting(template.get("delivery_setting"))
+    if template.get("material_strategy") != {
+        "source_type": MATERIAL_SOURCE_TYPE,
+        "persist_material_ids": False,
+    }:
+        raise ConfigurationError("invalid Qianchuan product default material strategy")
+    forbidden = contains_forbidden_key(template)
+    if forbidden:
+        raise ConfigurationError(
+            "Qianchuan product default template contains runtime fields",
+            {"field": forbidden},
+        )
+    return copy.deepcopy(template)
+
+
 def validate_business_template(template):
     if not isinstance(template, dict):
         raise ConfigurationError("Qianchuan product template must be an object")

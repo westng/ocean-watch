@@ -10,6 +10,7 @@ import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.core.config_store as config_store
 import ocean_watch.templates.plan_templates as plan_templates
+import ocean_watch.templates.qianchuan_live_templates as qianchuan_live_templates
 import ocean_watch.templates.qianchuan_product_templates as qianchuan_product_templates
 from ocean_watch.core.process_lock import ProcessLock
 
@@ -72,6 +73,7 @@ def prepare_config(raw, confirm_remove_legacy_materials=False):
             confirm_remove_legacy_materials=confirm_remove_legacy_materials,
         )
     prepared = qianchuan_product_templates.ensure_config(prepared)
+    prepared = qianchuan_live_templates.ensure_config(prepared)
     return channels.migrate_config(prepared)
 
 

@@ -29,6 +29,16 @@ class BusinessTemplateNameTests(unittest.TestCase):
             "8234567890123456780/8234567890123456781-商品全域",
         )
 
+    def test_qianchuan_live_name_uses_creator_binding(self):
+        self.assertEqual(
+            business_template_names.format_qianchuan_live_template_name(
+                "2345678901234567",
+                "示例账号",
+                "9988776655",
+            ),
+            "巨量千川-2345678901234567-示例账号-9988776655-直播全域",
+        )
+
     def test_unknown_channel_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unsupported business template channel"):
             business_template_names.format_business_template_name(

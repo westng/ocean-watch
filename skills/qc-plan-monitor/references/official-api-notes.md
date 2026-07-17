@@ -56,6 +56,13 @@ Official docs:
 
 This is one Qianchuan transaction. It does not use Marketing project and promotion endpoints.
 
+### Product And Live Template Boundaries
+
+- Product templates bind one advertiser, a product label, and one to 30 product IDs. Creator and material IDs remain runtime data.
+- Live templates bind one advertiser and one numeric live-account `aweme_id`. They do not bind products or work IDs.
+- Material-free live creation uses `marketing_goal=LIVE_PROM_GOODS` and `creative_setting.smart_select_material=true`; `name` is unsupported for this goal.
+- Product and live templates use separate schema keys and default skeletons. A default skeleton is never a business template or a direct plan-creation selector.
+
 ## Creator Materials
 
 - Product all-domain authorized creators: `GET https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_aweme/authorized/get/`.
@@ -65,6 +72,15 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - The video request requires `advertiser_id`, numeric `aweme_id`, and supports `filtering.product_id`, cursor pagination, and `count` from 1 to 50.
 - Query template products separately and deduplicate works while preserving every matched product ID.
 - Creator identity and material results are runtime data. They never belong in a Qianchuan product template.
+
+## Products, Plans, Materials, And Updates
+
+- Selectable products: `GET https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/product/get/`.
+- Product all-domain plans: `GET /v1.0/qianchuan/uni_promotion/list/`; details: `GET /v1.0/qianchuan/uni_promotion/ad/detail/`; materials: `GET /v1.0/qianchuan/uni_promotion/ad/material/get/`.
+- Material performance: `GET /v1.0/qianchuan/report/material/get/`. Paginate every declared page and aggregate raw report metrics before rounding. Plan-list `stats_info` is not report currency.
+- Plan status: `POST /v1.0/qianchuan/uni_promotion/ad/status/update/`; budget: `POST /v1.0/qianchuan/uni_promotion/ad/budget/update/`; ROI target: `POST /v1.0/qianchuan/uni_promotion/ad/roi2_goal/update/`.
+- Update commands accept at most ten unique plan IDs, default to dry-run, and treat any failed result row as command failure. `DELETE` additionally requires an explicit delete confirmation.
+- Every read and write resolves only the Qianchuan authorization mapped to the requested advertiser. Marketing credentials are never a fallback.
 
 ## Work Links And Plan Reconciliation
 

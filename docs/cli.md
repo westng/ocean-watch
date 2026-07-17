@@ -28,7 +28,8 @@ ocean-watch
 │   ├── status
 │   ├── refresh
 │   ├── sync-accounts
-│   └── migrate
+│   ├── migrate
+│   └── mappings
 ├── accounts
 │   ├── list
 │   ├── add
@@ -41,18 +42,38 @@ ocean-watch
 │   ├── show
 │   ├── create
 │   ├── migrate
-│   └── set-copy
+│   ├── set-copy
+│   ├── validate
+│   └── delete
 ├── qc-templates
 │   ├── list
 │   ├── create
-│   └── migrate
+│   ├── migrate
+│   ├── list-live
+│   ├── create-live
+│   └── migrate-live
 ├── materials
 │   ├── videos
 │   ├── creator
 │   ├── images
 │   └── products
 ├── qc-materials
-│   └── creator-videos
+│   ├── creator-videos
+│   ├── inspect-work
+│   └── authorized-creators
+├── qc-products
+│   ├── list
+│   └── search
+├── qc-plans
+│   ├── list
+│   ├── show
+│   ├── materials
+│   ├── update-status
+│   ├── update-budget
+│   └── update-roi
+├── runs
+│   ├── list
+│   └── show
 ├── plans
 │   ├── create
 │   ├── create-creator
@@ -60,13 +81,20 @@ ocean-watch
 │   ├── batch-qianchuan-works
 │   ├── remove-qianchuan-work
 │   ├── batch-upload
-│   └── batch-creator
+│   ├── batch-creator
+│   ├── update-project-status
+│   ├── update-promotion-status
+│   ├── update-budget
+│   ├── update-bid
+│   └── update-roi
 ├── reports
 │   ├── materials
 │   ├── schema
-│   └── custom
-├── qc-reports
+│   ├── custom
 │   └── plans
+├── qc-reports
+│   ├── plans
+│   └── materials
 ├── discover
 │   ├── projects
 │   ├── promotions
@@ -132,6 +160,7 @@ ocean-watch auth sync-accounts --channel marketing
 ocean-watch auth authorize --channel qianchuan
 ocean-watch auth status --channel qianchuan
 ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZATION_ID
+ocean-watch auth mappings --channel qianchuan --advertiser-id ADVERTISER_ID
 ```
 
 首次执行 `auth authorize` 时，如果当前渠道没有应用配置，浏览器会打开一张本地表单，同屏收集 App ID 和 Secret，保存后直接跳转官方 OAuth。需要主动更换应用时使用 `auth set-app --channel CHANNEL`，它会打开相同表单但不发起授权。
@@ -140,7 +169,7 @@ ocean-watch auth sync-accounts --channel qianchuan --authorization-id AUTHORIZAT
 
 营销和千川流程共用默认回调地址，通过 OAuth `state` 的 `AD`/`QC` 前缀区分渠道；用户无需维护两条回调路径。若账户同步失败，授权保留为 pending 状态，可用最后一条命令重试；确认迁移账户归属时增加 `--rebind-existing`。
 
-千川支持 `auth`、`qc-templates`、`qc-materials`、`qc-reports`、`plans create-qianchuan`、`plans batch-qianchuan-works` 和 `plans remove-qianchuan-work`。营销计划和报表命令不会回退使用千川授权。
+`auth mappings` 只显示广告主、授权记录、授权主体以及 Access/Refresh Token 是否存在，不返回任何凭据值。千川支持 `auth`、`qc-templates`、`qc-materials`、`qc-products`、`qc-plans`、`qc-reports` 和千川计划创建命令。营销计划和报表命令不会回退使用千川授权。
 
 一般业务调用会自动刷新 Token；只有排错或主动验证时才需要 `auth refresh`。
 
@@ -158,16 +187,24 @@ ocean-watch templates create --channel marketing
 ocean-watch templates create --channel marketing --material-source-type ACCOUNT_UPLOAD
 ocean-watch templates create --channel marketing --material-source-type CREATOR_AUTHORIZED
 ocean-watch templates create --channel qianchuan
+ocean-watch templates create --channel qianchuan --template-type product
+ocean-watch templates create --channel qianchuan --template-type live
 ocean-watch templates migrate --confirm-remove-legacy-materials
 ocean-watch templates set-copy --template TEMPLATE --title TITLE
 ocean-watch templates set-copy --template TARGET --from-template SOURCE
+ocean-watch templates validate
+ocean-watch templates validate --channel qianchuan --template TEMPLATE
+ocean-watch templates delete --channel marketing --template TEMPLATE
+ocean-watch templates delete --channel marketing --template TEMPLATE --submit
 ```
 
-`templates list` 只读取一次本地配置，默认同时返回巨量营销和巨量千川的精简业务模板、渠道计数和默认骨架。该命令不请求官方接口；只有排查完整配置时才使用 `--include-details`。
+`templates list` 只读取一次本地配置，默认同时返回巨量营销和巨量千川的精简业务模板、渠道计数和默认骨架。每条模板记录（包括默认骨架）都包含顶层 `channel=marketing|qianchuan`，即使脱离外层分组也能识别归属。该命令不请求官方接口；只有排查完整配置时才使用 `--include-details`。
 
 `templates show` 是单模板快速查询入口，只读本地配置且不请求官方接口。营销模板使用完整模板名称，千川模板可使用 `template_id` 或完整模板名称；结果返回完整绑定、投放设置、素材策略和 `ready_for_plan_creation` 状态。
 
-未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`，再显示同模式的来源模板；选择千川则进入千川商品全域来源向导。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
+`templates validate` 只读检查模板 Schema、规范名称、渠道/广告主/商品绑定、素材策略和运行时素材泄漏。`templates delete` 默认只预演；显式 `--submit` 才修改本地配置。营销模板仍被 `created_from` 或 `copied_from_template` 引用时会阻断，确认清理引用后再删除；`--force` 只跳过该引用保护，不替代 `--submit`。
+
+未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`；选择千川后继续选择商品全域或直播全域，再显示同类型来源模板。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
 
 真实业务模板不存在当前或默认指针。所有计划创建命令必须显式传 `--plan-template`；多营销账户批量创建使用 `--account-template ADVERTISER_ID=TEMPLATE_NAME` 为每个账户明确映射。
 
@@ -179,9 +216,14 @@ ocean-watch templates set-copy --template TARGET --from-template SOURCE
 ocean-watch qc-templates list
 ocean-watch qc-templates create
 ocean-watch qc-templates migrate
+ocean-watch qc-templates list-live
+ocean-watch qc-templates create-live
+ocean-watch qc-templates migrate-live
 ```
 
 向导从不可投放的默认骨架或已有千川商品模板复制创建，绑定广告主、产品和 1–30 个商品 ID。多个商品 ID 使用 `/` 分隔，名称使用 `巨量千川-广告账户ID-商品名-商品ID-商品全域`。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+
+直播模板从独立的 `default_qianchuan_live_template` 或已有直播模板复制，绑定广告主、直播账号名称和数值 `aweme_id`。默认设置为保守出价、预算 5000、长期投放和智能选材。直播模板不保存商品、作品或手工素材，使用 `plans create-qianchuan --live-template TEMPLATE_ID` 创建；该模式不接受计划名称。
 
 ## 上传素材
 
@@ -211,6 +253,20 @@ ocean-watch materials creator --source homepage --aweme-id AWEME_ID
 
 ## 千川达人素材
 
+只检查公开作品链接和本机解析配置，不调用计划写接口：
+
+```bash
+ocean-watch qc-materials inspect-work --work-url DOUYIN_WORK_URL
+```
+
+列出商品全域授权达人：
+
+```bash
+ocean-watch qc-materials authorized-creators \
+  --advertiser-id ADVERTISER_ID \
+  --query DOUYIN_SHOW_ID
+```
+
 ```bash
 ocean-watch qc-materials creator-videos \
   --plan-template TEMPLATE_ID \
@@ -219,6 +275,18 @@ ocean-watch qc-materials creator-videos \
 ```
 
 `--douyin-id` 填抖音 App 中用户可见的抖音号。命令只使用模板绑定的千川广告主授权，先通过商品全域可投抖音号接口严格解析数值 `aweme_id`，再按模板中的每个商品 ID 查询视频。官方商品过滤排除不匹配视频；结果按作品去重并记录 `matched_product_ids`。默认输出 JSON 到终端，只有显式传入 `--out PATH` 才写文件。
+
+## 千川商品与计划查询
+
+```bash
+ocean-watch qc-products list --advertiser-id ADVERTISER_ID
+ocean-watch qc-products search --advertiser-id ADVERTISER_ID --name PRODUCT_NAME
+ocean-watch qc-plans list --advertiser-id ADVERTISER_ID
+ocean-watch qc-plans show --advertiser-id ADVERTISER_ID --ad-id AD_ID
+ocean-watch qc-plans materials --advertiser-id ADVERTISER_ID --ad-id AD_ID
+```
+
+商品列表调用 `/v1.0/qianchuan/uni_promotion/product/get/`，支持商品 ID/名称、标签页、达人和未投放筛选。计划查询调用商品全域计划列表、详情和计划素材接口；计划列表中的 `stats_info` 不作为金额报表，消耗必须来自 `qc-reports`。
 
 ## 单条创建
 
@@ -246,6 +314,9 @@ ocean-watch plans create-creator \
 ocean-watch plans create-qianchuan \
   --plan-template TEMPLATE_ID \
   --name PLAN_NAME
+
+ocean-watch plans create-qianchuan \
+  --live-template LIVE_TEMPLATE_ID
 ```
 
 也可用 `--payload-file`、`--payload-json JSON` 或 `--payload-file -` 读取官方 payload；三种来源只能选择一个。`--advertiser-id` 可补充缺失的广告主 ID，但不能与 payload 或模板绑定冲突。在线提交增加 `--submit`，插件只解析该广告主的千川授权；成功返回 `data.ad_id`。
@@ -309,6 +380,7 @@ ocean-watch plans batch-creator \
 
 ```bash
 ocean-watch reports materials --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+ocean-watch reports plans --advertiser-id ADVERTISER_ID --top 10
 ocean-watch reports schema --data-topic MATERIAL_DATA
 ocean-watch reports custom \
   --data-topic MATERIAL_DATA \
@@ -318,10 +390,18 @@ ocean-watch reports custom \
 
 默认不写表格文件。Codex 应在对话中使用 Markdown 表格展示汇总和排行。
 
+`reports plans` 先请求官方 `/v3.0/report/custom/config/get/`，从当前广告主实际开放的 `UNI_PROJECT_DATA` 契约选择项目 ID、项目名称和指标，再完整分页查询。自定义 `--metric` 若不在当前权限契约中会直接报错，不会降级或猜字段。未查询或契约未开放的 GMV/订单汇总返回 `null`，不伪装成业务值 `0`。
+
 千川商品全域计划报表通过官方 MCP 查询：
 
 ```bash
 ocean-watch qc-reports plans \
+  --advertiser-id ADVERTISER_ID \
+  --start-date YYYY-MM-DD \
+  --end-date YYYY-MM-DD \
+  --top 10
+
+ocean-watch qc-reports materials \
   --advertiser-id ADVERTISER_ID \
   --start-date YYYY-MM-DD \
   --end-date YYYY-MM-DD \
@@ -331,6 +411,33 @@ ocean-watch qc-reports plans \
 默认日期为当天，营销目标为商品全域，计划范围为 `UNI_PROJECT`，并按消耗降序返回前十。`--top 0` 返回全部报表行；汇总始终基于所有分页结果。命令使用目标广告主绑定的千川 OAuth Token，调用官方 Streamable HTTP MCP。金额和 ROI 只读取全域报表返回值，计划列表补充计划状态、成本保障、出价方式、ROI 目标出价、预算、名称和业务归属，不推算其内部固定精度金额。输出同时包含总消耗、有消耗计划数、整体成交金额、订单数、加权支付 ROI、1 小时净成交金额和加权净成交 ROI。
 
 报表分页、计划 ID 和七个必需指标任一缺失、重复或非法时，命令拒绝返回不完整汇总。汇总先使用原始 `Decimal` 值跨全部页面计算，最后才按展示精度舍入。`--status ALL` 会保留历史财务行；计划列表无法补齐其元数据时，行内 `metadata_available=false`，汇总中的 `metadata_missing_count` 同步计数，名称、状态、成本保障、出价和预算保持为空。指定具体状态时必须解析到计划元数据，否则整次查询失败，避免错误筛选。
+
+`qc-reports materials` 调用官方 `/v1.0/qianchuan/report/material/get/`，支持素材 ID/类型/模式/来源筛选。展示上限只影响返回行，汇总始终基于全部已分页数据。自定义字段未包含成交金额或订单时，对应汇总为 `null`，不按零处理。
+
+## 计划参数调整
+
+```bash
+ocean-watch plans update-project-status --advertiser-id ID --project-id ID --status DISABLE
+ocean-watch plans update-promotion-status --advertiser-id ID --promotion-id ID --status ENABLE
+ocean-watch plans update-budget --advertiser-id ID --promotion-id ID --value 5000
+ocean-watch plans update-bid --advertiser-id ID --promotion-id ID --value 1.5
+ocean-watch plans update-roi --advertiser-id ID --project-id ID --value 1.7
+
+ocean-watch qc-plans update-status --advertiser-id ID --ad-id ID --status DISABLE
+ocean-watch qc-plans update-budget --advertiser-id ID --ad-id ID --value 5000
+ocean-watch qc-plans update-roi --advertiser-id ID --ad-id ID --value 1.7
+```
+
+以上命令默认只输出官方 endpoint 与 payload。在线修改必须增加 `--submit`；千川 `DELETE` 还必须同时传 `--confirm-delete`。每次最多处理 10 个去重后的 ID，提交时持有渠道和广告主级本机锁，并将官方批量结果中的部分失败作为整体失败返回。
+
+## 执行记录
+
+```bash
+ocean-watch runs list
+ocean-watch runs show --run-id creator-batch-RUN_ID
+```
+
+该命令只读 `$CODEX_HOME/ads-plan-monitor/state/runs/` 下由 Plugin 管理的 JSON journal；`run_id` 不接受路径字符。它不扫描用户指定的任意目录，也不显示凭据。
 
 ## 资产反查与 MCP
 

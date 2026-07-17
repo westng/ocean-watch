@@ -4,6 +4,7 @@ import argparse
 from ocean_watch.auth import authorization_store, channels
 from ocean_watch.templates import (
     manage_plan_templates,
+    manage_qianchuan_live_templates,
     manage_qianchuan_templates,
     template_advertiser_binding,
 )
@@ -16,6 +17,10 @@ CHANNEL_HANDLERS = {
 MARKETING_MATERIAL_SOURCES = (
     ("ACCOUNT_UPLOAD", "混剪素材（账户上传）"),
     ("CREATOR_AUTHORIZED", "原生素材（达人授权）"),
+)
+QIANCHUAN_TEMPLATE_TYPES = (
+    ("product", "商品全域"),
+    ("live", "直播全域"),
 )
 
 
@@ -51,6 +56,16 @@ def select_marketing_material_source(input_fn=input, output_fn=print):
             return MARKETING_MATERIAL_SOURCES[int(selected)][0]
 
 
+def select_qianchuan_template_type(input_fn=input, output_fn=print):
+    output_fn("巨量千川模板类型：")
+    for index, (_, label) in enumerate(QIANCHUAN_TEMPLATE_TYPES):
+        output_fn(f"  {index}. {label}")
+    while True:
+        selected = input_fn("请选择模板类型编号: ").strip()
+        if selected.isdigit() and 0 <= int(selected) < len(QIANCHUAN_TEMPLATE_TYPES):
+            return QIANCHUAN_TEMPLATE_TYPES[int(selected)][0]
+
+
 def main(argv=None, input_fn=input, output_fn=print):
     parser = argparse.ArgumentParser(description="Route template creation by business channel.")
     parser.add_argument("action", choices=("create",))
@@ -59,18 +74,30 @@ def main(argv=None, input_fn=input, output_fn=print):
         "--material-source-type",
         choices=tuple(source for source, _ in MARKETING_MATERIAL_SOURCES),
     )
+    parser.add_argument("--template-type", choices=("product", "live"))
     args, forwarded = parser.parse_known_args(argv)
 
     channel = args.channel or select_channel(input_fn=input_fn, output_fn=output_fn)
     if channel == "qianchuan" and args.material_source_type:
         parser.error("--material-source-type is only valid for the marketing channel")
+    if channel == "marketing" and args.template_type:
+        parser.error("--template-type is only valid for the qianchuan channel")
     material_source_type = args.material_source_type
     if channel == "marketing" and material_source_type is None:
         material_source_type = select_marketing_material_source(
             input_fn=input_fn,
             output_fn=output_fn,
         )
-    handler_module, handler_action = CHANNEL_HANDLERS[channel]
+    template_type = args.template_type
+    if channel == "qianchuan" and template_type is None:
+        template_type = select_qianchuan_template_type(
+            input_fn=input_fn,
+            output_fn=output_fn,
+        )
+    if channel == "qianchuan" and template_type == "live":
+        handler_module, handler_action = manage_qianchuan_live_templates, "create-wizard"
+    else:
+        handler_module, handler_action = CHANNEL_HANDLERS[channel]
     handler_args = [handler_action, *forwarded]
     if material_source_type:
         handler_args.extend(["--material-source-type", material_source_type])

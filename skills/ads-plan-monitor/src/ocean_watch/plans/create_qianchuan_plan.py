@@ -16,7 +16,7 @@ from ocean_watch.plans.qianchuan_executor import (
     QianchuanPlanExecutionRequest,
     QianchuanPlanExecutor,
 )
-from ocean_watch.templates import qianchuan_product_templates
+from ocean_watch.templates import qianchuan_live_templates, qianchuan_product_templates
 
 MARKETING_GOALS = {"LIVE_PROM_GOODS", "VIDEO_PROM_GOODS"}
 SMART_BID_TYPES = {"SMART_BID_CUSTOM", "SMART_BID_CONSERVATIVE"}
@@ -350,10 +350,12 @@ def load_payload_source(args, config):
         bool(args.payload_file),
         bool(args.payload_json),
         bool(args.plan_template),
+        bool(args.live_template),
     ]
     if sum(sources) != 1:
         raise ConfigurationError(
-            "provide exactly one of --payload-file, --payload-json, or --plan-template"
+            "provide exactly one of --payload-file, --payload-json, --plan-template, "
+            "or --live-template"
         )
     if args.plan_template:
         template = qianchuan_product_templates.resolve_template(
@@ -366,6 +368,23 @@ def load_payload_source(args, config):
                 "template_id": template["template_id"],
                 "name": template["display_name"],
                 "product_name": template["bindings"]["product_name"],
+                "template_type": qianchuan_product_templates.TEMPLATE_TYPE,
+            },
+        )
+    if args.live_template:
+        if args.name:
+            raise ConfigurationError("Qianchuan live plans do not accept --name")
+        template = qianchuan_live_templates.resolve_template(
+            config,
+            args.live_template,
+        )
+        return (
+            qianchuan_live_templates.payload_from_template(template),
+            {
+                "template_id": template["template_id"],
+                "name": template["display_name"],
+                "creator_name": template["bindings"]["creator_name"],
+                "template_type": qianchuan_live_templates.TEMPLATE_TYPE,
             },
         )
     if args.name:
@@ -400,6 +419,7 @@ def main(argv=None):
     parser.add_argument("--payload-file")
     parser.add_argument("--payload-json")
     parser.add_argument("--plan-template")
+    parser.add_argument("--live-template")
     parser.add_argument("--name")
     parser.add_argument("--advertiser-id")
     parser.add_argument("--auth-account-id")
@@ -414,7 +434,12 @@ def main(argv=None):
         payload,
         advertiser_id=args.advertiser_id,
     )
-    if template_summary and not payload.get("multi_product_creative_list"):
+    if (
+        template_summary
+        and template_summary.get("template_type")
+        == qianchuan_product_templates.TEMPLATE_TYPE
+        and not payload.get("multi_product_creative_list")
+    ):
         blocking_fields = (*blocking_fields, "runtime_creator_materials")
     runtime = channels.runtime_config(
         raw_config,

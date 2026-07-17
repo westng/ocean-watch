@@ -4,6 +4,14 @@ All notable changes to Ocean Watch are documented here.
 
 ## Unreleased
 
+### Added
+
+- Added stable CLI commands for Qianchuan work inspection, authorized creators, products, plan details/materials, material reports, and local execution history.
+- Added sanitized advertiser-to-authorization mapping inspection plus cross-channel template validation and guarded local template deletion.
+- Added Marketing project reports that negotiate the account's official `UNI_PROJECT_DATA` contract before querying metrics.
+- Added dry-run-first Marketing and Qianchuan plan status, budget, bid, and ROI updates, including partial-result detection, advertiser locks, and an extra confirmation for Qianchuan deletion.
+- Added advertiser-bound Qianchuan live all-domain template skeletons, creation guidance, unified template listing, and live-template plan payload creation.
+
 ### Changed
 
 - Consolidated long-lived documentation around one index and four maintained guides, added task-oriented examples for everyday users, and removed duplicated project-tree documentation and completed implementation design drafts.

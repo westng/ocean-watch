@@ -58,6 +58,31 @@
       "persist_material_ids": false
     }
   },
+  "qianchuan_live_template_schema_version": 1,
+  "qianchuan_live_templates": {},
+  "default_qianchuan_live_template": {
+    "template_type": "QIANCHUAN_LIVE_ALL_DOMAIN",
+    "business_usable": false,
+    "bindings": {
+      "channel": "qianchuan",
+      "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+      "creator_name": "REPLACE_WITH_CREATOR_NAME",
+      "aweme_id": "REPLACE_WITH_AWEME_ID"
+    },
+    "delivery_setting": {
+      "smart_bid_type": "SMART_BID_CONSERVATIVE",
+      "budget": 5000,
+      "live_schedule_type": "SCHEDULE_FROM_NOW",
+      "daily_delivery_time": 8.5
+    },
+    "creative_setting": {
+      "smart_select_material": true
+    },
+    "material_strategy": {
+      "source_type": "LIVE_SMART_SELECTION",
+      "persist_material_ids": false
+    }
+  },
   "default_plan_template": {
     "defaults": {
       "operation": "ENABLE",

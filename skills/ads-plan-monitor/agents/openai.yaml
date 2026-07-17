@@ -1,4 +1,4 @@
 interface:
   display_name: "巨量引擎盯盘助手"
-  short_description: "负责账户、巨量营销授权、素材计划、报表与盯盘策略分析"
-  default_prompt: "Use $ads-plan-monitor to query my responsible Marketing and Qianchuan accounts, inspect Marketing materials, create a dry-run plan, or analyze delivery performance."
+  short_description: "负责账户、营销授权、模板素材、计划调整、报表与策略"
+  default_prompt: "Use $ads-plan-monitor to query Marketing performance, inspect templates or runs, and safely preview plan creation or setting updates."

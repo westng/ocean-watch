@@ -7,6 +7,7 @@ import ocean_watch.core.config_store as config_store
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import (
     manage_plan_templates,
+    qianchuan_live_templates,
     qianchuan_product_templates,
 )
 
@@ -17,6 +18,7 @@ def compact_marketing_template(row):
     delivery = row["delivery_settings"]
     source_type = row["material_source_type"]
     return {
+        "channel": "marketing",
         "name": row["name"],
         "advertiser_id": row["advertiser_id"],
         "product_name": row["product_name"],
@@ -38,16 +40,27 @@ def compact_marketing_template(row):
 
 def marketing_channel(config, *, include_details):
     rows = manage_plan_templates.list_templates(config)
-    templates = rows if include_details else [compact_marketing_template(row) for row in rows]
+    templates = (
+        [{**row, "channel": "marketing"} for row in rows]
+        if include_details
+        else [compact_marketing_template(row) for row in rows]
+    )
     default = manage_plan_templates.default_template_summary(config)
+    default_skeleton = (
+        {**default, "channel": "marketing"}
+        if include_details
+        else {
+            "channel": "marketing",
+            "name": default["name"],
+            "business_usable": False,
+        }
+    )
     return {
         "channel": "marketing",
         "display_name": "巨量营销",
         "business_template_count": len(templates),
-        "default_skeleton": default if include_details else {
-            "name": default["name"],
-            "business_usable": False,
-        },
+        "default_skeleton_count": 1,
+        "default_skeleton": default_skeleton,
         "templates": templates,
     }
 
@@ -56,6 +69,7 @@ def compact_qianchuan_template(template):
     bindings = template["bindings"]
     delivery = template["delivery_setting"]
     return {
+        "channel": "qianchuan",
         "template_id": template["template_id"],
         "name": template["display_name"],
         "status": template["status"],
@@ -64,6 +78,7 @@ def compact_qianchuan_template(template):
         "product_ids": bindings["product_ids"],
         "product_count": len(bindings["product_ids"]),
         "template_type": "商品全域",
+        "template_kind": "product",
         "material_source_type": template["material_strategy"]["source_type"],
         "daily_budget": delivery["budget"],
         "roi_goal": delivery["roi2_goal"],
@@ -73,35 +88,83 @@ def compact_qianchuan_template(template):
     }
 
 
+def compact_qianchuan_live_template(template):
+    bindings = template["bindings"]
+    delivery = template["delivery_setting"]
+    return {
+        "channel": "qianchuan",
+        "template_id": template["template_id"],
+        "name": template["display_name"],
+        "status": template["status"],
+        "advertiser_id": bindings["advertiser_id"],
+        "creator_name": bindings["creator_name"],
+        "aweme_id": bindings["aweme_id"],
+        "template_type": "直播全域",
+        "template_kind": "live",
+        "material_source_type": template["material_strategy"]["source_type"],
+        "daily_budget": delivery["budget"],
+        "roi_goal": delivery.get("roi2_goal"),
+        "smart_bid_type": delivery["smart_bid_type"],
+        "ready_for_plan_creation": template["status"] == "active",
+    }
+
+
 def qianchuan_channel(config, *, include_details):
-    normalized = qianchuan_product_templates.ensure_config(config)
-    listed = qianchuan_product_templates.list_templates(normalized)
-    templates = [
+    product_config = qianchuan_product_templates.ensure_config(config)
+    product_listed = qianchuan_product_templates.list_templates(product_config)
+    product_templates = [
         qianchuan_product_templates.validate_business_template(
-            normalized[qianchuan_product_templates.TEMPLATES_KEY][row["template_id"]]
+            product_config[qianchuan_product_templates.TEMPLATES_KEY][row["template_id"]]
         )
-        for row in listed
+        for row in product_listed
     ]
-    rows = templates if include_details else [
-        compact_qianchuan_template(template) for template in templates
+    live_config = qianchuan_live_templates.ensure_config(config)
+    live_listed = qianchuan_live_templates.list_templates(live_config)
+    live_business_templates = [
+        qianchuan_live_templates.validate_business_template(
+            live_config[qianchuan_live_templates.TEMPLATES_KEY][row["template_id"]]
+        )
+        for row in live_listed
     ]
-    default = normalized[qianchuan_product_templates.DEFAULT_TEMPLATE_KEY]
+    if include_details:
+        rows = [
+            {**template, "channel": "qianchuan", "template_kind": "product"}
+            for template in product_templates
+        ] + [
+            {**template, "channel": "qianchuan", "template_kind": "live"}
+            for template in live_business_templates
+        ]
+    else:
+        rows = [compact_qianchuan_template(template) for template in product_templates]
+        rows.extend(
+            compact_qianchuan_live_template(template)
+            for template in live_business_templates
+        )
+    product_default = product_config[qianchuan_product_templates.DEFAULT_TEMPLATE_KEY]
+    live_default = live_config[qianchuan_live_templates.DEFAULT_TEMPLATE_KEY]
+    default_skeletons = [
+        {
+            "channel": "qianchuan",
+            "name": qianchuan_product_templates.DEFAULT_TEMPLATE_KEY,
+            "template_kind": "product",
+            "business_usable": False,
+            **({"template": product_default} if include_details else {}),
+        },
+        {
+            "channel": "qianchuan",
+            "name": qianchuan_live_templates.DEFAULT_TEMPLATE_KEY,
+            "template_kind": "live",
+            "business_usable": False,
+            **({"template": live_default} if include_details else {}),
+        },
+    ]
     return {
         "channel": "qianchuan",
         "display_name": "巨量千川",
         "business_template_count": len(rows),
-        "default_skeleton": (
-            {
-                "name": qianchuan_product_templates.DEFAULT_TEMPLATE_KEY,
-                "business_usable": False,
-                "template": default,
-            }
-            if include_details
-            else {
-                "name": qianchuan_product_templates.DEFAULT_TEMPLATE_KEY,
-                "business_usable": False,
-            }
-        ),
+        "default_skeleton_count": len(default_skeletons),
+        "default_skeleton": default_skeletons[0],
+        "default_skeletons": default_skeletons,
         "templates": rows,
     }
 
@@ -123,7 +186,9 @@ def list_all_templates(config, *, channel="all", include_details=False):
             "business_template_count": sum(
                 item["business_template_count"] for item in channels.values()
             ),
-            "default_skeleton_count": len(channels),
+            "default_skeleton_count": sum(
+                item["default_skeleton_count"] for item in channels.values()
+            ),
             "by_channel": {
                 name: item["business_template_count"]
                 for name, item in channels.items()
@@ -145,10 +210,26 @@ def show_template(config, *, channel, selector):
                 "Marketing plan template not found",
                 {"channel": channel, "selector": selector},
             )
-        template = matches[0]
+        template = {**matches[0], "channel": "marketing"}
         ready = template["binding_error"] is None
     else:
-        template = qianchuan_product_templates.resolve_template(config, selector)
+        try:
+            template = qianchuan_product_templates.resolve_template(config, selector)
+            template = {
+                **template,
+                "channel": "qianchuan",
+                "template_kind": "product",
+            }
+        except ConfigurationError as product_error:
+            try:
+                template = qianchuan_live_templates.resolve_template(config, selector)
+                template = {
+                    **template,
+                    "channel": "qianchuan",
+                    "template_kind": "live",
+                }
+            except ConfigurationError:
+                raise product_error from None
         ready = template["status"] == "active"
     return {
         "ok": True,

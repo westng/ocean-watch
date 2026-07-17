@@ -1,6 +1,6 @@
 ---
 name: qc-plan-monitor
-description: Dedicated 巨量千川 skill for local OAuth, responsible-account lists across Qianchuan and Marketing, token refresh, product templates, creator video discovery, all-domain plan creation, work-link material changes, and official MCP reports. Use for 千川初始化、千川授权、管理我负责的账户、跨渠道查询负责账户消耗、同步千川广告主、检查千川 Token、创建商品全域模板、查询达人视频、批量新建或追加商品全域计划、删除计划素材、查询千川计划消耗和 ROI、创建商品或直播全域计划, or validating official Qianchuan payloads.
+description: Dedicated 巨量千川 skill for local OAuth, responsible accounts, token refresh, product/live templates, creator/work/product discovery, all-domain plan creation and updates, material changes, plan/material reports, and run inspection. Use for 千川初始化、千川授权、管理我负责的账户、同步广告主、检查 Token 映射、创建/校验/删除商品或直播全域模板、查询达人/作品/商品/计划/素材、批量新建或追加商品全域计划、删除计划素材、调整计划状态/预算/ROI、查询消耗和 ROI, or validating official Qianchuan payloads.
 ---
 
 # QC Plan Monitor
@@ -16,18 +16,22 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 
 1. Configure the Qianchuan app and run local OAuth.
 2. Refresh Qianchuan tokens and discover authorized advertisers.
-3. Create advertiser- and product-bound product all-domain templates.
+3. Create advertiser-bound product or live all-domain templates.
 4. Resolve a visible Douyin ID to its authorized numeric `aweme_id`.
 5. Query creator videos through the Qianchuan API and filter them by template products.
 6. Validate official product or live all-domain plan payloads.
 7. Dry-run or explicitly submit one all-domain plan.
 8. Resolve multiple Douyin work links, group product-matched works by creator, then create or append product all-domain plans.
 9. Resolve Douyin work links to plan `material_id` values and remove verified custom materials.
-10. Query product all-domain plan spend, orders, GMV, and ROI through the official Qianchuan MCP.
+10. Query product all-domain plan spend through official MCP and material performance through official OpenAPI.
+11. List/search products and inspect plan details, materials, local runs, and authorization mappings.
+12. Dry-run or explicitly submit guarded plan status, budget, and ROI updates.
 
-Qianchuan strategy and live templates are not implemented yet. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
+Qianchuan live templates and live all-domain creation are implemented; model strategy remains read-only by default. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
 
 For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, ask for the channel before entering either template-source wizard. Use the shared `templates create` entry without `--channel`; authorization state is displayed but must not silently select a channel or prevent an unauthorized channel from creating a draft template.
+
+After Qianchuan is selected, ask whether the template is `商品全域` or `直播全域` before listing source templates. For automation, pass `--template-type product|live` explicitly.
 
 Ignore placeholder advertiser IDs during template creation. Validate an entered Qianchuan advertiser against the local Qianchuan advertiser index when authorization exists; if Qianchuan is not yet authorized, allow the template binding but mark it `UNVERIFIED` in the preview and block real delivery until authorization validation succeeds.
 
@@ -48,6 +52,7 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Start Qianchuan OAuth | `auth authorize --channel qianchuan` |
 | Replace Qianchuan app | `auth set-app --channel qianchuan` |
 | Token/account status | `auth status --channel qianchuan` |
+| Advertiser authorization mapping | `auth mappings --channel qianchuan` |
 | Refresh token | `auth refresh --channel qianchuan` |
 | Sync advertisers | `auth sync-accounts --channel qianchuan` |
 | List product templates | `qc-templates list` |
@@ -55,11 +60,20 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
 | Create product template | `qc-templates create` |
 | Migrate product templates | `qc-templates migrate` |
+| List/create live templates | `qc-templates list-live` / `qc-templates create-live` |
+| Validate/delete templates | `templates validate` / `templates delete` |
+| Inspect public work link | `qc-materials inspect-work` |
+| List authorized creators | `qc-materials authorized-creators` |
 | Query product-matched creator videos | `qc-materials creator-videos` |
+| List/search products | `qc-products list` / `qc-products search` |
+| List/show plan materials | `qc-plans list/show/materials` |
 | Create all-domain plan | `plans create-qianchuan` |
 | Create or append from work links | `plans batch-qianchuan-works` |
 | Remove plan materials by work link | `plans remove-qianchuan-work` |
 | Query all-domain plan spend | `qc-reports plans` |
+| Query material performance | `qc-reports materials` |
+| Update status/budget/ROI | `qc-plans update-status/update-budget/update-roi` |
+| List/show local batch runs | `runs list` / `runs show` |
 | Manage responsible accounts | `accounts add/list/remove/enable/disable` |
 | Query responsible-account spend | `accounts report` |
 
@@ -90,6 +104,8 @@ OAuth starts on first use, not during Plugin installation. Run `auth authorize` 
 
 Business commands resolve the Qianchuan authorization bound to the target `advertiser_id`. Never fall back to a Marketing authorization. Use `--auth-account-id` only when multiple Qianchuan authorizations cover the same advertiser.
 
+Use `auth mappings --channel qianchuan [--advertiser-id ID]` to verify advertiser-to-authorization resolution. The output contains token-presence booleans only, never token values.
+
 `managed_accounts` is a separate local user preference shared by both Skills. A request for `我负责的账户` resolves enabled records from this registry, not every OAuth-authorized advertiser. Run `accounts report` without a channel filter for concurrent Marketing and Qianchuan results, or filter by the explicitly named channel. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files.
 
 ## All-Domain Plan Reports
@@ -109,7 +125,7 @@ Use `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PROD
 
 Default to the current day and ten report rows. `--top 0` returns all report rows. Summaries must use all paged report data, including rows beyond the display limit, and aggregate raw decimal metrics before display rounding. Treat report money values as CNY exactly as returned; do not apply a guessed scale. Fail closed on missing required metrics, invalid pagination, duplicate plan IDs, or malformed numeric values. Request `need_compensate_info=true` from the plan list and include each plan's status, cost-guarantee state and reason, bid mode, ROI target bid, daily budget, spend, actual ROI, GMV, and orders. For `status=ALL`, retain financial rows missing plan-list metadata and expose `metadata_available=false` plus `metadata_missing_count`; a specific status requires complete metadata. Return total spend, plans with spend, orders, GMV, weighted ROI, one-hour settled amount, and weighted one-hour settled ROI. Do not write a file unless `--out` is explicit.
 
-## Product Template Contract
+## Template Contracts
 
 Qianchuan product templates are independent from Marketing templates.
 
@@ -123,11 +139,24 @@ Qianchuan product templates are independent from Marketing templates.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
 - `material_strategy.source_type` is `CREATOR_RUNTIME_QUERY`; creator information and materials belong to the creation run.
 
-Use `templates show --channel qianchuan --template TEMPLATE_ID_OR_NAME` for a complete, read-only single-template query. It returns bindings, delivery settings, material strategy, and readiness from one local config read without credentials or official API calls. Use the same shared command with `--channel marketing` and an exact Marketing template name for Marketing details.
+Use `templates show --channel qianchuan --template TEMPLATE_ID_OR_NAME` for a complete, read-only single-template query. It returns top-level `channel=qianchuan`, bindings, delivery settings, material strategy, and readiness from one local config read without credentials or official API calls. Use the same shared command with `--channel marketing` and an exact Marketing template name for Marketing details.
 
 Use `plans create-qianchuan --plan-template TEMPLATE_ID` to build a material-free base payload for low-level preflight. It reports `runtime_creator_materials` and blocks template-only submission. Use `plans batch-qianchuan-works` for the complete runtime work-query and material-injection workflow.
 
+Qianchuan live templates are separate:
+
+- `default_qianchuan_live_template` is a non-business skeleton.
+- Business templates bind one advertiser, creator/live-account name, and numeric `aweme_id`.
+- Names are `巨量千川-广告账户ID-直播账号名-aweme_id-直播全域`.
+- The default uses conservative bidding, budget `5000`, long-term delivery, and smart material selection.
+- Live templates never persist product IDs, work IDs, or manual materials.
+- Create with `plans create-qianchuan --live-template TEMPLATE_ID`; live plans reject `--name`.
+
+Use `templates validate` for both Qianchuan template kinds. `templates delete` defaults to dry-run and requires `--submit`; default skeletons are not business deletion targets.
+
 ## Creator Material Discovery
+
+Use `qc-materials inspect-work --work-url URL` to inspect and deduplicate public work links without touching a plan. It may call only the locally configured metadata endpoint and must redact that endpoint from every output or error. Use `qc-materials authorized-creators --advertiser-id ID [--query VALUE]` for the official product-all-domain authorization list.
 
 Query runtime creator videos with the business template and the Douyin ID visible in the Douyin app:
 
@@ -177,6 +206,8 @@ The plan-list `start_time` and `end_time` describe the returned data period, not
 
 Default to dry-run. Add `--submit` only after explicit online-write permission. Different creators may execute concurrently; one creator is always serialized, and a submit run takes an advertiser-scoped process lock. Return one final summary. Do not emit per-link progress or create a file unless `--out` is explicit.
 
+Use `qc-products list/search` for the official selectable-product endpoint. Use `qc-plans list/show/materials` for plan metadata and material membership. Never interpret plan-list `stats_info` as report currency.
+
 ## Work-Link Material Removal
 
 Remove one or more custom plan materials by Douyin work link:
@@ -223,6 +254,14 @@ Bid rules:
 
 Block submission before token resolution when validation fails. Success requires both official `code: 0` and `data.ad_id`.
 
+## Plan And Material Operations
+
+Use `qc-reports materials` for `/v1.0/qianchuan/report/material/get/`. Paginate every declared page; `--top` limits display only, while summaries use all fetched rows. Use official material filters and do not substitute plan-list stats. A custom field set that omits GMV or order metrics must return those summaries as `null`, not zero.
+
+Plan setting commands are fixed: `qc-plans update-status`, `update-budget`, and `update-roi`. Run them without `--submit` first and show the exact IDs, endpoint, and payload. Submit only the confirmed scope while holding the advertiser lock. Treat any failed result row as command failure. Qianchuan `DELETE` requires both `--submit` and `--confirm-delete`.
+
+Use `runs list/show` only for Plugin-managed journals under the local state root. Never accept arbitrary paths or infer online state from a journal.
+
 ## Official References
 
 - All-domain plan create: `https://open.oceanengine.com/labels/12/docs/1804360384937988`
@@ -245,6 +284,7 @@ Read `references/official-api-notes.md` for confirmed endpoint and account-expan
 - Keep official IDs exact; serialize number fields only where the API requires numbers.
 - Never print App Secret, Access Token, Refresh Token, auth code, or sensitive MCP URLs.
 - Keep dry-run independent of credentials and the HTTP client.
+- Never expose the configured private work-metadata endpoint; report only configured/not configured.
 - Show advertiser, goal, product count, budget, bid type, ROI, material counts, blocking fields, and endpoint before submission.
 - Present report summaries and rankings as Markdown tables in conversation; JSON remains the CLI boundary.
 - Batch work-link output must summarize created, appended, already-present, skipped, and failed groups only after the batch finishes.

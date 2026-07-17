@@ -19,9 +19,9 @@
 | Skill | Channel | Support |
 | --- | --- | --- |
 | `ads-plan-monitor` | Ocean Engine Marketing | OAuth, responsible accounts, uploaded/creator materials, templates, plans, reports, strategy |
-| `qc-plan-monitor` | Qianchuan | OAuth, responsible accounts, product all-domain templates, creator videos, work-link plans, all-domain reports |
+| `qc-plan-monitor` | Qianchuan | OAuth, responsible accounts, product/live templates, creator and product discovery, plan operations, plan/material reports |
 
-Qianchuan strategy and live templates are not available yet. Creation commands are dry-run by default and require an explicit `--submit` for online writes.
+Qianchuan live templates and creation are supported. Strategy remains read-only by default. Create, remove, and plan-setting commands require an explicit `--submit` for online writes.
 
 Daily users do not need to memorize commands, parameters, or Skill names. Describe the desired result in Codex; it will select the channel, ask for missing information, and show a preview before any write.
 
@@ -121,12 +121,15 @@ ocean-watch
 ├── auth           # Marketing/Qianchuan OAuth and tokens
 ├── accounts       # Responsible accounts and spend
 ├── templates      # Unified lookup and Marketing templates
-├── qc-templates   # Qianchuan product templates
+├── qc-templates   # Qianchuan product and live templates
 ├── materials      # Marketing materials
-├── qc-materials   # Qianchuan creator materials
+├── qc-materials   # Qianchuan creator materials and work inspection
+├── qc-products    # Qianchuan product discovery
 ├── plans          # Single and batch plan workflows
+├── qc-plans       # Qianchuan plan lookup and setting updates
+├── runs           # Local execution journals
 ├── reports        # Marketing reports
-├── qc-reports     # Qianchuan all-domain reports
+├── qc-reports     # Qianchuan plan and material reports
 ├── discover       # Official asset discovery
 └── mcp            # Developer-documentation MCP
 ```

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ocean_watch.templates import (
     list_channel_templates,
+    qianchuan_live_templates,
     qianchuan_product_templates,
 )
 
@@ -30,6 +31,21 @@ def all_channel_config():
     config[qianchuan_product_templates.TEMPLATES_KEY] = {
         qianchuan["template_id"]: qianchuan,
     }
+    live = qianchuan_live_templates.build_business_template(
+        "2345678901234567",
+        "example creator",
+        "9988776655",
+        template_id="qclt_example",
+    )
+    config[qianchuan_live_templates.SCHEMA_VERSION_KEY] = (
+        qianchuan_live_templates.SCHEMA_VERSION
+    )
+    config[qianchuan_live_templates.DEFAULT_TEMPLATE_KEY] = (
+        qianchuan_live_templates.default_template()
+    )
+    config[qianchuan_live_templates.TEMPLATES_KEY] = {
+        live["template_id"]: live,
+    }
     return config
 
 
@@ -39,19 +55,33 @@ class ListChannelTemplatesTests(unittest.TestCase):
 
         self.assertEqual(result["source"], "local_config")
         self.assertEqual(result["summary"], {
-            "business_template_count": 2,
-            "default_skeleton_count": 2,
-            "by_channel": {"marketing": 1, "qianchuan": 1},
+            "business_template_count": 3,
+            "default_skeleton_count": 3,
+            "by_channel": {"marketing": 1, "qianchuan": 2},
         })
         self.assertEqual(set(result["channels"]), {"marketing", "qianchuan"})
+        self.assertEqual(
+            result["channels"]["marketing"]["default_skeleton"]["channel"],
+            "marketing",
+        )
+        self.assertTrue(all(
+            row["channel"] == "qianchuan"
+            for row in result["channels"]["qianchuan"]["default_skeletons"]
+        ))
         marketing = result["channels"]["marketing"]["templates"][0]
+        self.assertEqual(marketing["channel"], "marketing")
         self.assertEqual(marketing["template_type"], "混剪素材")
         self.assertEqual(marketing["copy_title_count"], 0)
         self.assertNotIn("copy_materials", marketing)
         qianchuan = result["channels"]["qianchuan"]["templates"][0]
+        self.assertEqual(qianchuan["channel"], "qianchuan")
         self.assertEqual(qianchuan["template_type"], "商品全域")
         self.assertEqual(qianchuan["daily_budget"], 5000)
         self.assertEqual(qianchuan["roi_goal"], 1.7)
+        live = result["channels"]["qianchuan"]["templates"][1]
+        self.assertEqual(live["channel"], "qianchuan")
+        self.assertEqual(live["template_type"], "直播全域")
+        self.assertEqual(live["aweme_id"], "9988776655")
 
     def test_channel_filter_omits_unrequested_channel(self):
         result = list_channel_templates.list_all_templates(
@@ -60,8 +90,8 @@ class ListChannelTemplatesTests(unittest.TestCase):
         )
 
         self.assertEqual(set(result["channels"]), {"qianchuan"})
-        self.assertEqual(result["summary"]["business_template_count"], 1)
-        self.assertEqual(result["summary"]["default_skeleton_count"], 1)
+        self.assertEqual(result["summary"]["business_template_count"], 2)
+        self.assertEqual(result["summary"]["default_skeleton_count"], 2)
 
     def test_shows_one_marketing_template_with_full_details(self):
         config = all_channel_config()
@@ -76,6 +106,7 @@ class ListChannelTemplatesTests(unittest.TestCase):
         self.assertEqual(result["channel"], "marketing")
         self.assertTrue(result["ready_for_plan_creation"])
         self.assertEqual(result["template"]["name"], name)
+        self.assertEqual(result["template"]["channel"], "marketing")
         self.assertIn("delivery_settings", result["template"])
         self.assertIn("material_strategy", result["template"])
 
@@ -89,6 +120,7 @@ class ListChannelTemplatesTests(unittest.TestCase):
         self.assertEqual(result["channel"], "qianchuan")
         self.assertTrue(result["ready_for_plan_creation"])
         self.assertEqual(result["template"]["template_id"], "qcpt_example")
+        self.assertEqual(result["template"]["channel"], "qianchuan")
         self.assertIn("delivery_setting", result["template"])
         self.assertIn("material_strategy", result["template"])
 
@@ -118,9 +150,13 @@ class ListChannelTemplatesTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(path.read_bytes(), before)
             marketing = result["channels"]["marketing"]["templates"][0]
+            self.assertEqual(marketing["channel"], "marketing")
             self.assertIn("copy_materials", marketing)
             qianchuan = result["channels"]["qianchuan"]["templates"][0]
+            self.assertEqual(qianchuan["channel"], "qianchuan")
             self.assertIn("delivery_setting", qianchuan)
+            live = result["channels"]["qianchuan"]["templates"][1]
+            self.assertEqual(live["template_kind"], "live")
 
     def test_show_cli_is_read_only(self):
         with tempfile.TemporaryDirectory() as directory:

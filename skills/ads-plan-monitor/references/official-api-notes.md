@@ -17,6 +17,13 @@ Official docs:
 - `GET https://api.oceanengine.com/open_api/2/customer_center/advertiser/list/`
 - `GET https://api.oceanengine.com/open_api/2/ebp/advertiser/list/`
 - `GET https://api.oceanengine.com/open_api/2/advertiser/info/`
+- `GET https://api.oceanengine.com/open_api/v3.0/report/custom/config/get/`
+- `GET https://api.oceanengine.com/open_api/v3.0/report/custom/get/`
+- `POST https://api.oceanengine.com/open_api/v3.0/project/status/update/`
+- `POST https://api.oceanengine.com/open_api/v3.0/promotion/status/update/`
+- `POST https://api.oceanengine.com/open_api/v3.0/promotion/budget/update/`
+- `POST https://api.oceanengine.com/open_api/v3.0/promotion/bid/update/`
+- `POST https://api.oceanengine.com/open_api/v3.0/project/roigoal/update/`
 
 ## Authorized Advertiser Expansion
 
@@ -64,6 +71,15 @@ Required headers:
 - `CUSTOM` requires one or more account image IDs in `image_ids`; those IDs are not video or cover IDs.
 - `brand_info` can contain `yuntu_category_id`, `brand_name_id`, `ecom_brand_id`, or `cdp_brand_id` depending on account asset linkage.
 - Promotion success returns `data.promotion_id`.
+
+## Project Reports And Setting Updates
+
+- Query the report-config endpoint for `UNI_PROJECT_DATA` before requesting project metrics. Select only dimensions and metrics returned for the current advertiser and permission set.
+- Project report rows come from `/v3.0/report/custom/get/`. Traverse every declared page; a display limit must never reduce the rows used for totals.
+- Project and promotion status updates accept `ENABLE` or `DISABLE` in batch `data` rows.
+- Promotion budget and bid updates use `promotion_id`; project ROI updates use `project_id` and `roi_goal`.
+- Update commands accept at most ten unique IDs per official batch, default to dry-run, resolve the target advertiser's Marketing authorization only, and treat row-level errors as command failure.
+- Report and update responses may contain request IDs and business errors, but no credential value is safe to print.
 
 ## Still Requires Runtime Lookup
 

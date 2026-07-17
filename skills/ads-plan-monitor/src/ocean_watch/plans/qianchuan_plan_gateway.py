@@ -2,6 +2,7 @@ import datetime as dt
 
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError, ConfigurationError
+from ocean_watch.core.pagination import declared_page_count
 
 QIANCHUAN_PLAN_LIST_PATH = "/v1.0/qianchuan/uni_promotion/list/"
 QIANCHUAN_PLAN_DETAIL_PATH = "/v1.0/qianchuan/uni_promotion/ad/detail/"
@@ -22,37 +23,7 @@ def decimal_id(value, field):
     return text
 
 
-def page_count(page_info, *, source, page, row_count, expected=None):
-    raw_total = page_info.get("total_page") if isinstance(page_info, dict) else None
-    try:
-        total = int(raw_total)
-    except (TypeError, ValueError):
-        total = -1
-    if (
-        isinstance(raw_total, bool)
-        or total < 0
-        or isinstance(raw_total, float) and raw_total != total
-    ):
-        raise ApiError(
-            "Qianchuan pagination returned an invalid total_page",
-            {"source": source, "page": page, "total_page": raw_total},
-        )
-    if total == 0 and row_count:
-        raise ApiError(
-            "Qianchuan pagination contradicts returned rows",
-            {"source": source, "page": page, "total_page": total},
-        )
-    if expected is not None and total != expected:
-        raise ApiError(
-            "Qianchuan pagination changed during traversal",
-            {
-                "source": source,
-                "page": page,
-                "total_page": total,
-                "expected": expected,
-            },
-        )
-    return total
+page_count = declared_page_count
 
 
 def require_success(response, operation, **details):

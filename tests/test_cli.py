@@ -100,9 +100,26 @@ class CliTests(unittest.TestCase):
                 "create",
                 "--channel",
                 "qianchuan",
+                "--template-type",
+                "product",
                 "--config",
                 "example.json",
             ])
+
+        self.assertEqual(code, 0)
+        handler.assert_called_once_with(["create-wizard", "--config", "example.json"])
+
+    def test_qianchuan_template_type_is_selected_before_source_wizard(self):
+        with mock.patch.object(
+            template_channel_router.manage_qianchuan_live_templates,
+            "main",
+            return_value=0,
+        ) as handler:
+            code = template_channel_router.main(
+                ["create", "--channel", "qianchuan", "--config", "example.json"],
+                input_fn=lambda _: "1",
+                output_fn=lambda _: None,
+            )
 
         self.assertEqual(code, 0)
         handler.assert_called_once_with(["create-wizard", "--config", "example.json"])

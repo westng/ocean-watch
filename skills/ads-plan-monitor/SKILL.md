@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation, performance reports, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、管理我负责的账户、跨渠道查询负责账户消耗、创建或迁移营销投放模板、查询上传/达人素材、创建营销计划、查询素材消耗排行、汇总报表, and 投放策略分析 through official APIs.
+description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation and updates, performance reports, run history, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、管理我负责的账户、跨渠道查询负责账户消耗、创建/校验/删除营销投放模板、查询上传或达人素材、创建或调整营销计划、查询素材/项目消耗排行、查看执行记录、汇总报表, and 投放策略分析 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -26,6 +26,8 @@ This Skill owns only `marketing` (巨量营销): OAuth, account discovery, templ
 
 For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, do not assume Marketing from the active account, existing authorization, or default channel. Run the shared `templates create` entry without `--channel` and ask the user to choose `巨量营销` or `巨量千川` before showing source templates. An unconfigured or unauthorized channel remains selectable for template creation; clearly state that authorization is required before real delivery. After Marketing is selected, ask `混剪素材（账户上传）` or `原生素材（达人授权）` before showing source templates, and show only business templates bound to that material mode.
 
+After Qianchuan is selected, ask `商品全域` or `直播全域` before showing source templates. Never silently default one Qianchuan template kind.
+
 Template advertiser selection must ignore placeholder IDs. When the selected channel has multiple authorized advertisers, require an exact advertiser ID and reject IDs outside that channel's advertiser index. Auto-fill only when exactly one authorized advertiser exists or a reusable source-template advertiser is still authorized. An unauthorized channel may save an unverified template binding, but the preview must show `UNVERIFIED` and real delivery must revalidate after OAuth.
 
 ## Command Entry
@@ -48,9 +50,11 @@ Core routes:
 | Marketing OAuth | `auth authorize --channel marketing` |
 | Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status | `auth status --channel marketing` |
+| Advertiser authorization mapping | `auth mappings --channel marketing` |
 | List all channel templates | `templates list` |
 | Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
 | Create Marketing template | `templates create --channel marketing` |
+| Validate/delete template | `templates validate` / `templates delete` |
 | Uploaded videos | `materials videos` |
 | Creator videos | `materials creator` |
 | Single upload plan | `plans create` |
@@ -58,7 +62,10 @@ Core routes:
 | Upload batch | `plans batch-upload` |
 | Creator batch | `plans batch-creator` |
 | Current material report | `reports materials` |
+| Marketing project report | `reports plans` |
 | Report field discovery | `reports schema` |
+| Update project/unit settings | `plans update-*` |
+| List/show local batch runs | `runs list` / `runs show` |
 | List responsible accounts | `accounts list` |
 | Add responsible account | `accounts add` |
 | Query responsible-account spend | `accounts report` |
@@ -120,6 +127,8 @@ When Codex starts OAuth, always use `--print-url --no-open` and return only `sta
 
 After presenting `start_url`, keep the authorization command running and continue polling the same process; do not end the task while it is waiting for the callback. As soon as OAuth completes, proactively run `auth status` and report the channel, authorization result, authorized-subject count, verified advertiser count, pending/partial sync counts, and advertiser-to-Token mapping result. Never wait for the user to ask whether authorization succeeded, and never include credentials in the feedback.
 
+Use `auth mappings --channel marketing [--advertiser-id ID]` for the mapping check. It may report authorization IDs, account IDs, advertiser IDs, and token-presence booleans only. Never expose credential values.
+
 ## Official References
 
 Use official docs as the source of truth:
@@ -140,7 +149,9 @@ Official MCP is documentation-only. Use `mcp configure`/`mcp status`; continue u
 
 Schema v5 has one `default_plan_template` and advertiser-bound business templates.
 
-`templates list` is the fast shared read path for Marketing and Qianchuan. It reads the local config once, calls no official API, and returns compact business-template rows plus default-skeleton counts. Use `--channel marketing` or `--channel qianchuan` to filter, and `--include-details` only when full template diagnostics are needed.
+`templates list` is the fast shared read path for Marketing and Qianchuan. It reads the local config once, calls no official API, and returns compact business-template rows plus default-skeleton counts. Every template record, including default skeletons, detailed rows, and single-template responses, must include top-level `channel=marketing|qianchuan`. Use `--channel marketing` or `--channel qianchuan` to filter, and `--include-details` only when full template diagnostics are needed.
+
+Use `templates validate` before uncertain template operations. `templates delete` is a local write but still defaults to dry-run and requires `--submit`; do not use `--force` until referenced-template diagnostics have been shown and explicitly accepted. Default skeletons are never deletion targets.
 
 Use `templates show --channel marketing|qianchuan --template TEMPLATE` for one-template detail queries. Marketing requires the exact template name; Qianchuan accepts an exact template ID or display name. Return the complete bindings, delivery settings, material strategy, and readiness state from one local config read without credentials or official API calls.
 
@@ -238,6 +249,8 @@ For current material monitoring, use `reports materials`:
 
 Do not use a broad promotion-only total as the current material-list total. Status values are displayed and remembered but not filtered unless the user asks for active-only data.
 
+For project-level performance, use `reports plans`. It must first negotiate `UNI_PROJECT_DATA` through the official report-config endpoint and query only dimensions and metrics available to that advertiser. A user-requested unavailable metric is blocking; never guess an alternate field. Report unqueried or unavailable GMV/order summaries as `null`, never zero.
+
 Default conversation output is Markdown tables, not spreadsheet files:
 
 - Context: account, date range, unit/material/report counts.
@@ -256,6 +269,8 @@ Strategy is read-only by default:
 4. Recommend concrete stop, observe, test, or scale actions with reasons.
 5. Do not change delivery state, budgets, bids, templates, or plans unless the user explicitly requests the write after seeing the evidence.
 
+When a write is explicitly requested, use `plans update-project-status`, `update-promotion-status`, `update-budget`, `update-bid`, or `update-roi`. First run without `--submit`, show IDs, endpoint and payload, then submit only the confirmed scope. Never construct a naked ad-hoc payload outside these commands.
+
 ## Output And Safety
 
 - Keep IDs as exact strings unless an official JSON field requires a number.
@@ -263,3 +278,4 @@ Strategy is read-only by default:
 - Do not print credentials or sensitive MCP URLs.
 - Report partial batch failures per account/job; do not hide successful rows.
 - Prefer concise structured summaries; show full payloads only when requested.
+- Plan-setting and template-deletion writes are dry-run by default and require `--submit`.

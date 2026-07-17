@@ -62,3 +62,13 @@ def format_marketing_template_name(
         product_id,
         template_type,
     )
+
+
+def format_qianchuan_live_template_name(advertiser_id, creator_name, aweme_id):
+    return "-".join((
+        CHANNEL_LABELS["qianchuan"],
+        required_segment(advertiser_id, "advertiser_id"),
+        required_segment(creator_name, "creator_name"),
+        required_segment(aweme_id, "aweme_id"),
+        "直播全域",
+    ))
