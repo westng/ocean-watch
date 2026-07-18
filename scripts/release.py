@@ -184,6 +184,10 @@ def validate_versions(root, tag=None):
     return {**versions, "plugin_base": plugin_base, "tag": tag}
 
 
+def derive_release_tag(root):
+    return f"v{validate_versions(root)['project']}"
+
+
 def write_release_notes(root, tag, output_path):
     root = Path(root).resolve()
     versions = validate_versions(root, tag=tag)
@@ -480,6 +484,8 @@ def build_parser():
     check = commands.add_parser("check", help="Validate release version consistency.")
     check.add_argument("--tag")
 
+    commands.add_parser("tag", help="Derive the release tag from project.version.")
+
     notes = commands.add_parser("notes", help="Write release notes from CHANGELOG.md.")
     notes.add_argument("--tag", required=True)
     notes.add_argument("--output", default="release-notes/RELEASE_NOTES.md")
@@ -505,6 +511,8 @@ def main(argv=None):
     try:
         if args.command == "check":
             result = validate_versions(root, tag=args.tag)
+        elif args.command == "tag":
+            result = {"tag": derive_release_tag(root)}
         elif args.command == "notes":
             result = write_release_notes(root, args.tag, args.output)
         elif args.command == "plugin":

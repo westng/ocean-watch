@@ -83,12 +83,13 @@ Plugin 包只从 Git 已跟踪的白名单路径构建。脚本会拒绝符号�
 2. 同步更新 `pyproject.toml` 的 `project.version`、`ocean_watch.__version__` 和 `.codex-plugin/plugin.json` 的基础版本。Plugin 开发期 cachebuster 可以作为 `+codex.*` 构建元数据保留。
 3. 运行全部本地质量检查和发布构建。
 4. 提交版本改动并等待 `CI` 成功。
-5. 在 GitHub Actions 打开 `Release`，选择 `main`，点击 **Run workflow** 并输入 `vX.Y.Z`。
+5. 在 GitHub Actions 打开 `Release`，选择 `main`，点击 **Run workflow**。Tag 会从项目版本自动生成。
 
 ```bash
+python3 scripts/release.py tag
 python3 scripts/release.py check --tag vX.Y.Z
 python3 scripts/release.py notes --tag vX.Y.Z --output release-notes/RELEASE_NOTES.md
-gh workflow run release.yml --repo westng/ocean-watch --ref main -f release_tag=vX.Y.Z
+gh workflow run release.yml --repo westng/ocean-watch --ref main
 ```
 
-`Release` 不会被普通推送或 Tag 自动触发。工作流会重新执行编译、Ruff、Bandit 和全部测试，然后在全新 Ubuntu 环境构建、验证、证明并发布产物。手动运行必须选择 `main`；版本、输入 Tag 或 Changelog 任一不一致都会在创建 GitHub Release 前失败。同名 Tag 不存在时由工作流创建；已存在时必须指向当前 `main` 提交。重跑同一版本时，资产和 Release 页面的版本说明都会同步更新。构建任务只有仓库只读权限，单独的发布任务不执行仓库代码，只下载已验证产物与版本说明、重新校验 `SHA256SUMS` 并写入 GitHub Release。
+`Release` 不会被普通推送或 Tag 自动触发。工作流会重新执行编译、Ruff、Bandit 和全部测试，然后在全新 Ubuntu 环境构建、验证、证明并发布产物。手动运行必须选择 `main`；工作流会从项目版本自动生成 Tag，版本或 Changelog 任一不一致都会在创建 GitHub Release 前失败。同名 Tag 不存在时由工作流创建；已存在时必须指向当前 `main` 提交。重跑同一版本时，资产和 Release 页面的版本说明都会同步更新。构建任务只有仓库只读权限，单独的发布任务不执行仓库代码，只下载已验证产物与版本说明、重新校验 `SHA256SUMS` 并写入 GitHub Release。

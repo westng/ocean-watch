@@ -17,6 +17,9 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertEqual(result["package"], result["project"])
         self.assertEqual(result["plugin_base"], result["project"])
 
+    def test_release_tag_is_derived_from_project_version(self):
+        self.assertEqual(release.derive_release_tag(ROOT), "v0.9.1")
+
     def test_version_contract_rejects_non_release_version(self):
         with self.assertRaisesRegex(release.ReleaseError, "MAJOR.MINOR.PATCH"):
             release.validate_release_version("0.9")
@@ -140,13 +143,27 @@ class ReleasePackagingTests(unittest.TestCase):
         workflow_lines = [line.strip() for line in workflow.splitlines()]
         build_job, publish_job = workflow.split("\n  publish:\n", maxsplit=1)
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertIn("release_tag:", workflow)
         self.assertNotIn("\n  push:\n", workflow)
+        self.assertNotIn("inputs.release_tag", workflow)
+        self.assertIn("scripts/release.py tag", workflow)
+        self.assertIn("id: resolve_release_tag", workflow)
+        self.assertIn("needs.build.outputs.release_tag", workflow)
         self.assertNotIn("github.ref_name", workflow)
-        self.assertEqual(workflow_lines.count("name: ocean-watch-${{ inputs.release_tag }}"), 2)
         self.assertEqual(
-            workflow_lines.count("name: ocean-watch-${{ inputs.release_tag }}-notes"),
-            2,
+            workflow_lines.count("name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}"),
+            1,
+        )
+        self.assertEqual(
+            workflow_lines.count("name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}-notes"),
+            1,
+        )
+        self.assertEqual(
+            workflow_lines.count("name: ocean-watch-${{ needs.build.outputs.release_tag }}"),
+            1,
+        )
+        self.assertEqual(
+            workflow_lines.count("name: ocean-watch-${{ needs.build.outputs.release_tag }}-notes"),
+            1,
         )
         self.assertIn("scripts/release.py check --tag", workflow)
         self.assertIn("scripts/release.py notes --tag", workflow)

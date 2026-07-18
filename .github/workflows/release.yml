@@ -2,14 +2,9 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Release tag (vMAJOR.MINOR.PATCH)"
-        required: true
-        type: string
 
 concurrency:
-  group: release-${{ inputs.release_tag }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -20,12 +15,12 @@ jobs:
     if: github.repository == 'westng/ocean-watch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      release_tag: ${{ steps.resolve_release_tag.outputs.release_tag }}
     permissions:
       attestations: write
       contents: read
       id-token: write
-    env:
-      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,8 +31,15 @@ jobs:
           python-version: "3.12"
       - name: Install release toolchain
         run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: Resolve release tag from project version
+        id: resolve_release_tag
+        shell: bash
+        run: |
+          release_tag="$(python scripts/release.py tag | python -c 'import json, sys; print(json.load(sys.stdin)["tag"])')"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
       - name: Verify tag and version contract
         run: |
+          RELEASE_TAG="${{ steps.resolve_release_tag.outputs.release_tag }}"
           python scripts/release.py check --tag "${RELEASE_TAG}"
           if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
             echo "Releases must be dispatched from the main branch." >&2
@@ -54,6 +56,8 @@ jobs:
             fi
           fi
       - name: Generate release notes from Changelog
+        env:
+          RELEASE_TAG: ${{ steps.resolve_release_tag.outputs.release_tag }}
         run: python scripts/release.py notes --tag "${RELEASE_TAG}" --output release-notes/RELEASE_NOTES.md
       - name: Run release quality gate
         run: |
@@ -77,14 +81,14 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ocean-watch-${{ inputs.release_tag }}
+          name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}
           path: dist/*
           if-no-files-found: error
           retention-days: 30
       - name: Upload release notes
         uses: actions/upload-artifact@v7
         with:
-          name: ocean-watch-${{ inputs.release_tag }}-notes
+          name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}-notes
           path: release-notes/RELEASE_NOTES.md
           if-no-files-found: error
           retention-days: 30
@@ -101,17 +105,17 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
     steps:
       - name: Download verified release artifacts
         uses: actions/download-artifact@v8
         with:
-          name: ocean-watch-${{ inputs.release_tag }}
+          name: ocean-watch-${{ needs.build.outputs.release_tag }}
           path: dist
       - name: Download release notes
         uses: actions/download-artifact@v8
         with:
-          name: ocean-watch-${{ inputs.release_tag }}-notes
+          name: ocean-watch-${{ needs.build.outputs.release_tag }}-notes
           path: release-notes
       - name: Recheck artifact integrity
         working-directory: dist

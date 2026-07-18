@@ -48,7 +48,7 @@ See the Chinese [Getting started guide](docs/getting-started.md) for the complet
 
 ### Release artifacts
 
-When a maintainer manually runs the `Release` workflow in GitHub Actions and enters a `vMAJOR.MINOR.PATCH` tag, it publishes these assets to [GitHub Releases](https://github.com/westng/ocean-watch/releases):
+When a maintainer manually runs the `Release` workflow from `main` in GitHub Actions, the workflow derives the Tag from the project version and publishes these assets to [GitHub Releases](https://github.com/westng/ocean-watch/releases):
 
 - `ocean-watch-plugin-X.Y.Z.zip`: complete offline Codex Plugin bundle.
 - `ocean_watch-X.Y.Z-py3-none-any.whl`: independently installable Python CLI.
