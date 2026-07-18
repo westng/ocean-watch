@@ -17,17 +17,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Install package and quality tools
         run: python -m pip install --disable-pip-version-check -e ".[dev]"
       - name: Compile package
-        run: python -m compileall -q skills/ads-plan-monitor/src/ocean_watch
+        run: python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
       - name: Lint package and tests
-        run: ruff check skills/ads-plan-monitor/src tests
+        run: ruff check skills/ads-plan-monitor/src scripts tests
       - name: Scan package security
-        run: bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+        run: bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
       - name: Verify CLI
         run: ocean-watch --version
       - name: Validate example JSON
@@ -45,13 +47,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Build source and wheel distributions
         run: |
-          python -m pip install --disable-pip-version-check build
+          python -m pip install --disable-pip-version-check build "tomli>=2,<3; python_version < '3.11'"
+          python scripts/release.py check
           python -m build
+      - name: Build and verify offline Plugin distribution
+        run: |
+          python scripts/release.py plugin --output-dir dist
+          python scripts/release.py checksums --directory dist
+          python scripts/release.py verify-checksums --file dist/SHA256SUMS
       - name: Install wheel only
         run: python -m pip install --disable-pip-version-check --force-reinstall dist/*.whl
       - name: Verify installed CLI and packaged setup resources

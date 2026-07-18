@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository == 'westng/ocean-watch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install release toolchain
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: Verify tag and version contract
+        run: |
+          python scripts/release.py check --tag "${RELEASE_TAG}"
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
+      - name: Run release quality gate
+        run: |
+          python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
+          ruff check skills/ads-plan-monitor/src scripts tests
+          bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
+          python -m unittest discover -s tests
+      - name: Build CLI distributions
+        run: python -m build
+      - name: Build offline Codex Plugin
+        run: python scripts/release.py plugin --output-dir dist
+      - name: Verify wheel in isolation
+        run: |
+          python -m venv "${RUNNER_TEMP}/release-venv"
+          "${RUNNER_TEMP}/release-venv/bin/python" -m pip install --disable-pip-version-check dist/*.whl
+          CODEX_HOME="${RUNNER_TEMP}/codex-home" "${RUNNER_TEMP}/release-venv/bin/ocean-watch" setup init --home-config
+      - name: Generate and verify checksums
+        run: |
+          python scripts/release.py checksums --directory dist
+          python scripts/release.py verify-checksums --file dist/SHA256SUMS
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocean-watch-${{ github.ref_name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+  publish:
+    if: github.repository == 'westng/ocean-watch'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: ocean-watch-${{ github.ref_name }}
+          path: dist
+      - name: Recheck artifact integrity
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" dist/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" dist/* \
+              --verify-tag \
+              --title "Ocean Watch ${RELEASE_TAG}" \
+              --generate-notes
+          fi

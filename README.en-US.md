@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
+  <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/westng/ocean-watch/releases"><img src="https://img.shields.io/github/v/release/westng/ocean-watch?display_name=tag&sort=semver" alt="GitHub Release"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -43,6 +45,18 @@ ocean-watch setup doctor
 ```
 
 See the Chinese [Getting started guide](docs/getting-started.md) for the complete workflow. Installation never starts OAuth; the temporary callback server starts only when `auth authorize` runs.
+
+### Release artifacts
+
+Every `vMAJOR.MINOR.PATCH` tag publishes these assets to [GitHub Releases](https://github.com/westng/ocean-watch/releases):
+
+- `ocean-watch-plugin-X.Y.Z.zip`: complete offline Codex Plugin bundle.
+- `ocean_watch-X.Y.Z-py3-none-any.whl`: independently installable Python CLI.
+- `ocean_watch-X.Y.Z.tar.gz`: Python source distribution.
+- `SHA256SUMS`: SHA-256 checksums for every release asset.
+- GitHub build provenance attestations for repository and workflow verification.
+
+Codex Marketplace remains the recommended online installation path. See the [release guide](docs/releasing.md) for offline installation, checksum verification, and maintainer release procedures. The Plugin bundle and wheel still require Python 3.9+; they are not standalone native executables.
 
 ## Everyday examples
 
@@ -173,6 +187,7 @@ The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. S
 - [CLI reference](docs/cli.md) (Chinese)
 - [Configuration](docs/configuration.md) (Chinese)
 - [Architecture](docs/architecture.md) (Chinese)
+- [Release guide](docs/releasing.md) (Chinese)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 

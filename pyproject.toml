@@ -19,6 +19,13 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/westng/ocean-watch"
+Repository = "https://github.com/westng/ocean-watch"
+Issues = "https://github.com/westng/ocean-watch/issues"
+Changelog = "https://github.com/westng/ocean-watch/blob/main/CHANGELOG.md"
+Releases = "https://github.com/westng/ocean-watch/releases"
+
 [project.optional-dependencies]
 dev = [
   "bandit>=1.7,<2",

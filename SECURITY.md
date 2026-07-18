@@ -41,6 +41,12 @@ OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id
 
 安全修复只维护当前 `main` 和最新发布版本。旧版本发现漏洞时，请先升级；需要回溯修复时会在安全公告中明确标注。
 
+## 发布完整性
+
+正式产物只由 GitHub `Release` 工作流从版本 Tag 构建。每个 Release 包含 `SHA256SUMS`，并通过 GitHub artifact attestation 记录仓库、提交和工作流来源。Plugin 离线包只从 Git 已跟踪白名单构建，不包含 `config/`、凭据、日志、journal、缓存、测试临时文件或本机构建目录。
+
+下载后应先验证 `SHA256SUMS`；对供应链要求更高的环境，再使用 GitHub CLI 验证 attestation。具体命令见[发布指南](docs/releasing.md)。
+
 ## 泄露处理
 
 如果你不小心提交了真实 token、secret、auth code 或 MCP 动态 URL：

@@ -8,6 +8,8 @@
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
+  <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/westng/ocean-watch/releases"><img src="https://img.shields.io/github/v/release/westng/ocean-watch?display_name=tag&sort=semver" alt="GitHub Release"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -43,6 +45,18 @@ ocean-watch setup doctor
 ```
 
 完整流程见[快速开始](docs/getting-started.md)。安装阶段不会启动 OAuth；首次执行 `auth authorize` 时才会临时启动本地回调服务。
+
+### 正式发布产物
+
+每个 `vMAJOR.MINOR.PATCH` 版本 Tag 会在 [GitHub Releases](https://github.com/westng/ocean-watch/releases) 自动发布：
+
+- `ocean-watch-plugin-X.Y.Z.zip`：完整 Codex Plugin 离线包。
+- `ocean_watch-X.Y.Z-py3-none-any.whl`：可单独安装的 Python CLI。
+- `ocean_watch-X.Y.Z.tar.gz`：Python 源码分发包。
+- `SHA256SUMS`：全部发布文件的 SHA-256 校验值。
+- GitHub build provenance attestation：可验证产物由本仓库发布工作流构建。
+
+在线使用仍推荐 Codex Marketplace 安装。离线安装、校验和维护者发版流程见[发布指南](docs/releasing.md)。Plugin ZIP 和 wheel 均仍需要 Python 3.9+；它们不是免 Python 的独立可执行程序。
 
 ## 普通用户使用案例
 
@@ -220,6 +234,7 @@ ocean-watch --help
 - [CLI 参考](docs/cli.md)
 - [配置与授权](docs/configuration.md)
 - [架构说明](docs/architecture.md)
+- [发布指南](docs/releasing.md)
 - [贡献指南](CONTRIBUTING.md)
 - [更新日志](CHANGELOG.md)
 

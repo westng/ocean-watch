@@ -44,10 +44,11 @@ python3 -m pip install -e ".[dev]"
 提交前运行：
 
 ```bash
-PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch
+PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
-ruff check skills/ads-plan-monitor/src tests
-bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+ruff check skills/ads-plan-monitor/src scripts tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
+python3 scripts/release.py check
 python3 -m build
 python3 skills/ads-plan-monitor/run.py --version
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
@@ -57,6 +58,12 @@ git diff --check
 ```
 
 发布前还必须分别在 Python `3.9` 和 `3.12` 的干净环境中安装生成的 wheel，并用临时 `CODEX_HOME` 执行 `ocean-watch setup init --home-config`，确认安装态资源和命令不依赖源码目录。
+
+## 发布
+
+正式发布不从本机手工上传产物。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `Unreleased` 内容整理到对应版本的 Changelog 标题，再推送 `vMAJOR.MINOR.PATCH` Tag。GitHub Release 工作流会重新运行质量门、构建 CLI 和完整 Plugin 包、生成校验和来源证明，最后发布 GitHub Release。
+
+不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Release。完整检查清单和命令见[发布指南](docs/releasing.md)。
 
 ## Pull Request
 
