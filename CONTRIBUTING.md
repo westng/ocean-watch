@@ -61,7 +61,7 @@ git diff --check
 
 ## 发布
 
-正式发布不从本机手工上传产物。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `Unreleased` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Release` 工作流并选择 `main`。工作流会从三处版本元数据自动生成 `vMAJOR.MINOR.PATCH` Tag，重新运行质量门、构建 CLI 和完整 Plugin 包、生成校验和来源证明，最后创建 Tag 和 GitHub Release。
+正式发布不从本机手工上传产物。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Release` 工作流并选择 `main`。工作流会从三处版本元数据自动生成 `vMAJOR.MINOR.PATCH` Tag，重新运行质量门、构建 CLI 和完整 Plugin 包、生成校验和来源证明，最后创建 Tag 和 GitHub Release。
 
 不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Release。完整检查清单和命令见[发布指南](docs/releasing.md)。
 

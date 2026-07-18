@@ -1,119 +1,119 @@
-# Changelog
+# 更新日志
 
-All notable changes to Ocean Watch are documented here.
+本文记录 Ocean Watch 的所有重要变更。
 
-## Unreleased
+## 未发布
 
-### Added
+### 新增
 
-- Added a manually dispatched GitHub Release pipeline for deterministic offline Plugin archives, Python wheel/source distributions, Changelog-backed release notes, SHA-256 checksums, workflow artifacts, and build provenance attestations.
-- Added stable CLI commands for Qianchuan work inspection, authorized creators, products, plan details/materials, material reports, and local execution history.
-- Added sanitized advertiser-to-authorization mapping inspection plus cross-channel template validation and guarded local template deletion.
-- Added Marketing project reports that negotiate the account's official `UNI_PROJECT_DATA` contract before querying metrics.
-- Added dry-run-first Marketing and Qianchuan plan status, budget, bid, and ROI updates, including partial-result detection, advertiser locks, and an extra confirmation for Qianchuan deletion.
-- Added advertiser-bound Qianchuan live all-domain template skeletons, creation guidance, unified template listing, and live-template plan payload creation.
+- 新增手动触发的 GitHub Release 流程，用于构建确定性的 Codex Plugin 离线包、Python wheel 和源码分发包、由更新日志驱动的发布说明、SHA-256 校验和、工作流产物及构建来源证明。
+- 新增巨量千川作品检查、授权达人、商品、计划详情与素材、素材报表及本地执行历史的稳定 CLI 命令。
+- 新增脱敏的广告主与授权映射检查、跨渠道模板校验及受保护的本地模板删除能力。
+- 新增会协商账户官方 `UNI_PROJECT_DATA` 契约的巨量营销项目报表。
+- 新增巨量营销与巨量千川计划状态、预算、出价和 ROI 的先预检后执行更新流程，支持部分结果检测、广告主锁和千川删除二次确认。
+- 新增绑定广告主的千川直播全域模板骨架、创建引导、统一模板列表和直播模板计划载荷创建。
 
-### Changed
+### 变更
 
-- Consolidated long-lived documentation around one index and five maintained guides, added task-oriented examples for everyday users, and removed duplicated project-tree documentation and completed implementation design drafts.
-- Accelerated Qianchuan work-link preflight with an optional local-only metadata endpoint, public-link identity and product hints, bounded default concurrency, a 30-day advertiser-scoped owner-hint cache, mandatory official revalidation, and stage-level latency metrics. The private endpoint is no longer present in tracked source or documentation.
-- Added one fast local `templates list` command that returns compact Marketing and Qianchuan template summaries from a single config read, with optional channel filtering and full details.
-- Added a resumable Marketing creator-batch preflight that reports completed, ready, retry, and blocked jobs before submission while treating project capacity as a create-time-only check.
-- Updated the Marketing default template to target the 29 top-level regions outside Hong Kong, Macao, Taiwan, Xinjiang, and Tibet.
-- Changed the Marketing creation base to official DPA product images so the standard wizard no longer asks users for image IDs; advanced `CUSTOM` image templates retain strict image-ID validation.
-- Unified business-template names as `渠道-广告账户ID-商品名-商品ID-模版类型`; Qianchuan Schema v3 migrates existing display names without changing template IDs or bindings.
-- Removed active/default business-template pointers. Marketing Schema v5 and Qianchuan Schema v4 require every creation workflow to select a real business template explicitly; default templates remain creation skeletons only.
-- Added explicit Marketing wizard fields and previews for daily budget, net-order ROI goal, gender, and age targeting.
-- Added validated custom product-selling-point collection so Marketing templates satisfy the official 6–9-position payload rule before activation.
-- Changed Codex OAuth guidance to return a temporary local start URL so users can choose the browser profile bound to the intended Ocean Engine account.
-- Required Codex to keep polling OAuth after returning the start URL and proactively report account synchronization and Token-mapping results.
-- Added a shared template-creation router that asks for Marketing or Qianchuan before entering a channel-specific source-template wizard, independent of authorization state.
-- Split Marketing template creation into mixed/account-upload and native/creator-authorized modes before source-template selection, with mode-filtered source lists.
-- Added channel-index validation for template advertiser bindings, removed placeholder defaults, and exposed verified or unverified binding status in wizard previews.
+- 将长期维护文档整合为一个索引和五份指南，增加面向日常使用的任务示例，移除重复的项目树文档和已完成的阶段性设计稿。
+- 加速千川作品链接预检：支持可选的本机元数据接口、公开链接身份与商品提示、有上限的默认并发、按广告主隔离的 30 天达人提示缓存、强制官方复核和阶段耗时指标；私有接口不再存在于跟踪源码或文档中。
+- 新增一次配置读取即可返回巨量营销和巨量千川紧凑模板摘要的本地 `templates list` 命令，支持按渠道过滤和选择完整详情。
+- 新增可恢复的巨量营销达人批量预检，在提交前报告已完成、可执行、重试和阻塞任务，并将项目容量检查限定为创建时检查。
+- 更新巨量营销默认模板，投放地域改为排除港澳台、新疆和西藏后的 29 个一级地区。
+- 将巨量营销创建基础改为使用官方 DPA 商品图片，标准向导不再要求用户填写图片 ID；高级 `CUSTOM` 图片模板仍保留严格的图片 ID 校验。
+- 统一业务模板命名为 `渠道-广告账户ID-商品名-商品ID-模版类型`；千川 Schema v3 会迁移已有展示名称，但不改变模板 ID 或绑定关系。
+- 移除活动模板和默认业务模板指针。巨量营销 Schema v5 与千川 Schema v4 要求每次创建明确选择真实业务模板；默认模板只作为创建骨架，不参与实际投放。
+- 为巨量营销模板向导增加日预算、净成交 ROI 出价、性别和年龄定向字段及预览。
+- 增加经过校验的自定义产品卖点集合，确保巨量营销模板激活前满足官方 6 至 9 个位置的载荷规则。
+- 调整 Codex OAuth 引导，返回临时本地启动地址，让用户可以选择登录了目标巨量引擎账户的浏览器配置。
+- 要求 Codex 在返回启动地址后持续轮询 OAuth，并主动反馈广告主同步和 Token 映射结果。
+- 新增统一模板创建路由，在进入渠道专属模板向导前询问使用巨量营销还是巨量千川，与授权状态解耦。
+- 将巨量营销模板创建拆分为混剪/账户上传素材和原生/达人授权素材模式，并在素材来源选择时按模式过滤。
+- 增加模板广告主绑定的渠道索引校验，移除占位默认值，并在向导预览中展示已验证或未验证的绑定状态。
 
-### Fixed
+### 修复
 
-- Recovered creator cover IDs at runtime from unique same-advertiser, same-item, same-material official promotions when the current authorization snapshot omits the field, with create-time authorization warnings and guarded promotion-only retries after official authorization rejection.
-- Bound project and promotion discovery to an explicit advertiser ID for correct multi-account Token selection and official request parameters.
-- Fixed Chromium OAuth setup stalls caused by idle connections, incomplete official redirect origins, and duplicate form submissions.
-- Accepted the official empty advertiser-page contract (`total_page: 0`, `total_number: 0`) while retaining strict checks for inconsistent pagination data.
-- Resolved missing Marketing event assets from unique same-account, same-product projects and added a guarded DPA-image fallback from matching official promotions, blocking ambiguous or unavailable assets before project creation.
-- Corrected Qianchuan plan reconciliation and report metadata queries to use one legal recent-180-day data period while traversing every declared plan page, instead of sending invalid historical data windows.
-- Fixed Qianchuan creator-plan reconciliation when plan lists return a visible Douyin ID but plan details return the numeric `aweme_id`, preventing an existing plan from being misclassified as a new plan.
+- 当当前授权快照缺少封面 ID 时，从同广告主、同商品、同素材的唯一历史官方投放中运行时恢复封面 ID；创建前给出授权警告，并在官方授权拒绝时受保护地重试推广查询。
+- 将项目和推广查询绑定到明确的广告主 ID，确保多账户 Token 选择和官方请求参数正确。
+- 修复 Chromium OAuth 设置因空闲连接、官方重定向来源不完整和重复提交导致的卡住问题。
+- 接受官方空广告主分页契约（`total_page: 0`、`total_number: 0`），同时继续严格检查不一致的分页数据。
+- 从同账户、同商品的官方项目中恢复缺失的巨量营销事件素材，并增加匹配官方推广的受保护 DPA 图片回退；在资产不明确或不可用时阻止创建项目。
+- 修正千川计划对账和报表元数据查询，统一使用合法的近 180 天数据周期并遍历所有声明的计划分页，避免发送无效的历史时间范围。
+- 修复千川达人计划列表返回可见抖音号、而计划详情返回数字 `aweme_id` 时的对账逻辑，避免将已有计划误判为新计划。
 
 ## 0.9.1 - 2026-07-16
 
-### Fixed
+### 修复
 
-- Deferred local OAuth until first use instead of treating the loopback callback as an installation-time authentication page.
-- Added clear loopback diagnostics for direct, empty, trailing-slash, and unknown callback requests without terminating a valid authorization session.
+- 将本地 OAuth 延迟到首次使用，避免把回环回调地址误当成安装阶段的授权页面。
+- 增加对直接访问、空路径、尾部斜杠和未知回调请求的清晰诊断，同时不终止有效的授权会话。
 
-### Added
+### 新增
 
-- Added `setup doctor` and first-run environment reporting for Python, operating-system, Codex CLI, secure credential backend, and OAuth callback-port readiness.
-- Added explicit Ocean Engine developer registration and API-permission prerequisites.
+- 增加 `setup doctor` 和首次运行环境报告，检查 Python、操作系统、Codex CLI、安全凭据后端及 OAuth 回调端口状态。
+- 明确巨量引擎开发者注册和 API 权限前置条件。
 
 ## 0.9.0 - 2026-07-15
 
-### Added
+### 新增
 
-- Qianchuan all-domain plan spend reports through the official Streamable HTTP MCP.
-- Advertiser-bound Token refresh, restricted `Tool-Range`, paged all-domain report values, plan metadata enrichment, and weighted ROI summaries for `qc-reports plans`.
-- Local Marketing/Qianchuan responsible-account registry with channel-safe identity, enable/disable controls, concurrent account spend summaries, partial failures, and bounded retries for rate limits or transient service timeouts.
+- 通过官方 Streamable HTTP MCP 增加千川全域计划消耗报表。
+- 增加绑定广告主的 Token 刷新、受限 `Tool-Range`、分页全域报表值、计划元数据补充和加权 ROI 汇总。
+- 增加本地巨量营销/巨量千川常用账户登记表，支持按渠道隔离身份、启用/停用、并发账户消耗汇总、部分失败，以及针对限流和临时服务超时的有上限重试。
 
-### Changed
+### 变更
 
-- Unified project config, authorization state, and credential fallbacks under `CODEX_HOME`, with atomic locked writes and optimistic conflict detection for template wizards.
-- Restricted official API, OAuth, and MCP transports to approved HTTPS hosts, disabled redirects, bounded responses, and redacted transport errors.
-- Added wheel-only CI verification for packaged first-run resources and expanded generated-artifact ignore rules.
+- 将项目配置、授权状态和凭据回退统一到 `CODEX_HOME`，为模板向导增加带锁原子写入和乐观冲突检测。
+- 将官方 API、OAuth 和 MCP 传输限制到批准的 HTTPS 主机，禁用重定向、限制响应大小并脱敏传输错误。
+- 增加 wheel 安装态的首次运行资源校验，并扩展生成产物的忽略规则。
 
 ## 0.8.0 - 2026-07-14
 
-### Added
+### 新增
 
-- Isolated Qianchuan OAuth, token refresh, authorized-subject expansion, and advertiser discovery.
-- Official-payload Qianchuan all-domain plan creation with dry-run validation and explicit submit.
-- Dedicated `qc-plan-monitor` Skill for Qianchuan authorization, advertiser discovery, and plan creation.
-- Advertiser-bound Qianchuan product all-domain templates with 1–30 products and runtime-only creator materials.
-- Qianchuan creator video discovery with exact visible-ID resolution, official product filtering, pagination, and cross-product deduplication.
-- Qianchuan product template Schema v2 names templates by advertiser ID and migrates the earlier shop-name prefix.
-- Safe Douyin share-link resolution and official creator/product matching in batches of up to 50 works.
-- Idempotent Qianchuan work-link batches that create one product all-domain plan per creator or append only missing materials to an existing or paused plan.
-- Dry-run-first Qianchuan work-link material removal with custom-material checks, official 100-item batches, and post-delete status verification.
-- Advertiser-scoped submit locks, bounded creator concurrency, and final-only skipped/failed batch summaries.
-- Channel adapters for authorization URLs, official account endpoints, and role expansion rules.
-- Recoverable pending authorization records when advertiser synchronization fails.
-- Standard `src/ocean_watch` Python package and `pyproject.toml` metadata.
-- Unified `ocean-watch <domain> <action>` CLI and Plugin-local `run.py` launcher.
-- Shared `OceanEngineClient`, structured error foundation, common data utilities, and `PlanExecutor` transaction service.
-- Dedicated architecture, getting-started, CLI, and contributor documentation.
+- 隔离千川 OAuth、Token 刷新、授权主体扩展和广告主发现流程。
+- 增加带官方载荷的千川全域计划创建，支持预检和明确提交。
+- 增加专用 `qc-plan-monitor` Skill，支持千川授权、广告主发现和计划创建。
+- 增加绑定广告主的千川商品全域模板，支持 1 至 30 个商品和运行时达人素材。
+- 增加千川达人视频发现，支持精确可见 ID 解析、官方商品过滤、分页和跨商品去重。
+- 千川商品模板 Schema v2 按广告主 ID 命名模板，并迁移早期的店铺名称前缀。
+- 增加安全的抖音分享链接解析和官方达人/商品匹配，每批最多处理 50 条作品。
+- 增加幂等的千川作品链接批处理：每个达人创建一个商品全域计划，或只向已有/暂停计划追加缺少的素材。
+- 增加先预检后执行的千川作品素材删除，支持自定义素材检查、官方每批 100 条限制和删除后的状态确认。
+- 增加按广告主隔离的提交锁、有上限的达人并发和只在最后反馈跳过/失败批次摘要。
+- 增加授权渠道适配器，统一处理授权地址、官方账户接口和角色扩展规则。
+- 增加可恢复的待同步授权记录，避免广告主同步失败时丢失授权状态。
+- 增加标准 `src/ocean_watch` Python 包和 `pyproject.toml` 项目元数据。
+- 统一为 `ocean-watch <domain> <action>` CLI，并增加 Plugin 本地 `run.py` 启动器。
+- 增加共享的 `OceanEngineClient`、结构化错误基础、通用数据工具和 `PlanExecutor` 事务服务。
+- 增加架构、快速开始、CLI 和贡献者文档。
 
-### Changed
+### 变更
 
-- Consolidated App ID and Secret collection into one local secure form that continues directly to OAuth.
-- Routed Marketing and Qianchuan OAuth through one callback URI with validated `AD.<nonce>` and `QC.<nonce>` state values.
-- Reorganized authorization, templates, materials, plans, reports, discovery, onboarding, and integrations into explicit domain packages.
-- Routed ordinary business API calls through one HTTP client.
-- Routed uploaded, creator, single, and batch plan submissions through one project/promotion transaction.
-- Replaced all historical script commands with the unified CLI; old script paths are intentionally unsupported.
-- Updated tests to import the installed package structure and use explicit client injection.
+- 将 App ID 和 Secret 收集合并为一个本地安全表单，填写后直接进入 OAuth。
+- 通过一个回调 URI 路由巨量营销和千川 OAuth，并校验 `AD.<nonce>` 与 `QC.<nonce>` 状态值。
+- 将授权、模板、素材、计划、报表、发现、引导和集成重组为职责明确的领域包。
+- 普通业务 API 请求统一通过一个 HTTP 客户端发送。
+- 上传、达人、单条和批量计划提交统一通过一个项目/推广事务执行器。
+- 用统一 CLI 替换历史脚本命令；旧脚本路径明确不再兼容。
+- 更新测试，改为导入已安装的包结构并使用显式客户端注入。
 
 ## 0.7.0 - 2026-07-13
 
-### Added
+### 新增
 
-- Creator-authorized video discovery through the official Aweme authorization relationship API.
-- Native promotion payloads using authorized `aweme_id`, `item_id`, `video_id`, and cover IDs.
-- Source-bound schema v3 plan templates for account-uploaded and creator-authorized materials.
-- Creator material authorization, expiry, advertiser ownership, and same-creator validation.
-- Dedicated read-only query and dry-run-first creator creation commands.
+- 通过官方 Aweme 授权关系接口发现达人授权视频。
+- 使用已授权的 `aweme_id`、`item_id`、`video_id` 和封面 ID 构建原生推广载荷。
+- 增加绑定素材来源的 Schema v3 计划模板，支持账户上传素材和达人授权素材。
+- 增加达人素材授权、有效期、广告主归属和同达人校验。
+- 增加只读查询和先预检后执行的达人计划创建命令。
 
-### Changed
+### 变更
 
-- New business template names include an explicit material-source suffix.
-- Specific video, cover, item, and material IDs are runtime selections instead of schema v3 template fields.
-- Legacy fixed material IDs require explicit confirmation before template migration removes them.
+- 业务模板名称增加明确的素材来源后缀。
+- 具体视频、封面、商品和素材 ID 改为运行时选择，不再写入 Schema v3 模板字段。
+- 删除旧版固定素材 ID 前必须明确确认，迁移过程会移除这些固定值。
 
-### Security
+### 安全
 
-- Creator material development and regression tests use synthetic fixtures and never access local credentials or real advertiser accounts.
+- 达人素材开发和回归测试使用合成 fixture，不访问本地凭据或真实广告主账户。

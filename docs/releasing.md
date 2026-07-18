@@ -13,7 +13,7 @@
 
 GitHub Release 还会记录 build provenance attestation。Plugin ZIP 和 wheel 都不是原生独立程序；它们不会消除 Python 运行时要求。
 
-Release 页面正文由工作流从 `CHANGELOG.md` 精确提取 `## X.Y.Z - YYYY-MM-DD` 段落生成。对应版本段落不存在、内容为空或 `Unreleased` 尚有未归档内容时，发布会直接失败。
+Release 页面正文由工作流从 `CHANGELOG.md` 精确提取 `## X.Y.Z - YYYY-MM-DD` 段落生成。对应版本段落不存在、内容为空或 `未发布` 尚有未归档内容时，发布会直接失败。
 
 ## 验证下载文件
 
@@ -79,7 +79,7 @@ Plugin 包只从 Git 已跟踪的白名单路径构建。脚本会拒绝符号�
 
 ## 维护者发版
 
-1. 将 `CHANGELOG.md` 的 `Unreleased` 内容整理到 `## X.Y.Z - YYYY-MM-DD`，并保留空的 `## Unreleased` 段落。
+1. 将 `CHANGELOG.md` 的 `未发布` 内容整理到 `## X.Y.Z - YYYY-MM-DD`，并保留空的 `## 未发布` 段落。
 2. 同步更新 `pyproject.toml` 的 `project.version`、`ocean_watch.__version__` 和 `.codex-plugin/plugin.json` 的基础版本。Plugin 开发期 cachebuster 可以作为 `+codex.*` 构建元数据保留。
 3. 运行全部本地质量检查和发布构建。
 4. 提交版本改动并等待 `CI` 成功。

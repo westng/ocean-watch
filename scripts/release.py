@@ -115,11 +115,11 @@ def validate_release_changelog(changelog, version):
         raise ReleaseError(
             f"CHANGELOG.md has no dated release heading for {version}"
         )
-    unreleased_heading = re.search(r"^## Unreleased\s*$", changelog, re.MULTILINE)
+    unreleased_heading = re.search(r"^## 未发布\s*$", changelog, re.MULTILINE)
     if unreleased_heading is None:
-        raise ReleaseError("CHANGELOG.md must retain an Unreleased heading")
+        raise ReleaseError("CHANGELOG.md must retain a 未发布 heading")
     next_heading = re.search(
-        r"^## (?!Unreleased\s*$).+$",
+        r"^## (?!未发布\s*$).+$",
         changelog[unreleased_heading.end():],
         re.MULTILINE,
     )
@@ -136,7 +136,7 @@ def validate_release_changelog(changelog, version):
     ]
     if substantive_lines:
         raise ReleaseError(
-            "CHANGELOG.md Unreleased section must be empty before creating a release"
+            "CHANGELOG.md 未发布段落在发布前必须为空"
         )
     next_release = re.search(
         r"^## .+$",
