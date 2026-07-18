@@ -48,7 +48,7 @@ ocean-watch setup doctor
 
 ### 正式发布产物
 
-每个 `vMAJOR.MINOR.PATCH` 版本 Tag 会在 [GitHub Releases](https://github.com/westng/ocean-watch/releases) 自动发布：
+维护者在 GitHub Actions 中手动运行 `Release` 工作流并输入 `vMAJOR.MINOR.PATCH` 后，会在 [GitHub Releases](https://github.com/westng/ocean-watch/releases) 发布：
 
 - `ocean-watch-plugin-X.Y.Z.zip`：完整 Codex Plugin 离线包。
 - `ocean_watch-X.Y.Z-py3-none-any.whl`：可单独安装的 Python CLI。

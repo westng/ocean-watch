@@ -1,12 +1,15 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (vMAJOR.MINOR.PATCH)"
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 permissions:
@@ -22,7 +25,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,7 +39,20 @@ jobs:
       - name: Verify tag and version contract
         run: |
           python scripts/release.py check --tag "${RELEASE_TAG}"
-          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Releases must be dispatched from the main branch." >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse refs/remotes/origin/main)" != "${GITHUB_SHA}" ]]; then
+            echo "The selected commit is not the current origin/main commit." >&2
+            exit 1
+          fi
+          if existing_tag_commit="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [[ "${existing_tag_commit}" != "${GITHUB_SHA}" ]]; then
+              echo "The release tag already points to a different commit." >&2
+              exit 1
+            fi
+          fi
       - name: Run release quality gate
         run: |
           python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
@@ -59,7 +75,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ocean-watch-${{ github.ref_name }}
+          name: ocean-watch-${{ inputs.release_tag }}
           path: dist/*
           if-no-files-found: error
           retention-days: 30
@@ -76,12 +92,12 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Download verified release artifacts
         uses: actions/download-artifact@v8
         with:
-          name: ocean-watch-${{ github.ref_name }}
+          name: ocean-watch-${{ inputs.release_tag }}
           path: dist
       - name: Recheck artifact integrity
         working-directory: dist
@@ -94,7 +110,7 @@ jobs:
             gh release upload "${RELEASE_TAG}" dist/* --clobber
           else
             gh release create "${RELEASE_TAG}" dist/* \
-              --verify-tag \
+              --target "${GITHUB_SHA}" \
               --title "Ocean Watch ${RELEASE_TAG}" \
               --generate-notes
           fi
