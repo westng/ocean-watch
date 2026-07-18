@@ -1,6 +1,6 @@
 ---
 name: qc-plan-monitor
-description: Dedicated 巨量千川 skill for local OAuth, responsible accounts, token refresh, product/live templates, creator/work/product discovery, all-domain plan creation and updates, material changes, plan/material reports, and run inspection. Use for 千川初始化、千川授权、管理我负责的账户、同步广告主、检查 Token 映射、创建/校验/删除商品或直播全域模板、查询达人/作品/商品/计划/素材、批量新建或追加商品全域计划、删除计划素材、调整计划状态/预算/ROI、查询消耗和 ROI, or validating official Qianchuan payloads.
+description: Dedicated 巨量千川 skill for local OAuth, responsible accounts, token refresh, product/live templates, creator/work/product discovery, all-domain plan creation and updates, material changes, plan/material reports, and run inspection. Use for 千川初始化、千川授权、查询或管理用户常用的、负责的、管理的、日常投放范围内的账户（包括口语、简称、错别字和上下文追问）、同步广告主、检查 Token 映射、创建/校验/删除商品或直播全域模板、查询达人/作品/商品/计划/素材、批量新建或追加商品全域计划、删除计划素材、调整计划状态/预算/ROI、查询消耗和 ROI, or validating official Qianchuan payloads.
 ---
 
 # QC Plan Monitor
@@ -106,7 +106,11 @@ Business commands resolve the Qianchuan authorization bound to the target `adver
 
 Use `auth mappings --channel qianchuan [--advertiser-id ID]` to verify advertiser-to-authorization resolution. The output contains token-presence booleans only, never token values.
 
-`managed_accounts` is a separate local user preference shared by both Skills. A request for `我负责的账户` resolves enabled records from this registry, not every OAuth-authorized advertiser. Run `accounts report` without a channel filter for concurrent Marketing and Qianchuan results, or filter by the explicitly named channel. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files.
+`managed_accounts` is a separate local user preference shared by both Skills. Interpret requests about the accounts the user commonly uses, is responsible for, manages, operates, maintains, or normally runs campaigns from as one semantic responsible-account intent, not by exact wording or keyword matching. Recognize colloquial abbreviations such as `常用的户` or `我管的户`, misspellings, omitted nouns, and contextual follow-ups; these examples are illustrative, not an exact or exhaustive keyword list. Never require canonical wording.
+
+For that intent, resolve enabled records from this registry, not every OAuth-authorized advertiser, and run `accounts report` during the current turn. Do not reuse an earlier conversational answer or cached report when the request is repeated or paraphrased. Run without a channel filter for concurrent Marketing and Qianchuan results, or filter only by a channel explicitly named by the user. Use `accounts list` only for registry administration or an explicit request to include disabled records.
+
+Adapt the response to the question rather than enforcing a fixed sentence, field list, or Markdown layout. Make membership answers identify the relevant accounts, make performance answers emphasize requested metrics, and preserve partial failures and channel-specific metric semantics from the fresh result. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files.
 
 ## All-Domain Plan Reports
 

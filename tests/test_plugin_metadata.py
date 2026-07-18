@@ -92,6 +92,17 @@ class PluginMetadataTests(unittest.TestCase):
                 self.assertLessEqual(len(interface["short_description"]), 64)
                 self.assertIn(f"${skill_root.name}", interface["default_prompt"])
 
+    def test_responsible_account_skills_keep_semantic_intent_contract(self):
+        for skill_name in ("ads-plan-monitor", "qc-plan-monitor"):
+            with self.subTest(skill=skill_name):
+                content = (
+                    REPO_ROOT / "skills" / skill_name / "SKILL.md"
+                ).read_text(encoding="utf-8")
+                self.assertIn("semantic responsible-account intent", content)
+                self.assertIn("not an exact or exhaustive keyword list", content)
+                self.assertIn("during the current turn", content)
+                self.assertIn("fixed sentence, field list, or Markdown layout", content)
+
     def test_packaged_first_run_resource_is_valid_json(self):
         resource = resources.files("ocean_watch.resources").joinpath("config.example.json")
         with resource.open(encoding="utf-8") as stream:

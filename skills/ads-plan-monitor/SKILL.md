@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation and updates, performance reports, run history, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、管理我负责的账户、跨渠道查询负责账户消耗、创建/校验/删除营销投放模板、查询上传或达人素材、创建或调整营销计划、查询素材/项目消耗排行、查看执行记录、汇总报表, and 投放策略分析 through official APIs.
+description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation and updates, performance reports, run history, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、查询或管理用户常用的、负责的、管理的、日常投放范围内的账户（包括口语、简称、错别字和上下文追问）、跨渠道查询负责账户消耗、创建/校验/删除营销投放模板、查询上传或达人素材、创建或调整营销计划、查询素材/项目消耗排行、查看执行记录、汇总报表, and 投放策略分析 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -107,13 +107,19 @@ Business commands resolve a Marketing authorization by target `advertiser_id` an
 
 `managed_accounts` is a local, non-secret user preference. It is not the OAuth authorized-account snapshot and must never be overwritten by `auth sync-accounts`. Records are unique by `channel + advertiser_id` and contain name, advertiser ID, enabled state, and an optional `auth_account_id` that disambiguates overlapping OAuth authorizations.
 
-When the user says `我负责的账户`, `常用账户`, or asks to view spend without listing IDs, use:
+Interpret responsible-account requests as a semantic responsible-account intent, not by exact wording or keyword matching. This intent covers any natural-language request about the advertising accounts in the user's customary working scope: accounts they commonly use, are responsible for, manage, operate, maintain, or normally run campaigns from. It also covers colloquial abbreviations such as `常用的户` or `我管的户`, misspellings, omitted nouns, and contextual follow-ups. These examples illustrate the intent; they are not an exact or exhaustive keyword list. Never ask the user to restate the request in a canonical format.
+
+For this intent, and for spend requests that omit explicit advertiser IDs, run during the current turn:
 
 ```bash
 ocean-watch accounts report
 ```
 
+Do not answer from an earlier message or cached report, even when the user repeats or paraphrases the request. Use `accounts list` only for local registry administration or when the user explicitly asks to include disabled records; it is not a substitute for this live read path.
+
 Use `--channel marketing` or `--channel qianchuan` only when the request names one channel. With no channel filter, query every enabled responsible account across both channels. The command uses bounded concurrency, preserves configured account order, retries documented transient read failures, and returns successful accounts even when another account fails. Sum spend across channels, but present GMV and ROI from `channel_summaries` because Marketing and Qianchuan use different official conversion definitions. Never replace this registry with all OAuth-authorized advertisers.
+
+Adapt the response to the user's actual question instead of enforcing a fixed sentence, field list, or Markdown layout. A membership question should make the account set easy to identify; a performance question should emphasize the requested metrics; a follow-up should use its conversational context. Preserve relevant failures and channel-specific metric semantics from the fresh command result without dumping raw JSON unless requested.
 
 Manage records with `accounts add/list/remove/enable/disable`. Real account names and IDs belong only in the user's ignored project or home config, never in tracked Skill files, examples, tests, or templates.
 
