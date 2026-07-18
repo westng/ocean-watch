@@ -32,6 +32,37 @@ DEFAULT_FIELDS = [
     "total_prepay_and_pay_settle_roi2_1h",
 ]
 
+DEFAULT_PRESENTATION_COLUMNS = (
+    ("rank", "排名"),
+    ("name", "计划"),
+    ("creator_names", "达人"),
+    ("product_names", "商品"),
+    ("status_label", "状态"),
+    ("cost_guarantee_status_label", "成本保障"),
+    ("bid_type_label", "出价方式"),
+    ("roi_goal", "目标 ROI"),
+    ("budget", "日预算"),
+    ("stat_cost", "消耗"),
+    ("total_pay_order_count_for_roi2", "订单"),
+    ("total_pay_order_gmv_include_coupon_for_roi2", "GMV"),
+    ("roi", "实际 ROI"),
+    ("total_order_settle_amount_for_roi2_1h", "1h 结算金额"),
+    ("total_prepay_and_pay_settle_roi2_1h", "1h 结算 ROI"),
+)
+
+DEFAULT_PRESENTATION_DETAILS = (
+    ("budget_mode_label", "预算方式"),
+    ("cost_guarantee_result", "成本保障结果"),
+    ("cost_guarantee_reason", "成本保障原因"),
+)
+
+PRESENTATION_MONEY_FIELDS = {
+    "budget",
+    "stat_cost",
+    "total_pay_order_gmv_include_coupon_for_roi2",
+    "total_order_settle_amount_for_roi2_1h",
+}
+
 MONEY_FIELDS = {
     "stat_cost",
     "total_pay_order_gmv_include_coupon_for_roi2",
@@ -537,6 +568,53 @@ def build_summary(report_rows, total_plan_count, metadata_missing_count=0):
     }
 
 
+def presentation_value(field, value):
+    if value is None or value == "" or value == []:
+        return "—"
+    if isinstance(value, list):
+        value = "、".join(str(item) for item in value)
+    elif field in PRESENTATION_MONEY_FIELDS:
+        value = f"¥{number(value, field):,.2f}"
+    elif isinstance(value, float):
+        value = f"{value:.4f}".rstrip("0").rstrip(".")
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def render_presentation_table(rows):
+    labels = [label for _, label in DEFAULT_PRESENTATION_COLUMNS]
+    table = [
+        "| " + " | ".join(labels) + " |",
+        "| " + " | ".join("---:" if field == "rank" else "---" for field, _ in DEFAULT_PRESENTATION_COLUMNS) + " |",
+    ]
+    table.extend(
+        "| "
+        + " | ".join(
+            presentation_value(field, row.get(field))
+            for field, _ in DEFAULT_PRESENTATION_COLUMNS
+        )
+        + " |"
+        for row in rows
+    )
+    return "\n".join(table)
+
+
+def presentation_contract(rows):
+    return {
+        "format": "markdown_table",
+        "required": True,
+        "allow_column_omission": False,
+        "columns": [
+            {"field": field, "label": label}
+            for field, label in DEFAULT_PRESENTATION_COLUMNS
+        ],
+        "required_details": [
+            {"field": field, "label": label}
+            for field, label in DEFAULT_PRESENTATION_DETAILS
+        ],
+        "rendered_markdown": render_presentation_table(rows),
+    }
+
+
 def query_plan_report(
     client,
     advertiser_id,
@@ -600,6 +678,7 @@ def query_plan_report(
             "adlab_scene": adlab_scene,
             "status": status,
         },
+        "presentation": presentation_contract(displayed),
         "summary": build_summary(
             selected_report_rows,
             len(rows),

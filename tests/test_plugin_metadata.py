@@ -103,6 +103,14 @@ class PluginMetadataTests(unittest.TestCase):
                 self.assertIn("during the current turn", content)
                 self.assertIn("fixed sentence, field list, or Markdown layout", content)
 
+    def test_qianchuan_plan_report_keeps_default_presentation_contract(self):
+        content = (
+            REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("presentation.rendered_markdown", content)
+        self.assertIn("Do not omit, merge, rename, reorder", content)
+        self.assertIn("generic request for plan spend does not authorize simplification", content)
+
     def test_packaged_first_run_resource_is_valid_json(self):
         resource = resources.files("ocean_watch.resources").joinpath("config.example.json")
         with resource.open(encoding="utf-8") as stream:

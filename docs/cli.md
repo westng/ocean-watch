@@ -410,6 +410,8 @@ ocean-watch qc-reports materials \
 
 默认日期为当天，营销目标为商品全域，计划范围为 `UNI_PROJECT`，并按消耗降序返回前十。`--top 0` 返回全部报表行；汇总始终基于所有分页结果。命令使用目标广告主绑定的千川 OAuth Token，调用官方 Streamable HTTP MCP。金额和 ROI 只读取全域报表返回值，计划列表补充计划状态、成本保障、出价方式、ROI 目标出价、预算、名称和业务归属，不推算其内部固定精度金额。输出同时包含总消耗、有消耗计划数、整体成交金额、订单数、加权支付 ROI、1 小时净成交金额和加权净成交 ROI。
 
+结果中的 `presentation` 是默认对话展示契约，并在 `rendered_markdown` 中提供 CLI 已生成的标准表格。`presentation.required=true` 且 `allow_column_omission=false` 时，必须原样展示其中的排名、计划、达人、商品、状态、成本保障、出价方式、目标 ROI、日预算、消耗、订单、GMV、实际 ROI、1 小时结算金额和 1 小时结算 ROI，并补充预算方式和成本保障结果/原因。除非用户在当前请求中明确指定更少或不同的字段，否则不能为了简洁缩减、合并、重排或重命名这些列。
+
 报表分页、计划 ID 和七个必需指标任一缺失、重复或非法时，命令拒绝返回不完整汇总。汇总先使用原始 `Decimal` 值跨全部页面计算，最后才按展示精度舍入。`--status ALL` 会保留历史财务行；计划列表无法补齐其元数据时，行内 `metadata_available=false`，汇总中的 `metadata_missing_count` 同步计数，名称、状态、成本保障、出价和预算保持为空。指定具体状态时必须解析到计划元数据，否则整次查询失败，避免错误筛选。
 
 `qc-reports materials` 调用官方 `/v1.0/qianchuan/report/material/get/`，支持素材 ID/类型/模式/来源筛选。展示上限只影响返回行，汇总始终基于全部已分页数据。自定义字段未包含成交金额或订单时，对应汇总为 `null`，不按零处理。

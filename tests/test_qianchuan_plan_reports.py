@@ -143,6 +143,29 @@ class QianchuanPlanReportTests(unittest.TestCase):
         self.assertEqual(result["summary"]["total_pay_order_gmv"], 13.5)
         self.assertEqual(result["summary"]["total_pay_roi"], 1.5882)
         self.assertEqual(result["summary"]["total_settled_amount_1h"], 12.0)
+        self.assertTrue(result["presentation"]["required"])
+        self.assertFalse(result["presentation"]["allow_column_omission"])
+        self.assertEqual(
+            [column["field"] for column in result["presentation"]["columns"]],
+            [field for field, _ in query_qianchuan_plan_report.DEFAULT_PRESENTATION_COLUMNS],
+        )
+        self.assertEqual(
+            [column["label"] for column in result["presentation"]["columns"]],
+            [label for _, label in query_qianchuan_plan_report.DEFAULT_PRESENTATION_COLUMNS],
+        )
+        self.assertEqual(
+            [detail["field"] for detail in result["presentation"]["required_details"]],
+            [field for field, _ in query_qianchuan_plan_report.DEFAULT_PRESENTATION_DETAILS],
+        )
+        for column in result["presentation"]["columns"]:
+            self.assertIn(column["field"], result["rows"][0])
+        for detail in result["presentation"]["required_details"]:
+            self.assertIn(detail["field"], result["rows"][0])
+        markdown = result["presentation"]["rendered_markdown"]
+        self.assertEqual(markdown.count("\n"), len(result["rows"]) + 1)
+        self.assertIn("| 排名 | 计划 | 达人 | 商品 |", markdown)
+        self.assertIn("| 1 | one | creator-1 | product-1 |", markdown)
+        self.assertIn("| ¥5,000.00 | ¥5.00 | 2 | ¥10.00 | 2 | ¥9.00 |", markdown)
         self.assertEqual(result["rows"][0]["stat_cost"], 5.0)
         self.assertEqual(result["rows"][0]["ad_id"], "1")
         self.assertEqual(result["rows"][0]["creator_ids"], ["2001"])

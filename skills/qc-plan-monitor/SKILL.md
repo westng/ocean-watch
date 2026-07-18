@@ -129,6 +129,8 @@ Use `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PROD
 
 Default to the current day and ten report rows. `--top 0` returns all report rows. Summaries must use all paged report data, including rows beyond the display limit, and aggregate raw decimal metrics before display rounding. Treat report money values as CNY exactly as returned; do not apply a guessed scale. Fail closed on missing required metrics, invalid pagination, duplicate plan IDs, or malformed numeric values. Request `need_compensate_info=true` from the plan list and include each plan's status, cost-guarantee state and reason, bid mode, ROI target bid, daily budget, spend, actual ROI, GMV, and orders. For `status=ALL`, retain financial rows missing plan-list metadata and expose `metadata_available=false` plus `metadata_missing_count`; a specific status requires complete metadata. Return total spend, plans with spend, orders, GMV, weighted ROI, one-hour settled amount, and weighted one-hour settled ROI. Do not write a file unless `--out` is explicit.
 
+Treat the command's top-level `presentation` object as the default response contract. When `presentation.required=true`, reproduce `presentation.rendered_markdown` as the plan table instead of composing a new table. Do not omit, merge, rename, reorder, or replace its columns with a shorter ranking for brevity, and include `presentation.required_details` outside the table when they are not already visible. Only narrow the table when the user explicitly asks for fewer or different fields in the current request; a generic request for plan spend does not authorize simplification.
+
 ## Template Contracts
 
 Qianchuan product templates are independent from Marketing templates.
