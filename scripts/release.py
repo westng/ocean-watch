@@ -110,7 +110,8 @@ def validate_release_changelog(changelog, version):
         rf"^## {re.escape(version)}\s+-\s+\d{{4}}-\d{{2}}-\d{{2}}\s*$",
         re.MULTILINE,
     )
-    if release_heading.search(changelog) is None:
+    release_match = release_heading.search(changelog)
+    if release_match is None:
         raise ReleaseError(
             f"CHANGELOG.md has no dated release heading for {version}"
         )
@@ -137,6 +138,26 @@ def validate_release_changelog(changelog, version):
         raise ReleaseError(
             "CHANGELOG.md Unreleased section must be empty before creating a release"
         )
+    next_release = re.search(
+        r"^## .+$",
+        changelog[release_match.end():],
+        re.MULTILINE,
+    )
+    release_end = (
+        release_match.end() + next_release.start()
+        if next_release is not None
+        else len(changelog)
+    )
+    release_section = changelog[release_match.start():release_end].strip()
+    release_body = changelog[release_match.end():release_end]
+    release_lines = [
+        line.strip()
+        for line in release_body.splitlines()
+        if line.strip() and not line.strip().startswith("### ")
+    ]
+    if not release_lines:
+        raise ReleaseError(f"CHANGELOG.md release section for {version} is empty")
+    return release_section + "\n"
 
 
 def validate_versions(root, tag=None):
@@ -161,6 +182,28 @@ def validate_versions(root, tag=None):
         changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
         validate_release_changelog(changelog, versions["project"])
     return {**versions, "plugin_base": plugin_base, "tag": tag}
+
+
+def write_release_notes(root, tag, output_path):
+    root = Path(root).resolve()
+    versions = validate_versions(root, tag=tag)
+    changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    notes = validate_release_changelog(changelog, versions["project"])
+    output_path = Path(output_path)
+    if not output_path.is_absolute():
+        output_path = root / output_path
+    if output_path.is_symlink():
+        raise ReleaseError(f"refusing to replace symlinked release notes: {output_path}")
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(notes, encoding="utf-8")
+    except OSError as error:
+        raise ReleaseError(f"unable to write release notes: {output_path}") from error
+    return {
+        "notes_file": str(output_path.resolve()),
+        "version": versions["project"],
+        "character_count": len(notes),
+    }
 
 
 def is_forbidden_path(path):
@@ -437,6 +480,10 @@ def build_parser():
     check = commands.add_parser("check", help="Validate release version consistency.")
     check.add_argument("--tag")
 
+    notes = commands.add_parser("notes", help="Write release notes from CHANGELOG.md.")
+    notes.add_argument("--tag", required=True)
+    notes.add_argument("--output", default="release-notes/RELEASE_NOTES.md")
+
     plugin = commands.add_parser("plugin", help="Build the deterministic Plugin archive.")
     plugin.add_argument("--output-dir", default="dist")
 
@@ -458,6 +505,8 @@ def main(argv=None):
     try:
         if args.command == "check":
             result = validate_versions(root, tag=args.tag)
+        elif args.command == "notes":
+            result = write_release_notes(root, args.tag, args.output)
         elif args.command == "plugin":
             output_dir = Path(args.output_dir)
             if not output_dir.is_absolute():

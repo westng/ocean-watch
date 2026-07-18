@@ -14,6 +14,7 @@ coverage.xml
 htmlcov/
 build/
 dist/
+release-notes/
 *.whl
 
 # Local credential fallback/cache files. Real tokens should live in the OS

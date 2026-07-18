@@ -6,7 +6,7 @@ All notable changes to Ocean Watch are documented here.
 
 ### Added
 
-- Added a manually dispatched GitHub Release pipeline for deterministic offline Plugin archives, Python wheel/source distributions, SHA-256 checksums, workflow artifacts, and build provenance attestations.
+- Added a manually dispatched GitHub Release pipeline for deterministic offline Plugin archives, Python wheel/source distributions, Changelog-backed release notes, SHA-256 checksums, workflow artifacts, and build provenance attestations.
 - Added stable CLI commands for Qianchuan work inspection, authorized creators, products, plan details/materials, material reports, and local execution history.
 - Added sanitized advertiser-to-authorization mapping inspection plus cross-channel template validation and guarded local template deletion.
 - Added Marketing project reports that negotiate the account's official `UNI_PROJECT_DATA` contract before querying metrics.

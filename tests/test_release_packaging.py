@@ -86,7 +86,9 @@ class ReleasePackagingTests(unittest.TestCase):
 
 - Released.
 """
-        release.validate_release_changelog(valid, "0.9.1")
+        notes = release.validate_release_changelog(valid, "0.9.1")
+        self.assertIn("## 0.9.1 - 2026-07-16", notes)
+        self.assertIn("- Released.", notes)
         with self.assertRaisesRegex(release.ReleaseError, "Unreleased section"):
             release.validate_release_changelog(
                 valid.replace("### Added\n", "### Added\n\n- Pending change.\n"),
@@ -94,21 +96,68 @@ class ReleasePackagingTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(release.ReleaseError, "dated release heading"):
             release.validate_release_changelog(valid.replace(" - 2026-07-16", ""), "0.9.1")
+        with self.assertRaisesRegex(release.ReleaseError, "release section.*empty"):
+            release.validate_release_changelog(valid.replace("\n- Released.\n", "\n"), "0.9.1")
+
+    def test_release_notes_file_contains_only_the_selected_version_section(self):
+        changelog = """# Changelog
+
+## Unreleased
+
+## 1.2.3 - 2026-07-18
+
+### Added
+
+- Selected release note.
+
+## 1.2.2 - 2026-07-17
+
+- Previous release note.
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "skills/ads-plan-monitor/src/ocean_watch"
+            package.mkdir(parents=True)
+            (root / ".codex-plugin").mkdir()
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "ocean-watch"\nversion = "1.2.3"\n',
+                encoding="utf-8",
+            )
+            (package / "__init__.py").write_text('__version__ = "1.2.3"\n', encoding="utf-8")
+            (root / ".codex-plugin/plugin.json").write_text(
+                '{"name":"ocean-watch","version":"1.2.3+codex.test"}\n',
+                encoding="utf-8",
+            )
+            (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+            result = release.write_release_notes(root, "v1.2.3", "notes/RELEASE_NOTES.md")
+            notes = Path(result["notes_file"]).read_text(encoding="utf-8")
+            self.assertIn("Selected release note", notes)
+            self.assertNotIn("Previous release note", notes)
+            self.assertEqual(result["version"], "1.2.3")
 
     def test_release_workflow_publishes_verified_tag_artifacts(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        workflow_lines = [line.strip() for line in workflow.splitlines()]
         build_job, publish_job = workflow.split("\n  publish:\n", maxsplit=1)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("release_tag:", workflow)
         self.assertNotIn("\n  push:\n", workflow)
         self.assertNotIn("github.ref_name", workflow)
-        self.assertEqual(workflow.count("name: ocean-watch-${{ inputs.release_tag }}"), 2)
+        self.assertEqual(workflow_lines.count("name: ocean-watch-${{ inputs.release_tag }}"), 2)
+        self.assertEqual(
+            workflow_lines.count("name: ocean-watch-${{ inputs.release_tag }}-notes"),
+            2,
+        )
         self.assertIn("scripts/release.py check --tag", workflow)
+        self.assertIn("scripts/release.py notes --tag", workflow)
         self.assertIn('GITHUB_REF}" != "refs/heads/main', workflow)
         self.assertIn('refs/tags/${RELEASE_TAG}^{commit}', workflow)
         self.assertIn("uses: actions/attest-build-provenance@", workflow)
         self.assertIn("gh release create", workflow)
+        self.assertIn("gh release edit", workflow)
         self.assertIn('--target "${GITHUB_SHA}"', workflow)
+        self.assertIn("--notes-file release-notes/RELEASE_NOTES.md", workflow)
+        self.assertNotIn("--generate-notes", workflow)
         self.assertIn("dist/SHA256SUMS", workflow)
         self.assertNotIn("contents: write", build_job)
         self.assertIn("needs: build", publish_job)

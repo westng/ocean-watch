@@ -53,6 +53,8 @@ jobs:
               exit 1
             fi
           fi
+      - name: Generate release notes from Changelog
+        run: python scripts/release.py notes --tag "${RELEASE_TAG}" --output release-notes/RELEASE_NOTES.md
       - name: Run release quality gate
         run: |
           python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
@@ -79,6 +81,13 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 30
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: ocean-watch-${{ inputs.release_tag }}-notes
+          path: release-notes/RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 30
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
@@ -99,6 +108,11 @@ jobs:
         with:
           name: ocean-watch-${{ inputs.release_tag }}
           path: dist
+      - name: Download release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: ocean-watch-${{ inputs.release_tag }}-notes
+          path: release-notes
       - name: Recheck artifact integrity
         working-directory: dist
         run: sha256sum --check SHA256SUMS
@@ -108,9 +122,12 @@ jobs:
         run: |
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release upload "${RELEASE_TAG}" dist/* --clobber
+            gh release edit "${RELEASE_TAG}" \
+              --title "Ocean Watch ${RELEASE_TAG}" \
+              --notes-file release-notes/RELEASE_NOTES.md
           else
             gh release create "${RELEASE_TAG}" dist/* \
               --target "${GITHUB_SHA}" \
               --title "Ocean Watch ${RELEASE_TAG}" \
-              --generate-notes
+              --notes-file release-notes/RELEASE_NOTES.md
           fi

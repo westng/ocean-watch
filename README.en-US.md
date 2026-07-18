@@ -56,6 +56,8 @@ When a maintainer manually runs the `Release` workflow in GitHub Actions and ent
 - `SHA256SUMS`: SHA-256 checksums for every release asset.
 - GitHub build provenance attestations for repository and workflow verification.
 
+Each Release page takes its version notes directly from the matching `CHANGELOG.md` section instead of substituting an automatically generated commit list.
+
 Codex Marketplace remains the recommended online installation path. See the [release guide](docs/releasing.md) for offline installation, checksum verification, and maintainer release procedures. The Plugin bundle and wheel still require Python 3.9+; they are not standalone native executables.
 
 ## Everyday examples

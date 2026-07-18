@@ -56,6 +56,8 @@ ocean-watch setup doctor
 - `SHA256SUMS`：全部发布文件的 SHA-256 校验值。
 - GitHub build provenance attestation：可验证产物由本仓库发布工作流构建。
 
+每个 Release 页面的版本说明直接来自 `CHANGELOG.md` 中对应版本段落，不使用自动生成的提交列表替代版本日志。
+
 在线使用仍推荐 Codex Marketplace 安装。离线安装、校验和维护者发版流程见[发布指南](docs/releasing.md)。Plugin ZIP 和 wheel 均仍需要 Python 3.9+；它们不是免 Python 的独立可执行程序。
 
 ## 普通用户使用案例
