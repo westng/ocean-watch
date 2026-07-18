@@ -49,19 +49,19 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src scripts tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
 python3 scripts/release.py check
-python3 -m build
 python3 skills/ads-plan-monitor/run.py --version
+python3 skills/qc-plan-monitor/run.py --version
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
 python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
 python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/dev/null
 git diff --check
 ```
 
-发布前还必须分别在 Python `3.9` 和 `3.12` 的干净环境中安装生成的 wheel，并用临时 `CODEX_HOME` 执行 `ocean-watch setup init --home-config`，确认安装态资源和命令不依赖源码目录。
+CI 还会在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 环境中验证源码安装、首次初始化、Plugin 清单和两个 Skill 元数据。
 
 ## 发布
 
-正式发布不从本机手工上传产物。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Release` 工作流并选择 `main`。工作流会从三处版本元数据自动生成 `vMAJOR.MINOR.PATCH` Tag，重新运行质量门、构建 CLI 和完整 Plugin 包、生成校验和来源证明，最后创建 Tag 和 GitHub Release。
+项目直接以 Git 仓库作为 Codex Marketplace 来源，不发布 Release 资产。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Release` 工作流并选择 `main`。工作流会从三处版本元数据生成 `vMAJOR.MINOR.PATCH` Tag，重新运行质量门，并创建不带资产的 GitHub Release。
 
 不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Release。完整检查清单和命令见[发布指南](docs/releasing.md)。
 

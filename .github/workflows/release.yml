@@ -11,16 +11,13 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  validate:
     if: github.repository == 'westng/ocean-watch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
       release_tag: ${{ steps.resolve_release_tag.outputs.release_tag }}
-    permissions:
-      attestations: write
-      contents: read
-      id-token: write
+      release_notes: ${{ steps.release_notes.outputs.release_notes }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,7 +26,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install release toolchain
+      - name: Install project and quality tools
         run: python -m pip install --disable-pip-version-check -e ".[dev]"
       - name: Resolve release tag from project version
         id: resolve_release_tag
@@ -37,7 +34,8 @@ jobs:
         run: |
           release_tag="$(python scripts/release.py tag | python -c 'import json, sys; print(json.load(sys.stdin)["tag"])')"
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
-      - name: Verify tag and version contract
+      - name: Verify branch, tag, version, and changelog
+        shell: bash
         run: |
           RELEASE_TAG="${{ steps.resolve_release_tag.outputs.release_tag }}"
           python scripts/release.py check --tag "${RELEASE_TAG}"
@@ -56,81 +54,47 @@ jobs:
             fi
           fi
       - name: Generate release notes from Changelog
+        id: release_notes
         env:
           RELEASE_TAG: ${{ steps.resolve_release_tag.outputs.release_tag }}
-        run: python scripts/release.py notes --tag "${RELEASE_TAG}" --output release-notes/RELEASE_NOTES.md
+        shell: bash
+        run: |
+          python scripts/release.py notes --tag "${RELEASE_TAG}" --output release-notes/RELEASE_NOTES.md
+          echo "release_notes=$(base64 -w 0 release-notes/RELEASE_NOTES.md)" >> "${GITHUB_OUTPUT}"
       - name: Run release quality gate
         run: |
           python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
           ruff check skills/ads-plan-monitor/src scripts tests
           bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
           python -m unittest discover -s tests
-      - name: Build CLI distributions
-        run: python -m build
-      - name: Build offline Codex Plugin
-        run: python scripts/release.py plugin --output-dir dist
-      - name: Verify wheel in isolation
-        run: |
-          python -m venv "${RUNNER_TEMP}/release-venv"
-          "${RUNNER_TEMP}/release-venv/bin/python" -m pip install --disable-pip-version-check dist/*.whl
-          CODEX_HOME="${RUNNER_TEMP}/codex-home" "${RUNNER_TEMP}/release-venv/bin/ocean-watch" setup init --home-config
-      - name: Generate and verify checksums
-        run: |
-          python scripts/release.py checksums --directory dist
-          python scripts/release.py verify-checksums --file dist/SHA256SUMS
-      - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 30
-      - name: Upload release notes
-        uses: actions/upload-artifact@v7
-        with:
-          name: ocean-watch-${{ steps.resolve_release_tag.outputs.release_tag }}-notes
-          path: release-notes/RELEASE_NOTES.md
-          if-no-files-found: error
-          retention-days: 30
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: dist/*
-
   publish:
     if: github.repository == 'westng/ocean-watch'
-    needs: build
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+      RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+      RELEASE_NOTES: ${{ needs.validate.outputs.release_notes }}
     steps:
-      - name: Download verified release artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: ocean-watch-${{ needs.build.outputs.release_tag }}
-          path: dist
-      - name: Download release notes
-        uses: actions/download-artifact@v8
-        with:
-          name: ocean-watch-${{ needs.build.outputs.release_tag }}-notes
-          path: release-notes
-      - name: Recheck artifact integrity
-        working-directory: dist
-        run: sha256sum --check SHA256SUMS
-      - name: Publish GitHub Release
+      - name: Restore validated release notes
+        shell: bash
+        run: |
+          mkdir -p release-notes
+          printf '%s' "${RELEASE_NOTES}" | base64 --decode > release-notes/RELEASE_NOTES.md
+      - name: Publish GitHub Release without custom assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" dist/* --clobber
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
               --title "Ocean Watch ${RELEASE_TAG}" \
               --notes-file release-notes/RELEASE_NOTES.md
           else
-            gh release create "${RELEASE_TAG}" dist/* \
+            gh release create "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "Ocean Watch ${RELEASE_TAG}" \
               --notes-file release-notes/RELEASE_NOTES.md

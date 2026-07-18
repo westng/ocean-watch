@@ -43,9 +43,9 @@ OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id
 
 ## 发布完整性
 
-正式产物只由维护者在 GitHub Actions 手动运行 `Release` 工作流构建，并且只允许选择 `main`。每个 Release 包含 `SHA256SUMS`，并通过 GitHub artifact attestation 记录仓库、提交和工作流来源。Plugin 离线包只从 Git 已跟踪白名单构建，不包含 `config/`、凭据、日志、journal、缓存、测试临时文件或本机构建目录。
+项目直接以 Git 仓库作为 Codex Marketplace 来源，不上传 Plugin ZIP、wheel 或源码分发包等自定义 Release 资产。GitHub 自动提供的 Tag 源码快照除外。正式 Release 只能由维护者从当前 `origin/main` 手动触发；工作流在创建 Tag 和 Release 前校验三处版本、Changelog、Plugin 元数据、两个 Skill 及完整质量门。
 
-下载后应先验证 `SHA256SUMS`；对供应链要求更高的环境，再使用 GitHub CLI 验证 attestation。具体命令见[发布指南](docs/releasing.md)。
+需要可复现安装时，应使用经过审查的 Release Tag 注册 Marketplace。Tag、提交和 Release 说明均保留在 GitHub 中，具体流程见[发布指南](docs/releasing.md)。
 
 ## 泄露处理
 

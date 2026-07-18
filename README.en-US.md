@@ -46,19 +46,18 @@ ocean-watch setup doctor
 
 See the Chinese [Getting started guide](docs/getting-started.md) for the complete workflow. Installation never starts OAuth; the temporary callback server starts only when `auth authorize` runs.
 
-### Release artifacts
+### Versions and releases
 
-When a maintainer manually runs the `Release` workflow from `main` in GitHub Actions, the workflow derives the Tag from the project version and publishes these assets to [GitHub Releases](https://github.com/westng/ocean-watch/releases):
+This repository is the Codex Marketplace source. The project does not upload custom Release assets such as Plugin ZIPs, wheels, or source distributions. When a maintainer manually runs the `Release` workflow, it validates the version, Changelog, Plugin metadata, and tests, then creates an installable Tag and a notes-only [GitHub Release](https://github.com/westng/ocean-watch/releases). GitHub's automatic `Source code (zip/tar.gz)` links are platform-generated Tag snapshots, not project-built assets.
 
-- `ocean-watch-plugin-X.Y.Z.zip`: complete offline Codex Plugin bundle.
-- `ocean_watch-X.Y.Z-py3-none-any.whl`: independently installable Python CLI.
-- `ocean_watch-X.Y.Z.tar.gz`: Python source distribution.
-- `SHA256SUMS`: SHA-256 checksums for every release asset.
-- GitHub build provenance attestations for repository and workflow verification.
+Each Release page takes its notes directly from the matching `CHANGELOG.md` section instead of substituting an automatically generated commit list. To pin a version, register the Marketplace at its Tag:
 
-Each Release page takes its version notes directly from the matching `CHANGELOG.md` section instead of substituting an automatically generated commit list.
+```bash
+codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
+codex plugin add ocean-watch@ocean-watch
+```
 
-Codex Marketplace remains the recommended online installation path. See the [release guide](docs/releasing.md) for offline installation, checksum verification, and maintainer release procedures. The Plugin bundle and wheel still require Python 3.9+; they are not standalone native executables.
+See the [release guide](docs/releasing.md) for the maintainer workflow.
 
 ## Everyday examples
 
@@ -199,11 +198,11 @@ The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. S
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
-python3 -m build
+python3 scripts/release.py check
 git diff --check
 ```
 
-CI covers Python `3.9` and `3.12` on Windows, macOS, and Linux, including first-run checks from an installed wheel.
+CI covers Python `3.9` and `3.12` on Windows, macOS, and Linux, including source-installed CLI, first-run, Plugin manifest, and both Skill metadata checks.
 
 ## License
 

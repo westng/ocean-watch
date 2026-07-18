@@ -29,7 +29,6 @@ Releases = "https://github.com/westng/ocean-watch/releases"
 [project.optional-dependencies]
 dev = [
   "bandit>=1.7,<2",
-  "build>=1.2,<2",
   "PyYAML>=6,<7",
   "ruff>=0.11,<1",
   "tomli>=2,<3; python_version < '3.11'",

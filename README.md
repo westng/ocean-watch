@@ -46,19 +46,18 @@ ocean-watch setup doctor
 
 完整流程见[快速开始](docs/getting-started.md)。安装阶段不会启动 OAuth；首次执行 `auth authorize` 时才会临时启动本地回调服务。
 
-### 正式发布产物
+### 版本与发布
 
-维护者在 GitHub Actions 中手动运行 `Release` 工作流并选择 `main` 后，工作流会根据项目版本自动生成 Tag，并在 [GitHub Releases](https://github.com/westng/ocean-watch/releases) 发布：
+本项目以 Git 仓库作为 Codex Marketplace 来源，不上传 Plugin ZIP、wheel 或源码分发包等自定义 Release 资产。维护者在 GitHub Actions 中手动运行 `Release` 工作流后，工作流会校验版本、Changelog、Plugin 元数据和测试，并创建可固定安装的 Tag 与只含版本说明的 [GitHub Release](https://github.com/westng/ocean-watch/releases)。GitHub 自动显示的 `Source code (zip/tar.gz)` 是对应 Tag 的平台源码快照，不是项目构建资产。
 
-- `ocean-watch-plugin-X.Y.Z.zip`：完整 Codex Plugin 离线包。
-- `ocean_watch-X.Y.Z-py3-none-any.whl`：可单独安装的 Python CLI。
-- `ocean_watch-X.Y.Z.tar.gz`：Python 源码分发包。
-- `SHA256SUMS`：全部发布文件的 SHA-256 校验值。
-- GitHub build provenance attestation：可验证产物由本仓库发布工作流构建。
+每个 Release 页面的版本说明直接来自 `CHANGELOG.md` 中对应版本段落，不使用自动生成的提交列表。需要固定版本时，在注册 Marketplace 时指定 Tag：
 
-每个 Release 页面的版本说明直接来自 `CHANGELOG.md` 中对应版本段落，不使用自动生成的提交列表替代版本日志。
+```bash
+codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
+codex plugin add ocean-watch@ocean-watch
+```
 
-在线使用仍推荐 Codex Marketplace 安装。离线安装、校验和维护者发版流程见[发布指南](docs/releasing.md)。Plugin ZIP 和 wheel 均仍需要 Python 3.9+；它们不是免 Python 的独立可执行程序。
+维护者流程见[发布指南](docs/releasing.md)。
 
 ## 普通用户使用案例
 
@@ -246,11 +245,11 @@ ocean-watch --help
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
-python3 -m build
+python3 scripts/release.py check
 git diff --check
 ```
 
-CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行，并验证 wheel 安装后的首次初始化。
+CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行，并验证源码安装后的 CLI、首次初始化、Plugin 清单和两个 Skill 元数据。
 
 ## License
 
