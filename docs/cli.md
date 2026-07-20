@@ -132,7 +132,15 @@ ocean-watch accounts remove --channel qianchuan --advertiser-id ADVERTISER_ID
 
 `--auth-account-id` 是可选的；当同一广告主出现在多个 OAuth 授权中时，用它固定账户所属授权。重复执行 `accounts add` 仅更新名称或显式传入的授权主体，不会重新启用已禁用账户。
 
-查询所有启用账户当天消耗：
+只查看负责或常用账户名单：
+
+```bash
+ocean-watch accounts list
+```
+
+自然语言中的“我负责的账户”“我常用的账户”“我管的户”等名单问法只读取本机启用账户簿，不刷新 Token，也不请求账户表现数据。`accounts list` 的 `presentation` 固定返回渠道、账户名称、广告主 ID、启用状态四列；只有显式 `--all` 才包含已停用账户。
+
+查询所有启用账户当天表现：
 
 ```bash
 ocean-watch accounts report
@@ -140,9 +148,9 @@ ocean-watch accounts report --channel marketing
 ocean-watch accounts report --channel qianchuan --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 ```
 
-默认跨渠道并发查询。营销使用无维度的 `BASIC_DATA` 账户聚合报表，千川使用商品全域计划报表汇总；单账户结果统一字段名，并附带 `metric_basis` 说明官方指标来源。总消耗可跨渠道相加；营销 `in_app_order_gmv` 与千川含券 ROI2 支付 GMV 口径不同，因此混合查询的顶层 `total_gmv`、`weighted_roi` 为 `null`，实际值按 `channel_summaries` 分渠道展示。单账户失败不会中止其他账户。只读请求会对业务临时错误 `40100`、`51010`，HTTP `429`/部分 `5xx`，以及明确标记可重试的超时或连接错误额外尝试两次，默认等待 1 秒、2 秒。只有显式传入 `--out` 才写文件。
+默认跨渠道并发查询。营销使用无维度的 `BASIC_DATA` 账户聚合报表；千川直接使用 `/v1.0/qianchuan/report/uni_promotion/get/` 全域投放账户维度聚合，不扫描计划列表。单账户结果统一字段名，并附带 `metric_basis` 说明官方指标来源。总消耗可跨渠道相加；营销 `in_app_order_gmv` 与千川含券 ROI2 支付 GMV 口径不同，因此混合查询的顶层 `total_gmv`、`weighted_roi` 为 `null`，实际值按 `channel_summaries` 分渠道展示。单账户失败不会中止其他账户。只读请求会对业务临时错误 `40100`、`51010`，HTTP `429`/部分 `5xx`，以及明确标记可重试的超时或连接错误额外尝试两次，默认等待 1 秒、2 秒。只有显式传入 `--out` 才写文件。
 
-结果中的 `presentation` 是负责账户查询的强制对话展示契约。`presentation.required=true` 时，Codex 必须原样输出 `rendered_markdown`，包括查询日期、账户汇总、完整账户明细、失败原因、分渠道汇总和官方指标口径；不能因为用户只问账户名单、使用简称、重复提问或进行上下文追问而缩成自选字段或短名单。只有用户在当前消息中明确要求特定字段时才允许收窄。
+`accounts report` 的 `presentation` 是账户表现查询的强制对话展示契约。`presentation.required=true` 时，Codex 必须原样输出 `rendered_markdown`，包括查询日期、账户汇总、完整账户明细、失败原因、分渠道汇总和官方指标口径。名单问法不使用这个报表合同，而使用 `accounts list` 的四列名单合同。
 
 ## 初始化与授权
 

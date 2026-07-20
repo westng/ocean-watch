@@ -77,6 +77,8 @@ Show today's spend for all accounts I am responsible for. Summarize by channel a
 
 Accounts are queried concurrently and failures are isolated. Marketing and Qianchuan GMV/ROI remain separate because their official metric definitions differ.
 
+If you only ask “Which accounts am I responsible for?” or “What are my commonly used accounts?”, Codex returns the enabled local account registry only. It does not refresh a token or query performance until you explicitly ask for spend, GMV, ROI, orders, or a dated performance view.
+
 ### Create Marketing plans from uploaded videos
 
 ```text

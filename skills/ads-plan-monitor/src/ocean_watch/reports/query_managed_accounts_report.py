@@ -13,10 +13,9 @@ from ocean_watch.core import config_paths
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError, ConfigurationError, OceanWatchError
 from ocean_watch.core.output import write_json
-from ocean_watch.integrations.mcp_streamable_http import StreamableHttpMcpClient
-from ocean_watch.reports import query_qianchuan_plan_report
 
 MARKETING_REPORT_PATH = "/v3.0/report/custom/get/"
+QIANCHUAN_ACCOUNT_REPORT_PATH = "/v1.0/qianchuan/report/uni_promotion/get/"
 RETRYABLE_API_CODES = {"40100", "51010"}
 RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
 METRIC_BASES = {
@@ -34,9 +33,6 @@ METRIC_BASES = {
         "orders": "total_pay_order_count_for_roi2",
         "gmv": "total_pay_order_gmv_include_coupon_for_roi2",
         "roi": "total_prepay_and_pay_order_roi2",
-        "net_orders_1h": "total_order_settle_count_for_roi2_1h",
-        "net_gmv_1h": "total_order_settle_amount_for_roi2_1h",
-        "net_roi_1h": "total_prepay_and_pay_settle_roi2_1h",
     },
 }
 MARKETING_METRICS = [
@@ -168,34 +164,44 @@ def qianchuan_account_report(config_path, account, start_date, end_date):
         advertiser_id=account["advertiser_id"],
         auth_account_id=account.get("auth_account_id"),
     )
-    client = StreamableHttpMcpClient(
-        query_qianchuan_plan_report.QIANCHUAN_MCP_ENDPOINT,
+    client = OceanEngineClient(
+        get_path(runtime, "api.base_url"),
         get_path(runtime, "api.access_token"),
-        tool_range=query_qianchuan_plan_report.QIANCHUAN_REPORT_TOOLS,
     )
-    result = query_qianchuan_plan_report.query_plan_report(
-        client,
-        account["advertiser_id"],
-        start_date=start_date,
-        end_date=end_date,
-        top=0,
+    response = client.get(
+        QIANCHUAN_ACCOUNT_REPORT_PATH,
+        params={
+            "advertiser_id": int(account["advertiser_id"]),
+            "start_date": f"{start_date} 00:00:00",
+            "end_date": f"{end_date} 23:59:59",
+            "marketing_goal": "ALL",
+            "order_platform": "QIANCHUAN",
+            "fields": list(METRIC_BASES["qianchuan"].values()),
+        },
     )
-    if not result.get("ok") or result.get("truncated"):
-        raise ApiError("Qianchuan account report was incomplete")
-    summary = result["summary"]
+    if response.get("code") != 0:
+        raise ApiError(
+            "Qianchuan account report failed",
+            {
+                "code": response.get("code"),
+                "http_status": response.get("http_status"),
+                "message": response.get("message"),
+                "request_id": response.get("request_id"),
+            },
+        )
+    metrics = response.get("data") or {}
+    if not isinstance(metrics, dict):
+        raise ApiError("Qianchuan account report returned invalid data")
     return {
         "metric_basis": METRIC_BASES["qianchuan"],
-        "spend": summary["total_cost"],
-        "orders": summary["total_pay_order_count"],
-        "gmv": summary["total_pay_order_gmv"],
-        "roi": summary["total_pay_roi"],
-        "net_orders_1h": sum(
-            int(row.get("total_order_settle_count_for_roi2_1h") or 0)
-            for row in result["rows"]
-        ),
-        "net_gmv_1h": summary["total_settled_amount_1h"],
-        "net_roi_1h": summary["total_settled_roi_1h"],
-        "request_ids": result["request_ids"],
+        "spend": rounded(metrics.get("stat_cost"), 2),
+        "orders": int(number(metrics.get("total_pay_order_count_for_roi2"))),
+        "gmv": rounded(metrics.get("total_pay_order_gmv_include_coupon_for_roi2"), 2),
+        "roi": rounded(metrics.get("total_prepay_and_pay_order_roi2"), 4),
+        "net_orders_1h": None,
+        "net_gmv_1h": None,
+        "net_roi_1h": None,
+        "request_ids": [response.get("request_id")] if response.get("request_id") else [],
     }
 
 
@@ -298,17 +304,30 @@ def summarize_metrics(rows, *, metric_basis=None):
     spend = sum((number(row.get("spend")) for row in rows), Decimal(0))
     orders = sum((number(row.get("orders")) for row in rows), Decimal(0))
     gmv = sum((number(row.get("gmv")) for row in rows), Decimal(0))
-    net_orders = sum((number(row.get("net_orders_1h")) for row in rows), Decimal(0))
-    net_gmv = sum((number(row.get("net_gmv_1h")) for row in rows), Decimal(0))
+    supports_net = metric_basis is None or "net_orders_1h" in metric_basis
+    net_orders = (
+        sum((number(row.get("net_orders_1h")) for row in rows), Decimal(0))
+        if supports_net
+        else None
+    )
+    net_gmv = (
+        sum((number(row.get("net_gmv_1h")) for row in rows), Decimal(0))
+        if supports_net
+        else None
+    )
     return {
         "account_count": len(rows),
         "total_spend": rounded(spend, 2),
         "total_orders": int(orders),
         "total_gmv": rounded(gmv, 2),
         "weighted_roi": rounded(gmv / spend, 4) if spend else 0.0,
-        "total_net_orders_1h": int(net_orders),
-        "total_net_gmv_1h": rounded(net_gmv, 2),
-        "weighted_net_roi_1h": rounded(net_gmv / spend, 4) if spend else 0.0,
+        "total_net_orders_1h": int(net_orders) if net_orders is not None else None,
+        "total_net_gmv_1h": rounded(net_gmv, 2) if net_gmv is not None else None,
+        "weighted_net_roi_1h": (
+            rounded(net_gmv / spend, 4)
+            if net_gmv is not None and spend
+            else 0.0 if net_gmv is not None else None
+        ),
         "metric_basis": metric_basis,
     }
 

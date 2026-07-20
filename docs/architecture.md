@@ -54,7 +54,7 @@ OAuth Token endpoint 和官方 MCP 使用不同协议适配器，可以直接使
 
 `accounts/managed_accounts.py` 管理用户主动维护的跨渠道账户簿。它与 OAuth 授权索引、当前账户和模板绑定相互独立，唯一键为 `channel + advertiser_id`；授权同步不能修改账户簿。真实记录只保存在被忽略的项目配置或用户配置中。
 
-`query_managed_accounts_report` 按配置顺序调度启用账户并受控并发。营销账户读取无维度 `BASIC_DATA` 聚合，千川账户读取商品全域计划报表汇总。总消耗可跨渠道汇总；GMV、订单和 ROI 通过 `metric_basis` 保留渠道官方口径，并在 `channel_summaries` 分渠道聚合，避免把营销应用内成交与千川含券 ROI2 成交误当作完全可比。单账户失败结构化返回但不取消其他任务，官方只读限频可有限重试。
+`accounts list` 只读取本机启用账户簿，并返回固定的名单展示合同；它不解析 OAuth、不刷新 Token、也不调用官方报表。`query_managed_accounts_report` 仅服务明确的账户表现意图，按配置顺序调度启用账户并受控并发。营销账户读取无维度 `BASIC_DATA` 聚合；千川账户直接读取 `/v1.0/qianchuan/report/uni_promotion/get/` 全域投放账户维度聚合，不经过计划报表或计划列表。总消耗可跨渠道汇总；GMV、订单和 ROI 通过 `metric_basis` 保留渠道官方口径，并在 `channel_summaries` 分渠道聚合，避免把营销应用内成交与千川含券 ROI2 成交误当作完全可比。单账户失败结构化返回但不取消其他任务，官方只读限频可有限重试。
 
 配置更新统一经过文件级进程锁和原子替换；读改写操作在锁内重新读取。交互式模板向导先记录 revision，提交时使用 compare-and-swap，检测到并发修改后返回 `configuration_conflict`，不覆盖另一进程的结果。首次初始化使用锁内 create-if-missing，多个进程同时启动也只会有一个写入模板。
 

@@ -109,17 +109,32 @@ Business commands resolve a Marketing authorization by target `advertiser_id` an
 
 Interpret responsible-account requests as a semantic responsible-account intent, not by exact wording or keyword matching. This intent covers any natural-language request about the advertising accounts in the user's customary working scope: accounts they commonly use, are responsible for, manage, operate, maintain, or normally run campaigns from. It also covers colloquial abbreviations such as `常用的户` or `我管的户`, misspellings, omitted nouns, and contextual follow-ups. These examples illustrate the intent; they are not an exact or exhaustive keyword list. Never ask the user to restate the request in a canonical format.
 
-For this intent, and for spend requests that omit explicit advertiser IDs, run during the current turn:
+Split this semantic intent by what the user asks for:
+
+- Membership-only requests such as `我负责的账户`, `我常用的账户`, `我管的户`, or a contextual equivalent ask which accounts are in the user's working scope. Run `accounts list` during the current turn. Read only the enabled local registry records by default; it must not resolve credentials, refresh a Token, or call any official report API.
+- Performance requests that mention spend, GMV, ROI, orders, performance, a date range, or equivalent metrics ask how those accounts are performing. Run `accounts report` during the current turn. If the user names no advertiser ID, query all enabled responsible accounts.
+
+Do not infer a performance request merely because the user asks for their accounts. Do not require exact keywords; determine whether the requested output is membership or metrics from the full utterance and conversation context.
+
+For a membership request, run:
+
+```bash
+ocean-watch accounts list
+```
+
+Treat `accounts list` top-level `presentation` as the mandatory membership response contract. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim. It contains only channel, account name, advertiser ID, and enabled state. Do not add spend, GMV, ROI, orders, query status, date range, or failure columns. Use `--channel` only when the request names one channel, and use `--all` only when the user explicitly asks to include disabled accounts.
+
+For a performance request, run:
 
 ```bash
 ocean-watch accounts report
 ```
 
-Do not answer from an earlier message or cached report, even when the user repeats or paraphrases the request. Use `accounts list` only for local registry administration or when the user explicitly asks to include disabled records; it is not a substitute for this live read path.
+Do not answer either intent from an earlier message or cached result when the user repeats or paraphrases the request.
 
 Use `--channel marketing` or `--channel qianchuan` only when the request names one channel. With no channel filter, query every enabled responsible account across both channels. The command uses bounded concurrency, preserves configured account order, retries documented transient read failures, and returns successful accounts even when another account fails. Sum spend across channels, but present GMV and ROI from `channel_summaries` because Marketing and Qianchuan use different official conversion definitions. Never replace this registry with all OAuth-authorized advertisers.
 
-Treat the command's top-level `presentation` object as the mandatory response contract for every semantic responsible-account request, including membership questions, performance questions, repeated requests, and contextual follow-ups. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim as the complete result. Do not reconstruct it from `accounts` or `summary`, and do not omit, merge, rename, reorder, summarize, or replace its date range, account summary, account rows, per-channel summaries, failure details, or metric-basis section. A shorter membership-style answer is not an allowed substitute. Only narrow the output when the user explicitly requests specific fields in the current message; a short or contextual follow-up does not imply such an override. Do not dump raw JSON unless requested.
+Treat `accounts report` top-level `presentation` as the mandatory performance response contract. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim as the complete result. Do not reconstruct it from `accounts` or `summary`, and do not omit, merge, rename, reorder, summarize, or replace its date range, account summary, account rows, per-channel summaries, failure details, or metric-basis section. Only narrow the output when the user explicitly requests specific performance fields in the current message. Do not dump raw JSON unless requested.
 
 Manage records with `accounts add/list/remove/enable/disable`. Real account names and IDs belong only in the user's ignored project or home config, never in tracked Skill files, examples, tests, or templates.
 

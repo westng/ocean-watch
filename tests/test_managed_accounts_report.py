@@ -37,6 +37,24 @@ class FakeMarketingClient:
         }
 
 
+class FakeQianchuanClient:
+    def __init__(self, *_args, **_kwargs):
+        self.calls = []
+
+    def get(self, path, params):
+        self.calls.append((path, params))
+        return {
+            "code": 0,
+            "request_id": "qianchuan-account-request",
+            "data": {
+                "stat_cost": "193.95",
+                "total_pay_order_count_for_roi2": "1",
+                "total_pay_order_gmv_include_coupon_for_roi2": "99.00",
+                "total_prepay_and_pay_order_roi2": "0.5104",
+            },
+        }
+
+
 class ManagedAccountReportTests(unittest.TestCase):
     def test_marketing_account_uses_dimensionless_basic_data_total(self):
         client = FakeMarketingClient()
@@ -85,6 +103,51 @@ class ManagedAccountReportTests(unittest.TestCase):
                 "2026-07-15",
             )
         self.assertEqual(ensure_token.call_args.kwargs["auth_account_id"], "987654321")
+
+    def test_qianchuan_account_uses_direct_account_dimension_report(self):
+        client = FakeQianchuanClient()
+        runtime = {"api": {"base_url": "https://api.test", "access_token": "token"}}
+        with mock.patch.object(
+            query_managed_accounts_report.token_manager,
+            "ensure_access_token",
+            return_value=runtime,
+        ), mock.patch.object(
+            query_managed_accounts_report,
+            "OceanEngineClient",
+            return_value=client,
+        ):
+            result = query_managed_accounts_report.qianchuan_account_report(
+                "config.json",
+                account("qianchuan", "1234567890123456", "Account"),
+                "2026-07-20",
+                "2026-07-20",
+            )
+
+        self.assertEqual(
+            client.calls,
+            [(
+                "/v1.0/qianchuan/report/uni_promotion/get/",
+                {
+                    "advertiser_id": 1234567890123456,
+                    "start_date": "2026-07-20 00:00:00",
+                    "end_date": "2026-07-20 23:59:59",
+                    "marketing_goal": "ALL",
+                    "order_platform": "QIANCHUAN",
+                    "fields": [
+                        "stat_cost",
+                        "total_pay_order_count_for_roi2",
+                        "total_pay_order_gmv_include_coupon_for_roi2",
+                        "total_prepay_and_pay_order_roi2",
+                    ],
+                },
+            )],
+        )
+        self.assertEqual(result["spend"], 193.95)
+        self.assertEqual(result["orders"], 1)
+        self.assertEqual(result["gmv"], 99.0)
+        self.assertEqual(result["roi"], 0.5104)
+        self.assertIsNone(result["net_orders_1h"])
+        self.assertEqual(result["request_ids"], ["qianchuan-account-request"])
 
     def test_batch_preserves_order_and_one_failure_does_not_stop_others(self):
         accounts = [
@@ -311,24 +374,32 @@ class ManagedAccountReportTests(unittest.TestCase):
                 )
                 self.assertEqual(result["query_status"], "ok")
 
-    def test_incomplete_qianchuan_report_is_rejected(self):
-        runtime = {"api": {"access_token": "token"}}
+    def test_qianchuan_account_report_error_is_forwarded_for_retry(self):
+        runtime = {"api": {"base_url": "https://api.test", "access_token": "token"}}
+        client = FakeQianchuanClient()
+        client.get = mock.Mock(return_value={
+            "code": 51010,
+            "message": "Internal service timed out",
+            "request_id": "request-id",
+        })
         with mock.patch.object(
             query_managed_accounts_report.token_manager,
             "ensure_access_token",
             return_value=runtime,
         ), mock.patch.object(
-            query_managed_accounts_report.query_qianchuan_plan_report,
-            "query_plan_report",
-            return_value={"ok": True, "truncated": True},
+            query_managed_accounts_report,
+            "OceanEngineClient",
+            return_value=client,
         ):
-            with self.assertRaisesRegex(ApiError, "incomplete"):
+            with self.assertRaisesRegex(ApiError, "account report failed") as raised:
                 query_managed_accounts_report.qianchuan_account_report(
                     "config.json",
                     account("qianchuan", "1001", "Account"),
                     "2026-07-15",
                     "2026-07-15",
                 )
+        self.assertEqual(raised.exception.details["code"], 51010)
+        self.assertEqual(raised.exception.details["request_id"], "request-id")
 
     def test_malformed_summary_metric_is_rejected(self):
         with self.assertRaisesRegex(ApiError, "non-finite"):

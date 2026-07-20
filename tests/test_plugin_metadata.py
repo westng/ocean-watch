@@ -102,9 +102,19 @@ class PluginMetadataTests(unittest.TestCase):
                 self.assertIn("not an exact or exhaustive keyword list", content)
                 self.assertIn("during the current turn", content)
                 self.assertIn("presentation.rendered_markdown", content)
-                self.assertIn("mandatory response contract", content)
-                self.assertIn("A shorter membership-style answer is not an allowed substitute", content)
+                self.assertIn("accounts list", content)
+                self.assertIn("accounts report", content)
+                self.assertIn("Do not infer a performance request", content)
+                self.assertIn("must not resolve credentials, refresh a Token", content)
                 self.assertIn("Do not reconstruct it from `accounts` or `summary`", content)
+
+    def test_qianchuan_account_report_uses_advertiser_dimension_endpoint(self):
+        content = (
+            REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("/v1.0/qianchuan/report/uni_promotion/get/", content)
+        self.assertIn("Do not call `qianchuan_report_uni_promotion_data_get_v1`", content)
+        self.assertIn("Those plan-level interfaces belong only to plan reports", content)
 
     def test_qianchuan_plan_report_keeps_default_presentation_contract(self):
         content = (

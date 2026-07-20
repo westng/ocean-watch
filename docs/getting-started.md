@@ -100,14 +100,14 @@ ocean-watch accounts add \
   --name ACCOUNT_NAME
 ```
 
-当多份 OAuth 授权同时覆盖同一广告主时，增加 `--auth-account-id AUTH_ACCOUNT_ID` 固定所属授权。检查账户簿和当天消耗：
+当多份 OAuth 授权同时覆盖同一广告主时，增加 `--auth-account-id AUTH_ACCOUNT_ID` 固定所属授权。分别检查账户簿和当天表现：
 
 ```bash
 ocean-watch accounts list
 ocean-watch accounts report
 ```
 
-跨渠道报表会隔离单账户失败。营销与千川 GMV 口径不同，因此跨渠道只合计消耗，GMV 和 ROI 按渠道展示。
+“我负责的账户”“我常用的账户”等名单问法只执行 `accounts list`，不会刷新 Token 或查询表现。只有明确问消耗、GMV、ROI、订单或日期表现时才执行 `accounts report`。跨渠道报表会隔离单账户失败；营销与千川 GMV 口径不同，因此跨渠道只合计消耗，GMV 和 ROI 按渠道展示。
 
 ## 5. 创建业务模板
 

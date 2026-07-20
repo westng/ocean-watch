@@ -42,6 +42,14 @@ Official docs:
 - `status=ALL` preserves report rows when historical plan metadata is no longer returned and marks them as unavailable. A specific status filter requires resolved metadata and fails closed when it cannot be obtained.
 - Access Tokens remain in the operating-system credential backend, are refreshed before MCP use, and must never be written into Codex MCP configuration or output.
 
+## Qianchuan Account Aggregate
+
+- Official document: https://open.oceanengine.com/labels/12/docs/1865675229008199
+- Account-dimension aggregate: `GET https://api.oceanengine.com/open_api/v1.0/qianchuan/report/uni_promotion/get/`.
+- Use it for responsible-account performance with `advertiser_id`, `start_date`, `end_date`, `marketing_goal=ALL`, `order_platform=QIANCHUAN`, and explicit account metric fields.
+- The response directly supplies advertiser-level aggregate `stat_cost`, ROI2 orders, GMV, and ROI. It does not require plan pagination or plan metadata enrichment.
+- Do not substitute `/v1.0/qianchuan/uni_promotion/list/`; that endpoint returns the account's plan list and belongs to plan-level queries only.
+
 ## All-Domain Plan Create
 
 - Endpoint: `POST https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_aweme/ad/create/`.

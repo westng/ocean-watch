@@ -38,6 +38,30 @@ def add_account_in_process(config_path, advertiser_id, ready, start):
 
 
 class ManagedAccountTests(unittest.TestCase):
+    def test_list_presentation_is_mandatory_and_membership_only(self):
+        accounts = [
+            {
+                "channel": "qianchuan",
+                "advertiser_id": "1234567890123456",
+                "name": "常用|账户",
+                "enabled": True,
+            },
+        ]
+
+        presentation = manage_accounts.list_presentation(accounts)
+
+        self.assertTrue(presentation["required"])
+        self.assertFalse(presentation["allow_column_omission"])
+        self.assertEqual(
+            [column["label"] for column in presentation["columns"]],
+            ["渠道", "账户名称", "广告主 ID", "启用状态"],
+        )
+        markdown = presentation["rendered_markdown"]
+        self.assertIn("共 1 个；仅展示已启用账户", markdown)
+        self.assertIn("| 巨量千川 | 常用\\|账户 | 1234567890123456 | 已启用 |", markdown)
+        self.assertNotIn("消耗", markdown)
+        self.assertNotIn("ROI", markdown)
+
     def test_same_advertiser_can_exist_in_both_channels_and_update_in_place(self):
         config = {"config_schema_version": 2}
         config, marketing, created = managed_accounts.upsert(
@@ -223,6 +247,28 @@ class ManagedAccountTests(unittest.TestCase):
                 "987654321",
             )
             self.assertNotIn("access_token", json.dumps(stored))
+
+    def test_cli_list_returns_membership_presentation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps({
+                "managed_accounts": {
+                    "qianchuan": [{
+                        "advertiser_id": "1234567890123456",
+                        "name": "Managed account",
+                        "enabled": True,
+                    }],
+                },
+            }), encoding="utf-8")
+
+            with redirect_stdout(StringIO()) as output:
+                code = manage_accounts.main(["list", "--config", str(path)])
+
+            self.assertEqual(code, 0)
+            result = json.loads(output.getvalue())
+            self.assertTrue(result["presentation"]["required"])
+            self.assertIn("Managed account", result["presentation"]["rendered_markdown"])
+            self.assertNotIn("query_status", result["accounts"][0])
 
     def test_concurrent_cli_mutations_preserve_every_account(self):
         with tempfile.TemporaryDirectory() as directory:

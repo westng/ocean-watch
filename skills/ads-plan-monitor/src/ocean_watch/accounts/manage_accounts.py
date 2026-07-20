@@ -6,9 +6,62 @@ from ocean_watch.auth import channels
 from ocean_watch.core import config_paths, config_store
 from ocean_watch.core.output import write_json
 
+LIST_PRESENTATION_COLUMNS = (
+    ("channel_name", "渠道"),
+    ("name", "账户名称"),
+    ("advertiser_id", "广告主 ID"),
+    ("enabled_label", "启用状态"),
+)
+
 
 def load(path):
     return config_store.load_json(path)
+
+
+def presentation_value(value):
+    return str(value if value not in (None, "") else "—").replace(
+        "|", "\\|"
+    ).replace("\r", " ").replace("\n", " ")
+
+
+def list_presentation(accounts, *, include_disabled=False):
+    rows = [
+        {
+            **account,
+            "channel_name": channels.CHANNELS[account["channel"]]["display_name"],
+            "enabled_label": "已启用" if account["enabled"] else "已停用",
+        }
+        for account in accounts
+    ]
+    table = [
+        "| " + " | ".join(label for _, label in LIST_PRESENTATION_COLUMNS) + " |",
+        "| " + " | ".join("---" for _ in LIST_PRESENTATION_COLUMNS) + " |",
+    ]
+    table.extend(
+        "| "
+        + " | ".join(
+            presentation_value(row.get(field))
+            for field, _ in LIST_PRESENTATION_COLUMNS
+        )
+        + " |"
+        for row in rows
+    )
+    scope = "包含已停用账户" if include_disabled else "仅展示已启用账户"
+    return {
+        "format": "markdown",
+        "required": True,
+        "allow_column_omission": False,
+        "allow_column_reordering": False,
+        "columns": [
+            {"field": field, "label": label}
+            for field, label in LIST_PRESENTATION_COLUMNS
+        ],
+        "rendered_markdown": "\n".join([
+            f"**负责账户：** 共 {len(rows)} 个；{scope}",
+            "",
+            *table,
+        ]),
+    }
 
 
 def main(argv=None):
@@ -28,13 +81,15 @@ def main(argv=None):
     config_path = config_paths.resolve_config_path(args.config)
     if args.action == "list":
         config = load(config_path)
+        accounts = managed_accounts.list_accounts(
+            config,
+            channel=args.channel,
+            enabled_only=not args.all,
+        )
         result = {
             "ok": True,
-            "accounts": managed_accounts.list_accounts(
-                config,
-                channel=args.channel,
-                enabled_only=not args.all,
-            ),
+            "accounts": accounts,
+            "presentation": list_presentation(accounts, include_disabled=args.all),
         }
         write_json(result)
         return 0
