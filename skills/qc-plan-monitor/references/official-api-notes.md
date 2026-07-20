@@ -88,7 +88,7 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - `search_key_words` is optional on `/v1.0/qianchuan/uni_aweme/authorized/get/`, so a batch may list all product all-domain creators once.
 - `/v1.0/qianchuan/file/video/aweme/get/` accepts up to 50 `filtering.aweme_item_ids` and an optional `filtering.product_id`. Resolve creator ownership first, then verify each template product.
 - `/v1.0/qianchuan/uni_promotion/list/` uses `marketing_goal=VIDEO_PROM_GOODS`, `filtering.status=ALL`, and `adlab_scene=UNI_PROJECT`. `ALL` includes paused plans and excludes deleted plans.
-- Plan-list `start_time` and `end_time` are required data-period fields and must remain inside the latest 180 days. They do not filter plan creation time; creation dates have separate optional fields. Query one legal recent data period and traverse all declared pages because the API defines no fixed plan-count ceiling.
+- Plan-list `start_time` and `end_time` are required data-period fields and do not filter plan creation time; creation dates have separate optional fields. Batch work-link reconciliation queries the current local day (`00:00:00` through `23:59:59`) because it only decides whether to create a plan or append materials, and traverses every declared page for that day.
 - Plan detail returns exact `aweme_id`, `product_infos`, status, and operation status. Never choose among multiple exact creator matches.
 - Plan-list `room_info.anchor_id` is the visible Douyin ID, not the numeric detail `aweme_id`. Candidate reconciliation must carry both identifiers and use plan detail for the final numeric identity check.
 - Plan material list returns `material_info.video_material.aweme_item_id`; query `material_status=ALL` and deduplicate before any write.

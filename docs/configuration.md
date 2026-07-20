@@ -370,13 +370,17 @@ ocean-watch setup validate --mode all
 - `create-submit`：凭据、账户和在线创建字段完整。
 - `all`：全部模式。
 
-## 官方文档 MCP
+## 可选官方 MCP
 
 ```bash
 ocean-watch mcp configure
 ocean-watch mcp status
+ocean-watch mcp capabilities
+ocean-watch mcp capabilities --tool TOOL_NAME
 ```
 
-上述命令配置开发文档 MCP，用于官方文档、OpenAPI Schema 和 SDK 示例。包含 App ID 和 Developer ID 的动态 URL 只在桥进程内存中构造，不写入 Plugin 清单或 Codex 配置。
+上述命令配置可选的官方 MCP，并从运行时 `tools/list` 查询当前工具。`capabilities` 返回工具名称和描述，指定 `--tool` 时返回该工具当前的完整输入 Schema；实际路由以运行时结果为准，不依赖静态工具清单。MCP 验证和注册成功后，Developer ID 写入本机操作系统凭据仓库供后续任务复用；包含 App ID 和 Developer ID 的动态 URL 只在桥进程内存中构造，不写入业务配置、Plugin 清单或 Codex MCP 配置。
+
+已配置 MCP 时，插件优先用于当前明确支持且参数契约匹配的远程操作。配置、OAuth 本机回调、凭据持久化、模板、负责账户、本机缓存和执行日志仍由 CLI 管理。读操作可在 MCP 调用前失败时安全回退 OpenAPI；写操作仍需原有预览和明确确认，若 MCP 是否已执行不确定，必须先查询并核对状态，不能直接改走 OpenAPI 重试。
 
 千川计划报表使用官方业务 MCP `https://open.oceanengine.com/qianchuan/mcp`。插件复用目标广告主绑定的千川 OAuth `Access-Token`，调用前自动刷新，并通过 `Tool-Range` 限制为全域计划和报表工具。Token 不写入配置文件、Plugin 清单或 Codex MCP 配置，也不需要用户额外维护 MCP API Key。

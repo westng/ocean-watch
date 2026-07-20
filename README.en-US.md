@@ -9,7 +9,7 @@
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/westng/ocean-watch/releases"><img src="https://img.shields.io/github/v/release/westng/ocean-watch?display_name=tag&sort=semver" alt="GitHub Release"></a>
+  <a href="https://github.com/westng/ocean-watch/tags"><img src="https://img.shields.io/github/v/tag/westng/ocean-watch?sort=semver" alt="Git Tag"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -48,9 +48,7 @@ See the Chinese [Getting started guide](docs/getting-started.md) for the complet
 
 ### Versions and releases
 
-This repository is the Codex Marketplace source. The project does not upload custom Release assets such as Plugin ZIPs, wheels, or source distributions. When a maintainer manually runs the `Release` workflow, it validates the version, Changelog, Plugin metadata, and tests, then creates an installable Tag and a notes-only [GitHub Release](https://github.com/westng/ocean-watch/releases). GitHub's automatic `Source code (zip/tar.gz)` links are platform-generated Tag snapshots, not project-built assets.
-
-Each Release page takes its notes directly from the matching `CHANGELOG.md` section instead of substituting an automatically generated commit list. To pin a version, register the Marketplace at its Tag:
+This repository is the Codex Marketplace source. The project publishes version Tags only: it does not create GitHub Release pages or build and upload Plugin ZIPs, wheels, source distributions, checksums, or other Release assets. Version changes remain in `CHANGELOG.md`. To pin a version, register the Marketplace at its Tag:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
@@ -146,7 +144,7 @@ ocean-watch
 ├── reports        # Marketing reports
 ├── qc-reports     # Qianchuan plan and material reports
 ├── discover       # Official asset discovery
-└── mcp            # Developer-documentation MCP
+└── mcp            # Optional official MCP setup and capability discovery
 ```
 
 Every level supports `--help`. The full command reference is in [docs/cli.md](docs/cli.md).
@@ -198,7 +196,7 @@ The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. S
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
-python3 scripts/release.py check
+python3 scripts/version_tag.py check
 git diff --check
 ```
 

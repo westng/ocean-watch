@@ -23,7 +23,7 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 7. Dry-run or explicitly submit one all-domain plan.
 8. Resolve multiple Douyin work links, group product-matched works by creator, then create or append product all-domain plans.
 9. Resolve Douyin work links to plan `material_id` values and remove verified custom materials.
-10. Query product all-domain plan spend through official MCP and material performance through official OpenAPI.
+10. Prefer verified official MCP tools for supported Qianchuan reads and guarded writes, with OpenAPI fallback where safe.
 11. List/search products and inspect plan details, materials, local runs, and authorization mappings.
 12. Dry-run or explicitly submit guarded plan status, budget, and ROI updates.
 
@@ -112,6 +112,14 @@ For that intent, resolve enabled records from this registry, not every OAuth-aut
 
 Adapt the response to the question rather than enforcing a fixed sentence, field list, or Markdown layout. Make membership answers identify the relevant accounts, make performance answers emphasize requested metrics, and preserve partial failures and channel-specific metric semantics from the fresh result. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files.
 
+## MCP Preference And Capability Check
+
+MCP is an optional acceleration and capability surface, not a setup prerequisite. If the user has configured it, prefer MCP for a Qianchuan remote operation only after confirming that the exact tool is present in the current runtime inventory and that its current input schema matches the operation. Read `references/mcp-capability-routing.md` before choosing an MCP tool; it contains the supported Plugin-operation intersection and the read/write fallback rules.
+
+Use runtime `tools/list` as the authority, not a remembered or static tool list. When the current tool inventory or schema is not already visible, use `mcp capabilities` and `mcp capabilities --tool TOOL_NAME`. Never infer parameters from a tool name. Keep local configuration, OAuth browser flows, credential persistence, templates, responsible-account registry operations, caches, journals, and work-link resolution in the bundled CLI.
+
+Reads may fall back to the existing OpenAPI command after a missing tool, schema mismatch, or pre-dispatch MCP failure. Writes must retain the existing dry-run, explicit confirmation, advertiser binding, locking, result validation, and post-write verification. If an MCP write may have been dispatched but its result is unknown, never retry through OpenAPI until current state has been queried and reconciled. Do not replace a multi-step batch or resumable journal workflow with isolated MCP calls.
+
 ## All-Domain Plan Reports
 
 Query plan performance with the advertiser-bound Qianchuan authorization:
@@ -123,7 +131,7 @@ ocean-watch qc-reports plans \
   --end-date YYYY-MM-DD
 ```
 
-The command uses the official Streamable HTTP MCP at `https://open.oceanengine.com/qianchuan/mcp`. It injects the refreshed local Qianchuan `Access-Token` only in memory and restricts the remote server with `Tool-Range`. Never persist the token in Plugin metadata, Codex MCP configuration, command output, or report files.
+The command uses the official Streamable HTTP MCP at `https://open.oceanengine.com/qianchuan/mcp`. It injects the refreshed local Qianchuan `Access-Token` only in memory and restricts the remote server with `Tool-Range`. This path already satisfies the MCP preference rule for its three report tools. Never persist the token in Plugin metadata, Codex MCP configuration, command output, or report files.
 
 Use `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PRODUCT_AD` and dimension `ad_id` as the only financial source. Read each metric from its returned `Value` or `ValueStr`. Separately call `qianchuan_uni_promotion_list_v1` with `VIDEO_PROM_GOODS`, `UNI_PROJECT`, and `status=ALL` only to enrich report rows with plan names, statuses, creators, products, budgets, and ROI targets. Never display or infer money from plan-list `stats_info`; those internal fixed-point values are not report currency values. Use `qianchuan_report_uni_promotion_config_get_v1` to inspect available metric contracts, and do not substitute the standard Qianchuan plan report for all-domain plans.
 
@@ -202,7 +210,9 @@ Before writing, list current product all-domain plans and confirm candidates thr
 
 The plan list exposes the visible Douyin ID in `room_info.anchor_id`, while plan detail exposes the numeric `aweme_id`. Use both identities to select list candidates, then require the numeric detail `aweme_id` to match before treating a plan as existing. Never compare only one identifier type and never create a new plan merely because the list uses the visible ID.
 
-The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. Always use one legal period inside the latest 180 days and traverse every declared page. There is no fixed plan-count cap; do not split the query into older data-period windows and do not stop after an arbitrary number of plans.
+The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. For batch work-link reconciliation, set both to the current local date (`00:00:00` through `23:59:59`) because this lookup only decides whether the current batch should create a plan or append materials. Traverse every declared page for that day and do not stop after an arbitrary number of plans.
+
+Retry transient `40100` rate limits, `51010` service timeouts, retryable transport failures, and explicit RPC timeouts with bounded backoff while reading the product all-domain plan list and candidate plan details. A failed list page must retry that same page without restarting the completed portion of the current-day scan. Do not retry non-transient business errors or any write request through this read retry path.
 
 - No plan: create from template delivery settings and the first 100 eligible homepage works.
 - Homepage-work creation omits `creative_card` by default and must never send an empty card object. The official field table makes the whole card conditional on merchant account type, while the verified creator-homepage flow accepts omission. If a future account reports the whole card as missing, return that account-specific failure instead of inventing selling points.
@@ -211,6 +221,18 @@ The plan-list `start_time` and `end_time` describe the returned data period, not
 - More than 100 works: create once, then append remaining chunks through the dedicated add-material endpoint.
 
 Default to dry-run. Add `--submit` only after explicit online-write permission. Different creators may execute concurrently; one creator is always serialized, and a submit run takes an advertiser-scoped process lock. Return one final summary. Do not emit per-link progress or create a file unless `--out` is explicit.
+
+### Mandatory Batch Completion Response
+
+After every `plans batch-qianchuan-works` result, treat the top-level `presentation` object as the mandatory user-facing completion contract. When `presentation.required=true`, perform these steps in order:
+
+1. Output `presentation.rendered_markdown` verbatim as the main result table. Do not reconstruct it from `counts`, `results`, or a model-selected subset.
+2. Preserve exactly these five headers and this order: `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`.
+3. Do not omit, rename, merge, reorder, summarize, or replace these columns. In particular, never substitute a table whose columns are `处理方式`, `状态`, `数量`, `成功数`, `失败数`, `失败原因`, or similar operational summaries.
+4. Keep `skipped`, `query_failures`, and `failed_results` outside the five-column table. Show them after the table when non-empty, following `presentation.required_details`; they never become replacement columns.
+5. Even when there are no successful rows, output the five-column header from `presentation.rendered_markdown`, then explain the empty, skipped, or failed result outside the table. Never invent IDs or successful rows.
+
+The five-column table is the default for both dry-run previews and submitted batch completion. A dry-run may show `—` for an unknown plan ID. For `素材ID`, the command prefers the official `material_id` and explicitly falls back to the creation `aweme_item_id` only when the official material ID is absent. Brevity, a large batch, partial failure, or conversational wording is not permission to change this format. Only a direct user request in the current turn that explicitly asks to suppress the table or names different columns may override it; never infer an override.
 
 Use `qc-products list/search` for the official selectable-product endpoint. Use `qc-plans list/show/materials` for plan metadata and material membership. Never interpret plan-list `stats_info` as report currency.
 
@@ -283,7 +305,7 @@ Use `runs list/show` only for Plugin-managed journals under the local state root
 - Qianchuan MCP tool list: `https://open.oceanengine.com/labels/12/docs/1847297003631945`
 - Qianchuan MCP guide and examples: `https://open.oceanengine.com/labels/12/docs/1849835441833027`
 
-Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details. If local notes conflict with official documentation or official MCP results, use the official source.
+Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details and `references/mcp-capability-routing.md` before selecting an MCP business tool. If local notes conflict with official documentation, the current MCP schema, or official MCP results, use the current official source.
 
 ## Output And Safety
 
@@ -293,5 +315,5 @@ Read `references/official-api-notes.md` for confirmed endpoint and account-expan
 - Never expose the configured private work-metadata endpoint; report only configured/not configured.
 - Show advertiser, goal, product count, budget, bid type, ROI, material counts, blocking fields, and endpoint before submission.
 - Present report summaries and rankings as Markdown tables in conversation; JSON remains the CLI boundary.
-- Batch work-link output must summarize created, appended, already-present, skipped, and failed groups only after the batch finishes.
+- Batch work-link output must follow `Mandatory Batch Completion Response`: reproduce the required five-column `presentation.rendered_markdown` only after the batch finishes, then summarize skipped and failed details outside that table.
 - Preserve official responses for diagnosis, but never expose stored credentials.

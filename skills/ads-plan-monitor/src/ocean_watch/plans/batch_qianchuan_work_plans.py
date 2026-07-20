@@ -37,6 +37,13 @@ from ocean_watch.templates import qianchuan_product_templates
 MAX_MATERIALS_PER_WRITE = 100
 VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
 DEFAULT_QIANCHUAN_CONCURRENCY = 8
+BATCH_PRESENTATION_COLUMNS = (
+    ("ad_id", "计划ID"),
+    ("creator_name", "达人昵称"),
+    ("product_id", "商品ID"),
+    ("material_id", "素材ID"),
+    ("material_title", "素材标题"),
+)
 
 
 def build_parser():
@@ -194,6 +201,7 @@ def base_group_result(aweme_id, rows, existing_plan=None):
         "ad_id": existing_plan.get("ad_id") if existing_plan else None,
         "plan_name": existing_plan.get("name") if existing_plan else None,
         "plan_status": existing_plan.get("status") if existing_plan else None,
+        "product_ids": list(existing_plan.get("product_ids") or []) if existing_plan else [],
         "input_item_ids": [row["aweme_item_id"] for row in rows],
     }
 
@@ -327,6 +335,7 @@ def execute_new_plan_group(
     advertiser_id = template["bindings"]["advertiser_id"]
     aweme_id = rows[0]["aweme_id"]
     result = base_group_result(aweme_id, rows)
+    result["product_ids"] = list(template["bindings"]["product_ids"])
     first_chunk, remaining = rows[:MAX_MATERIALS_PER_WRITE], rows[MAX_MATERIALS_PER_WRITE:]
     payload = qianchuan_product_templates.payload_from_template(
         template,
@@ -469,6 +478,125 @@ def execute_plan_actions(
     return [results[aweme_id] for aweme_id in groups], unsupported
 
 
+def presentation_value(value):
+    if value is None or value == "":
+        return "—"
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def completed_item_ids(group_result):
+    item_ids = []
+
+    def extend(values):
+        for value in values or []:
+            value = str(value)
+            if value not in item_ids:
+                item_ids.append(value)
+
+    extend(group_result.get("already_present_item_ids"))
+    if group_result.get("status") in {"created", "created_partial", "would_create"}:
+        extend(group_result.get("created_item_ids"))
+    if group_result.get("status") == "would_create":
+        extend(group_result.get("remaining_item_ids"))
+    for batch in [
+        *(group_result.get("batches") or []),
+        *(group_result.get("append_batches") or []),
+    ]:
+        if batch.get("status") in {"appended", "would_append"}:
+            extend(batch.get("item_ids"))
+
+    completed = set(item_ids)
+    input_order = [str(value) for value in group_result.get("input_item_ids") or []]
+    return [value for value in input_order if value in completed] + [
+        value for value in item_ids if value not in input_order
+    ]
+
+
+def presentation_rows(template, material_result, group_results):
+    materials_by_item_id = {
+        str(row["aweme_item_id"]): row
+        for row in material_result.get("matched") or []
+        if row.get("aweme_item_id") is not None
+    }
+    default_product_ids = [str(value) for value in template["bindings"]["product_ids"]]
+    rows = []
+    for group_result in group_results:
+        allowed_product_ids = {
+            str(value) for value in group_result.get("product_ids") or default_product_ids
+        }
+        for item_id in completed_item_ids(group_result):
+            material_row = materials_by_item_id.get(item_id)
+            if material_row is None:
+                continue
+            material = material_row.get("material") or {}
+            official_material_id = material.get("material_id")
+            material_id = (
+                str(official_material_id)
+                if official_material_id not in {None, ""}
+                else str(material.get("aweme_item_id") or item_id)
+            )
+            material_id_source = (
+                "material_id" if official_material_id not in {None, ""} else "aweme_item_id"
+            )
+            matched_product_ids = {
+                str(value) for value in material_row.get("matched_product_ids") or []
+            }
+            for product_id in default_product_ids:
+                if product_id not in allowed_product_ids or product_id not in matched_product_ids:
+                    continue
+                rows.append(
+                    {
+                        "ad_id": str(group_result["ad_id"])
+                        if group_result.get("ad_id") not in {None, ""}
+                        else None,
+                        "creator_name": group_result.get("creator_name")
+                        or get_path(material_row, "creator.aweme_name"),
+                        "product_id": product_id,
+                        "material_id": material_id,
+                        "material_title": material.get("title"),
+                        "material_id_source": material_id_source,
+                        "aweme_item_id": item_id,
+                    }
+                )
+    return rows
+
+
+def render_presentation_table(rows):
+    labels = [label for _, label in BATCH_PRESENTATION_COLUMNS]
+    table = [
+        "| " + " | ".join(labels) + " |",
+        "| " + " | ".join("---" for _ in labels) + " |",
+    ]
+    table.extend(
+        "| "
+        + " | ".join(presentation_value(row.get(field)) for field, _ in BATCH_PRESENTATION_COLUMNS)
+        + " |"
+        for row in rows
+    )
+    return "\n".join(table)
+
+
+def presentation_contract(template, material_result, group_results):
+    rows = presentation_rows(template, material_result, group_results)
+    return {
+        "format": "markdown_table",
+        "required": True,
+        "allow_column_omission": False,
+        "allow_column_reordering": False,
+        "columns": [
+            {"field": field, "label": label} for field, label in BATCH_PRESENTATION_COLUMNS
+        ],
+        "rows": rows,
+        "details_outside_table": ["skipped", "query_failures", "failed_results"],
+        "required_details": [
+            {"field": "skipped", "label": "跳过详情"},
+            {"field": "query_failures", "label": "查询失败"},
+            {"field": "failed_results", "label": "执行失败"},
+        ],
+        "rendered_markdown": render_presentation_table(rows),
+    }
+
+
 def summarize(mode, template, link_result, material_result, group_results, unsupported):
     skipped = [
         *link_result["skipped"],
@@ -487,6 +615,18 @@ def summarize(mode, template, link_result, material_result, group_results, unsup
         "creator_groups": len(group_results),
         **statuses,
     }
+    failed_results = [
+        row
+        for row in group_results
+        if row.get("status")
+        in {
+            "failed",
+            "blocked",
+            "create_failed",
+            "append_failed",
+            "created_partial",
+        }
+    ]
     return {
         "mode": mode,
         "channel": "qianchuan",
@@ -500,6 +640,8 @@ def summarize(mode, template, link_result, material_result, group_results, unsup
         "results": group_results,
         "skipped": skipped,
         "query_failures": material_result["query_failures"],
+        "failed_results": failed_results,
+        "presentation": presentation_contract(template, material_result, group_results),
     }
 
 

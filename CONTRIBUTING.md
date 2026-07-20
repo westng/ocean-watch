@@ -48,7 +48,7 @@ PYTHONPATH=skills/ads-plan-monitor/src python3 -m compileall -q skills/ads-plan-
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src scripts tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
-python3 scripts/release.py check
+python3 scripts/version_tag.py check
 python3 skills/ads-plan-monitor/run.py --version
 python3 skills/qc-plan-monitor/run.py --version
 python3 -m json.tool .codex-plugin/plugin.json >/dev/null
@@ -61,9 +61,9 @@ CI 还会在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 环境中验证
 
 ## 发布
 
-项目直接以 Git 仓库作为 Codex Marketplace 来源，不发布 Release 资产。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Release` 工作流并选择 `main`。工作流会从三处版本元数据生成 `vMAJOR.MINOR.PATCH` Tag，重新运行质量门，并创建不带资产的 GitHub Release。
+项目直接以 Git 仓库作为 Codex Marketplace 来源，只创建 `vMAJOR.MINOR.PATCH` Tag，不创建 GitHub Release 页面或上传 Release 资产。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Publish Tag` 工作流并选择 `main`，由工作流重新运行质量门并创建版本 Tag。
 
-不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Release。完整检查清单和命令见[发布指南](docs/releasing.md)。
+不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Tag。完整检查清单和命令见[发布指南](docs/releasing.md)。
 
 ## Pull Request
 

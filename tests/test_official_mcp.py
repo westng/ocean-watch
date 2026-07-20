@@ -114,6 +114,87 @@ class OfficialMcpTests(unittest.TestCase):
         self.assertNotIn("app-1", json.dumps(result))
         self.assertNotIn("developer-1", json.dumps(result))
 
+    def test_capabilities_uses_runtime_tool_listing_and_is_redacted(self):
+        with mock.patch.object(
+            authorization_store,
+            "read_app",
+            return_value={"app_id": "app-1"},
+        ), mock.patch.object(
+            credential_store,
+            "read_credentials",
+            return_value={"developer_id": "developer-1"},
+        ), mock.patch.object(
+            oceanengine_mcp_bridge,
+            "discover_tools",
+            return_value=[
+                {
+                    "name": "qianchuan_report_material_get_v1",
+                    "description": "material report",
+                    "inputSchema": {"type": "object"},
+                },
+                {
+                    "name": "qianchuan_video_get_v1",
+                    "description": "video list",
+                    "inputSchema": {"type": "object"},
+                },
+            ],
+        ) as discover:
+            result = configure_official_mcp.capabilities()
+
+        self.assertEqual(result["source"], "runtime_tools_list")
+        self.assertEqual(result["tool_count"], 2)
+        self.assertEqual(result["tools"], [
+            {
+                "name": "qianchuan_report_material_get_v1",
+                "description": "material report",
+            },
+            {"name": "qianchuan_video_get_v1", "description": "video list"},
+        ])
+        self.assertNotIn("app-1", json.dumps(result))
+        self.assertNotIn("developer-1", json.dumps(result))
+        discover.assert_called_once_with("app-1", "developer-1")
+
+    def test_capabilities_returns_exact_runtime_tool_schema(self):
+        tool = {
+            "name": "qianchuan_uni_promotion_list_v1",
+            "description": "plan list",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"advertiser_id": {"type": "integer"}},
+                "required": ["advertiser_id"],
+            },
+        }
+        with mock.patch.object(
+            authorization_store,
+            "read_app",
+            return_value={"app_id": "app-1"},
+        ), mock.patch.object(
+            credential_store,
+            "read_credentials",
+            return_value={"developer_id": "developer-1"},
+        ), mock.patch.object(
+            oceanengine_mcp_bridge,
+            "discover_tools",
+            return_value=[tool],
+        ):
+            result = configure_official_mcp.capabilities(tool["name"])
+        self.assertEqual(result["tool_count"], 1)
+        self.assertEqual(result["tools"], [tool])
+
+    def test_capabilities_requires_configured_developer_id(self):
+        with mock.patch.object(
+            authorization_store,
+            "read_app",
+            return_value={"app_id": "app-1"},
+        ), mock.patch.object(
+            credential_store,
+            "read_credentials",
+            return_value={},
+        ), mock.patch.object(oceanengine_mcp_bridge, "discover_tools") as discover:
+            with self.assertRaisesRegex(RuntimeError, "developer_id is missing"):
+                configure_official_mcp.capabilities()
+        discover.assert_not_called()
+
     def test_configure_registers_stdio_bridge(self):
         credentials = {"app_id": "app-1"}
         calls = []
@@ -124,7 +205,7 @@ class OfficialMcpTests(unittest.TestCase):
 
         with mock.patch.object(authorization_store, "read_app", return_value=credentials), \
                 mock.patch.object(credential_store, "read_credentials", return_value={}), \
-                mock.patch.object(credential_store, "configure_developer_id"), \
+                mock.patch.object(credential_store, "configure_developer_id") as save, \
                 mock.patch.object(oceanengine_mcp_bridge, "probe", return_value=["tool-1"]), \
                 mock.patch.object(configure_official_mcp, "get_server", side_effect=[None, self.bridge_server()]), \
                 mock.patch.object(configure_official_mcp, "run_codex", side_effect=fake_run), \
@@ -138,6 +219,7 @@ class OfficialMcpTests(unittest.TestCase):
         self.assertEqual(Path(calls[0][5]).resolve(), configure_official_mcp.bridge_path())
         self.assertNotIn("app-1", json.dumps(calls))
         self.assertNotIn("developer-1", json.dumps(calls))
+        save.assert_called_once_with("developer-1")
 
     def test_failed_registration_does_not_store_developer_id(self):
         with mock.patch.object(

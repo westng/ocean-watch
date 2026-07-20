@@ -1,4 +1,5 @@
 import datetime as dt
+import time
 
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError, ConfigurationError
@@ -13,7 +14,9 @@ PRODUCT_MARKETING_GOAL = "VIDEO_PROM_GOODS"
 ALL_ACTIVE_STATUSES = "ALL"
 UNI_PROJECT = "UNI_PROJECT"
 MAX_PAGE_SIZE = 100
-PLAN_HISTORY_WINDOW_DAYS = 180
+RETRYABLE_READ_API_CODES = {"40100", "51010"}
+RETRYABLE_READ_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+READ_RETRY_DELAYS = (1, 2, 4)
 
 
 def decimal_id(value, field):
@@ -33,6 +36,7 @@ def require_success(response, operation, **details):
         f"Qianchuan {operation} failed",
         {
             "code": response.get("code"),
+            "http_status": response.get("http_status"),
             "message": response.get("message"),
             "request_id": response.get("request_id"),
             **details,
@@ -40,9 +44,57 @@ def require_success(response, operation, **details):
     )
 
 
+def is_timeout_message(value):
+    message = str(value or "").lower()
+    return any(marker in message for marker in ("timeout", "timed out", "time out", "超时"))
+
+
+def is_rpc_timeout_message(value):
+    message = str(value or "")
+    return "rpc" in message.lower() and is_timeout_message(message)
+
+
+def is_retryable_read_response(response):
+    code = str(response.get("code") or "")
+    return (
+        code in RETRYABLE_READ_API_CODES
+        or response.get("http_status") in RETRYABLE_READ_HTTP_STATUSES
+        or is_rpc_timeout_message(response.get("message"))
+    )
+
+
+def is_retryable_read_error(error):
+    if not isinstance(error, ApiError):
+        return False
+    details = error.details or {}
+    code = str(details.get("code") or "")
+    return (
+        code in RETRYABLE_READ_API_CODES
+        or details.get("http_status") in RETRYABLE_READ_HTTP_STATUSES
+        or details.get("retryable") is True
+        or is_timeout_message(details.get("reason"))
+        or is_rpc_timeout_message(details.get("message") or str(error))
+    )
+
+
 class QianchuanPlanGateway:
-    def __init__(self, client):
+    def __init__(self, client, *, retry_delays=READ_RETRY_DELAYS, sleep_fn=time.sleep):
         self.client = client
+        self.retry_delays = tuple(retry_delays)
+        self.sleep_fn = sleep_fn
+
+    def get_with_retry(self, path, params):
+        for attempt in range(len(self.retry_delays) + 1):
+            try:
+                response = self.client.get(path, params=params)
+            except ApiError as error:
+                if not is_retryable_read_error(error) or attempt >= len(self.retry_delays):
+                    raise
+            else:
+                if not is_retryable_read_response(response) or attempt >= len(self.retry_delays):
+                    return response
+            self.sleep_fn(self.retry_delays[attempt])
+        raise AssertionError("unreachable")
 
     def list_product_plans(
         self,
@@ -53,7 +105,6 @@ class QianchuanPlanGateway:
     ):
         advertiser_id = decimal_id(advertiser_id, "advertiser_id")
         today = today or dt.date.today()
-        period_start = today - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1)
         plans = []
         seen_plan_ids = set()
         request_ids = []
@@ -63,11 +114,11 @@ class QianchuanPlanGateway:
         expected_pages = None
         while page <= max_pages:
             response = require_success(
-                self.client.get(
+                self.get_with_retry(
                     QIANCHUAN_PLAN_LIST_PATH,
-                    params={
+                    {
                         "advertiser_id": int(advertiser_id),
-                        "start_time": f"{period_start.isoformat()} 00:00:00",
+                        "start_time": f"{today.isoformat()} 00:00:00",
                         "end_time": f"{today.isoformat()} 23:59:59",
                         "marketing_goal": PRODUCT_MARKETING_GOAL,
                         "filtering": {"status": ALL_ACTIVE_STATUSES},
@@ -82,7 +133,7 @@ class QianchuanPlanGateway:
                 "product plan list query",
                 advertiser_id=advertiser_id,
                 page=page,
-                start_time=period_start.isoformat(),
+                start_time=today.isoformat(),
                 end_time=today.isoformat(),
             )
             pages += 1
@@ -119,7 +170,7 @@ class QianchuanPlanGateway:
             "plans": plans,
             "page_count": pages,
             "data_period": {
-                "start_date": period_start.isoformat(),
+                "start_date": today.isoformat(),
                 "end_date": today.isoformat(),
             },
             "request_ids": request_ids,
@@ -130,9 +181,9 @@ class QianchuanPlanGateway:
         advertiser_id = decimal_id(advertiser_id, "advertiser_id")
         ad_id = decimal_id(ad_id, "ad_id")
         response = require_success(
-            self.client.get(
+            self.get_with_retry(
                 QIANCHUAN_PLAN_DETAIL_PATH,
-                params={"advertiser_id": int(advertiser_id), "ad_id": int(ad_id)},
+                {"advertiser_id": int(advertiser_id), "ad_id": int(ad_id)},
             ),
             "plan detail query",
             advertiser_id=advertiser_id,

@@ -337,7 +337,7 @@ ocean-watch plans batch-qianchuan-works \
 
 可选解析服务通过 `setup work-metadata --endpoint URL --home-config` 写入本机配置，仓库不提供真实地址。配置后，千川作品链路只发送公开抖音链接并读取作品 ID、抖音号、数值 UID 和商品 ID；不传广告主、Token 或模板数据。返回非空商品 ID 且不在模板商品集合时直接跳过，不得新建或追加；匹配或空值仍由官方接口复核。未配置或使用 `--no-link-metadata-api` 时走安全兜底。命令默认使用 8 并发（上限 10）执行必要的官方素材校验。首次官方校验成功后，会在 `$CODEX_HOME/ads-plan-monitor/state/cache/` 保存 30 天的作品达人查询提示。缓存过期或失效时自动回退到全量官方扫描。`performance` 会分别展示链接解析、凭据准备、素材校验和计划对账耗时，并通过 `link_metadata.configured/enabled` 标识本次是否启用本机服务。
 
-命令跟随抖音短链并提取作品 ID，通过官方接口批量确认授权达人和模板商品匹配，再按数值 `aweme_id` 分组。达人没有商品全域计划时按模板新建；已有计划（包括暂停）时只调用素材追加接口，预算、ROI、状态和名称保持不变。计划素材已存在、链接无效、达人未授权或商品不匹配时跳过，并在整批结束后统一反馈。默认 dry-run，真实写入增加 `--submit`；只有显式传入 `--out` 才写文件。
+命令跟随抖音短链并提取作品 ID，通过官方接口批量确认授权达人和模板商品匹配，再按数值 `aweme_id` 分组。达人没有商品全域计划时按模板新建；已有计划（包括暂停）时只调用素材追加接口，预算、ROI、状态和名称保持不变。计划素材已存在、链接无效、达人未授权或商品不匹配时跳过，并在整批结束后统一反馈。完成结果的主表固定为 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`，跳过和失败详情只在表外展示。默认 dry-run，真实写入增加 `--submit`；只有显式传入 `--out` 才写文件。
 
 按作品链接删除计划自提素材：
 
@@ -449,6 +449,8 @@ ocean-watch discover promotions --advertiser-id ADVERTISER_ID --project-id PROJE
 ocean-watch discover cities --city-csv cities.csv
 ocean-watch mcp configure
 ocean-watch mcp status
+ocean-watch mcp capabilities
+ocean-watch mcp capabilities --tool TOOL_NAME
 ```
 
-`mcp configure/status` 管理的是开发文档 MCP。千川业务报表使用独立的官方业务 MCP 传输层，由 `qc-reports` 在内存中注入自动刷新的千川 Token，不把 Token 写入 Codex MCP 配置。
+`mcp configure/status` 管理可选的官方 MCP；`mcp capabilities` 通过运行时 `tools/list` 返回当前工具名称和描述，`--tool` 返回单个工具的完整输入 Schema。已配置时只对当前明确支持、Schema 匹配且不破坏插件校验与写保护的操作优先使用 MCP。千川业务报表使用独立的官方业务 MCP 传输层，由 `qc-reports` 在内存中注入自动刷新的千川 Token，不把 Token 写入 Codex MCP 配置。

@@ -213,6 +213,7 @@ def main(argv=None):
             **mcp_status,
             "configure_command": f'{command} mcp configure',
             "status_command": f'{command} mcp status',
+            "capabilities_command": f'{command} mcp capabilities',
         },
         "additional_fields_for_create_plan": create_missing,
         "missing_query_fields": query_missing,

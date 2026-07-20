@@ -3,6 +3,7 @@ import datetime as dt
 import unittest
 from unittest import mock
 
+from ocean_watch.core.errors import ApiError
 from ocean_watch.plans import qianchuan_plan_gateway
 
 
@@ -105,10 +106,10 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         self.assertEqual(payload["multi_product_creative_list"], creatives)
         self.assertEqual(client.calls[-1][1], qianchuan_plan_gateway.QIANCHUAN_ADD_MATERIALS_PATH)
 
-    def test_creator_reconciliation_uses_recent_data_period_and_all_pages(self):
+    def test_creator_reconciliation_uses_today_and_all_pages(self):
         today = dt.date(2026, 7, 15)
-        old_plan = {
-            "ad_info": {"id": 7001, "name": "old plan"},
+        today_plan = {
+            "ad_info": {"id": 7001, "name": "today plan"},
             "room_info": [{"anchor_id": "9001"}],
         }
         other_plan = {
@@ -120,9 +121,9 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             if path == qianchuan_plan_gateway.QIANCHUAN_PLAN_DETAIL_PATH:
                 return {
                     "code": 0,
-                    "data": {"ad_id": 7001, "aweme_id": 9001, "name": "old plan"},
+                    "data": {"ad_id": 7001, "aweme_id": 9001, "name": "today plan"},
                 }
-            rows = [] if params["page"] == 1 else [other_plan, old_plan, old_plan]
+            rows = [] if params["page"] == 1 else [other_plan, today_plan, today_plan]
             return {
                 "code": 0,
                 "data": {"ad_list": rows, "page_info": {"total_page": 2}},
@@ -144,7 +145,7 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         )
         self.assertEqual(found["list_query"]["page_count"], 2)
         self.assertEqual(found["list_query"]["data_period"], {
-            "start_date": "2026-01-17",
+            "start_date": "2026-07-15",
             "end_date": "2026-07-15",
         })
         list_calls = [
@@ -154,9 +155,104 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
         ]
         self.assertEqual([params["page"] for params in list_calls], [1, 2])
         for params in list_calls:
-            start = dt.date.fromisoformat(params["start_time"][:10])
-            end = dt.date.fromisoformat(params["end_time"][:10])
-            self.assertEqual((end - start).days, 179)
+            self.assertEqual(params["start_time"], "2026-07-15 00:00:00")
+            self.assertEqual(params["end_time"], "2026-07-15 23:59:59")
+
+    def test_plan_list_retries_transient_codes_on_the_current_page(self):
+        for transient_code in (40100, 51010):
+            with self.subTest(transient_code=transient_code):
+                calls = []
+                sleeps = []
+
+                def get(
+                    path,
+                    params=None,
+                    *,
+                    calls=calls,
+                    transient_code=transient_code,
+                ):
+                    self.assertEqual(path, qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH)
+                    calls.append(params["page"])
+                    if params["page"] == 2 and calls.count(2) == 1:
+                        return {
+                            "code": transient_code,
+                            "message": "temporary",
+                            "request_id": f"retry-{transient_code}",
+                        }
+                    return {
+                        "code": 0,
+                        "data": {"ad_list": [], "page_info": {"total_page": 2}},
+                    }
+
+                client = mock.Mock()
+                client.get.side_effect = get
+                gateway = qianchuan_plan_gateway.QianchuanPlanGateway(
+                    client,
+                    retry_delays=(1, 2),
+                    sleep_fn=sleeps.append,
+                )
+
+                result = gateway.list_product_plans(
+                    "1234567890123456",
+                    today=dt.date(2026, 7, 15),
+                )
+
+                self.assertEqual(result["page_count"], 2)
+                self.assertEqual(calls, [1, 2, 2])
+                self.assertEqual(sleeps, [1])
+
+    def test_plan_detail_retries_retryable_rpc_timeout(self):
+        client = mock.Mock()
+        client.get.side_effect = [
+            ApiError(
+                "temporary RPC timeout",
+                {"retryable": True, "transport_error": "timeout"},
+            ),
+            {"code": 0, "data": {"ad_id": 7001, "aweme_id": 9001}},
+        ]
+        sleeps = []
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(
+            client,
+            retry_delays=(1, 2),
+            sleep_fn=sleeps.append,
+        )
+
+        detail = gateway.get_plan_detail("1234567890123456", "7001")
+
+        self.assertEqual(detail["aweme_id"], 9001)
+        self.assertEqual(client.get.call_count, 2)
+        self.assertEqual(sleeps, [1])
+
+    def test_plan_detail_retries_official_rpc_timeout_response(self):
+        client = mock.Mock()
+        client.get.side_effect = [
+            {"code": 50000, "message": "RPC调用超时", "request_id": "retry-detail"},
+            {"code": 0, "data": {"ad_id": 7001, "aweme_id": 9001}},
+        ]
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(
+            client,
+            retry_delays=(0,),
+            sleep_fn=lambda _delay: None,
+        )
+
+        detail = gateway.get_plan_detail("1234567890123456", "7001")
+
+        self.assertEqual(detail["ad_id"], 7001)
+        self.assertEqual(client.get.call_count, 2)
+
+    def test_plan_reads_do_not_retry_non_transient_business_errors(self):
+        client = mock.Mock()
+        client.get.return_value = {"code": 40000, "message": "invalid request"}
+        gateway = qianchuan_plan_gateway.QianchuanPlanGateway(
+            client,
+            retry_delays=(1, 2),
+            sleep_fn=lambda _delay: self.fail("unexpected sleep"),
+        )
+
+        with self.assertRaises(ApiError):
+            gateway.get_plan_detail("1234567890123456", "7001")
+
+        client.get.assert_called_once()
 
     def test_creator_reconciliation_fails_closed_at_page_cap(self):
         client = mock.Mock()

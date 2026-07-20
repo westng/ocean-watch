@@ -9,7 +9,7 @@
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/westng/ocean-watch/releases"><img src="https://img.shields.io/github/v/release/westng/ocean-watch?display_name=tag&sort=semver" alt="GitHub Release"></a>
+  <a href="https://github.com/westng/ocean-watch/tags"><img src="https://img.shields.io/github/v/tag/westng/ocean-watch?sort=semver" alt="Git Tag"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -48,9 +48,7 @@ ocean-watch setup doctor
 
 ### 版本与发布
 
-本项目以 Git 仓库作为 Codex Marketplace 来源，不上传 Plugin ZIP、wheel 或源码分发包等自定义 Release 资产。维护者在 GitHub Actions 中手动运行 `Release` 工作流后，工作流会校验版本、Changelog、Plugin 元数据和测试，并创建可固定安装的 Tag 与只含版本说明的 [GitHub Release](https://github.com/westng/ocean-watch/releases)。GitHub 自动显示的 `Source code (zip/tar.gz)` 是对应 Tag 的平台源码快照，不是项目构建资产。
-
-每个 Release 页面的版本说明直接来自 `CHANGELOG.md` 中对应版本段落，不使用自动生成的提交列表。需要固定版本时，在注册 Marketplace 时指定 Tag：
+本项目以 Git 仓库作为 Codex Marketplace 来源，只发布版本 Tag，不创建 GitHub Release 页面，也不构建或上传 Plugin ZIP、wheel、源码分发包、校验和或其他 Release 资产。版本变化统一记录在 `CHANGELOG.md`；需要固定版本时，在注册 Marketplace 时指定 Tag：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
@@ -192,7 +190,7 @@ ocean-watch
 ├── reports        # 营销报表
 ├── qc-reports     # 千川全域计划与素材报表
 ├── discover       # 官方资产反查
-└── mcp            # 开发文档 MCP
+└── mcp            # 可选官方 MCP 配置与能力发现
 ```
 
 每个层级均支持 `--help`。完整参数与示例见 [CLI 参考](docs/cli.md)。
@@ -245,7 +243,7 @@ ocean-watch --help
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
-python3 scripts/release.py check
+python3 scripts/version_tag.py check
 git diff --check
 ```
 

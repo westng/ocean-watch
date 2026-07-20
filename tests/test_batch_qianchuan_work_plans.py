@@ -21,7 +21,14 @@ def template():
     )
 
 
-def material(item_id, aweme_id="9001", product_ids=None):
+def material(
+    item_id,
+    aweme_id="9001",
+    product_ids=None,
+    *,
+    material_id=None,
+    title=None,
+):
     return {
         "input_index": int(item_id),
         "aweme_item_id": str(item_id),
@@ -35,6 +42,8 @@ def material(item_id, aweme_id="9001", product_ids=None):
             "aweme_item_id": str(item_id),
             "image_mode": "VIDEO_VERTICAL",
             "video_id": f"video-{item_id}",
+            "material_id": material_id,
+            "title": title,
         },
         "matched_product_ids": product_ids or ["1001"],
     }
@@ -357,6 +366,102 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         self.assertEqual(by_creator["9001"]["status"], "failed")
         self.assertEqual(by_creator["9002"]["status"], "appended")
         self.assertEqual(len(gateway.add_calls), 1)
+
+    def test_summary_requires_fixed_five_column_material_table(self):
+        material_result = {
+            "matched": [
+                material("101", material_id="501", title="标题|一\n续行"),
+                material("102", material_id=None, title="标题二"),
+                material("201", "9002", material_id="601", title="标题三"),
+            ],
+            "skipped": [{"aweme_item_id": "999", "reason": "product_mismatch"}],
+            "query_failures": [{"aweme_id": "9003", "reason": "timeout"}],
+        }
+        group_results = [
+            {
+                "aweme_id": "9001",
+                "creator_name": "达人一",
+                "ad_id": "7001",
+                "product_ids": ["1001"],
+                "input_item_ids": ["101", "102"],
+                "already_present_item_ids": ["101"],
+                "batches": [{"status": "appended", "item_ids": ["102"]}],
+                "status": "appended",
+            },
+            {
+                "aweme_id": "9002",
+                "creator_name": "达人二",
+                "ad_id": "8001",
+                "product_ids": ["1001"],
+                "input_item_ids": ["201"],
+                "created_item_ids": ["201"],
+                "status": "created",
+            },
+            {
+                "aweme_id": "9003",
+                "creator_name": "失败达人",
+                "ad_id": None,
+                "product_ids": ["1001"],
+                "input_item_ids": ["301"],
+                "status": "failed",
+                "reason": "timeout",
+            },
+        ]
+
+        result = batch.summarize(
+            "submit",
+            template(),
+            {"resolved": [], "skipped": []},
+            material_result,
+            group_results,
+            [],
+        )
+
+        presentation = result["presentation"]
+        self.assertTrue(presentation["required"])
+        self.assertFalse(presentation["allow_column_omission"])
+        self.assertFalse(presentation["allow_column_reordering"])
+        self.assertEqual(
+            [detail["field"] for detail in presentation["required_details"]],
+            ["skipped", "query_failures", "failed_results"],
+        )
+        self.assertEqual(
+            [column["label"] for column in presentation["columns"]],
+            ["计划ID", "达人昵称", "商品ID", "素材ID", "素材标题"],
+        )
+        self.assertEqual(
+            [row["material_id"] for row in presentation["rows"]],
+            ["501", "102", "601"],
+        )
+        self.assertEqual(
+            [row["material_id_source"] for row in presentation["rows"]],
+            ["material_id", "aweme_item_id", "material_id"],
+        )
+        markdown = presentation["rendered_markdown"]
+        self.assertEqual(
+            markdown.splitlines()[0],
+            "| 计划ID | 达人昵称 | 商品ID | 素材ID | 素材标题 |",
+        )
+        self.assertIn("| 7001 | 达人一 | 1001 | 501 | 标题\\|一 续行 |", markdown)
+        self.assertNotIn("product_mismatch", markdown)
+        self.assertNotIn("失败达人", markdown)
+        self.assertEqual(result["failed_results"], [group_results[2]])
+
+    def test_empty_summary_still_returns_fixed_table_header(self):
+        result = batch.summarize(
+            "submit",
+            template(),
+            {"resolved": [], "skipped": []},
+            {"matched": [], "skipped": [], "query_failures": []},
+            [],
+            [],
+        )
+
+        self.assertEqual(result["presentation"]["rows"], [])
+        self.assertEqual(
+            result["presentation"]["rendered_markdown"],
+            "| 计划ID | 达人昵称 | 商品ID | 素材ID | 素材标题 |\n| --- | --- | --- | --- | --- |",
+        )
 
     def test_command_returns_one_final_summary_without_local_files(self):
         config = qianchuan_product_templates.ensure_config({})

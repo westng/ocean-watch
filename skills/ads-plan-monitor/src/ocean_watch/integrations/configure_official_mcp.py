@@ -115,6 +115,39 @@ def status(credentials=None):
     }
 
 
+def capabilities(tool_name=None):
+    credentials = {
+        **authorization_store.read_app("marketing"),
+        **{"developer_id": credential_store.read_credentials().get("developer_id")},
+    }
+    app_id = credentials.get("app_id")
+    developer_id = credentials.get("developer_id")
+    if not is_configured(app_id):
+        raise RuntimeError("APP_ID is missing; save app credentials before querying MCP capabilities")
+    if not is_configured(developer_id):
+        raise RuntimeError("developer_id is missing; configure the MCP before querying capabilities")
+
+    tools = oceanengine_mcp_bridge.discover_tools(app_id, developer_id)
+    if tool_name:
+        tools = [tool for tool in tools if tool.get("name") == tool_name]
+        if not tools:
+            raise RuntimeError(f"Official MCP does not currently advertise tool: {tool_name}")
+    else:
+        tools = [
+            {
+                "name": tool["name"],
+                "description": tool.get("description"),
+            }
+            for tool in tools
+        ]
+    return {
+        "server": SERVER_NAME,
+        "tool_count": len(tools),
+        "tools": tools,
+        "source": "runtime_tools_list",
+    }
+
+
 def configure(developer_id=None):
     credentials = {
         **authorization_store.read_app("marketing"),
@@ -170,19 +203,37 @@ def configure(developer_id=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Configure Ocean Engine's official developer-documentation MCP for Codex."
+        description="Configure Ocean Engine's optional official MCP for Codex."
     )
     parser.add_argument("--developer-id", help="Developer ID; prompts securely when omitted.")
-    parser.add_argument("--status", action="store_true", help="Show redacted MCP readiness.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--status", action="store_true", help="Show redacted MCP readiness.")
+    mode.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="List tools currently advertised by the configured MCP.",
+    )
+    parser.add_argument(
+        "--tool",
+        help="With --capabilities, return the exact runtime definition for one tool.",
+    )
     args = parser.parse_args(argv)
+    if args.tool and not args.capabilities:
+        parser.error("--tool requires --capabilities")
 
     try:
-        result = status() if args.status else configure(args.developer_id)
+        if args.status:
+            result = status()
+        elif args.capabilities:
+            result = capabilities(args.tool)
+        else:
+            result = configure(args.developer_id)
     except RuntimeError as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False, indent=2))
         return 1
-    print(json.dumps({"ok": bool(result["ready"]), **result}, ensure_ascii=False, indent=2))
-    return 0 if result["ready"] else 1
+    ok = True if args.capabilities else bool(result["ready"])
+    print(json.dumps({"ok": ok, **result}, ensure_ascii=False, indent=2))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

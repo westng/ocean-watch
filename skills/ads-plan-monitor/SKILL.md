@@ -149,7 +149,7 @@ Use official docs as the source of truth:
 
 Read `references/official-api-notes.md` for endpoint details and `references/creator-material-api-notes.md` for creator semantics. Read `references/current-template-notes.md` for reusable template and reporting rules. If references conflict with official docs or official MCP results, prefer the official source.
 
-Official MCP is documentation-only. Use `mcp configure`/`mcp status`; continue using the official business API through the CLI for accounts, plans, and reports.
+MCP is optional. Use `mcp configure`/`mcp status`, and use `mcp capabilities [--tool TOOL_NAME]` to inspect the current runtime tool inventory and schema. Prefer a configured MCP for official documentation and for an exact advertised remote operation only when its schema matches and credentials remain protected. Marketing project/promotion workflows, local state, OAuth persistence, and any operation without an exact runtime tool continue through the bundled CLI and official API. Route Qianchuan capability selection through `$qc-plan-monitor` and its `references/mcp-capability-routing.md`; never infer tool parameters from a static list.
 
 ## Template Contract
 

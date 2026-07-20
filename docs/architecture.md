@@ -91,7 +91,7 @@ sequenceDiagram
 
 千川全域计划不进入上述营销事务。`QianchuanPlanExecutor` 单独调用官方 `/v1.0/qianchuan/uni_aweme/ad/create/`，以 `code: 0` 和 `data.ad_id` 作为成功条件。商品全域与直播全域使用独立模板 Schema，再汇入同一官方 payload 校验和执行器；直播模板不保存商品或作品素材字段。`qianchuan_creator_accounts` 负责授权达人分页，`query_qianchuan_creator_videos` 负责官方视频查询。`douyin_work_links` 可从本机配置的可选公开链接解析服务读取作品、达人和商品提示，未配置或失败时回退到受限抖音短链跳转；`qianchuan_work_materials` 仍通过官方“作品归属、模板商品”两阶段查询建立运行时素材集合。
 
-`batch_qianchuan_work_plans` 按数值 `aweme_id` 聚合运行时素材。`QianchuanPlanGateway` 一次读取商品全域计划，再通过详情精确确认达人；已有计划先拉取全部视频素材并按 `aweme_item_id` 去重，只调用素材追加接口。没有计划才走创建接口。不同达人受控并发，同一达人串行；在线提交持有广告主级进程锁。整个流程不保存本地计划映射，因此重试时仍以官方计划和素材状态恢复幂等。
+`batch_qianchuan_work_plans` 按数值 `aweme_id` 聚合运行时素材。`QianchuanPlanGateway` 查询执行当天的商品全域计划，再通过详情精确确认达人和商品，用于判断本批次是创建计划还是追加素材；计划列表遇到 `40100`、`51010` 或明确的临时传输错误时在当前页有界退避，候选详情的临时 RPC 超时采用同一只读重试边界，不会重新扫描当天已完成分页。已有计划先拉取全部视频素材并按 `aweme_item_id` 去重，只调用素材追加接口。没有计划才走创建接口。不同达人受控并发，同一达人串行；在线提交持有广告主级进程锁。整个流程不保存本地计划映射，因此重试时仍以官方计划和素材状态恢复幂等。
 
 `qianchuan_work_owner_cache` 只缓存公开作品与达人的数值 ID 映射，不保存 Token、计划结论或商品匹配结论。缓存命中仅用于缩小官方查询候选集；每次预检和提交仍重新验证当前授权、作品和商品。缓存按广告主隔离、30 天过期、原子写入并使用进程锁；故障时安全降级为全量扫描。
 

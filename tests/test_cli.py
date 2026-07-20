@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from ocean_watch.cli import main as cli
-from ocean_watch.integrations import qianchuan_work_metadata
+from ocean_watch.integrations import configure_official_mcp, qianchuan_work_metadata
 from ocean_watch.onboarding import environment_check
 from ocean_watch.templates import (
     list_channel_templates,
@@ -21,6 +21,12 @@ from tests.support import business_template_config
 
 
 class CliTests(unittest.TestCase):
+    def test_exposes_runtime_mcp_capability_listing(self):
+        handler, prefix, description = cli.COMMANDS[("mcp", "capabilities")]
+        self.assertIs(handler, configure_official_mcp.main)
+        self.assertEqual(prefix, ("--capabilities",))
+        self.assertIn("advertised MCP tools", description)
+
     def test_exposes_local_qianchuan_work_metadata_configuration(self):
         handler, prefix, description = cli.COMMANDS[("setup", "work-metadata")]
         self.assertIs(handler, qianchuan_work_metadata.main)

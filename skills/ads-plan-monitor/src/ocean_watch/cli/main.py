@@ -269,8 +269,13 @@ COMMANDS = {
     ("discover", "deep-bids"): (query_deep_bid_types.main, (), "Find deep bid types"),
     ("discover", "goals"): (query_optimized_goals.main, (), "Find optimization goals"),
     ("discover", "cities"): (resolve_city_ids.main, (), "Resolve city identifiers"),
-    ("mcp", "configure"): (configure_official_mcp.main, (), "Configure official docs MCP"),
+    ("mcp", "configure"): (configure_official_mcp.main, (), "Configure optional official MCP"),
     ("mcp", "status"): (configure_official_mcp.main, ("--status",), "Check MCP status"),
+    ("mcp", "capabilities"): (
+        configure_official_mcp.main,
+        ("--capabilities",),
+        "List currently advertised MCP tools",
+    ),
 }
 
 

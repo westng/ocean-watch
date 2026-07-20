@@ -111,6 +111,32 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertIn("Do not omit, merge, rename, reorder", content)
         self.assertIn("generic request for plan spend does not authorize simplification", content)
 
+    def test_qianchuan_batch_keeps_fixed_completion_table_contract(self):
+        content = (
+            REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("### Mandatory Batch Completion Response", content)
+        self.assertIn("计划ID｜达人昵称｜商品ID｜素材ID｜素材标题", content)
+        self.assertIn("Output `presentation.rendered_markdown` verbatim", content)
+        self.assertIn("Do not reconstruct it from `counts`, `results`", content)
+        self.assertIn("never substitute a table whose columns are", content)
+        self.assertIn("Even when there are no successful rows", content)
+        self.assertIn("never infer an override", content)
+
+    def test_qianchuan_skill_keeps_runtime_mcp_routing_contract(self):
+        skill_root = REPO_ROOT / "skills" / "qc-plan-monitor"
+        content = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        routing = (
+            skill_root / "references" / "mcp-capability-routing.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("MCP is an optional", content)
+        self.assertIn("runtime `tools/list`", content)
+        self.assertIn("never retry through OpenAPI", content)
+        self.assertIn("220 tools", routing)
+        self.assertIn("151 `qianchuan_*_v1` tools", routing)
+        self.assertIn("qianchuan_uni_aweme_ad_create_v1", routing)
+        self.assertIn("qianchuan_report_material_get_v1", routing)
+
     def test_packaged_first_run_resource_is_valid_json(self):
         resource = resources.files("ocean_watch.resources").joinpath("config.example.json")
         with resource.open(encoding="utf-8") as stream:

@@ -186,7 +186,7 @@ class LegacySseBridge:
             raise RuntimeError("Unable to send a message to the official MCP") from error
 
 
-def probe(app_id, developer_id, timeout=30):
+def discover_tools(app_id, developer_id, timeout=30):
     responses = {}
     condition = threading.Condition()
 
@@ -234,14 +234,24 @@ def probe(app_id, developer_id, timeout=30):
         "params": {},
     }).encode("utf-8"))
     result = wait_for(tools_id)
-    names = sorted(
-        tool.get("name")
-        for tool in (result.get("tools") or [])
-        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    tools = sorted(
+        (
+            tool
+            for tool in (result.get("tools") or [])
+            if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+        ),
+        key=lambda tool: tool["name"],
     )
-    if not names:
+    if not tools:
         raise RuntimeError("Official MCP returned no developer tools")
-    return names
+    return tools
+
+
+def probe(app_id, developer_id, timeout=30):
+    return [
+        tool["name"]
+        for tool in discover_tools(app_id, developer_id, timeout=timeout)
+    ]
 
 
 def main():
