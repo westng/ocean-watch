@@ -279,6 +279,16 @@ COMMANDS = {
 }
 
 
+def configure_standard_streams(stdout=None, stderr=None):
+    for stream in (
+        sys.stdout if stdout is None else stdout,
+        sys.stderr if stderr is None else stderr,
+    ):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ocean-watch", description="Ocean Engine operations for Codex")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -295,6 +305,7 @@ def build_parser():
 
 
 def main(argv=None):
+    configure_standard_streams()
     arguments, command_arguments = build_parser().parse_known_args(argv)
     handler, prefix, _ = COMMANDS[(arguments.domain, arguments.action)]
     try:

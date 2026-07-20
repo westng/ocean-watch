@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
 from unittest import mock
 
@@ -21,6 +21,19 @@ from tests.support import business_template_config
 
 
 class CliTests(unittest.TestCase):
+    def test_configures_non_utf8_standard_streams_for_unicode_output(self):
+        buffer = BytesIO()
+        stdout = TextIOWrapper(buffer, encoding="cp1252")
+
+        cli.configure_standard_streams(stdout=stdout, stderr=StringIO())
+        stdout.write("千川初始化成功")
+        stdout.flush()
+
+        self.assertEqual(buffer.getvalue().decode("utf-8"), "千川初始化成功")
+
+    def test_configures_string_io_without_reconfigure(self):
+        cli.configure_standard_streams(stdout=StringIO(), stderr=StringIO())
+
     def test_exposes_runtime_mcp_capability_listing(self):
         handler, prefix, description = cli.COMMANDS[("mcp", "capabilities")]
         self.assertIs(handler, configure_official_mcp.main)
