@@ -1,6 +1,6 @@
 import copy
-import datetime as dt
 import unittest
+from unittest import mock
 
 from ocean_watch.core.errors import ApiError
 from ocean_watch.reports import query_qianchuan_plan_report
@@ -108,6 +108,47 @@ class FakeMcpClient:
 
 
 class QianchuanPlanReportTests(unittest.TestCase):
+    def test_cli_defaults_report_and_metadata_queries_to_today(self):
+        result = {"ok": True}
+        with mock.patch.object(
+            query_qianchuan_plan_report,
+            "today",
+            return_value="2026-07-20",
+        ), mock.patch.object(
+            query_qianchuan_plan_report.config_paths,
+            "resolve_config_path",
+            return_value="config.json",
+        ), mock.patch.object(
+            query_qianchuan_plan_report.token_manager,
+            "ensure_access_token",
+            return_value={"api": {"access_token": "secret"}},
+        ), mock.patch.object(
+            query_qianchuan_plan_report,
+            "StreamableHttpMcpClient",
+        ) as client_class, mock.patch.object(
+            query_qianchuan_plan_report,
+            "query_plan_report",
+            return_value=result,
+        ) as query_report, mock.patch.object(
+            query_qianchuan_plan_report,
+            "write_json",
+        ) as write_json:
+            code = query_qianchuan_plan_report.main([
+                "--advertiser-id",
+                "1234567890123456",
+            ])
+
+        self.assertEqual(code, 0)
+        query_report.assert_called_once_with(
+            client_class.return_value,
+            "1234567890123456",
+            start_date="2026-07-20",
+            end_date="2026-07-20",
+            top=10,
+            status="ALL",
+        )
+        write_json.assert_called_once_with(result, None)
+
     def test_uses_report_values_without_guessing_scale_and_builds_weighted_summary(self):
         client = FakeMcpClient(
             [
@@ -461,7 +502,7 @@ class QianchuanPlanReportTests(unittest.TestCase):
         self.assertEqual(result["summary"]["total_pay_order_gmv"], 0.01)
         self.assertEqual(result["summary"]["total_pay_roi"], 1.0)
 
-    def test_metadata_search_targets_report_ids_independent_of_report_dates(self):
+    def test_metadata_search_uses_report_date_range(self):
         client = FakeMcpClient(
             [[plan_row(77, "older-plan")]],
             [[report_row(77, 2.0, 3.0, 2.5, 1)]],
@@ -483,10 +524,8 @@ class QianchuanPlanReportTests(unittest.TestCase):
         self.assertEqual(filtering, {"status": "ALL", "having_cost": "ALL"})
         self.assertNotIn("create_start_date", filtering)
         self.assertNotIn("create_end_date", filtering)
-        metadata_start = dt.datetime.fromisoformat(metadata_call["start_time"])
-        metadata_end = dt.datetime.fromisoformat(metadata_call["end_time"])
-        self.assertEqual((metadata_end - metadata_start).days, 179)
-        self.assertNotEqual(metadata_call["start_time"], "2025-01-01 00:00:00")
+        self.assertEqual(metadata_call["start_time"], "2025-01-01 00:00:00")
+        self.assertEqual(metadata_call["end_time"], "2025-01-02 23:59:59")
         self.assertEqual(result["rows"][0]["name"], "older-plan")
 
 

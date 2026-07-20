@@ -145,6 +145,71 @@ class ManagedAccountReportTests(unittest.TestCase):
         self.assertEqual(summary["channel_summaries"]["marketing"]["weighted_roi"], 2.0)
         self.assertEqual(summary["channel_summaries"]["qianchuan"]["weighted_roi"], 3.0)
 
+    def test_presentation_is_mandatory_and_preserves_failures_and_metric_basis(self):
+        rows = [
+            {
+                **account("marketing", "1001", "营销|账户"),
+                "channel_name": "巨量营销",
+                "query_status": "ok",
+                "spend": 10,
+                "orders": 2,
+                "gmv": 20,
+                "roi": 2,
+                "net_orders_1h": 1,
+                "net_gmv_1h": 12,
+                "net_roi_1h": 1.2,
+            },
+            {
+                **account("qianchuan", "1002", "千川账户"),
+                "channel_name": "巨量千川",
+                "query_status": "failed",
+                "error": {
+                    "code": "api_error",
+                    "message": "remote failure",
+                    "details": {"code": 40100, "message": "系统请求频率超限"},
+                },
+            },
+        ]
+
+        result = query_managed_accounts_report.build_result(
+            rows,
+            "2026-07-20",
+            "2026-07-20",
+        )
+
+        presentation = result["presentation"]
+        self.assertTrue(presentation["required"])
+        self.assertFalse(presentation["allow_column_omission"])
+        self.assertFalse(presentation["allow_column_reordering"])
+        self.assertEqual(
+            presentation["required_sections"],
+            ["date_range", "summary", "accounts", "channel_summaries", "metric_basis"],
+        )
+        markdown = presentation["rendered_markdown"]
+        self.assertIn("**查询日期：** 2026-07-20", markdown)
+        self.assertIn("共 2 个；成功 1 个；失败 1 个；总消耗 ¥10.00", markdown)
+        self.assertIn("| 渠道 | 账户名称 | 广告主 ID | 启用状态 | 查询状态 |", markdown)
+        self.assertIn("营销\\|账户", markdown)
+        self.assertIn("| 巨量千川 | 千川账户 | 1002 | 已启用 | 失败 |", markdown)
+        self.assertIn("40100: 系统请求频率超限", markdown)
+        self.assertIn("| 巨量营销 | GMV | in_app_order_gmv |", markdown)
+        self.assertIn("| 巨量千川 | GMV | total_pay_order_gmv_include_coupon_for_roi2 |", markdown)
+
+    def test_channel_summary_includes_all_standard_metrics(self):
+        summary = query_managed_accounts_report.summarize_metrics([
+            {
+                "spend": 10,
+                "orders": 2,
+                "gmv": 20,
+                "net_orders_1h": 1,
+                "net_gmv_1h": 12,
+            },
+        ])
+        self.assertEqual(summary["total_orders"], 2)
+        self.assertEqual(summary["total_net_orders_1h"], 1)
+        self.assertEqual(summary["total_net_gmv_1h"], 12.0)
+        self.assertEqual(summary["weighted_net_roi_1h"], 1.2)
+
     def test_transient_api_errors_are_retried(self):
         def retrying_query(error_code, calls):
             def query_fn(_path, current, _start, _end):

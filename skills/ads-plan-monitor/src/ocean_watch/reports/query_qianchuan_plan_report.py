@@ -20,7 +20,6 @@ DEFAULT_ADLAB_SCENE = "UNI_PROJECT"
 REPORT_DATA_TOPIC = "SITE_PROMOTION_PRODUCT_AD"
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGES = 500
-PLAN_HISTORY_WINDOW_DAYS = 180
 
 DEFAULT_FIELDS = [
     "stat_cost",
@@ -295,12 +294,13 @@ def fetch_plan_metadata(
     advertiser_id,
     ad_ids,
     *,
+    start_date,
+    end_date,
     marketing_goal=DEFAULT_MARKETING_GOAL,
     adlab_scene=DEFAULT_ADLAB_SCENE,
     status="ALL",
     page_size=DEFAULT_PAGE_SIZE,
     max_pages=MAX_PAGES,
-    today_value=None,
     allow_missing=False,
 ):
     rows = []
@@ -308,7 +308,6 @@ def fetch_plan_metadata(
     target_ids = set(dict.fromkeys(str(value) for value in ad_ids))
     request_ids = []
     page_count = 0
-    today_value = today_value or dt.date.today()
     if not target_ids:
         return {
             "rows": [],
@@ -318,7 +317,6 @@ def fetch_plan_metadata(
             "missing_ad_ids": [],
         }
 
-    period_start = today_value - dt.timedelta(days=PLAN_HISTORY_WINDOW_DAYS - 1)
     page = 1
     expected_pages = None
     expected_total = None
@@ -328,8 +326,8 @@ def fetch_plan_metadata(
             PLAN_LIST_TOOL,
             {
                 "advertiser_id": int(advertiser_id),
-                "start_time": f"{period_start.isoformat()} 00:00:00",
-                "end_time": f"{today_value.isoformat()} 23:59:59",
+                "start_time": f"{start_date} 00:00:00",
+                "end_time": f"{end_date} 23:59:59",
                 "marketing_goal": marketing_goal,
                 "adlab_scene": adlab_scene,
                 "fields": ["stat_cost"],
@@ -639,6 +637,8 @@ def query_plan_report(
         client,
         advertiser_id,
         report_ad_ids,
+        start_date=start_date,
+        end_date=end_date,
         marketing_goal=marketing_goal,
         adlab_scene=adlab_scene,
         status=status,

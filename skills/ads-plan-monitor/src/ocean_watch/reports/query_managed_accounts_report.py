@@ -48,6 +48,44 @@ MARKETING_METRICS = [
     "in_app_order_net_gmv_1h",
     "in_app_order_net_roi_1h",
 ]
+PRESENTATION_COLUMNS = (
+    ("channel_name", "渠道"),
+    ("name", "账户名称"),
+    ("advertiser_id", "广告主 ID"),
+    ("enabled_label", "启用状态"),
+    ("query_status_label", "查询状态"),
+    ("spend", "消耗"),
+    ("orders", "订单"),
+    ("gmv", "GMV"),
+    ("roi", "ROI"),
+    ("net_orders_1h", "1h 结算订单"),
+    ("net_gmv_1h", "1h 结算金额"),
+    ("net_roi_1h", "1h 结算 ROI"),
+    ("error_summary", "失败原因"),
+)
+PRESENTATION_MONEY_FIELDS = {
+    "spend",
+    "gmv",
+    "net_gmv_1h",
+    "total_spend",
+    "total_gmv",
+    "total_net_gmv_1h",
+}
+PRESENTATION_RATIO_FIELDS = {
+    "roi",
+    "net_roi_1h",
+    "weighted_roi",
+    "weighted_net_roi_1h",
+}
+METRIC_LABELS = {
+    "spend": "消耗",
+    "orders": "订单",
+    "gmv": "GMV",
+    "roi": "ROI",
+    "net_orders_1h": "1h 结算订单",
+    "net_gmv_1h": "1h 结算金额",
+    "net_roi_1h": "1h 结算 ROI",
+}
 
 
 def today():
@@ -258,12 +296,19 @@ def query_accounts(
 
 def summarize_metrics(rows, *, metric_basis=None):
     spend = sum((number(row.get("spend")) for row in rows), Decimal(0))
+    orders = sum((number(row.get("orders")) for row in rows), Decimal(0))
     gmv = sum((number(row.get("gmv")) for row in rows), Decimal(0))
+    net_orders = sum((number(row.get("net_orders_1h")) for row in rows), Decimal(0))
+    net_gmv = sum((number(row.get("net_gmv_1h")) for row in rows), Decimal(0))
     return {
         "account_count": len(rows),
         "total_spend": rounded(spend, 2),
+        "total_orders": int(orders),
         "total_gmv": rounded(gmv, 2),
         "weighted_roi": rounded(gmv / spend, 4) if spend else 0.0,
+        "total_net_orders_1h": int(net_orders),
+        "total_net_gmv_1h": rounded(net_gmv, 2),
+        "weighted_net_roi_1h": rounded(net_gmv / spend, 4) if spend else 0.0,
         "metric_basis": metric_basis,
     }
 
@@ -306,6 +351,171 @@ def build_summary(rows):
     }
 
 
+def presentation_value(field, value):
+    if value is None or value == "":
+        return "—"
+    if field in PRESENTATION_MONEY_FIELDS:
+        value = f"¥{number(value):,.2f}"
+    elif field in PRESENTATION_RATIO_FIELDS:
+        value = f"{number(value):.4f}".rstrip("0").rstrip(".")
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def account_error_summary(row):
+    error = row.get("error") or {}
+    details = error.get("details") or {}
+    code = details.get("code") or error.get("code")
+    message = details.get("message") or error.get("message")
+    if code and message:
+        return f"{code}: {message}"
+    return str(message or code or "—")
+
+
+def presentation_account_row(row):
+    successful = row.get("query_status") == "ok"
+    return {
+        **row,
+        "channel_name": row.get("channel_name")
+        or channels.CHANNELS[row["channel"]]["display_name"],
+        "enabled_label": "已启用" if row.get("enabled") else "已停用",
+        "query_status_label": "成功" if successful else "失败",
+        "spend": row.get("spend") if successful else None,
+        "orders": row.get("orders") if successful else None,
+        "gmv": row.get("gmv") if successful else None,
+        "roi": row.get("roi") if successful else None,
+        "net_orders_1h": row.get("net_orders_1h") if successful else None,
+        "net_gmv_1h": row.get("net_gmv_1h") if successful else None,
+        "net_roi_1h": row.get("net_roi_1h") if successful else None,
+        "error_summary": "—" if successful else account_error_summary(row),
+    }
+
+
+def markdown_table(columns, rows):
+    table = [
+        "| " + " | ".join(label for _, label in columns) + " |",
+        "| " + " | ".join("---" for _ in columns) + " |",
+    ]
+    table.extend(
+        "| "
+        + " | ".join(presentation_value(field, row.get(field)) for field, _ in columns)
+        + " |"
+        for row in rows
+    )
+    return "\n".join(table)
+
+
+def render_presentation(summary, rows, start_date, end_date):
+    date_range = start_date if start_date == end_date else f"{start_date} 至 {end_date}"
+    lines = [
+        f"**查询日期：** {date_range}",
+        "",
+        (
+            "**负责账户汇总：** "
+            f"共 {summary['account_count']} 个；成功 {summary['successful_account_count']} 个；"
+            f"失败 {summary['failed_account_count']} 个；总消耗 ¥{summary['total_spend']:,.2f}"
+        ),
+    ]
+    if summary["aggregate_gmv_comparable"] and summary["channel_summaries"]:
+        lines.extend([
+            "",
+            (
+                "**同渠道成交汇总：** "
+                f"GMV ¥{summary['total_gmv']:,.2f}；加权 ROI "
+                f"{summary['weighted_roi']:.4f}".rstrip("0").rstrip(".")
+            ),
+        ])
+    elif summary["mixed_channel_note"]:
+        lines.extend(["", f"**跨渠道说明：** {summary['mixed_channel_note']}"])
+
+    lines.extend([
+        "",
+        "### 账户明细",
+        "",
+        markdown_table(PRESENTATION_COLUMNS, [presentation_account_row(row) for row in rows]),
+        "",
+        "### 分渠道汇总",
+        "",
+    ])
+    channel_summary_columns = (
+        ("channel_name", "渠道"),
+        ("account_count", "成功账户"),
+        ("total_spend", "消耗"),
+        ("total_orders", "订单"),
+        ("total_gmv", "GMV"),
+        ("weighted_roi", "ROI"),
+        ("total_net_orders_1h", "1h 结算订单"),
+        ("total_net_gmv_1h", "1h 结算金额"),
+        ("weighted_net_roi_1h", "1h 结算 ROI"),
+    )
+    channel_rows = [
+        {
+            **summary["channel_summaries"][channel],
+            "channel_name": channels.CHANNELS[channel]["display_name"],
+        }
+        for channel in channels.CHANNELS
+        if channel in summary["channel_summaries"]
+    ]
+    lines.extend([
+        markdown_table(channel_summary_columns, channel_rows),
+        "",
+        "### 指标口径",
+        "",
+    ])
+    metric_columns = (
+        ("channel_name", "渠道"),
+        ("metric", "指标"),
+        ("field", "官方字段"),
+    )
+    metric_rows = [
+        {
+            "channel_name": channels.CHANNELS[channel]["display_name"],
+            "metric": METRIC_LABELS[metric],
+            "field": field,
+        }
+        for channel in channels.CHANNELS
+        if any(row.get("channel") == channel for row in rows)
+        for metric, field in METRIC_BASES[channel].items()
+    ]
+    lines.append(markdown_table(metric_columns, metric_rows))
+    return "\n".join(lines)
+
+
+def presentation_contract(summary, rows, start_date, end_date):
+    return {
+        "format": "markdown",
+        "required": True,
+        "allow_column_omission": False,
+        "allow_column_reordering": False,
+        "columns": [
+            {"field": field, "label": label}
+            for field, label in PRESENTATION_COLUMNS
+        ],
+        "required_sections": [
+            "date_range",
+            "summary",
+            "accounts",
+            "channel_summaries",
+            "metric_basis",
+        ],
+        "rendered_markdown": render_presentation(summary, rows, start_date, end_date),
+    }
+
+
+def build_result(rows, start_date, end_date):
+    summary = build_summary(rows)
+    return {
+        "ok": all(row["query_status"] == "ok" for row in rows),
+        "mode": "managed_accounts_spend",
+        "date_range": {
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+        "summary": summary,
+        "accounts": rows,
+        "presentation": presentation_contract(summary, rows, start_date, end_date),
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Query spend for locally responsible accounts.")
     parser.add_argument("--config")
@@ -343,16 +553,7 @@ def main(argv=None):
         end_date.isoformat(),
         concurrency=args.concurrency,
     )
-    result = {
-        "ok": all(row["query_status"] == "ok" for row in rows),
-        "mode": "managed_accounts_spend",
-        "date_range": {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-        },
-        "summary": build_summary(rows),
-        "accounts": rows,
-    }
+    result = build_result(rows, start_date.isoformat(), end_date.isoformat())
     write_json(result, args.out)
     return 0 if result["ok"] else 1
 

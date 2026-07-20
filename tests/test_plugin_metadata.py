@@ -101,7 +101,10 @@ class PluginMetadataTests(unittest.TestCase):
                 self.assertIn("semantic responsible-account intent", content)
                 self.assertIn("not an exact or exhaustive keyword list", content)
                 self.assertIn("during the current turn", content)
-                self.assertIn("fixed sentence, field list, or Markdown layout", content)
+                self.assertIn("presentation.rendered_markdown", content)
+                self.assertIn("mandatory response contract", content)
+                self.assertIn("A shorter membership-style answer is not an allowed substitute", content)
+                self.assertIn("Do not reconstruct it from `accounts` or `summary`", content)
 
     def test_qianchuan_plan_report_keeps_default_presentation_contract(self):
         content = (
