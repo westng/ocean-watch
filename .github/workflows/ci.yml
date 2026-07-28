@@ -90,6 +90,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26.5"
+          cache-dependency-path: |
+            prototype/ocean-watch-go/go.sum
+            prototype/runtime-bootstrap/go.mod
       - name: Test and vet Go modules
         shell: bash
         run: |

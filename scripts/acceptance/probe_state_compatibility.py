@@ -93,7 +93,9 @@ def run_probe(out: Path | None = None) -> dict:
             raise RuntimeError(holder.stderr.read() if holder.stderr else "lock holder failed")
 
         workers = [_run_child("increment", state, "10") for _ in range(8)]
-        worker_codes = [worker.wait(timeout=10) for worker in workers]
+        worker_results = [worker.communicate(timeout=10) for worker in workers]
+        worker_codes = [worker.returncode for worker in workers]
+        worker_errors = [stderr.strip() for _, stderr in worker_results]
         final_state = load_json(state)
 
         crash = _run_child("crash", state)
@@ -113,6 +115,7 @@ def run_probe(out: Path | None = None) -> dict:
                 "timeout_elapsed_seconds": round(timeout_elapsed, 3),
                 "holder_exit_code": holder.returncode,
                 "worker_exit_codes": worker_codes,
+                "worker_errors": worker_errors,
                 "final_counter": final_state["counter"],
             },
             "atomic_write": {

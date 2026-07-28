@@ -46,11 +46,13 @@ class ProcessLock:
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.handle = self.path.open("a+b")
-        self.handle.seek(0, os.SEEK_END)
-        if self.handle.tell() == 0:
-            self.handle.write(b"\0")
-            self.handle.flush()
+        with self.path.open("a+b") as initializer:
+            initializer.seek(0, os.SEEK_END)
+            if initializer.tell() == 0:
+                initializer.write(b" ")
+                initializer.flush()
+                os.fsync(initializer.fileno())
+        self.handle = self.path.open("r+b")
         deadline = time.monotonic() + self.timeout
         while not self._try_lock():
             if time.monotonic() >= deadline:
@@ -60,9 +62,10 @@ class ProcessLock:
             time.sleep(0.1)
         self.nonce = secrets.token_hex(8)
         metadata = json.dumps({"pid": os.getpid(), "nonce": self.nonce}).encode("utf-8")
+        self.handle.seek(0, os.SEEK_END)
+        record_size = max(self.handle.tell(), len(metadata))
         self.handle.seek(0)
-        self.handle.truncate()
-        self.handle.write(metadata)
+        self.handle.write(metadata.ljust(record_size, b" "))
         self.handle.flush()
         os.fsync(self.handle.fileno())
         return self

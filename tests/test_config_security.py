@@ -349,6 +349,13 @@ class FileLockTests(unittest.TestCase):
             metadata = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(metadata["pid"], os.getpid())
             self.assertEqual(metadata["nonce"], lock.nonce)
+            path.write_bytes(path.read_bytes().ljust(512, b" "))
+            record_size = path.stat().st_size
+
+            with process_lock.ProcessLock(path, timeout=0.1):
+                pass
+            json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(path.stat().st_size, record_size)
 
     def test_process_lock_times_out_when_same_file_is_held(self):
         with tempfile.TemporaryDirectory() as directory:

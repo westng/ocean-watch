@@ -38,6 +38,7 @@
 
 ### 修复
 
+- 修复 Windows 多进程并发更新本地状态时，锁文件元数据截断可能与并发句柄冲突并导致单个写入进程异常退出的问题。
 - 收紧未来 G5 外部证据工具的来源校验：模型、canary、Marketplace、回滚和 rollout 使用固定角色、artifact 名和证据文件集合；最终汇总拒绝任意 workflow、错角色、错 artifact、跨角色文件注入及底层 source run 复用。
 - 将“我负责的账户/我常用的账户”等名单意图与账户表现查询拆分：名单只读取本机启用账户簿并返回固定四列表格，不刷新 Token 或调用报表；消耗、GMV、ROI、订单等表现意图才执行实时账户报表。
 - 修正千川负责账户表现查询，直接调用 `/v1.0/qianchuan/report/uni_promotion/get/` 账户维度聚合接口，不再复用计划报表或扫描 `/v1.0/qianchuan/uni_promotion/list/` 计划列表。
