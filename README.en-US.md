@@ -57,67 +57,69 @@ codex plugin add ocean-watch@ocean-watch
 
 See the [release guide](docs/releasing.md) for the maintainer workflow.
 
-## Everyday examples
+## Everyday Q&A
 
-Send requests like these directly to Codex, replacing placeholders with your own account, template, product, and work links.
+These questions are examples, not fixed commands. You can use conversational wording, abbreviations, or follow-up questions; Codex routes by intent.
 
 ### First-time setup
 
-```text
-Check my Qianchuan environment and guide me through authorization.
-```
+**Q:** This is my first time using Ocean Watch. Can you check the environment and guide me through Marketing authorization?
 
-Codex checks the runtime, secure credential backend, and OAuth port, then guides you through the channel-specific app and authorization flow. Marketing and Qianchuan are authorized separately.
+**Ocean Watch:** It checks the runtime, secure credential backend, and OAuth port, then guides you through channel-specific app configuration and authorization. Marketing and Qianchuan are authorized separately.
 
-### Daily account overview
+### Responsible accounts and spend
 
-```text
-Show today's spend for all accounts I am responsible for. Summarize by channel and identify accounts that could not be queried.
-```
+**Q:** Add Qianchuan account `1234567890` to the accounts I manage and call it “Flagship Store.”
 
-Accounts are queried concurrently and failures are isolated. Marketing and Qianchuan GMV/ROI remain separate because their official metric definitions differ.
+**Ocean Watch:** It adds the account to the local registry. Later questions such as “Which accounts am I responsible for?” or “What are my commonly used ad accounts?” return the enabled account list only, without querying reports or refreshing tokens.
 
-If you only ask “Which accounts am I responsible for?” or “What are my commonly used accounts?”, Codex returns the enabled local account registry only. It does not refresh a token or query performance until you explicitly ask for spend, GMV, ROI, orders, or a dated performance view.
+**Follow-up:** Now show today's spend for those accounts, summarize by channel, and identify failures.
+
+**Ocean Watch:** It resolves “those accounts” from the conversation, queries account-level reports concurrently, and isolates individual failures. Marketing and Qianchuan GMV/ROI remain separate because their official definitions differ.
 
 ### Create Marketing plans from uploaded videos
 
-```text
-Find today's uploaded videos for my sunscreen account. Group five videos per unit and use my mixed-material template. Preview only—do not submit.
-```
+**Q:** Find today's videos for my sunscreen account, group five per unit, and create plans with my mixed-material template. Let me review them first.
 
-Codex displays the advertiser, template, groups, budget, ROI, and plan count. A later explicit confirmation is required before online creation.
+**Ocean Watch:** It previews the advertiser, template, groups, budget, ROI, and plan count. Nothing is submitted until you explicitly confirm the preview; resumable project IDs remain visible if unit creation fails after project creation.
 
 ### Use creator-authorized materials
 
-```text
-Find currently authorized videos for this creator and advertiser, then preflight a native-material plan.
-```
+**Q:** Find videos from creator `DOUYIN_SHOW_ID` that are still authorized for this advertiser, then preflight a native-material plan.
 
-Public homepage visibility is kept separate from advertiser-specific delivery authorization. Batch preflight reports ready, completed, resumable, and blocked jobs before submission.
+**Ocean Watch:** It distinguishes public videos from materials that this advertiser can actually deliver. Batch preflight separates ready, completed, resumable, and blocked jobs before confirmation.
 
 ### Process Qianchuan plans from Douyin links
 
-```text
-Check these Douyin work links against my sunscreen Qianchuan template. Create a plan when the creator has none, otherwise append only missing materials. Preflight first.
-```
+**Q:** Create a sunscreen product template for Qianchuan account `1234567890`, product `987654321`, budget 5000, and target ROI 1.7.
 
-Official APIs verify creator authorization, work ownership, and product matching. Invalid, unauthorized, mismatched, or existing materials are skipped and explained.
+**Ocean Watch:** It validates the channel, advertiser, and product bindings before saving the template.
+
+**Follow-up:** Use that template for these Douyin works. Create a plan when the creator has no matching plan; otherwise append only missing materials. Preflight first.
+
+**Ocean Watch:** Official APIs verify authorization, ownership, and product matching. Invalid, unauthorized, mismatched, and existing materials are skipped. After confirmation, successful rows always contain `Plan ID | Creator | Product ID | Material ID | Material title`; skips and failures are explained separately.
 
 ### Remove a Qianchuan work safely
 
-```text
-Preflight removing this Douyin work from plan AD_ID. Show the exact materials and any linked impact before doing anything.
-```
+**Q:** I want to remove this Douyin work from plan `AD_ID`. Show the exact materials and linked impact first, but do not execute.
 
-Only custom-selected materials can be removed. Codex waits for confirmation and verifies the official deletion state afterward.
+**Ocean Watch:** It maps the work to exact plan materials and only permits removal of custom-selected materials. Submission requires another confirmation and is followed by an official state check.
+
+### Create a Qianchuan live plan
+
+**Q:** Create a live all-domain template for Qianchuan account `1234567890` and preview a live plan with the default settings.
+
+**Ocean Watch:** It uses a dedicated live template without product-work fields, then previews budget, bidding, schedule, and intelligent material settings before submission.
 
 ### Review performance
 
-```text
-Show the last seven days of Marketing material spend, highlight high-spend low-conversion materials, and recommend pause, observe, or scale actions.
-```
+**Q:** Show the last seven days of Marketing material performance, list the top ten by spend and high-spend low-conversion materials, then recommend actions.
 
-Reports stay in the conversation unless an output file is explicitly requested. Recommendations are read-only and never modify plans automatically.
+**Ocean Watch:** It returns a read-only report with pause, observe, or scale recommendations and never changes plans automatically.
+
+**Follow-up:** What about today's product all-domain plans for Qianchuan account `1234567890`?
+
+**Ocean Watch:** It queries Qianchuan plan reporting, summarizes spend, GMV, orders, and weighted ROI, and preserves Qianchuan-specific metric definitions.
 
 ## Confirmation rules
 
@@ -126,30 +128,9 @@ Reports stay in the conversation unless an output file is explicitly requested. 
 - Templates, tokens, and materials cannot cross channel or advertiser boundaries.
 - Partial skips or failures are reported without hiding successful results.
 
-## Advanced: CLI overview
+## Automation and diagnostics
 
-Everyday users do not need the CLI. It is available for scripts, precise arguments, and diagnostics:
-
-```text
-ocean-watch
-├── setup          # Diagnostics and initialization
-├── auth           # Marketing/Qianchuan OAuth and tokens
-├── accounts       # Responsible accounts and spend
-├── templates      # Unified lookup and Marketing templates
-├── qc-templates   # Qianchuan product and live templates
-├── materials      # Marketing materials
-├── qc-materials   # Qianchuan creator materials and work inspection
-├── qc-products    # Qianchuan product discovery
-├── plans          # Single and batch plan workflows
-├── qc-plans       # Qianchuan plan lookup and setting updates
-├── runs           # Local execution journals
-├── reports        # Marketing reports
-├── qc-reports     # Qianchuan plan and material reports
-├── discover       # Official asset discovery
-└── mcp            # Optional official MCP setup and capability discovery
-```
-
-Every level supports `--help`. The full command reference is in [docs/cli.md](docs/cli.md).
+Everyday users should express delivery goals in natural language without learning internal command groups. Use the stable CLI only for scripting, precise arguments, or diagnostics; see the [CLI reference](docs/cli.md) for actions and parameters. CLI groups are a migration compatibility contract, not the new architecture's domain modules and not evidence that a command has moved to Go. The [Go SDK migration matrix](docs/go-sdk-migration-matrix.md) is the authority for per-command routing status.
 
 ## Security
 
@@ -179,7 +160,34 @@ python3 -m pip install -e ".[dev]"
 ocean-watch --help
 ```
 
-The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. See [Architecture](docs/architecture.md) for module boundaries.
+## Current Runtime Architecture
+
+As of 2026-07-28, the repository is in a dual-runtime migration with a single production path:
+
+```mermaid
+flowchart LR
+    User["Natural-language intent"] --> Skills["Marketing / Qianchuan Skills"]
+    Skills --> Contract["Stable CLI and Presentation contracts"]
+    Contract --> Policy["Signed route policy"]
+    Policy -->|"current production"| Python["Python compatibility runtime"]
+    Policy -.->|"isolated Shadow"| Go["Go modular monolith"]
+    Go --> App["Application"]
+    App --> Domain["Domain + Ports"]
+    Domain --> Adapters["Official SDK / State / Credential adapters"]
+    Python --> Shared["Shared state and credential contracts"]
+    Adapters --> Shared
+```
+
+| Scope | Current state |
+| --- | --- |
+| Installed users and production commands | Both Skill `run.py` entrypoints still route to the Python runtime in `skills/ads-plan-monitor/src/ocean_watch/` |
+| Production routing policy | `.codex-plugin/runtime-policy.json` remains `enabled: false`; installed users cannot switch to Go automatically |
+| Go SDK candidate | `prototype/ocean-watch-go/` contains official SDK adapters, modular business implementations, and contract tests, but remains an isolated Shadow candidate |
+| Native bootstrap candidate | `prototype/runtime-bootstrap/` validates candidate signatures, platforms, digests, and versions, but is not part of the production installation path yet |
+| Known migration gaps | `auth set-app/authorize/status/refresh/sync-accounts/mappings` and `qc-materials inspect-work` do not yet have Go CLI handlers |
+| Production prerequisites | Real canaries, five-platform native consumption, candidate identity binding, independent approvals, and all G1-G5 Gates are not yet complete |
+
+Most P1-P5 automation is implemented in the isolated candidate, but “Go component implemented,” “Go handler wired,” and “production route enabled” are separate states. Candidate code, local tests, or ordinary CI success never means installed users are running Go. See [Architecture](docs/architecture.md) for the runtime boundary, [Go SDK migration matrix](docs/go-sdk-migration-matrix.md) for per-command status, and [machine contracts](contracts/README.md) for phase status, blockers, and acceptance definitions.
 
 ## Documentation
 
@@ -188,6 +196,8 @@ The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. S
 - [CLI reference](docs/cli.md) (Chinese)
 - [Configuration](docs/configuration.md) (Chinese)
 - [Architecture](docs/architecture.md) (Chinese)
+- [Go SDK migration matrix](docs/go-sdk-migration-matrix.md) (Chinese)
+- [Phase status and acceptance contracts](contracts/README.md) (Chinese)
 - [Release guide](docs/releasing.md) (Chinese)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
@@ -196,13 +206,15 @@ The shared implementation lives in `skills/ads-plan-monitor/src/ocean_watch/`. S
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
-ruff check skills/ads-plan-monitor/src tests
-bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+ruff check skills/ads-plan-monitor/src scripts tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
+(cd prototype/ocean-watch-go && GOTOOLCHAIN=go1.26.5 go test ./...)
+(cd prototype/runtime-bootstrap && GOTOOLCHAIN=go1.26.5 go test ./...)
 python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI covers Python `3.9` and `3.12` on Windows, macOS, and Linux, including source-installed CLI, first-run, Plugin manifest, and both Skill metadata checks.
+CI validates the production Python runtime on Python `3.9` and `3.12` across Windows, macOS, and Linux, tests both Go modules, builds a non-release candidate, and consumes it on five native targets. Ordinary CI uses a public test signing identity and cannot produce a release; a failed job is never Gate evidence.
 
 ## License
 

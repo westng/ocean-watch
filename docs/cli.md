@@ -1,10 +1,10 @@
 # CLI 参考
 
-本文记录统一 CLI 的命令结构和主要行为。首次使用请先阅读[快速开始](getting-started.md)；配置位置、模板 Schema 和凭据边界见[配置与授权](configuration.md)。具体参数始终以对应命令的 `--help` 为准。
+本文记录统一 CLI 的当前兼容命令合同和主要行为。首次使用请先阅读[快速开始](getting-started.md)；配置位置、模板 Schema 和凭据边界见[配置与授权](configuration.md)。具体参数始终以对应命令的 `--help` 为准。
 
 ## 入口
 
-安装 Python 包后使用 `ocean-watch`。Plugin 内无需安装时可从对应 Skill 启动：
+安装 Python 包后使用 `ocean-watch`。当前 Plugin 生产策略仍执行 Python 运行时；Plugin 内无需安装时可从对应 Skill 启动：
 
 ```bash
 python3 skills/ads-plan-monitor/run.py
@@ -13,7 +13,11 @@ python3 skills/qc-plan-monitor/run.py
 
 下文统一写作 `ocean-watch`。所有业务命令支持 `--config PATH`；不指定时按环境变量、开发配置、用户配置顺序解析。
 
-## 命令树
+仓库中的 `prototype/ocean-watch-go` 是隔离 Shadow 候选，不是第二套用户 CLI。它复用同一命令、参数、JSON、退出码和 Presentation 合同，并通过不可变路由 manifest 选择 Go handler 或 Python fallback。生产 manifest 当前将所有命令固定到 Python；贡献者应根据[迁移矩阵](go-sdk-migration-matrix.md)判断 handler 状态，不得因 Go package 存在就假定命令已接入或已发布。
+
+## 当前兼容命令目录
+
+下列 75 个 action 与 `contracts/commands.yaml` 一致，用于保护现有脚本、参数、退出码和 Presentation。它不是领域架构图：例如历史 `plans` 命名空间同时包含营销和千川写入，新 Go 实现仍按 Marketing/Qianchuan Application、Port 和 Adapter 分离。新增或废弃命令必须先修改运行时注册表并重新生成机器合同，不能只改本文。
 
 ```text
 ocean-watch
@@ -402,7 +406,7 @@ ocean-watch reports custom \
 
 `reports plans` 先请求官方 `/v3.0/report/custom/config/get/`，从当前广告主实际开放的 `UNI_PROJECT_DATA` 契约选择项目 ID、项目名称和指标，再完整分页查询。自定义 `--metric` 若不在当前权限契约中会直接报错，不会降级或猜字段。未查询或契约未开放的 GMV/订单汇总返回 `null`，不伪装成业务值 `0`。
 
-千川商品全域计划报表通过官方 MCP 查询：
+千川商品全域计划报表命令：
 
 ```bash
 ocean-watch qc-reports plans \
@@ -418,7 +422,9 @@ ocean-watch qc-reports materials \
   --top 10
 ```
 
-默认日期为当天，报表数据与计划元数据均只查询当天；显式指定日期范围时，两类查询使用相同范围。营销目标为商品全域，计划范围为 `UNI_PROJECT`，并按消耗降序返回前十。`--top 0` 返回全部报表行；汇总始终基于所有分页结果。命令使用目标广告主绑定的千川 OAuth Token，调用官方 Streamable HTTP MCP。金额和 ROI 只读取全域报表返回值，计划列表补充计划状态、成本保障、出价方式、ROI 目标出价、预算、名称和业务归属，不推算其内部固定精度金额。输出同时包含总消耗、有消耗计划数、整体成交金额、订单数、加权支付 ROI、1 小时净成交金额和加权净成交 ROI。
+默认日期为当天，报表数据与计划元数据均只查询当天；显式指定日期范围时，两类查询使用相同范围。营销目标为商品全域，计划范围为 `UNI_PROJECT`，并按消耗降序返回前十。`--top 0` 返回全部报表行；汇总始终基于所有分页结果。金额和 ROI 只读取全域报表返回值，计划列表只补充计划状态、成本保障、出价方式、ROI 目标出价、预算、名称和业务归属，不推算其内部固定精度金额。输出同时包含总消耗、有消耗计划数、整体成交金额、订单数、加权支付 ROI、1 小时净成交金额和加权净成交 ROI。
+
+当前生产 Python handler 在迁移期仍通过官方 Streamable HTTP MCP 获取该计划报表；Go Shadow handler 已改用官方 SDK REST 的 `config/get`、`data/get` 和计划列表 Service。MCP 是待替换的生产兼容实现和 Shadow 对比来源，不是目标业务架构，也不得在 SDK REST 失败时作为静默回退。生产切流前两条路径必须保持相同日期、财务口径和 Presentation 合同。
 
 结果中的 `presentation` 是默认对话展示契约，并在 `rendered_markdown` 中提供 CLI 已生成的标准表格。`presentation.required=true` 且 `allow_column_omission=false` 时，必须原样展示其中的排名、计划、达人、商品、状态、成本保障、出价方式、目标 ROI、日预算、消耗、订单、GMV、实际 ROI、1 小时结算金额和 1 小时结算 ROI，并补充预算方式和成本保障结果/原因。除非用户在当前请求中明确指定更少或不同的字段，否则不能为了简洁缩减、合并、重排或重命名这些列。
 
@@ -463,4 +469,4 @@ ocean-watch mcp capabilities
 ocean-watch mcp capabilities --tool TOOL_NAME
 ```
 
-`mcp configure/status` 管理可选的官方 MCP；`mcp capabilities` 通过运行时 `tools/list` 返回当前工具名称和描述，`--tool` 返回单个工具的完整输入 Schema。已配置时只对当前明确支持、Schema 匹配且不破坏插件校验与写保护的操作优先使用 MCP。千川业务报表使用独立的官方业务 MCP 传输层，由 `qc-reports` 在内存中注入自动刷新的千川 Token，不把 Token 写入 Codex MCP 配置。
+`mcp configure/status` 管理可选的官方 MCP；`mcp capabilities` 通过运行时 `tools/list` 返回当前工具名称和描述，`--tool` 返回单个工具的完整输入 Schema。它们是保留的诊断兼容命令，不属于目标 SDK 业务数据路径。当前 Python `qc-reports plans` 使用的独立官方业务 MCP 仅是迁移期兼容实现，其 Token 只在内存中注入，不写入 Codex MCP 配置。

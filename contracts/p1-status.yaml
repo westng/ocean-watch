@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: 2026-07-26
+as_of: 2026-07-28
 branch: codex/go-sdk-migration
 stage: P1
 scope: isolated_go_candidate
@@ -18,7 +18,7 @@ tasks:
       - GOTOOLCHAIN=go1.26.5 go vet ./...
       - staticcheck v0.7.0 ./...
       - govulncheck v1.6.0 ./... returned No vulnerabilities found
-      - gosec v2.22.10 full report matched 23 of 23 controlled findings with zero High Critical nosec or scanner errors
+      - gosec v2.22.10 full report matched 24 of 24 controlled findings with zero High Critical nosec or scanner errors
     remaining_gate: Architecture Owner and Runtime Lead sign-off
   P1-02:
     status: shadow_complete_automated
@@ -80,7 +80,7 @@ g1:
   status: automated_ready_external_gate_pending
   migration_state: Shadow
   blockers:
-    - candidate branch has not been pushed, so native Linux and Windows CI evidence does not exist for these bytes
+    - candidate commit d2b7958e9bb41f1e469210cd3ae9b008778f5cbc was pushed, but CI run 30327850057 failed across native candidate jobs and provides no successful G1 native evidence
     - Architecture Owner sign-off is not represented in Git
     - Runtime Lead sign-off is not represented in Git
     - Quality Owner sign-off is not represented in Git

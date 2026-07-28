@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: 2026-07-26
+as_of: 2026-07-28
 branch: codex/go-sdk-migration
 stage: P2
 scope: isolated_go_candidate
@@ -61,7 +61,7 @@ g2:
   migration_state: Shadow
   blockers:
     - real Marketing and Qianchuan read-only canary evidence is absent by development-mode policy
-    - native Linux and Windows CI evidence does not exist for the unpushed candidate branch
+    - pushed candidate CI run 30327850057 failed; native Linux and Windows credential and contract evidence is not accepted
     - Auth Platform Owner sign-off is not represented in Git
     - Marketing Adapter Owner sign-off is not represented in Git
     - Qianchuan API Owner sign-off is not represented in Git

@@ -4,6 +4,14 @@ branch: codex/go-sdk-migration
 stage: P5
 scope: release_candidate_assembly
 production_route_changed: false
+repository_snapshot:
+  pushed_commit: d2b7958e9bb41f1e469210cd3ae9b008778f5cbc
+  worktree_head: d2b7958e9bb41f1e469210cd3ae9b008778f5cbc
+  worktree_plugin_version: 0.9.1+codex.20260728041200
+  worktree_dirty: true
+  remote_ci_run_id: 30327850057
+  remote_ci_conclusion: failure
+  remote_ci_gate_evidence_accepted: false
 candidate_identity:
   record_type: last_local_test_candidate_snapshot
   product_version: 0.9.1

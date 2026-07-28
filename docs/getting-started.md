@@ -4,6 +4,8 @@
 
 ## 1. 准备环境
 
+本节描述当前已发布的生产路径。Go SDK 运行时仍处于隔离 Shadow 和发布 Gate 中，普通用户不需要安装 Go，也不要直接运行 `prototype/` 下的候选程序。
+
 需要：
 
 - Codex CLI `0.144.1+`
@@ -25,6 +27,8 @@ ocean-watch setup doctor
 ```
 
 该命令只检查环境，不安装 Python、不修改系统设置，也不发起 OAuth。
+
+当前 Plugin 的生产策略仍将全部命令路由到 Python。未来 Go 路由启用后会由签名发布 manifest 和 native bootstrap 选择同版本运行时，不会要求用户手工切换；当前状态见[架构说明](architecture.md)。
 
 ## 2. 初始化配置
 

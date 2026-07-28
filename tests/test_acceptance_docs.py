@@ -13,6 +13,55 @@ class AcceptanceDocumentationTests(unittest.TestCase):
         paths = sorted((ROOT / "docs").rglob("*.md"))
         self.assertEqual(check(paths), [])
 
+    def test_current_architecture_docs_reject_retired_descriptions(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        english = (ROOT / "README.en-US.md").read_text(encoding="utf-8")
+        cli = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
+        plugin = json.loads(
+            (ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        go_runtime = (ROOT / "prototype" / "ocean-watch-go" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        bootstrap = (ROOT / "prototype" / "runtime-bootstrap" / "README.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("├── setup", readme)
+        self.assertNotIn("├── setup", english)
+        self.assertIn("CLI 分组是迁移期兼容合同", readme)
+        self.assertIn("CLI groups are a migration compatibility contract", english)
+        self.assertIn("它不是领域架构图", cli)
+        self.assertNotIn("Qianchuan MCP data", plugin["description"])
+        self.assertNotIn("G0/G1 gates pass", go_runtime)
+        self.assertNotIn("P0-05 feasibility proof", bootstrap)
+        self.assertIn("historical", go_runtime)
+        self.assertIn("historical", bootstrap)
+
+    def test_migration_documentation_has_single_authoritative_set(self):
+        retained = (
+            "docs/architecture.md",
+            "docs/go-sdk-migration-matrix.md",
+            "docs/releasing.md",
+            "docs/adr/0001-platform-bootstrap.md",
+            "contracts/README.md",
+            "contracts/acceptance/ac-manifest.yaml",
+        )
+        retired = (
+            "docs/go-sdk-target-architecture.md",
+            "docs/go-sdk-execution-plan.md",
+            "docs/go-sdk-acceptance-plan.md",
+            "docs/go-sdk-release-rfc.md",
+            "docs/go-sdk-threat-model.md",
+        )
+
+        for path in retained:
+            with self.subTest(retained=path):
+                self.assertTrue((ROOT / path).is_file())
+        for path in retired:
+            with self.subTest(retired=path):
+                self.assertFalse((ROOT / path).exists())
+
     def test_p0_status_references_existing_tracked_paths(self):
         import yaml
 

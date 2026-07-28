@@ -57,113 +57,69 @@ codex plugin add ocean-watch@ocean-watch
 
 维护者流程见[发布指南](docs/releasing.md)。
 
-## 普通用户使用案例
+## 普通用户使用 Q&A
 
-下面的内容都可以直接发给 Codex。示例中的账户名、模板名、商品和作品链接换成自己的即可。
+下面的问法只是示意，不是固定口令。你可以使用口语、简称或上下文追问，Codex 会根据意图选择对应能力。
 
-### 案例一：第一次配置营销或千川
+### 第一次配置营销或千川
 
-你可以说：
+**问：** 我第一次使用，能帮我检查环境并完成巨量营销授权吗？
 
-```text
-帮我初始化巨量引擎盯盘，并授权巨量营销。
-```
+**Ocean Watch：** 会检查 Python、Codex 版本、安全凭据仓库和 OAuth 端口，再引导你配置对应渠道的 App ID 与 Secret。授权完成后会反馈同步到的广告主；巨量营销和巨量千川需要分别授权。
 
-或：
+### 查看负责账户和账户消耗
 
-```text
-帮我检查千川使用环境，然后引导我完成授权。
-```
+**问：** 把千川账户 `1234567890` 设为我负责的账户，名称叫“品牌旗舰店”。
 
-Codex 会检查 Python、Codex 版本、安全凭据仓库和 OAuth 端口，然后引导你填写对应渠道的 App ID 与 Secret。授权完成后会反馈同步到的广告主；营销和千川需要分别授权一次。
+**Ocean Watch：** 会把它加入本机账户簿。以后问“我负责的账户有哪些”“我常用的广告账户”等相近说法，只返回启用账户名单，不查询报表、不刷新 Token。
 
-### 案例二：查看负责账户今天的整体情况
+**继续问：** 那再看一下这些账户今天的消耗，按渠道汇总，并标出失败账户。
 
-先告诉 Codex 哪些账户由你负责：
+**Ocean Watch：** 会理解“这些账户”指刚才的负责账户，并发查询账户级报表、隔离单账户失败。营销和千川的成交金额、ROI 口径不同，会分渠道展示，不强行混算。
 
-```text
-把千川账户 1234567890 加入我负责的账户，名称设为「品牌旗舰店」。
-```
+### 用上传视频创建营销计划
 
-以后只需要说：
+**问：** 查询“夏季防晒”账户今天上传的视频，每 5 条组成一个单元，用防晒霜混剪模板创建计划，先让我确认。
 
-```text
-帮我看一下我负责的所有账户今天消耗情况，按渠道汇总，并标出查询失败的账户。
-```
+**Ocean Watch：** 会先展示广告主、模板、视频分组、预算、ROI 和计划数量，不会直接提交。你确认“按刚才的预览提交”后才会在线创建；若项目成功而单元失败，结果会保留项目 ID，供后续续建。
 
-Codex 会并发查询已启用账户，汇总消耗并隔离单账户失败。营销和千川的成交金额、ROI 口径不同，因此会分渠道展示，不会强行混算。
+### 使用达人授权素材投放
 
-如果只说“我负责的账户”或“我常用的账户”，Codex 只返回本机账户簿中的启用账户名单，不查询消耗，也不会刷新 Token。只有明确询问消耗、GMV、ROI、订单或日期表现时才调用账户报表。
+**问：** 找出抖音号 `DOUYIN_SHOW_ID` 仍授权给这个营销账户的视频，用原生素材模板先做创建预检。
 
-### 案例三：用今天上传的视频创建营销计划
+**Ocean Watch：** 会区分公开视频与当前广告主真正拥有投放授权的素材，只使用有效授权快照。批量预检会分别列出可创建、已完成、可续建和被阻断的项目，再等待确认。
 
-```text
-查询「夏季防晒」账户今天上传的视频，按每 5 条一个单元，用「巨量营销-1234567890-防晒霜-987654321-混剪素材」模板创建计划，先预览，不要提交。
-```
+### 按抖音作品链接批量处理千川计划
 
-Codex 会先查询素材，再展示广告主、模板、视频分组、预算、ROI 和计划数量。确认预览无误后可以继续说：
+**问：** 为千川账户 `1234567890` 建一个防晒霜商品全域模板，商品 ID 是 `987654321`，预算 5000，目标 ROI 1.7。
 
-```text
-确认，按刚才的预览提交。
-```
+**Ocean Watch：** 会先校验模板与广告主、商品和渠道的绑定，再保存模板。
 
-没有明确确认时不会在线创建。若项目已创建但单元失败，结果会保留项目 ID，方便后续续建，避免重复创建项目。
+**继续问：** 用刚才的模板处理这些抖音作品。达人没有对应计划就新建，已有计划只追加缺少的素材，先预检。
 
-### 案例四：使用达人授权素材投放
+**Ocean Watch：** 会通过官方接口确认达人授权、作品归属和商品匹配；无效链接、商品不匹配、未授权作品和已存在素材会跳过。确认执行后，成功明细固定返回 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`，跳过和失败原因单独说明。
 
-```text
-查询抖音号 DOUYIN_SHOW_ID 当前授权给这个营销账户的视频，筛出仍在授权期内的素材，用原生素材模板先做创建预检。
-```
+### 删除千川计划中的指定作品
 
-Codex 会区分公开主页视频和当前广告主真正拥有投放授权的视频，只使用有效授权快照中的素材。批量任务会先列出可创建、已完成、可续建和被阻断的项目，再等待确认。
+**问：** 我想从千川计划 `AD_ID` 中移除这个抖音作品，先告诉我会影响哪些素材，不要直接执行。
 
-### 案例五：按抖音作品链接处理千川计划
+**Ocean Watch：** 会把作品精确映射到计划素材，只允许删除自提素材，并展示多账号或多商品场景下的联动影响。再次确认后才提交删除，提交后还会复查官方状态。
 
-第一次先创建商品全域模板：
+### 创建千川直播全域计划
 
-```text
-为千川账户 1234567890 创建一个「防晒霜」商品全域模板，商品 ID 是 987654321，预算 5000，目标 ROI 1.7。
-```
+**问：** 给千川账户 `1234567890` 的直播账号创建直播全域模板，先用默认设置预览一条直播计划。
 
-以后把作品链接直接交给 Codex：
+**Ocean Watch：** 会使用独立的直播模板，不混入商品或作品素材字段，并先展示预算、出价方式、直播时段和智能选材设置，等你确认后再提交。
 
-```text
-用「防晒霜」千川模板检查下面 3 个抖音作品链接。达人没有计划就新建，已有计划只追加缺少的素材，先预检：
-https://v.douyin.com/EXAMPLE1/
-https://v.douyin.com/EXAMPLE2/
-https://v.douyin.com/EXAMPLE3/
-```
+### 查看报表并获得投放建议
 
-Codex 会通过官方接口确认达人授权、作品归属和商品匹配。无效链接、商品不匹配、未授权作品和已存在素材会跳过；默认只返回预检结果，确认后才执行新建或追加。
+**问：** 看一下这个营销账户最近 7 天的素材表现，列出消耗前 10 和高消耗低转化素材，再给我优化建议。
 
-### 案例六：删除千川计划中的指定作品
+**Ocean Watch：** 会在对话中展示只读报表，并给出停投、观察或放量建议，不会自行修改计划。
 
-```text
-从千川计划 AD_ID 中移除这个抖音作品，先告诉我会删除哪些素材以及可能的联动影响，不要直接执行：
-https://v.douyin.com/EXAMPLE/
-```
+**继续问：** 千川账户 `1234567890` 今天的商品全域计划呢？
 
-Codex 会先把作品精确映射到计划素材，只允许删除自提素材，并展示千川多号或多商品场景下可能存在的联动影响。只有再次确认后才提交删除，并在提交后复查删除状态。
-
-### 案例七：创建千川直播全域计划
-
-```text
-为千川账户 1234567890 的直播账号创建直播全域模板，先沿用默认投放设置；然后用该模板预览创建直播计划。
-```
-
-直播模板独立绑定广告主、直播账号名称和数值 `aweme_id`，不会混入商品全域模板的商品或作品素材字段。Codex 会先展示预算、出价方式、直播时段和智能选材设置，再等待提交确认。
-
-### 案例八：查看报表并获得投放建议
-
-```text
-查询这个营销账户最近 7 天的素材消耗，列出消耗前 10、低转化高消耗素材，并给出停投、观察或放量建议。
-```
-
-```text
-查询千川账户 1234567890 今天所有商品全域计划，汇总消耗、成交金额、订单和加权 ROI，再列出消耗前 10。
-```
-
-报表默认直接在对话中展示，不会自动写入本地文件。建议基于只读数据生成，不会自行修改计划。
+**Ocean Watch：** 会查询千川计划报表，汇总消耗、成交金额、订单和加权 ROI，并保持千川指标口径独立。
 
 ## 使用时的确认规则
 
@@ -172,30 +128,9 @@ Codex 会先把作品精确映射到计划素材，只允许删除自提素材�
 - 模板必须绑定正确渠道、广告主和商品，不能跨账户复用 Token 或素材。
 - 一次任务可以有部分跳过或失败；Codex 会保留成功结果并单独说明失败原因。
 
-## 高级：直接使用 CLI
+## 自动化与排错
 
-普通用户无需使用 CLI。需要自动化脚本、精确传参或排错时，可以使用统一命令：
-
-```text
-ocean-watch
-├── setup          # 环境检查与配置初始化
-├── auth           # 营销/千川 OAuth 与 Token
-├── accounts       # 负责账户及跨渠道消耗
-├── templates      # 统一模板查询与营销模板
-├── qc-templates   # 千川商品与直播模板
-├── materials      # 营销素材
-├── qc-materials   # 千川达人素材与作品检查
-├── qc-products    # 千川商品查询
-├── plans          # 单条与批量计划
-├── qc-plans       # 千川计划查询与参数调整
-├── runs           # 本机执行记录
-├── reports        # 营销报表
-├── qc-reports     # 千川全域计划与素材报表
-├── discover       # 官方资产反查
-└── mcp            # 可选官方 MCP 配置与能力发现
-```
-
-每个层级均支持 `--help`。完整参数与示例见 [CLI 参考](docs/cli.md)。
+普通用户应直接用自然语言表达投放目标，不需要了解内部命令分组。需要脚本化、精确传参或排错时再使用稳定 CLI；完整 action 和参数见 [CLI 参考](docs/cli.md)。CLI 分组是迁移期兼容合同，不代表新架构的领域模块，也不用于判断某个命令是否已经切换到 Go；逐命令路由状态以 [Go SDK 迁移矩阵](docs/go-sdk-migration-matrix.md)为准。
 
 ## 安全与隐私
 
@@ -225,7 +160,34 @@ python3 -m pip install -e ".[dev]"
 ocean-watch --help
 ```
 
-核心代码位于 `skills/ads-plan-monitor/src/ocean_watch/`，两个 Skill 的入口分别位于 `skills/ads-plan-monitor/` 和 `skills/qc-plan-monitor/`。模块职责和依赖规则见[架构说明](docs/architecture.md)。
+## 当前运行时架构
+
+截至 2026-07-28，仓库处于“双运行时、单生产路径”的迁移阶段：
+
+```mermaid
+flowchart LR
+    User["用户自然语言"] --> Skills["Marketing / Qianchuan Skills"]
+    Skills --> Contract["稳定 CLI 与 Presentation 合同"]
+    Contract --> Policy["签名路由策略"]
+    Policy -->|"当前生产"| Python["Python 兼容运行时"]
+    Policy -.->|"隔离 Shadow"| Go["Go 模块化单体"]
+    Go --> App["Application"]
+    App --> Domain["Domain + Ports"]
+    Domain --> Adapters["官方 SDK / State / Credential Adapters"]
+    Python --> Shared["共享状态与凭据合同"]
+    Adapters --> Shared
+```
+
+| 范围 | 当前状态 |
+| --- | --- |
+| 用户安装与生产命令 | 两个 Skill 的 `run.py` 仍统一进入 `skills/ads-plan-monitor/src/ocean_watch/` 中的 Python 运行时 |
+| 生产路由策略 | `.codex-plugin/runtime-policy.json` 保持 `enabled: false`；已安装用户不会自动切换到 Go |
+| Go SDK 候选 | `prototype/ocean-watch-go/` 已包含官方 SDK Adapter、模块化业务实现和合同测试，当前仅作为隔离 Shadow 候选 |
+| 原生启动候选 | `prototype/runtime-bootstrap/` 负责候选资产的签名、平台、摘要和版本校验，尚未进入生产安装路径 |
+| 已知迁移缺口 | `auth set-app/authorize/status/refresh/sync-accounts/mappings` 与 `qc-materials inspect-work` 尚未接入 Go CLI handler |
+| 上线条件 | 真实 canary、五平台原生消费、候选身份绑定、独立签字与 G1–G5 Gate 尚未全部通过 |
+
+P1–P5 的主要自动化范围已经在隔离候选中落地，但“Go 组件已实现”“Go handler 已接入”和“生产路由已启用”是三个独立状态。候选代码、本地测试或普通 CI 通过都不代表用户已经运行 Go。当前边界见[架构说明](docs/architecture.md)，逐命令状态见[Go SDK 迁移矩阵](docs/go-sdk-migration-matrix.md)，阶段完成度、阻断项与验收定义见[机器契约](contracts/README.md)。
 
 ## 文档
 
@@ -235,6 +197,8 @@ ocean-watch --help
 - [CLI 参考](docs/cli.md)
 - [配置与授权](docs/configuration.md)
 - [架构说明](docs/architecture.md)
+- [Go SDK 迁移矩阵](docs/go-sdk-migration-matrix.md)
+- [阶段状态与验收契约](contracts/README.md)
 - [发布指南](docs/releasing.md)
 - [贡献指南](CONTRIBUTING.md)
 - [更新日志](CHANGELOG.md)
@@ -243,13 +207,15 @@ ocean-watch --help
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
-ruff check skills/ads-plan-monitor/src tests
-bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch
+ruff check skills/ads-plan-monitor/src scripts tests
+bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
+(cd prototype/ocean-watch-go && GOTOOLCHAIN=go1.26.5 go test ./...)
+(cd prototype/runtime-bootstrap && GOTOOLCHAIN=go1.26.5 go test ./...)
 python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上运行，并验证源码安装后的 CLI、首次初始化、Plugin 清单和两个 Skill 元数据。
+CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上验证现行运行时，并测试两个 Go module、构建非发布候选和执行五平台 native candidate 消费。普通 CI 使用公开测试签名身份，不产生可发布资产；任一失败 Job 都不能作为阶段 Gate 证据。
 
 ## License
 

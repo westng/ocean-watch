@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: 2026-07-26
+as_of: 2026-07-28
 branch: codex/go-sdk-migration
 stage: P4
 scope: isolated_go_candidate
@@ -95,7 +95,7 @@ tasks:
       - prototype/ocean-watch-go/internal/application/plans/qianchuan/reconcile_test.go
       - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_plans_test.go
       - prototype/ocean-watch-go/internal/adapters/oceanengine/qianchuan_write_test.go
-      - docs/go-sdk-acceptance-plan.md
+      - contracts/acceptance/ac-manifest.yaml
     verified:
       - pre-dispatch failures may retry only where explicitly safe
       - post-dispatch timeout and disconnect fixtures never blindly replay writes
@@ -118,6 +118,6 @@ g4:
     - AC-127 real canary is intentionally absent because development mode does not authorize real credentials or business API calls
     - no Maintainer and Security Owner approval file authorizes a write canary
     - controlled observation windows for each write command have not run
-    - native Linux and Windows CI evidence does not exist for the unpushed candidate branch
+    - pushed candidate CI run 30327850057 failed; native Linux and Windows write-path evidence is not accepted
     - required Maintainer Marketing Qianchuan Quality Security and Release Owner sign-offs are not represented in Git
   allowed_next_work: assemble and validate P5 release candidates only; keep all production and write routes on Python

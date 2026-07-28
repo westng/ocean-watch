@@ -20,10 +20,12 @@ Ocean Watch 将非敏感业务配置与敏感凭据分开：
 配置解析顺序：`--config`、`ADS_PLAN_MONITOR_CONFIG`、开发仓库配置、用户配置。安装在
 `$CODEX_HOME/plugins/cache` 下的插件即使携带仓库元数据，也始终读取用户配置，避免把插件缓存误判为开发仓库。
 
+Go Shadow 候选原地兼容相同配置和状态根，不创建第二份“Go 配置”。Python 与 Go 使用相同字段、凭据 service/account 命名、文件锁和原子替换协议；Go 首次读取不得隐式迁移或删除未知字段。生产路由仍全量 Python，因此普通用户不需要修改配置来启用 Go，也不存在受支持的用户级运行时开关。
+
 ## 渠道
 
 - `marketing`：巨量营销，当前已经实现 OAuth、账户、素材、计划和报表。
-- `qianchuan`：巨量千川，当前实现 OAuth、Token 刷新、授权广告主同步、商品/直播全域模板、达人和商品查询、作品链接批量新建/追加/删除、计划参数调整、官方 MCP 全域计划报表与 OpenAPI 素材报表。
+- `qianchuan`：巨量千川，当前生产实现 OAuth、Token 刷新、授权广告主同步、商品/直播全域模板、达人和商品查询、作品链接批量新建/追加/删除、计划参数调整及计划/素材报表。计划报表的 Python handler 暂时保留官方 MCP 兼容传输，Go Shadow 已改用官方 SDK REST；MCP 不是目标业务架构，也不作为 SDK 失败时的静默回退。
 
 渠道之间不共享 App、Secret、Token、账户或模板。旧配置迁移到巨量营销：
 
@@ -383,4 +385,4 @@ ocean-watch mcp capabilities --tool TOOL_NAME
 
 已配置 MCP 时，插件优先用于当前明确支持且参数契约匹配的远程操作。配置、OAuth 本机回调、凭据持久化、模板、负责账户、本机缓存和执行日志仍由 CLI 管理。读操作可在 MCP 调用前失败时安全回退 OpenAPI；写操作仍需原有预览和明确确认，若 MCP 是否已执行不确定，必须先查询并核对状态，不能直接改走 OpenAPI 重试。
 
-千川计划报表使用官方业务 MCP `https://open.oceanengine.com/qianchuan/mcp`。插件复用目标广告主绑定的千川 OAuth `Access-Token`，调用前自动刷新，并通过 `Tool-Range` 限制为全域计划和报表工具。Token 不写入配置文件、Plugin 清单或 Codex MCP 配置，也不需要用户额外维护 MCP API Key。
+当前生产 Python `qc-reports plans` 暂时使用官方业务 MCP `https://open.oceanengine.com/qianchuan/mcp`。插件复用目标广告主绑定的千川 OAuth `Access-Token`，调用前自动刷新，并通过 `Tool-Range` 限制为全域计划和报表工具。Token 不写入配置文件、Plugin 清单或 Codex MCP 配置，也不需要用户额外维护 MCP API Key。该传输是迁移期兼容路径；目标 Go 业务路径使用官方 SDK REST，完成 Gate 后替换它，不能把 MCP 路径继续扩展为新的领域依赖。

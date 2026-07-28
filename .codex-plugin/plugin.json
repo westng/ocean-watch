@@ -1,7 +1,7 @@
 {
   "name": "ocean-watch",
-  "version": "0.9.1+codex.20260720094548",
-  "description": "Codex plugin for responsible-account reporting, Ocean Engine OAuth, plan creation, Qianchuan MCP data, and monitoring analysis.",
+  "version": "0.9.1+codex.20260728041200",
+  "description": "Codex plugin for Ocean Engine OAuth, responsible-account reporting, plan operations, performance reporting, and monitoring analysis.",
   "author": {
     "name": "westng",
     "url": "https://github.com/westng"
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "\u5de8\u91cf\u5f15\u64ce\u76ef\u76d8\u52a9\u624b",
     "shortDescription": "\u5de8\u91cf\u8425\u9500\u4e0e\u5343\u5ddd\u72ec\u7acb Skill \u7684\u6388\u6743\u3001\u8ba1\u5212\u4e0e\u76ef\u76d8",
-    "longDescription": "\u901a\u8fc7\u5de8\u91cf\u5f15\u64ce\u5b98\u65b9 API \u4e0e\u5343\u5ddd MCP \u5b8c\u6210\u8de8\u6e20\u9053\u8d1f\u8d23\u8d26\u6237\u6c47\u603b\u3001\u72ec\u7acb OAuth \u6388\u6743\u3001Token \u5237\u65b0\u3001\u8d26\u6237\u540c\u6b65\u3001\u8ba1\u5212\u521b\u5efa\u548c\u6295\u653e\u62a5\u8868\u3002",
+    "longDescription": "\u901a\u8fc7\u5de8\u91cf\u5f15\u64ce\u5b98\u65b9\u80fd\u529b\u5b8c\u6210\u8de8\u6e20\u9053\u8d1f\u8d23\u8d26\u6237\u6c47\u603b\u3001\u72ec\u7acb OAuth \u6388\u6743\u3001Token \u5237\u65b0\u3001\u8d26\u6237\u540c\u6b65\u3001\u8ba1\u5212\u521b\u5efa\u4e0e\u8c03\u6574\u3001\u6295\u653e\u62a5\u8868\u548c\u76d1\u63a7\u5206\u6790\u3002",
     "developerName": "westng",
     "category": "Productivity",
     "capabilities": [

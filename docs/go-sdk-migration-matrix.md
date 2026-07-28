@@ -1,6 +1,6 @@
 # Go SDK 迁移矩阵
 
-本文把现有 CLI 用例和官方 endpoint 映射到 Go 目标模块、官方 SDK Service、韧性策略和验收项。它与[目标架构](go-sdk-target-architecture.md)共同冻结迁移范围；实施阶段、责任和交付物见[实施任务书](go-sdk-execution-plan.md)。
+本文把现有 CLI 用例和官方 endpoint 映射到 Go 模块、官方 SDK Service、韧性策略和验收项。它既记录已落地的 Shadow 实现，也记录仍未接入的命令和刻意保留的 Python 兼容面；运行时边界见[架构说明](architecture.md)，阶段完成度、责任和阻断项见[机器契约](../contracts/README.md)。
 
 ## 1. 使用规则
 
@@ -11,9 +11,24 @@
 - Adapter 名称是目标代码边界；SDK Service 不得越过 Adapter 暴露给 Application、CLI 或 Skill。
 - 当前矩阵内 endpoint 在 `v1.1.92` 均有生成 Service，因此 `CommonApi` 使用数为零。
 
-迁移状态只能取：`Not started`、`Shadow`、`Go canary`、`Go default`、`Rolled back`。每次 PR 必须同步状态列。当前 P1 候选实现只标记为 `Shadow`；本机自动化通过不等于 G1 已签字，也不代表生产 launcher 已切流。
+命令路由状态只能取：`Not started`、`Shadow`、`Go canary`、`Go default`、`Python retained`、`Rolled back`。每次改变 handler、候选 manifest 或生产 manifest 的 PR 都必须同步状态列。
 
-截至 2026-07-23 的冻结盘点为：当前 `COMMANDS` 共 `75` 个 CLI action，全部由第 2 节覆盖；当前 Python 运行时调用 `49` 条官方 OpenAPI path，第 3 节另加入目标态千川计划报表的 `config/get`、`data/get` 两条 path，共 `51` 条。固定 SDK 中对应的 `51/51` 个生成 Service、HTTP 方法和 host profile 已核验。`P0-02` 必须把这个盘点生成机器清单；若 `main` 在 G0 前发生增删，以重新生成并经 QO + AO 签字的清单作为新分母，不得沿用本文数字宣称 `100%`。
+- `Not started`：命令尚无完整 Go CLI handler；底层组件可能已经实现，必须在状态说明中单独记录。
+- `Shadow`：完整 Go handler 已通过隔离合同或测试专用 manifest 验证，但生产仍走 Python。
+- `Go canary` / `Go default`：必须有对应 Gate、签名路由 manifest 和运行证据。
+- `Python retained`：批准保留的兼容或诊断面，不是遗漏的 Go 业务路径。
+- `Rolled back`：曾启用 Go 后，发布路由已切回 Python。
+
+截至 2026-07-28，P1–P4 的大部分命令已达到 `Shadow`，但生产策略仍禁用，`ProductionRouteManifest` 将全部命令固定为 Python。Go 候选的默认开发 manifest 只启用已接入的本地命令；网络和写命令的 Shadow 由测试专用 manifest 显式开启。本机自动化通过不等于 Gate 已签字，也不代表生产 launcher 已切流。
+
+2026-07-23 的冻结盘点为：`COMMANDS` 共 `75` 个 CLI action，全部由第 2 节覆盖；Python 运行时调用 `49` 条官方 OpenAPI path，第 3 节另加入千川计划报表的 `config/get`、`data/get` 两条 path，共 `51` 条。固定 SDK 中对应的 `51/51` 个生成 Service、HTTP 方法和 host profile已核验，并由 `contracts/commands.yaml` 与 `contracts/sdk-baseline.yaml` 固化。命令或 endpoint 发生增删时必须重新生成机器清单，并以重新评审后的清单作为分母。
+
+### 当前实现说明
+
+- `auth set-app/authorize/status/refresh/sync-accounts/mappings` 仍是 `Not started` 路由：P2 已实现并自动测试 SDK Client、OAuth callback、OS 凭据、Token 单飞刷新和完整广告主快照组件，但这些命令尚未接入 Go CLI handler。
+- `qc-materials inspect-work` 仍是 `Not started`：Go runner 明确返回 `go_handler_missing`，生产继续使用 Python 作品解析路径。
+- `mcp configure/status/capabilities` 标记为 `Python retained`：它们保留为可选诊断命令；业务报表不得在 SDK REST 失败时静默回退 MCP。
+- 其他 `Shadow` 网络和写命令已有完整 Go handler，但在生产 manifest 中仍固定为 Python。
 
 ## 2. 命令迁移矩阵
 
@@ -68,7 +83,7 @@
 | 转化资产 | `discover events` | `discovery.EventAssets` | P3 | 广告主隔离、分页 | AC-112, AC-114 | Shadow |
 | 深度出价/优化目标 | `discover deep-bids`、`discover goals` | `discovery.Optimization` | P3 | 官方枚举与筛选兼容 | AC-114 | Shadow |
 | 城市解析 | `discover cities` | `discovery.ResolveCities` + Marketing Admin Adapter | P3 | 本地 CSV + 官方行政区读取；显式 `--write-config` | AC-106, AC-110, AC-114 | Shadow |
-| MCP 兼容诊断 | `mcp configure`、`mcp status`、`mcp capabilities` | `mcp.Diagnostics` | P3 | 保留 CLI；业务不得静默回退 MCP | AC-101, AC-109, AC-115 | Not started |
+| MCP 兼容诊断 | `mcp configure`、`mcp status`、`mcp capabilities` | Python compatibility diagnostics | P3 | 保留 CLI；业务不得静默回退 MCP | AC-101, AC-109, AC-115 | Python retained |
 
 ## 3. 官方 endpoint 到 SDK Service
 
@@ -180,7 +195,7 @@
 - `pagination-stalled`、`pagination-contradictory`、`duplicate-identity`。
 - `token-expired-refresh-success`、`token-expired-refresh-failed`。
 
-fixture 必须使用明显占位 ID 和测试 Token，且由 secret scan 验证。具体目录、命令和证据格式见[验收计划](go-sdk-acceptance-plan.md)。
+fixture 必须使用明显占位 ID 和测试 Token，且由 secret scan 验证。具体目录、命令和证据格式见[验收契约](../contracts/README.md)及 `contracts/acceptance/`。
 
 ## 6. 矩阵完成条件
 

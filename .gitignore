@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 *.pyc
 .DS_Store
+AGENTS.md
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/

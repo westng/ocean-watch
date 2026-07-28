@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted for P0 feasibility; not production-enabled until P5.
+Accepted. Production remains disabled pending five-platform acceptance,
+controlled canaries, independent approvals, and all required Gates.
 
 ## Context
 
@@ -18,8 +19,10 @@ Ship a small native Go bootstrap for each target platform. It uses only Go's
 standard-library `crypto/ed25519`, a build-time pinned public key, bounded HTTPS
 downloads, SHA-256, private cache permissions, and atomic promotion. Python
 selects the bootstrap and never accepts a trust-root or release-URL override.
-The bootstrap is kept in `prototype/runtime-bootstrap` during P0/P1; P5 moves the
-approved source under the packaging boundary and wires `run.py` to it.
+The bootstrap source currently lives in `prototype/runtime-bootstrap`; `prototype`
+is a historical directory name, not a statement that the candidate is still a P0
+feasibility spike. P5 candidate automation builds and validates the platform
+assets, while the production `run.py` path remains unwired until release approval.
 
 The release job must produce independent Ed25519 test vectors, a reproducible
 cross-build record, SBOM/provenance, and a second security review. The P0 code
@@ -28,11 +31,12 @@ not a security sign-off by itself.
 
 ## Consequences
 
-- The Plugin package carries five small platform bootstrap assets before runtime
-  downloads are enabled.
+- Candidate automation builds five small platform bootstrap assets; the production
+  Plugin does not consume them until the native-installation Gate is approved.
 - A user still needs Python during the compatibility period.
-- P5 must solve executable packaging, signature rotation, and Windows atomic-file
-  behavior as release concerns; P0 does not claim those are production complete.
+- Candidate automation covers executable packaging, signature rotation controls,
+  and Windows atomic-file behavior, but real installation and rollback evidence is
+  still required before production enablement.
 - If platform bootstrap packaging cannot be made immutable and verifiable, the
   release plan must stop and return to a vendored audited verifier or a bundled
   runtime distribution model.

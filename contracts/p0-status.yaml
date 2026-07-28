@@ -1,5 +1,5 @@
 schema_version: 1
-as_of: 2026-07-26
+as_of: 2026-07-28
 branch: codex/go-sdk-migration
 stage: P0
 tasks:
@@ -40,11 +40,11 @@ tasks:
       - scripts/acceptance/probe_state_compatibility.py
       - tests/test_state_compatibility.py
       - .github/workflows/ci.yml
-    remaining_gate: scheduled native Windows and Linux evidence in CI
+    remaining_gate: fix failed CI run 30327850057 and retain successful native Windows and Linux evidence
   P0-04:
     status: automated_controls_complete_pending_review
     evidence:
-      - docs/go-sdk-threat-model.md
+      - SECURITY.md
       - scripts/acceptance/scan_evidence.py
       - contracts/security/gosec-controls.json
       - scripts/acceptance/verify_gosec_report.py
@@ -52,7 +52,7 @@ tasks:
       - artifacts/go-sdk-acceptance/p5/security/gosec-ocean-watch-go-verification.json
       - artifacts/go-sdk-acceptance/p5/security/gosec-runtime-bootstrap-verification.json
     verified:
-      - full gosec audit matched 23 of 23 documented main-module findings
+      - full gosec audit matched 24 of 24 documented main-module findings
       - full gosec audit matched 8 of 8 documented bootstrap findings
       - unregistered stale High Critical nosec and scanner-error counts are zero
       - every control expires no later than 2026-10-31 and the inventory grants no Gate sign-off
@@ -72,7 +72,7 @@ g0:
   status: blocked_pending_external_evidence
   blockers:
     - current controlled Skill model driver is not configured; the latest automation record is 12 not_run and there is no post-change 3-trial model evidence
-    - native Linux and Windows CI evidence has not run on this unpushed branch
+    - branch commit d2b7958e9bb41f1e469210cd3ae9b008778f5cbc was pushed, but CI run 30327850057 failed and provides no successful native Gate evidence
     - second Security Owner review is not represented in Git
     - Maintainer, Architecture, Quality, and Skill Contract sign-offs are not represented in Git
   allowed_next_work: implementation may continue only as isolated prototype work; do not switch production routing to Go
