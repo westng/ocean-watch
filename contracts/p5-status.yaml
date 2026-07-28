@@ -1,0 +1,162 @@
+schema_version: 1
+as_of: 2026-07-28
+branch: codex/go-sdk-migration
+stage: P5
+scope: release_candidate_assembly
+production_route_changed: false
+candidate_identity:
+  record_type: last_local_test_candidate_snapshot
+  product_version: 0.9.1
+  plugin_version: 0.9.1+codex.20260720094548
+  git_commit: 5ff6439ce28cb848548a6f2d3b7cefe297e96282
+  source_tree_sha256: 6baf902a9b60b664f1d489635a9c0222cc5741ba93ee4183cdf8aad677e718c0
+  source_dirty: true
+  signing_identity: rfc8032_public_test_vector_only
+  approved_release_trust_root: false
+  release_eligible: false
+  current_worktree_matches_candidate: false
+tasks:
+  P5-01:
+    status: formal_candidate_automation_complete_external_clean_run_pending
+    evidence:
+      - .github/workflows/ci.yml
+      - .github/workflows/g5-evidence.yml
+      - scripts/release/build_candidate.py
+      - scripts/acceptance/p5.py
+      - scripts/acceptance/protected_release_evidence.py
+      - prototype/ocean-watch-go/cmd/ocean-watch
+      - prototype/runtime-bootstrap/cmd/ocean-watch-bootstrap
+      - artifacts/go-sdk-acceptance/p5/repro-build-a
+      - artifacts/go-sdk-acceptance/p5/repro-build-b
+      - artifacts/go-sdk-acceptance/p5/local-verification/candidate-a.json
+      - artifacts/go-sdk-acceptance/p5/local-verification/candidate-b.json
+      - artifacts/go-sdk-acceptance/p5/security/ac-125-supply-chain.json
+      - artifacts/go-sdk-acceptance/p5/security/gosec-ocean-watch-go-verification.json
+      - artifacts/go-sdk-acceptance/p5/security/gosec-runtime-bootstrap-verification.json
+    verified:
+      - five runtime assets and five bootstrap assets are produced
+      - runtime manifest and checksums use detached Ed25519 signatures
+      - SPDX 2.3 SBOM and SLSA v1 compatible provenance are produced
+      - production_go_routes remains zero
+      - two builds from the same dirty development source are byte reproducible with zero asset differences
+      - full gosec reports match all 32 expiring controlled findings with zero High Critical nosec or scanner errors
+      - local signatures use only the RFC 8032 public test vector and are not a release trust root
+      - ordinary CI produces only an explicitly non-release test candidate
+      - the formal signing Secret is scoped only to the protected formal candidate build job
+      - the formal workflow builds twice and fans the same candidate out to five native runners
+    remaining_gate: run g5-evidence from the final clean protected main revision with the approved trust root and retain the successful formal candidate plus automated evidence artifacts
+  P5-02:
+    status: native_consumer_automation_complete_external_five_platform_run_pending
+    evidence:
+      - scripts/runtime_launcher.py
+      - skills/ads-plan-monitor/run.py
+      - skills/qc-plan-monitor/run.py
+      - prototype/runtime-bootstrap/bootstrap
+      - scripts/acceptance/native_candidate.py
+      - .github/workflows/g5-evidence.yml
+      - artifacts/go-sdk-acceptance/p5/local-verification/ac-124.json
+    local_platform: darwin-amd64
+    contracts:
+      system_go_required_by_plugin: false
+      installed_ocean_watch_package_required: false
+      tampered_signature_execution_count: 0
+      offline_verified_cache: passed
+    remaining_gate: native install evidence for all five target platforms through the final Marketplace distribution path
+  P5-03:
+    status: sealed_release_automation_complete_external_execution_pending
+    evidence:
+      - .github/workflows/g5-evidence.yml
+      - .github/workflows/g5-external-evidence.yml
+      - .github/workflows/g5-seal.yml
+      - .github/workflows/g5-signoff.yml
+      - .github/workflows/tag.yml
+      - scripts/acceptance/source_artifacts.py
+      - scripts/acceptance/source_runs.py
+      - scripts/acceptance/g5_source_policy.py
+      - scripts/acceptance/external_evidence.py
+      - contracts/acceptance/g5-external-evidence-attestation.schema.json
+      - scripts/acceptance/build_final_summary.py
+      - scripts/acceptance/verify_gate_signoff.py
+      - scripts/release/sealed_release.py
+      - scripts/release/verify_published_release.py
+      - docs/releasing.md
+    verified:
+      - ordinary CI and formal G5 candidate identities are cryptographically distinct
+      - formal model canary Marketplace rollback and rollout evidence require six explicit distinct successful trusted workflow runs for one commit
+      - prepare accepts only six run IDs and derives every workflow path and artifact name from the fixed source policy
+      - one protected external intake revalidates the formal candidate identity and exact role file set before producing model canary Marketplace rollback or rollout evidence
+      - arbitrary workflows wrong roles wrong artifacts cross-role file injection and reused external source run IDs fail closed
+      - the ready G5 summary binds the immutable candidate identity exact source runs and every indexed evidence file
+      - external six-role signoff must hash the exact summary and cannot come from a tracked source file
+      - Security and Release Owner approvals must use distinct identities and all approvals must postdate the summary
+      - prepare and independent signoff come from different verified runs before a self-contained seal is created
+      - the Tag workflow accepts one sealed run ID and independently downloads and verifies it in both read-only and write-enabled jobs
+      - the Tag workflow never rebuilds a candidate or accesses the signing Secret or public-key variable
+      - only the protected g5-release-publish job has minimal contents-write permission and authenticated Tag push credentials
+      - existing Tags Releases notes and assets cannot be overwritten and must match byte for byte
+      - the public Release contains the original nineteen candidate assets plus g5-seal.json without approver identities
+      - current documentation distinguishes Marketplace Tag installation restricted evidence and public Release assets
+    remaining_gate: configure all five protected environments then execute formal evidence five external producer and protected intake runs prepare independent signoff seal and publish against the final clean main candidate
+  P5-04:
+    status: automated_current_candidate_pass_external_previous_version_pending
+    evidence:
+      - artifacts/go-sdk-acceptance/p5/local-verification/ac-126.json
+      - scripts/acceptance/p5.py
+    contracts:
+      state_hash_unchanged: true
+      reauthorization_count: 0
+      damaged_cache_execution_count: 0
+      local_rollback_duration_seconds: 6.337
+      local_rollback_under_15_minutes: true
+    remaining_gate: repeat with a previous signed Go release on every native target and obtain Release Auth Platform and Quality Owner approval
+  P5-05:
+    status: external_not_started
+    evidence:
+      - contracts/gates/ac127-write-canary.schema.json
+      - contracts/gates/ac127-write-canary.example.json
+      - artifacts/go-sdk-acceptance/p5/local-verification/ac-127-blocked.json
+      - artifacts/go-sdk-acceptance/p5/local-verification/ac-128.json
+    verified:
+      - invalid or absent canary approval stops before the driver with zero writes
+      - once a canary driver starts any unaccepted result is recorded as unknown rather than zero writes
+      - account membership template dry-run and mandatory Qianchuan five-column journeys pass synthetic checks
+    remaining_gate: approved real canary, model semantic trials, Marketplace installation, three rollout cohorts, and two released-version observation windows
+automated_acceptance:
+  AC-124: local_one_platform_pass_formal_five_platform_workflow_not_run
+  AC-125: local_test_candidate_reproducibility_pass_formal_release_workflow_not_run
+  AC-126: local_current_candidate_pass_external_previous_version_pending
+  AC-127: fail_closed_guard_pass_real_canary_not_run
+  AC-128: synthetic_journey_pass_external_model_and_marketplace_pending
+release_automation:
+  status: implemented_and_targeted_tests_pass_external_runs_absent
+  sequence:
+    - formal_candidate_evidence
+    - five_distinct_external_evidence_runs
+    - prepare_ready_summary
+    - validate_external_six_role_signoff
+    - seal_exact_candidate_summary_signoff_and_evidence
+    - publish_exact_sealed_assets
+  protected_environments:
+    - g5-release-candidate
+    - g5-external-evidence
+    - g5-independent-signoff
+    - g5-release-seal
+    - g5-release-publish
+  production_route_enabled: false
+g5:
+  status: blocked_external_gates_pending
+  migration_state: Shadow
+  blockers:
+    - G1 through G4 owner approvals and real read-only and write canaries are not complete
+    - the current candidate was built from a dirty development tree and cannot be released
+    - the current candidate uses an RFC 8032 public test vector rather than the approved protected release trust root
+    - the protected formal candidate workflow has not produced a clean release identity from final main
+    - five-platform native installation upgrade offline-cache and rollback evidence is incomplete
+    - Codex installs from Marketplace snapshots and the final Marketplace package path containing the platform bootstraps is not yet accepted
+    - AC-127 has no current commit-bound MT and SO approval and no real write canary evidence
+    - approved model semantic trials and confidential paraphrase cases have not run for the candidate identity
+    - internal invited and general rollout cohorts plus two released-version observation windows have not completed
+    - no ready G5 summary exists for six distinct successful source runs on one formal candidate
+    - MT AO QO SO RO and SCO have not approved an exact ready summary through the restricted signoff path
+    - no sealed artifact or published Tag and Release exists for the final candidate
+  allowed_next_work: review and merge the automation then execute the protected external G5 runbook; keep every production route on Python

@@ -48,7 +48,7 @@ ocean-watch setup doctor
 
 ### 版本与发布
 
-本项目以 Git 仓库作为 Codex Marketplace 来源，只发布版本 Tag，不创建 GitHub Release 页面，也不构建或上传 Plugin ZIP、wheel、源码分发包、校验和或其他 Release 资产。版本变化统一记录在 `CHANGELOG.md`；需要固定版本时，在注册 Marketplace 时指定 Tag：
+本项目以 Git 仓库版本 Tag 作为 Codex Marketplace 安装源，并把同一提交经过 G5 证据与独立签字密封的运行时候选资产发布到 GitHub Release。Codex 当前不会直接从 Release ZIP 安装 Plugin；生产运行时策略仍关闭，所有命令继续走 Python，直到 Go 迁移门禁和独立审批全部通过。版本变化统一记录在 `CHANGELOG.md`；需要固定版本时，在注册 Marketplace 时指定 Tag：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z

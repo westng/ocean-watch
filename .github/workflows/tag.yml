@@ -1,22 +1,31 @@
-name: Publish Tag
+name: Publish Sealed Release
 
 on:
   workflow_dispatch:
+    inputs:
+      sealed_run_id:
+        description: Successful seal-mode G5 run ID to publish
+        required: true
+        type: string
 
 concurrency:
-  group: publish-tag-${{ github.ref }}
+  group: publish-release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   validate:
-    if: github.repository == 'westng/ocean-watch'
-    runs-on: ubuntu-latest
+    if: github.repository == 'westng/ocean-watch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
-      version_tag: ${{ steps.resolve_version_tag.outputs.version_tag }}
+      version_tag: ${{ steps.resolve-version.outputs.version_tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SEALED_RUN_ID: ${{ inputs.sealed_run_id }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -25,62 +34,165 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install project and quality tools
+      - name: Install validation dependencies
         run: python -m pip install --disable-pip-version-check -e ".[dev]"
-      - name: Resolve version tag from project version
-        id: resolve_version_tag
+      - name: Resolve and validate version identity
+        id: resolve-version
         shell: bash
         run: |
-          version_tag="$(python scripts/version_tag.py tag | python -c 'import json, sys; print(json.load(sys.stdin)["tag"])')"
+          version_tag="$(python scripts/version_tag.py tag \
+            | python -c 'import json, sys; print(json.load(sys.stdin)["tag"])')"
+          python scripts/version_tag.py check --tag "${version_tag}"
           echo "version_tag=${version_tag}" >> "${GITHUB_OUTPUT}"
-      - name: Verify branch, tag, version, and changelog
+      - name: Verify protected current main and sealed producer run
         shell: bash
         run: |
-          VERSION_TAG="${{ steps.resolve_version_tag.outputs.version_tag }}"
-          python scripts/version_tag.py check --tag "${VERSION_TAG}"
-          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
-            echo "Version tags must be dispatched from the main branch." >&2
+          if [[ "${GITHUB_REF_PROTECTED}" != "true" ]]; then
+            echo "Release publication requires a protected main ref." >&2
             exit 1
           fi
           if [[ "$(git rev-parse refs/remotes/origin/main)" != "${GITHUB_SHA}" ]]; then
-            echo "The selected commit is not the current origin/main commit." >&2
+            echo "Release publication must use the current origin/main commit." >&2
             exit 1
           fi
-          if existing_tag_commit="$(git rev-parse "refs/tags/${VERSION_TAG}^{commit}" 2>/dev/null)"; then
+          if [[ ! "${SEALED_RUN_ID}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "sealed_run_id must be a positive workflow run ID." >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SEALED_RUN_ID}" \
+            > "${RUNNER_TEMP}/sealed-run-raw.json"
+          python scripts/acceptance/verify_workflow_run.py \
+            --metadata "${RUNNER_TEMP}/sealed-run-raw.json" \
+            --expected-run-id "${SEALED_RUN_ID}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-workflow-path .github/workflows/g5-seal.yml \
+            --expected-head-sha "${GITHUB_SHA}" \
+            --out "${RUNNER_TEMP}/sealed-run.json"
+          version_tag="${{ steps.resolve-version.outputs.version_tag }}"
+          if existing_tag_commit="$(git rev-parse "refs/tags/${version_tag}^{commit}" 2>/dev/null)"; then
             if [[ "${existing_tag_commit}" != "${GITHUB_SHA}" ]]; then
-              echo "The version tag already points to a different commit." >&2
+              echo "The version Tag already points to a different commit." >&2
               exit 1
             fi
           fi
-      - name: Run tag quality gate
+      - name: Download and reverify exact sealed release
+        shell: bash
         run: |
-          python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
-          ruff check skills/ads-plan-monitor/src scripts tests
-          bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
-          python -m unittest discover -s tests
+          gh run download "${SEALED_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "g5-sealed-${GITHUB_SHA}-${SEALED_RUN_ID}" \
+            --dir "${RUNNER_TEMP}/sealed"
+          python scripts/release/sealed_release.py verify \
+            --sealed-dir "${RUNNER_TEMP}/sealed" \
+            --expected-commit "${GITHUB_SHA}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-tag "${{ steps.resolve-version.outputs.version_tag }}"
+          python scripts/acceptance/verify_gate_signoff.py \
+            "${RUNNER_TEMP}/sealed/approvals/signoff.json" \
+            --summary "${RUNNER_TEMP}/sealed/evidence/summary.json" \
+            --expected-git-sha "${GITHUB_SHA}" \
+            --reject-tracked-signoff
+
   publish:
-    if: github.repository == 'westng/ocean-watch'
+    if: github.repository == 'westng/ocean-watch' && github.ref == 'refs/heads/main'
     needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: g5-release-publish
     permissions:
+      actions: read
       contents: write
     env:
+      GH_TOKEN: ${{ github.token }}
+      SEALED_RUN_ID: ${{ inputs.sealed_run_id }}
       VERSION_TAG: ${{ needs.validate.outputs.version_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Publish version tag
+          persist-credentials: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install validation dependencies
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: Independently download and reverify sealed release
         shell: bash
         run: |
-          if existing_tag_commit="$(git rev-parse "refs/tags/${VERSION_TAG}^{commit}" 2>/dev/null)"; then
-            if [[ "${existing_tag_commit}" != "${GITHUB_SHA}" ]]; then
-              echo "The version tag already points to a different commit." >&2
-              exit 1
-            fi
-            echo "${VERSION_TAG} already points to ${GITHUB_SHA}; nothing to publish."
-            exit 0
+          python scripts/version_tag.py check --tag "${VERSION_TAG}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SEALED_RUN_ID}" \
+            > "${RUNNER_TEMP}/sealed-run-raw.json"
+          python scripts/acceptance/verify_workflow_run.py \
+            --metadata "${RUNNER_TEMP}/sealed-run-raw.json" \
+            --expected-run-id "${SEALED_RUN_ID}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-workflow-path .github/workflows/g5-seal.yml \
+            --expected-head-sha "${GITHUB_SHA}" \
+            --out "${RUNNER_TEMP}/sealed-run.json"
+          gh run download "${SEALED_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "g5-sealed-${GITHUB_SHA}-${SEALED_RUN_ID}" \
+            --dir "${RUNNER_TEMP}/sealed"
+          python scripts/release/sealed_release.py verify \
+            --sealed-dir "${RUNNER_TEMP}/sealed" \
+            --expected-commit "${GITHUB_SHA}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-tag "${VERSION_TAG}"
+          python scripts/acceptance/verify_gate_signoff.py \
+            "${RUNNER_TEMP}/sealed/approvals/signoff.json" \
+            --summary "${RUNNER_TEMP}/sealed/evidence/summary.json" \
+            --expected-git-sha "${GITHUB_SHA}" \
+            --reject-tracked-signoff
+          python scripts/version_tag.py notes \
+            --tag "${VERSION_TAG}" \
+            --out "${RUNNER_TEMP}/release-notes.md"
+          mkdir -p "${RUNNER_TEMP}/release-assets"
+          cp "${RUNNER_TEMP}/sealed/candidate"/* "${RUNNER_TEMP}/release-assets/"
+          cp "${RUNNER_TEMP}/sealed/seal.json" \
+            "${RUNNER_TEMP}/release-assets/g5-seal.json"
+      - name: Publish immutable version Tag
+        shell: bash
+        run: |
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/${VERSION_TAG}" >/dev/null
+          remote_status=$?
+          set -e
+          case "${remote_status}" in
+            0)
+              ;;
+            2)
+              git push origin "${GITHUB_SHA}:refs/tags/${VERSION_TAG}"
+              ;;
+            *)
+              echo "Unable to determine the remote Tag state." >&2
+              exit "${remote_status}"
+              ;;
+          esac
+          git fetch --force origin "refs/tags/${VERSION_TAG}:refs/tags/${VERSION_TAG}"
+          if [[ "$(git rev-parse "refs/tags/${VERSION_TAG}^{commit}")" != "${GITHUB_SHA}" ]]; then
+            echo "The published Tag does not point to the sealed commit." >&2
+            exit 1
           fi
-          git tag "${VERSION_TAG}" "${GITHUB_SHA}"
-          git push origin "refs/tags/${VERSION_TAG}"
+      - name: Create or verify immutable GitHub Release
+        shell: bash
+        run: |
+          expected="${RUNNER_TEMP}/release-assets"
+          if ! gh release view "${VERSION_TAG}" \
+            --json tagName,name,targetCommitish,isDraft,isPrerelease,body,assets \
+            > "${RUNNER_TEMP}/release-metadata.json"; then
+            gh release create "${VERSION_TAG}" "${expected}"/* \
+              --verify-tag \
+              --target "${GITHUB_SHA}" \
+              --title "${VERSION_TAG}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md"
+          fi
+          mkdir -p "${RUNNER_TEMP}/published-assets"
+          gh release view "${VERSION_TAG}" \
+            --json tagName,name,targetCommitish,isDraft,isPrerelease,body,assets \
+            > "${RUNNER_TEMP}/release-metadata.json"
+          gh release download "${VERSION_TAG}" --dir "${RUNNER_TEMP}/published-assets"
+          python scripts/release/verify_published_release.py \
+            --candidate-dir "${expected}" \
+            --published-dir "${RUNNER_TEMP}/published-assets" \
+            --metadata "${RUNNER_TEMP}/release-metadata.json" \
+            --notes "${RUNNER_TEMP}/release-notes.md" \
+            --tag "${VERSION_TAG}" \
+            --commit "${GITHUB_SHA}"

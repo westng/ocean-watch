@@ -48,7 +48,7 @@ See the Chinese [Getting started guide](docs/getting-started.md) for the complet
 
 ### Versions and releases
 
-This repository is the Codex Marketplace source. The project publishes version Tags only: it does not create GitHub Release pages or build and upload Plugin ZIPs, wheels, source distributions, checksums, or other Release assets. Version changes remain in `CHANGELOG.md`. To pin a version, register the Marketplace at its Tag:
+Repository version Tags remain the Codex Marketplace installation source. Runtime candidate assets from the same commit are published to GitHub Release only after G5 evidence and independent approvals have been sealed. Codex does not currently install the Plugin directly from that Release ZIP; the production runtime policy remains disabled and every command stays on Python until all Go migration gates and independent approvals pass. Version changes remain in `CHANGELOG.md`. To pin a version, register the Marketplace at its Tag:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z

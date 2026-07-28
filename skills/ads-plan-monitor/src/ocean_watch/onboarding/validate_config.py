@@ -8,6 +8,7 @@ import ocean_watch.auth.channels as channels
 import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 import ocean_watch.plans.create_plan as create_plan
+from ocean_watch.core.errors import ConfigurationError
 
 MODES = ("query", "create-preview", "create-submit", "all")
 QUERY_CAPABILITIES = {
@@ -158,12 +159,12 @@ def main(argv=None):
 
     path = config_paths.resolve_config_path(args.config)
     if not path.exists():
-        parser.error(f"missing config: {path}")
+        raise ConfigurationError(f"missing config: {path}")
 
     try:
         raw_config = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        parser.error(f"invalid config {path}: {exc}")
+        raise ConfigurationError(f"invalid config {path}: {exc}") from exc
 
     try:
         result = validate_config(raw_config, plan_template=args.plan_template)

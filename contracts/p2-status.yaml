@@ -1,0 +1,70 @@
+schema_version: 1
+as_of: 2026-07-26
+branch: codex/go-sdk-migration
+stage: P2
+scope: isolated_go_candidate
+production_route_changed: false
+tasks:
+  P2-01:
+    status: complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/client.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/envelope.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/client_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/envelope_test.go
+    remaining_gate: Architecture Owner and Security Owner sign-off
+  P2-02:
+    status: complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/adapters/browser/callback.go
+      - prototype/ocean-watch-go/internal/adapters/credentials/store.go
+      - prototype/ocean-watch-go/internal/application/auth/callback.go
+      - prototype/ocean-watch-go/internal/adapters/credentials/store_test.go
+    platform_compatibility:
+      macos_keychain: tested_contract
+      linux_secret_service: tested_contract
+      windows_dpapi: tested_contract
+    remaining_gate: native Linux and Windows credential evidence plus Auth Platform and Security Owner sign-off
+  P2-03:
+    status: complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/application/auth/token_manager.go
+      - prototype/ocean-watch-go/internal/application/auth/token_manager_test.go
+      - prototype/ocean-watch-go/internal/adapters/filesystem/refresh_lock.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/oauth.go
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/application/auth -run TestTokenRefreshSingleflightAndIsolation -count=20
+    remaining_gate: Auth Platform Owner sign-off
+  P2-04:
+    status: complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/application/auth/snapshot.go
+      - prototype/ocean-watch-go/internal/application/auth/snapshot_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/advertisers.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/advertisers_test.go
+    remaining_gate: real dual-channel read-only advertiser discovery canary and Quality Owner sign-off
+  P2-05:
+    status: shadow_complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/application/accounts/report.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/account_reports.go
+      - prototype/ocean-watch-go/internal/cli/accounts_report.go
+      - prototype/ocean-watch-go/internal/cli/accounts_report_test.go
+      - contracts/presentation/managed-accounts-report.md
+    contracts:
+      account_columns: 13
+      qianchuan_plan_list_calls: 0
+      default_route: Python
+    remaining_gate: real dual-channel read-only report canary plus Marketing Adapter and Qianchuan API Owner sign-off
+g2:
+  status: automated_ready_external_gate_pending
+  migration_state: Shadow
+  blockers:
+    - real Marketing and Qianchuan read-only canary evidence is absent by development-mode policy
+    - native Linux and Windows CI evidence does not exist for the unpushed candidate branch
+    - Auth Platform Owner sign-off is not represented in Git
+    - Marketing Adapter Owner sign-off is not represented in Git
+    - Qianchuan API Owner sign-off is not represented in Git
+    - Quality Owner sign-off is not represented in Git
+    - Security Owner sign-off is not represented in Git
+  allowed_next_work: continue P3-P5 only as isolated candidate implementation; keep every production route on Python

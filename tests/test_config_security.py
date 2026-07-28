@@ -262,9 +262,36 @@ class ConfigAndCredentialTests(unittest.TestCase):
             self.assertEqual(credential_store.backend_name(), "file-fallback")
 
     def test_sensitive_fields_are_removed(self):
-        config = {"api": {"access_token": "a", "refresh_token": "r", "secret": "s", "base_url": "u"}}
+        config = {
+            "api": {
+                "access_token": "a",
+                "refresh_token": "r",
+                "secret": "s",
+                "auth_code": "code",
+                "base_url": "u",
+            },
+            "channels": {
+                "marketing": {
+                    "api": {
+                        "auth_code": "channel-code",
+                        "base_url": "channel-url",
+                    }
+                }
+            },
+        }
         cleaned = credential_store.strip_sensitive_config(config)
         self.assertEqual(cleaned["api"], {"base_url": "u"})
+        self.assertEqual(
+            cleaned["channels"]["marketing"]["api"],
+            {"base_url": "channel-url"},
+        )
+
+    def test_auth_code_is_extracted_before_config_cleanup(self):
+        config = {"api": {"auth_code": "legacy-code"}}
+        self.assertEqual(
+            credential_store.extract_credentials(config),
+            {"auth_code": "legacy-code"},
+        )
 
     def test_developer_id_is_not_merged_into_business_api_config(self):
         merged = credential_store.merge_credentials(

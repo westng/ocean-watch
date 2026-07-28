@@ -43,9 +43,11 @@ OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id
 
 ## 发布完整性
 
-项目直接以 Git 仓库作为 Codex Marketplace 来源，不上传 Plugin ZIP、wheel 或源码分发包等自定义 Release 资产。GitHub 自动提供的 Tag 源码快照除外。正式 Release 只能由维护者从当前 `origin/main` 手动触发；工作流在创建 Tag 和 Release 前校验三处版本、Changelog、Plugin 元数据、两个 Skill 及完整质量门。
+项目以 Git 仓库 Tag 作为 Codex Marketplace 安装源，并为同一提交发布签名的 Go 运行时、平台 bootstrap、Plugin 候选 ZIP、checksum、SBOM 和 provenance。候选 ZIP 不是当前 Marketplace 的直接安装路径，发布资产也不会自动启用生产 Go 路由。正式候选先在受保护环境完成信任根校验、两次可复现构建、五平台消费、Plugin/Skill 合同、依赖漏洞、许可证和凭据扫描；模型评测、真实 canary、Marketplace、回滚和分批观察必须来自另外五个成功且 commit 一致的 workflow run。
 
-需要可复现安装时，应使用经过审查的 Release Tag 注册 Marketplace。Tag、提交和 Release 说明均保留在 GitHub 中，具体流程见[发布指南](docs/releasing.md)。
+正式 Ed25519 私钥只允许存在于 `g5-evidence.yml` 候选构建 Job 的 GitHub Actions Secret `OCEAN_WATCH_RELEASE_SIGNING_KEY`；批准的公钥使用受保护变量 `OCEAN_WATCH_RELEASE_PUBLIC_KEY` 绑定。六角色批准由外部系统汇总后作为受限 artifact 验证，工作流不得自行生成批准。候选、证据、最终摘要、来源 run 和签字先密封；`tag.yml` 不读取签名 Secret，也不重建候选，而是在只读验证 Job 和写入 Job 中各自下载并复验同一 seal。只有受保护的发布 Job 拥有最小 `contents: write`。完整审批身份不发布到公开 Release，公开的 `g5-seal.json` 只保留 hash 与来源。工作流不覆盖既有 Tag 或资产；重跑只能在 Tag、commit、notes 和每个资产字节完全一致时成功。
+
+需要可复现安装时，应使用经过审查的 Release Tag 注册 Marketplace。Tag、提交、签名资产和 Release 说明均保留在 GitHub 中，具体流程见[发布指南](docs/releasing.md)。
 
 ## 泄露处理
 

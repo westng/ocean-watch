@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "gate": "G5",
+  "git_sha": "0000000000000000000000000000000000000000",
+  "sdk_version": "v1.1.92",
+  "candidate_identity": {
+    "schema_version": 1,
+    "git_sha": "0000000000000000000000000000000000000000",
+    "product_version": "0.0.0",
+    "plugin_version": "0.0.0+codex.PENDING",
+    "sdk_version": "v1.1.92",
+    "source_tree_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "candidate_checksums_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "release_public_key_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "release": true
+  },
+  "candidate_identity_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "approvals": [
+    {"role": "MT", "identity": "PENDING", "decision": "pending", "approved_at": null},
+    {"role": "AO", "identity": "PENDING", "decision": "pending", "approved_at": null},
+    {"role": "QO", "identity": "PENDING", "decision": "pending", "approved_at": null},
+    {"role": "SO", "identity": "PENDING", "decision": "pending", "approved_at": null},
+    {"role": "RO", "identity": "PENDING", "decision": "pending", "approved_at": null},
+    {"role": "SCO", "identity": "PENDING", "decision": "pending", "approved_at": null}
+  ],
+  "exceptions": []
+}

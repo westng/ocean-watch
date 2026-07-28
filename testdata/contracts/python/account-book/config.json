@@ -1,0 +1,26 @@
+{
+  "future_root": "preserved",
+  "managed_account_schema_version": 1,
+  "managed_accounts": {
+    "marketing": [
+      {
+        "advertiser_id": "1000000000000001",
+        "name": "营销账户甲",
+        "enabled": true,
+        "auth_account_id": "1000000000000011"
+      },
+      {
+        "advertiser_id": "1000000000000002",
+        "name": "营销账户乙",
+        "enabled": false
+      }
+    ],
+    "qianchuan": [
+      {
+        "advertiser_id": "1000000000000003",
+        "name": "千川账户甲",
+        "enabled": true
+      }
+    ]
+  }
+}

@@ -9,7 +9,7 @@ import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
 from ocean_watch.api import OceanEngineClient
 from ocean_watch.core.data import get_path
-from ocean_watch.core.errors import ApiError
+from ocean_watch.core.errors import ApiError, ConfigurationError
 from ocean_watch.core.output import write_json
 from ocean_watch.core.process_lock import ProcessLock
 from ocean_watch.materials.douyin_work_links import (
@@ -40,6 +40,7 @@ def build_parser():
     parser.add_argument("--work-url", action="append", default=[])
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
     parser.add_argument("--auth-account-id")
+    parser.add_argument("--confirm-delete", action="store_true")
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--out")
     return parser
@@ -268,6 +269,12 @@ def summarize(mode, advertiser_id, ad_id, plan, link_result, results, batches):
 
 
 def execute(args, *, link_resolver=None, client=None, lock_factory=ProcessLock):
+    if args.submit and not args.confirm_delete:
+        raise ConfigurationError(
+            "Qianchuan material deletion requires --submit --confirm-delete"
+        )
+    if args.confirm_delete and not args.submit:
+        raise ConfigurationError("--confirm-delete is valid only with --submit")
     advertiser_id = decimal_id(args.advertiser_id, "advertiser_id")
     ad_id = decimal_id(args.ad_id, "ad_id")
     concurrency = int(args.concurrency)

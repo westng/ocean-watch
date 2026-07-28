@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "gate", "git_sha", "sdk_version", "candidate_identity", "candidate_identity_sha256", "evidence_sha256", "approvals", "exceptions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "gate": {"const": "G5"},
+    "git_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "sdk_version": {"const": "v1.1.92"},
+    "candidate_identity": {"$ref": "../acceptance/candidate-identity.schema.json"},
+    "candidate_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "approvals": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["role", "identity", "decision", "approved_at"],
+        "properties": {
+          "role": {"enum": ["MT", "AO", "QO", "SO", "RO", "SCO"]},
+          "identity": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["pending", "approved", "rejected"]},
+          "approved_at": {"type": ["string", "null"], "format": "date-time"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "acceptance_id", "owner", "impact", "rollback_condition", "expires_at", "status", "blocking"],
+        "properties": {
+          "id": {"type": "string"},
+          "acceptance_id": {"type": "string"},
+          "owner": {"type": "string"},
+          "impact": {"type": "string"},
+          "rollback_condition": {"type": "string"},
+          "expires_at": {"type": "string", "format": "date-time"},
+          "status": {"const": "open"},
+          "blocking": {"const": false}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

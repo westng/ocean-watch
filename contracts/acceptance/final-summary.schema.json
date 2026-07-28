@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "gate", "git_sha", "sdk_version", "evaluated_at", "status", "ready", "counts", "required_platforms", "platforms", "acceptance", "exceptions", "blockers", "evidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "gate": {"enum": ["G0", "G1", "G2", "G3", "G4", "G5"]},
+    "git_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "sdk_version": {"const": "v1.1.92"},
+    "candidate_identity": {"$ref": "candidate-identity.schema.json"},
+    "candidate_identity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_runs": {"$ref": "source-runs.schema.json"},
+    "source_runs_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evaluated_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["passed", "failed", "blocked"]},
+    "ready": {"type": "boolean"},
+    "counts": {
+      "type": "object",
+      "required": ["passed", "failed", "blocked", "missing", "not_run", "blocking", "active_exceptions", "expired_exceptions"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "required_platforms": {"type": "array", "items": {"type": "string"}},
+    "platforms": {"type": "array"},
+    "acceptance": {"type": "array"},
+    "exceptions": {"type": "object"},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"gate": {"const": "G5"}}, "required": ["gate"]},
+      "then": {"required": ["candidate_identity", "candidate_identity_sha256", "source_runs", "source_runs_sha256"]}
+    }
+  ],
+  "additionalProperties": true
+}

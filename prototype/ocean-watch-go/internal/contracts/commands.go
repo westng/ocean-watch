@@ -1,0 +1,118 @@
+package contracts
+
+// Command is the stable two-token CLI identity frozen by contracts/commands.yaml.
+// The route is deliberately not configurable by a user command line flag.
+type Command struct {
+	Domain      string
+	Action      string
+	Description string
+}
+
+func (c Command) Name() string { return c.Domain + " " + c.Action }
+
+// Commands is ordered exactly like the Python dispatcher and the contract
+// manifest. Keep additions at the end of their domain and regenerate the
+// contract manifest before changing this list.
+var Commands = []Command{
+	{"setup", "doctor", "Check local runtime requirements"},
+	{"setup", "init", "Initialize local configuration"},
+	{"setup", "validate", "Validate configuration readiness"},
+	{"setup", "work-metadata", "Configure optional local Qianchuan work metadata"},
+	{"auth", "set-app", "Store app credentials"},
+	{"auth", "authorize", "Run local OAuth authorization"},
+	{"auth", "status", "Show redacted token status"},
+	{"auth", "refresh", "Refresh an access token"},
+	{"auth", "sync-accounts", "Sync advertisers"},
+	{"auth", "migrate", "Migrate legacy channel state"},
+	{"auth", "mappings", "Show sanitized advertiser authorization mappings"},
+	{"accounts", "list", "List responsible accounts"},
+	{"accounts", "add", "Add or update a responsible account"},
+	{"accounts", "remove", "Remove a responsible account"},
+	{"accounts", "enable", "Enable a responsible account"},
+	{"accounts", "disable", "Disable a responsible account"},
+	{"accounts", "report", "Query spend for responsible accounts"},
+	{"templates", "list", "List Marketing and Qianchuan templates"},
+	{"templates", "show", "Show one Marketing or Qianchuan template"},
+	{"templates", "create", "Create a channel-specific template"},
+	{"templates", "migrate", "Migrate templates"},
+	{"templates", "set-copy", "Set copy materials"},
+	{"templates", "validate", "Validate business templates"},
+	{"templates", "delete", "Delete a business template"},
+	{"qc-templates", "list", "List Qianchuan product templates"},
+	{"qc-templates", "create", "Create a Qianchuan product template"},
+	{"qc-templates", "migrate", "Migrate Qianchuan product templates"},
+	{"qc-templates", "list-live", "List Qianchuan live templates"},
+	{"qc-templates", "create-live", "Create a Qianchuan live template"},
+	{"qc-templates", "migrate-live", "Migrate Qianchuan live templates"},
+	{"materials", "videos", "Query uploaded videos"},
+	{"materials", "creator", "Query creator videos"},
+	{"materials", "images", "Query image assets"},
+	{"materials", "products", "Query product assets"},
+	{"qc-materials", "creator-videos", "Query Qianchuan creator videos"},
+	{"qc-materials", "inspect-work", "Inspect public Douyin work links"},
+	{"qc-materials", "authorized-creators", "List authorized Qianchuan creators"},
+	{"qc-products", "list", "List Qianchuan products"},
+	{"qc-products", "search", "Search Qianchuan products"},
+	{"qc-plans", "list", "List Qianchuan plans"},
+	{"qc-plans", "show", "Show a Qianchuan plan"},
+	{"qc-plans", "materials", "List materials in a Qianchuan plan"},
+	{"qc-plans", "update-status", "Update Qianchuan plan status"},
+	{"qc-plans", "update-budget", "Update Qianchuan plan budget"},
+	{"qc-plans", "update-roi", "Update Qianchuan plan ROI target"},
+	{"runs", "list", "List local execution runs"},
+	{"runs", "show", "Show one local execution run"},
+	{"plans", "create", "Create from uploaded materials"},
+	{"plans", "create-creator", "Create from creator materials"},
+	{"plans", "create-qianchuan", "Create a Qianchuan all-domain plan"},
+	{"plans", "batch-qianchuan-works", "Create or append Qianchuan plans from Douyin work links"},
+	{"plans", "remove-qianchuan-work", "Remove Qianchuan plan materials by Douyin work link"},
+	{"plans", "batch-upload", "Batch uploaded materials"},
+	{"plans", "batch-creator", "Batch creator materials"},
+	{"plans", "update-project-status", "Update Marketing project status"},
+	{"plans", "update-promotion-status", "Update Marketing promotion status"},
+	{"plans", "update-budget", "Update Marketing promotion budget"},
+	{"plans", "update-bid", "Update Marketing promotion bid"},
+	{"plans", "update-roi", "Update Marketing project ROI target"},
+	{"reports", "materials", "Material performance"},
+	{"reports", "schema", "Available report fields"},
+	{"reports", "custom", "Custom report"},
+	{"reports", "plans", "Marketing project performance"},
+	{"qc-reports", "plans", "Qianchuan all-domain plan performance through the official MCP"},
+	{"qc-reports", "materials", "Qianchuan material performance"},
+	{"discover", "projects", "Find projects"},
+	{"discover", "promotions", "Find promotions"},
+	{"discover", "dpa", "Find DPA assets"},
+	{"discover", "events", "Find event assets"},
+	{"discover", "deep-bids", "Find deep bid types"},
+	{"discover", "goals", "Find optimization goals"},
+	{"discover", "cities", "Resolve city identifiers"},
+	{"mcp", "configure", "Configure optional official MCP"},
+	{"mcp", "status", "Check MCP status"},
+	{"mcp", "capabilities", "List currently advertised MCP tools"},
+}
+
+func Lookup(domain, action string) (Command, bool) {
+	for _, command := range Commands {
+		if command.Domain == domain && command.Action == action {
+			return command, true
+		}
+	}
+	return Command{}, false
+}
+
+func HasDomain(domain string) bool {
+	for _, command := range Commands {
+		if command.Domain == domain {
+			return true
+		}
+	}
+	return false
+}
+
+func Names() []string {
+	result := make([]string, 0, len(Commands))
+	for _, command := range Commands {
+		result = append(result, command.Name())
+	}
+	return result
+}

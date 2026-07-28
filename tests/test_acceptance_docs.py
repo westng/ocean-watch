@@ -1,0 +1,169 @@
+import copy
+import hashlib
+import json
+import unittest
+
+from scripts.acceptance.build_g0_summary import encode_summary
+from scripts.acceptance.check_docs_links import ROOT, check
+from scripts.acceptance.verify_g0_signoff import verify
+
+
+class AcceptanceDocumentationTests(unittest.TestCase):
+    def test_local_documentation_links_resolve(self):
+        paths = sorted((ROOT / "docs").rglob("*.md"))
+        self.assertEqual(check(paths), [])
+
+    def test_p0_status_references_existing_tracked_paths(self):
+        import yaml
+
+        status = yaml.safe_load((ROOT / "contracts" / "p0-status.yaml").read_text(encoding="utf-8"))
+        for task in status["tasks"].values():
+            for evidence in task.get("evidence", []):
+                if evidence.startswith("artifacts/"):
+                    continue
+                with self.subTest(evidence=evidence):
+                    self.assertTrue((ROOT / evidence).exists())
+
+    def test_p3_shadow_status_references_existing_paths_and_keeps_routes_python(self):
+        import yaml
+
+        status = yaml.safe_load((ROOT / "contracts" / "p3-status.yaml").read_text(encoding="utf-8"))
+        self.assertFalse(status["production_route_changed"])
+        self.assertEqual(status["g3"]["status"], "automated_ready_external_gate_pending")
+        self.assertEqual(status["tasks"]["P3-03"]["status"], "shadow_complete_automated")
+        self.assertIn("real read-only canary evidence is absent by development-mode policy", status["g3"]["blockers"])
+        for task in status["tasks"].values():
+            for evidence in task.get("evidence", []):
+                with self.subTest(evidence=evidence):
+                    self.assertTrue((ROOT / evidence).exists())
+
+    def test_p4_status_records_shadow_evidence_without_claiming_g4(self):
+        import yaml
+
+        status = yaml.safe_load((ROOT / "contracts" / "p4-status.yaml").read_text(encoding="utf-8"))
+        self.assertFalse(status["production_route_changed"])
+        self.assertEqual(status["g4"]["migration_state"], "Shadow")
+        self.assertEqual(status["g4"]["status"], "automated_ready_external_gate_pending")
+        self.assertEqual(status["automated_acceptance"]["AC-127"], "external_not_run")
+        self.assertIn("AC-127 real canary", status["g4"]["blockers"][0])
+        self.assertEqual(
+            status["tasks"]["P4-05"]["contracts"]["presentation_columns"],
+            ["计划ID", "达人昵称", "商品ID", "素材ID", "素材标题"],
+        )
+        for task in status["tasks"].values():
+            for evidence in task.get("evidence", []):
+                with self.subTest(evidence=evidence):
+                    self.assertTrue((ROOT / evidence).exists())
+
+    def test_g0_signoff_requires_complete_independent_approvals(self):
+        example = json.loads(
+            (ROOT / "contracts" / "gates" / "g0-signoff.example.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertTrue(verify(example))
+        summary = {
+            "schema_version": 1,
+            "gate": "G0",
+            "git_commit": "a" * 40,
+            "status": "ready",
+            "ready": True,
+            "blockers": [],
+        }
+        summary_bytes = encode_summary(summary)
+        example["git_commit"] = summary["git_commit"]
+        example["evidence_sha256"] = hashlib.sha256(summary_bytes).hexdigest()
+        for index, approval in enumerate(example["approvals"]):
+            approval.update(
+                {
+                    "decision": "approved",
+                    "approver": "reviewer-a" if index < 3 else "reviewer-b",
+                    "approved_at": "2026-07-24T00:00:00Z",
+                }
+            )
+        self.assertEqual(verify(example, summary_bytes), [])
+
+        tampered = summary_bytes.replace(b'"ready":true', b'"ready":false')
+        self.assertIn(
+            "evidence_sha256 does not match the supplied summary",
+            verify(example, tampered),
+        )
+        blocked = copy.deepcopy(summary)
+        blocked.update({"status": "blocked", "ready": False, "blockers": ["pending review"]})
+        blocked_bytes = encode_summary(blocked)
+        example["evidence_sha256"] = hashlib.sha256(blocked_bytes).hexdigest()
+        self.assertIn("G0 evidence summary is not ready", verify(example, blocked_bytes))
+
+    def test_g0_signoff_rejects_placeholders_and_naive_timestamps(self):
+        example = json.loads(
+            (ROOT / "contracts" / "gates" / "g0-signoff.example.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        for approval in example["approvals"]:
+            approval.update(
+                {
+                    "decision": "approved",
+                    "approver": "reviewer",
+                    "approved_at": "2026-07-24T00:00:00",
+                }
+            )
+        errors = verify(example, b"{}\n")
+        self.assertIn("git_commit cannot use the all-zero placeholder", errors)
+        self.assertIn("evidence_sha256 cannot use the all-zero placeholder", errors)
+        self.assertTrue(any("RFC3339" in error for error in errors))
+
+    def test_powershell_all_suite_matches_static_acceptance_scope(self):
+        script = (ROOT / "scripts" / "acceptance" / "run.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Run-State -Out", script)
+        self.assertIn("Run-SkillEval -AllowNotRun -Out", script)
+        self.assertIn("scripts/acceptance/scan_evidence.py", script)
+        self.assertIn("scripts/acceptance/check_docs_links.py", script)
+        self.assertIn("scripts/acceptance/build_g0_summary.py", script)
+        self.assertIn("Run-Contracts", script)
+        self.assertIn("cmd/contract-runner capture-python", script)
+        self.assertIn("cmd/contract-runner compare", script)
+
+    def test_ci_and_release_workflows_preserve_acceptance_evidence(self):
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        evidence = (ROOT / ".github" / "workflows" / "g5-evidence.yml").read_text(
+            encoding="utf-8"
+        )
+        native_candidate = (ROOT / "scripts" / "acceptance" / "native_candidate.py").read_text(
+            encoding="utf-8"
+        )
+        tag = (ROOT / ".github" / "workflows" / "tag.yml").read_text(encoding="utf-8")
+        self.assertIn("Capture native P0 state evidence", ci)
+        self.assertIn("probe_state_compatibility.py --out", ci)
+        self.assertIn("p0-state-${{ runner.os }}", ci)
+        self.assertIn("ci-test-candidate-${{ github.sha }}", ci)
+        self.assertIn("ci-native-${{ matrix.platform }}-${{ github.sha }}", ci)
+        self.assertIn("run.sh --suite native-candidate", ci)
+        self.assertIn("run.ps1 -Suite native-candidate", ci)
+        self.assertIn("g5-formal-candidate-${{ github.sha }}-${{ github.run_id }}", evidence)
+        self.assertIn("g5-native-${{ matrix.platform }}-${{ github.sha }}-${{ github.run_id }}", evidence)
+        self.assertIn("g5-automated-evidence-${{ github.sha }}-${{ github.run_id }}", evidence)
+        self.assertGreaterEqual(evidence.count("retention-days: 90"), 4)
+        self.assertIn("actions/upload-artifact@v4", evidence)
+        self.assertIn("ac-125-supply-chain.json", evidence)
+        self.assertIn("path: ${{ runner.temp }}/native/${{ matrix.platform }}", evidence)
+        self.assertIn("release/ac-124-platform.json", native_candidate)
+        self.assertIn("release/ac-126-upgrade-rollback.json", native_candidate)
+        self.assertIn("contracts/ac-128-user-journeys.json", native_candidate)
+        self.assertIn("scripts/acceptance/verify_gosec_report.py", evidence)
+        self.assertEqual(tag.count("gh run download"), 2)
+        self.assertEqual(tag.count("sealed_release.py verify"), 2)
+        self.assertNotIn("scripts/release/build_candidate.py", tag)
+        controls = json.loads(
+            (ROOT / "contracts" / "security" / "gosec-controls.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertTrue(controls["does_not_grant_gate_signoff"])
+        self.assertEqual(controls["scanner_install_version"], "v2.22.10")
+
+
+if __name__ == "__main__":
+    unittest.main()

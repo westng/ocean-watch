@@ -1,0 +1,72 @@
+{
+  "future_root": "preserved",
+  "plan_template_schema_version": 3,
+  "active_plan_template": "旧目标模板",
+  "default_plan_template": {
+    "defaults": {
+      "daily_budget": 300,
+      "roi_goal": 1.5,
+      "gender": "NONE",
+      "ages": []
+    },
+    "resolved_ids": {
+      "city_ids": [
+        110000
+      ],
+      "city_names": [
+        "示例地区"
+      ]
+    }
+  },
+  "plan_templates": {
+    "旧来源模板": {
+      "display_name": "旧来源模板",
+      "bindings": {
+        "channel": "marketing",
+        "advertiser_id": "1000000000000001",
+        "platform": "示例平台",
+        "traffic_source": "CID",
+        "product_id": "3001",
+        "product_name": "来源商品"
+      },
+      "material_strategy": {
+        "source_type": "ACCOUNT_UPLOAD",
+        "selection_mode": "MANUAL",
+        "max_materials_per_unit": 5
+      },
+      "copy_materials": {
+        "titles": [
+          "来源模板有效标题"
+        ]
+      },
+      "overrides": {},
+      "future_template": "preserved"
+    },
+    "旧目标模板": {
+      "display_name": "旧目标模板",
+      "bindings": {
+        "channel": "marketing",
+        "advertiser_id": "1000000000000001",
+        "platform": "示例平台",
+        "traffic_source": "CID",
+        "product_id": "3002",
+        "product_name": "目标商品"
+      },
+      "material_strategy": {
+        "source_type": "ACCOUNT_UPLOAD",
+        "selection_mode": "MANUAL",
+        "max_materials_per_unit": 5
+      },
+      "copy_materials": {
+        "titles": [
+          "目标模板有效标题"
+        ],
+        "copied_from_template": "旧来源模板"
+      },
+      "created_from": {
+        "template": "旧来源模板"
+      },
+      "overrides": {}
+    }
+  }
+}

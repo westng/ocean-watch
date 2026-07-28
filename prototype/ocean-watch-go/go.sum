@@ -1,0 +1,4 @@
+github.com/oceanengine/ad_open_sdk_go v1.1.92 h1:1yL4xoERfG94Cwm/2q9mm2iJfdpgn9fOecnaG49Qqn8=
+github.com/oceanengine/ad_open_sdk_go v1.1.92/go.mod h1:XB4KPTfLan7+UuBpm2/81+rY8BnqMkn4xprAfne6e/s=
+golang.org/x/sys v0.35.0 h1:vz1N37gP5bs89s7He8XuIYXpyY0+QlsKmzipCbUtyxI=
+golang.org/x/sys v0.35.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=

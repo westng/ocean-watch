@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "acceptance_id", "git_sha", "platform", "status", "blocking", "tests", "required_evidence", "external_requirements"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "acceptance_id": {"type": "string", "pattern": "^AC-1(?:0[1-9]|1[0-9]|2[0-8])$"},
+    "git_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "platform": {"type": "string", "pattern": "^[a-z0-9]+-[a-z0-9]+$"},
+    "status": {"enum": ["passed", "failed", "blocked", "not_run"]},
+    "blocking": {"type": "boolean"},
+    "tests": {"type": "array"},
+    "required_evidence": {"type": "array"},
+    "external_requirements": {"type": "array"}
+  },
+  "additionalProperties": true
+}

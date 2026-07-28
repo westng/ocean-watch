@@ -27,7 +27,7 @@ def material(
     }
 
 
-def arguments(*item_ids, submit=False):
+def arguments(*item_ids, submit=False, confirm_delete=False):
     return SimpleNamespace(
         config=None,
         advertiser_id="1234567890123456",
@@ -36,6 +36,7 @@ def arguments(*item_ids, submit=False):
         concurrency=2,
         auth_account_id=None,
         submit=submit,
+        confirm_delete=confirm_delete,
         out=None,
     )
 
@@ -118,7 +119,9 @@ class RemoveQianchuanWorkMaterialTests(unittest.TestCase):
 
     def test_submit_deletes_custom_material_and_verifies_status(self):
         client = FakeClient([material(101, 8001), material(102, 8002)])
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["results"][0]["status"], "deleted")
         self.assertEqual(result["results"][0]["verified_material_statuses"], ["DELETED"])
@@ -128,21 +131,27 @@ class RemoveQianchuanWorkMaterialTests(unittest.TestCase):
 
     def test_auto_material_is_skipped(self):
         client = FakeClient([material(101, 8001, select_type="AUTO")])
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["results"][0]["reason"], "unsupported_material_select_type")
         self.assertFalse(any(method == "POST" for method, _, _ in client.calls))
 
     def test_already_deleted_material_is_idempotent(self):
         client = FakeClient([material(101, 8001, status="DELETED")])
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["results"][0]["status"], "already_deleted")
         self.assertFalse(any(method == "POST" for method, _, _ in client.calls))
 
     def test_multiple_distinct_material_ids_for_one_work_are_blocked(self):
         client = FakeClient([material(101, 8001), material(101, 8002)])
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 1)
         self.assertEqual(result["results"][0]["reason"], "ambiguous_material_match")
         self.assertFalse(any(method == "POST" for method, _, _ in client.calls))
@@ -158,16 +167,54 @@ class RemoveQianchuanWorkMaterialTests(unittest.TestCase):
 
     def test_official_delete_failure_is_returned(self):
         client = FakeClient([material(101, 8001)], delete_code=40000)
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 1)
         self.assertEqual(result["results"][0]["reason"], "official_delete_failed")
         self.assertEqual(result["results"][0]["response"]["code"], 40000)
 
     def test_success_response_without_deleted_status_fails_verification(self):
         client = FakeClient([material(101, 8001)], apply_delete=False)
-        result, exit_code = self.execute(arguments(101, submit=True), client)
+        result, exit_code = self.execute(
+            arguments(101, submit=True, confirm_delete=True), client
+        )
         self.assertEqual(exit_code, 1)
         self.assertEqual(result["results"][0]["reason"], "delete_verification_failed")
+
+    def test_submit_without_confirm_delete_stops_before_link_or_api_calls(self):
+        client = FakeClient([material(101, 8001)])
+        link_calls = []
+
+        with self.assertRaisesRegex(
+            remove_work.ConfigurationError, "--submit --confirm-delete"
+        ):
+            remove_work.execute(
+                arguments(101, submit=True),
+                client=client,
+                link_resolver=lambda url: link_calls.append(url),
+                lock_factory=lambda _path: nullcontext(),
+            )
+
+        self.assertEqual(link_calls, [])
+        self.assertEqual(client.calls, [])
+
+    def test_confirm_delete_without_submit_stops_before_link_or_api_calls(self):
+        client = FakeClient([material(101, 8001)])
+        link_calls = []
+
+        with self.assertRaisesRegex(
+            remove_work.ConfigurationError, "valid only with --submit"
+        ):
+            remove_work.execute(
+                arguments(101, confirm_delete=True),
+                client=client,
+                link_resolver=lambda url: link_calls.append(url),
+                lock_factory=lambda _path: nullcontext(),
+            )
+
+        self.assertEqual(link_calls, [])
+        self.assertEqual(client.calls, [])
 
     def test_delete_batches_follow_official_one_hundred_limit(self):
         gateway = FakeDeleteGateway()

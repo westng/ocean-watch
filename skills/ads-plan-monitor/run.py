@@ -3,11 +3,11 @@ from pathlib import Path
 import sys
 
 
-SOURCE_ROOT = Path(__file__).resolve().parent / "src"
-sys.path.insert(0, str(SOURCE_ROOT))
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 
-from ocean_watch.cli.main import main  # noqa: E402
+from runtime_launcher import launch  # noqa: E402
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(launch(PLUGIN_ROOT))

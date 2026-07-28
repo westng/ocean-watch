@@ -6,7 +6,8 @@
 
 ### 新增
 
-- 新增手动触发的版本 Tag 工作流，完成版本、更新日志和质量门校验后只创建 Tag，不创建 GitHub Release 页面或上传 Release 资产。
+- 新增分阶段 G5 密封发布链：正式候选在受保护环境执行两次可复现构建并生成五平台 Go 运行时、bootstrap、Plugin 候选 ZIP、Ed25519 签名、checksum、SPDX SBOM 和 SLSA provenance；六类成功证据运行、外部六角色签字和同一候选先形成可复验 seal，Tag 工作流不重建候选或接触签名密钥，只以最小写权限发布 seal 中的原始资产。
+- 新增 Go SDK P0–P5 企业级迁移实施包、AC-101–AC-128 自动验收工具和 Shadow 运行时；仓库生产策略继续禁用并保留全部 Python 路由，真实 canary、五平台 Marketplace 装配和独立签字完成前不切流。
 - 新增巨量千川作品检查、授权达人、商品、计划详情与素材、素材报表及本地执行历史的稳定 CLI 命令。
 - 新增脱敏的广告主与授权映射检查、跨渠道模板校验及受保护的本地模板删除能力。
 - 新增会协商账户官方 `UNI_PROJECT_DATA` 契约的巨量营销项目报表。
@@ -33,6 +34,7 @@
 
 ### 修复
 
+- 收紧 G5 外部证据来源：模型、canary、Marketplace、回滚和 rollout 统一经过受保护的角色 intake，固定每类 artifact 名和证据文件集合；最终汇总只接受六个 run ID，并拒绝任意 workflow、错角色、错 artifact、跨角色文件注入及底层 source run 复用。
 - 将“我负责的账户/我常用的账户”等名单意图与账户表现查询拆分：名单只读取本机启用账户簿并返回固定四列表格，不刷新 Token 或调用报表；消耗、GMV、ROI、订单等表现意图才执行实时账户报表。
 - 修正千川负责账户表现查询，直接调用 `/v1.0/qianchuan/report/uni_promotion/get/` 账户维度聚合接口，不再复用计划报表或扫描 `/v1.0/qianchuan/uni_promotion/list/` 计划列表。
 - 将负责账户实时查询的完整 Markdown 设为 CLI 与 Skill 的强制返回合同，固定查询日期、账户汇总、账户明细、失败原因、分渠道汇总和官方指标口径，避免账户名单或上下文追问被擅自缩写。

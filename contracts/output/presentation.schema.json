@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ocean-watch.local/contracts/output/presentation.schema.json",
+  "title": "Ocean Watch mandatory Presentation contract",
+  "type": "object",
+  "required": [
+    "format",
+    "required",
+    "allow_column_omission",
+    "allow_column_reordering",
+    "columns",
+    "rendered_markdown"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required": {
+      "const": true
+    },
+    "allow_column_omission": {
+      "const": false
+    },
+    "allow_column_reordering": {
+      "const": false
+    },
+    "columns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "required_details": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "details_outside_table": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rendered_markdown": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": [
+        "field",
+        "label"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

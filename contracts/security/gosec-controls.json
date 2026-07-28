@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "kind": "gosec_control_inventory",
+  "scanner_install_version": "v2.22.10",
+  "does_not_grant_gate_signoff": true,
+  "controls": [
+    {
+      "id": "GOSEC-MAIN-G204-CREDENTIAL-BACKENDS",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G204",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "AP",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The credential Adapter must invoke the native macOS Keychain or Linux Secret Service client without a shell.",
+      "controls": [
+        "The executable name is selected from the fixed security and secret-tool allowlist and resolved to an absolute path with LookPath.",
+        "Arguments are constructed by the Adapter, account names reject NUL and line breaks, and no shell parser is used.",
+        "Credential command stdout and stderr are never forwarded to user output."
+      ],
+      "removal_condition": "Replace the subprocess backends with reviewed native library bindings or adopt a scanner rule that recognizes the executable allowlist.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/credentials/store.go",
+          "code_sha256": "65f0ab51b0864d986199f3d925611d1733b4af910ff568fac6a1cd95a6231c96",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/credentials/store.go",
+          "code_sha256": "6bfb4deaa0bdae0401a1d53ee86cc247cbb2a2e3530b4c5762e1a22ce4947f83",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G204-PYTHON-FALLBACK",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G204",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "RL",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The compatibility runtime intentionally invokes the existing Python launcher while production routes remain Python.",
+      "controls": [
+        "The production executable is resolved to an absolute supported Python runtime after a bounded version probe.",
+        "The default entrypoint is the fixed Plugin run.py path and execution uses argv directly without a shell.",
+        "The immutable route manifest controls which compatibility commands may reach the fallback."
+      ],
+      "removal_condition": "Remove the compatibility fallback after every supported command is Go-default and the rollback window is closed.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/python/fallback.go",
+          "code_sha256": "87b9c41ea0f5d6235095082c3ea2f574c7b84b7b5ba6ac293c68f33935f39058",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G204-CONTRACT-RUNNER",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G204",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "QO",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The acceptance runner must execute the explicitly resolved Python baseline and candidate binaries.",
+      "controls": [
+        "The runner CLI resolves executables to absolute paths before constructing Program values.",
+        "Each case runs in a private temporary workspace with PATH removed, outbound proxies pinned to loopback failure, and fixture fields validated.",
+        "The contract runner is an acceptance-only binary and is not reachable from the production CLI."
+      ],
+      "removal_condition": "Replace process-level compatibility contracts with an equivalent hermetic runner that the scanner can prove safe.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/execute.go",
+          "code_sha256": "77b0064f96088804cec95e6000f863e42c79211140a2da9dd97f8b0a08f1cfb6",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G302-PRIVATE-DIRECTORIES",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G302",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "AP",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "These chmod calls target directories, which require the owner execute bit and are intentionally private at 0700.",
+      "controls": [
+        "Every flagged target is a local state directory rather than a data file.",
+        "Mode 0700 grants access only to the current user and is re-applied after directory creation.",
+        "Files inside these directories are written atomically with mode 0600."
+      ],
+      "removal_condition": "Remove the entries when gosec distinguishes directory chmod from file chmod or the calls move to a typed private-directory helper.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/authorization.go",
+          "code_sha256": "0a8fb6df9f5f918047ff97bdf4554001f6ec9939368a130af9f9451a76644cd0",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/authorization.go",
+          "code_sha256": "e346e96c51034eba13276ea3a0b4caa856ab3a28cff6b521b8fdc4b80bcce1b0",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "c6cf7b4307452a4858dc4ec942dce048f236e1d1f502b3c13c67492886d14f66",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "c6cf7b4307452a4858dc4ec942dce048f236e1d1f502b3c13c67492886d14f66",
+          "occurrence": 2
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "f0b833a60848f2e04007f0a5d4b8f1766f944b13c9a4cd993d2246afd0d27770",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/write_safety.go",
+          "code_sha256": "669d22de0bec7fccc121287b8754679d1fb9100ede0c3bba4ca00e3d28604243",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G304-AUTHORIZATION-STATE",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "AP",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "Authorization state reads use fixed filenames under the selected local state root and validated channel and generation components.",
+      "controls": [
+        "Channel values are restricted to marketing or qianchuan and generation values must be positive integers.",
+        "State manifests carry a SHA-256 checksum and writes use private atomic files.",
+        "The read path never originates from an official API response or shell-expanded input."
+      ],
+      "removal_condition": "Move authorization reads to an os.Root-scoped implementation with equivalent Python compatibility.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/authorization.go",
+          "code_sha256": "1c4d2d427f633ebdcf0225f8c163a4956502f6c4b36965b84fb8d09e827274be",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G304-EXPLICIT-CONFIG",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "AP",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "Configuration operations intentionally read the exact local path selected by the user or Plugin launcher.",
+      "controls": [
+        "No untrusted child component is appended to the explicit configuration path.",
+        "Writes use a mode-0600 temporary file, atomic replacement, read-back verification, and a mode-0700 parent directory.",
+        "Backup, verification, and parent fsync operations remain bound to that exact path."
+      ],
+      "removal_condition": "Introduce a cross-runtime state-root handle that preserves explicit external config compatibility without dynamic os path calls.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "0081f512c38e20b503e33dfb0fa8a85160adf1424b574cfed4092d4b9a4d7851",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "79c4ff7c0941f62222ca08db234c07795186ce3d95bd7f4e3550add054427400",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "8dcadfbf40c9d7c1aabc8b5aa05916eecca7a7c66e83b857b055ae3eb75fc30a",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/config.go",
+          "code_sha256": "fc11819330649fe496ff81f7e2e77f8e18c01c793411e10c270cf01a42812a09",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G304-LOCK-FILE",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "AP",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "Cross-runtime process locks must open a caller-selected state lock path.",
+      "controls": [
+        "Production callers derive lock paths from managed state paths plus fixed suffixes.",
+        "Lock files are mode 0600, contain only process metadata, and are opened without a shell.",
+        "Operation-journal locks use os.Root for managed subdirectories and cross-runtime serialization is tested."
+      ],
+      "removal_condition": "Route all lock creation through an os.Root-scoped API after the Python compatibility lock contract is retired.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/lock.go",
+          "code_sha256": "e6b659e6c06fac20b9673ed4450af02d968aaf7d75caae7db9efa18c390d8018",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G304-OWNER-CACHE",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "QA-API",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The Qianchuan owner cache reads a single fixed-basename file at the configured local cache path.",
+      "controls": [
+        "The cache basename must be qianchuan-work-owners.json and IDs are validated decimal values.",
+        "The reader rejects non-regular files, caps input at 16 MiB, and validates schema and trailing JSON.",
+        "Writes use the private atomic file helper and a process lock."
+      ],
+      "removal_condition": "Open the cache relative to a validated os.Root without changing the shared Python state location.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/adapters/filesystem/qianchuan_owner_cache.go",
+          "code_sha256": "186831c3c61dc7c517e331fe8eb8ade22bea095f82118cd080aafd4dc4bcb0f8",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-MAIN-G304-CONTRACT-FILES",
+      "module": "prototype/ocean-watch-go",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "QO",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The acceptance runner reads explicit manifests, captures, fixture files, and the sealed candidate identity to compare Python and Go behavior.",
+      "controls": [
+        "Fixture-relative paths pass safeJoin root containment and fixture copies reject symbolic links and non-regular files.",
+        "Case execution and snapshots use a private temporary workspace that is removed after every case.",
+        "Manifest, evidence, and candidate identity paths are acceptance CLI inputs and are not reachable from production commands.",
+        "Candidate identity input must contain the exact sealed fields and match the requested Git SHA, pinned SDK version, and non-zero SHA-256 values before comparison."
+      ],
+      "removal_condition": "Move acceptance file access to os.Root-scoped helpers without weakening cross-platform fixture support.",
+      "findings": [
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/candidate_identity.go",
+          "code_sha256": "d0dbea53a240765bc3e9fa2225436301cdff7bc9a8686b56c468b24fe4606a08",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/execute.go",
+          "code_sha256": "0a8457981815be3afffcbe3dfd90904978a638b24e265a7d5c1d04a7aaefa524",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/fixtures.go",
+          "code_sha256": "bc36923276277c677451802469884d5acddb2b0d5ba2fe294abab332615d3a8c",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/fixtures.go",
+          "code_sha256": "c7059c0a3b9f43d8963e528857281452b0ed01013c98b23ee6d05af060f52e4d",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/fixtures.go",
+          "code_sha256": "dfc9c182387b721f2b87bc8af6a0d1b849504074e06d936de5c3203bc18868e8",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/io.go",
+          "code_sha256": "22a7b108e35626af343678c8ad7c28a74794dd492af1944b06d52c910b763ebf",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/ocean-watch-go/internal/contractrunner/manifest.go",
+          "code_sha256": "5c8879c69ce4a27e1cc985550cd5724c0cae19e3a8058b56222e0309ee8989b9",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-BOOTSTRAP-G204-VERIFIED-ASSET",
+      "module": "prototype/runtime-bootstrap",
+      "rule_id": "G204",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "RO",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The bootstrap exists to execute the platform runtime selected from a signed release manifest.",
+      "controls": [
+        "The manifest signature, product and Plugin identity, commit, SDK version, route, platform, filename, size, and SHA-256 are verified before AssetPath is returned.",
+        "The cache path is private, symbolic links and non-regular files are rejected, and execution uses argv directly without a shell.",
+        "The execute flag is set only by the Plugin launcher after bootstrap validation."
+      ],
+      "removal_condition": "Adopt an execution API or scanner model that carries the verified-asset type across the bootstrap boundary.",
+      "findings": [
+        {
+          "file": "prototype/runtime-bootstrap/cmd/ocean-watch-bootstrap/main.go",
+          "code_sha256": "f82da2e4878f19561f517d344b1fd186172c12c249393c1c297eae17714f1012",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-BOOTSTRAP-G302-PRIVATE-EXECUTABLES",
+      "module": "prototype/runtime-bootstrap",
+      "rule_id": "G302",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "RO",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "Runtime cache directories and verified binaries require the owner execute bit and are intentionally private at 0700.",
+      "controls": [
+        "Cache roots and platform directories reject symbolic links and are constrained beneath the configured cache root.",
+        "Mode 0700 grants access only to the current user while permitting traversal or binary execution.",
+        "Runtime asset contents are signature-bound and rechecked by size and SHA-256."
+      ],
+      "removal_condition": "Remove the entries when gosec distinguishes private executable paths from over-permissive data files.",
+      "findings": [
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "83248a514b8e693874c63d06f7f40d9ce58a413cdfd66c7f86f13ca688392ba3",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "be177b489b983bd1c39cd9ba78f3354215ac4a48c597db8710656171b3ee1349",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "e6b063cfef96044dca30e88d106b6296391d699e8850614042d74c989f0db949",
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "id": "GOSEC-BOOTSTRAP-G304-VERIFIED-CACHE",
+      "module": "prototype/runtime-bootstrap",
+      "rule_id": "G304",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "owner": "RO",
+      "security_reviewer": "SO",
+      "expires_at": "2026-10-31T23:59:59Z",
+      "rationale": "The bootstrap reads signed metadata and a verified asset from its versioned private cache.",
+      "controls": [
+        "Cache directories are root-contained, private, and checked component-by-component for symbolic links.",
+        "Metadata filenames are fixed, files must be private regular files, and reads are size bounded.",
+        "Runtime asset names come from the validated signed manifest and the file is checked for mode, size, and SHA-256 before use."
+      ],
+      "removal_condition": "Move all cache reads and atomic replacement verification to an os.Root-scoped cache abstraction.",
+      "findings": [
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "1b08bb9a734ab390aa0693d47cfc4abbadcf11b24c0bf4ec11b66ee3887e79eb",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "b235a014b40d7ef6480dec663691da61979eb23edc4b95a993c40f903b4279fc",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "b7b29a2b2aa39025a9440b46097ac14e0627fccd9ed537919925434ea3ab794f",
+          "occurrence": 1
+        },
+        {
+          "file": "prototype/runtime-bootstrap/bootstrap/bootstrap.go",
+          "code_sha256": "cb34a1012b1c1a797c3fe7ebab0253a1a92dfbb7dc3e7f11316f4fc846d49949",
+          "occurrence": 1
+        }
+      ]
+    }
+  ]
+}

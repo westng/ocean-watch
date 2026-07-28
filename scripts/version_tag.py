@@ -131,6 +131,12 @@ def derive_version_tag(root):
     return f"v{validate_versions(root)['project']}"
 
 
+def release_notes(root, tag):
+    versions = validate_versions(root, tag=tag)
+    changelog = (Path(root) / "CHANGELOG.md").read_text(encoding="utf-8")
+    return validate_tag_changelog(changelog, versions["project"])
+
+
 def repository_root():
     return Path(__file__).resolve().parents[1]
 
@@ -145,6 +151,10 @@ def build_parser():
 
     commands.add_parser("tag", help="Derive the version tag from project.version.")
 
+    notes = commands.add_parser("notes", help="Write release notes from CHANGELOG.md.")
+    notes.add_argument("--tag", required=True)
+    notes.add_argument("--out", type=Path, required=True)
+
     return parser
 
 
@@ -157,6 +167,11 @@ def main(argv=None):
             result = validate_versions(root, tag=args.tag)
         elif args.command == "tag":
             result = {"tag": derive_version_tag(root)}
+        elif args.command == "notes":
+            notes = release_notes(root, args.tag)
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(notes, encoding="utf-8")
+            result = {"tag": args.tag, "out": str(args.out), "bytes": len(notes.encode("utf-8"))}
         else:
             raise AssertionError("unreachable")
     except VersionTagError as error:

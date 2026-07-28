@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-import importlib
-import sys
 from pathlib import Path
+import sys
 
-SOURCE_ROOT = Path(__file__).resolve().parents[1] / "ads-plan-monitor" / "src"
-sys.path.insert(0, str(SOURCE_ROOT))
 
-main = importlib.import_module("ocean_watch.cli.main").main
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
+
+from runtime_launcher import launch  # noqa: E402
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(launch(PLUGIN_ROOT))

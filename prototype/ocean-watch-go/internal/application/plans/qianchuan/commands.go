@@ -1,0 +1,667 @@
+package qianchuan
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	authapplication "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/auth"
+	sharedplans "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/plans"
+	applicationworkmetadata "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/workmetadata"
+	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
+	domainplans "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain/plans"
+	domaintemplates "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain/templates"
+)
+
+const DefaultBatchConcurrency = 8
+
+type CommandConfigReader interface {
+	Read(context.Context) (map[string]any, error)
+}
+
+type WorkLinkResolver interface {
+	Resolve(context.Context, applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error)
+}
+
+type WorkLinkResolverFactory func(string) (WorkLinkResolver, error)
+
+type CreatePlanCommand struct {
+	ConfigPath    string
+	Payload       json.RawMessage
+	PlanTemplate  string
+	LiveTemplate  string
+	Name          string
+	AdvertiserID  string
+	AuthAccountID string
+	Submit        bool
+}
+
+type CreateTemplateSummary struct {
+	TemplateID   string `json:"template_id"`
+	Name         string `json:"name"`
+	ProductName  string `json:"product_name,omitempty"`
+	CreatorName  string `json:"creator_name,omitempty"`
+	TemplateType string `json:"template_type"`
+}
+
+type CreatePreflight struct {
+	AdvertiserID  string `json:"advertiser_id"`
+	MarketingGoal string `json:"marketing_goal"`
+	Name          string `json:"name,omitempty"`
+	AwemeID       string `json:"aweme_id,omitempty"`
+	ProductCount  int    `json:"product_count"`
+	Budget        any    `json:"budget,omitempty"`
+	SmartBidType  string `json:"smart_bid_type,omitempty"`
+	ROI2Goal      any    `json:"roi2_goal,omitempty"`
+	VideoCount    int    `json:"video_count"`
+	ImageCount    int    `json:"image_count"`
+	CarouselCount int    `json:"carousel_count"`
+}
+
+type CreateCommandResult struct {
+	Mode           string                        `json:"mode"`
+	Channel        string                        `json:"channel"`
+	Config         string                        `json:"config"`
+	PlanTemplate   *CreateTemplateSummary        `json:"plan_template"`
+	Preflight      CreatePreflight               `json:"preflight"`
+	BlockingFields []string                      `json:"blocking_fields"`
+	Endpoint       string                        `json:"endpoint"`
+	Payload        map[string]any                `json:"payload"`
+	Status         string                        `json:"status"`
+	AdID           string                        `json:"ad_id,omitempty"`
+	RequestID      string                        `json:"request_id,omitempty"`
+	FailureStage   string                        `json:"failure_stage,omitempty"`
+	DispatchState  domainplans.DispatchState     `json:"dispatch_state,omitempty"`
+	Reconciliation *domainplans.Reconciliation   `json:"reconciliation,omitempty"`
+	LastResponse   *domainplans.OfficialResponse `json:"last_response,omitempty"`
+	SubmitBlocked  bool                          `json:"submit_blocked,omitempty"`
+	ExitCode       int                           `json:"exit_code"`
+}
+
+type BatchWorksCommand struct {
+	PlanTemplate      string
+	WorkURLs          []string
+	Concurrency       int
+	AuthAccountID     string
+	NoLinkMetadataAPI bool
+	IncludePayloads   bool
+	Submit            bool
+}
+
+type OwnerHintCachePerformance struct {
+	OwnerHintSummary
+	Loaded                 int `json:"loaded"`
+	LoadedFromCache        int `json:"loaded_from_cache"`
+	LoadedFromLinkMetadata int `json:"loaded_from_link_metadata"`
+	Stored                 int `json:"stored"`
+	Warning                any `json:"warning"`
+}
+
+type LinkMetadataPerformance struct {
+	Configured bool `json:"configured"`
+	Enabled    bool `json:"enabled"`
+}
+
+type BatchPerformance struct {
+	LinkResolutionSeconds       float64                   `json:"link_resolution_seconds"`
+	CredentialResolutionSeconds float64                   `json:"credential_resolution_seconds"`
+	MaterialResolutionSeconds   float64                   `json:"material_resolution_seconds"`
+	PlanReconciliationSeconds   float64                   `json:"plan_reconciliation_seconds"`
+	TotalSeconds                float64                   `json:"total_seconds"`
+	OwnerHintCache              OwnerHintCachePerformance `json:"owner_hint_cache"`
+	LinkMetadata                LinkMetadataPerformance   `json:"link_metadata"`
+}
+
+type BatchCommandResult struct {
+	BatchResult
+	Performance BatchPerformance `json:"performance"`
+}
+
+type RemoveWorksCommand struct {
+	AdvertiserID  string
+	AuthAccountID string
+	AdID          string
+	WorkURLs      []string
+	Concurrency   int
+	Submit        bool
+	ConfirmDelete bool
+}
+
+type CommandService struct {
+	Config        CommandConfigReader
+	Tokens        authapplication.TokenProvider
+	Links         WorkLinkResolver
+	MetadataLinks WorkLinkResolverFactory
+	OwnerHints    OwnerHintCache
+	Verifier      WorkVerifier
+	Create        CreateExecutor
+	Batch         BatchService
+	Remove        RemoveExecutor
+	Now           func() time.Time
+}
+
+func (service CommandService) CreatePlan(
+	ctx context.Context,
+	command CreatePlanCommand,
+) (CreateCommandResult, error) {
+	payload, summary, blocking, err := service.createPayload(ctx, command)
+	if err != nil {
+		return CreateCommandResult{}, err
+	}
+	advertiserID, err := commandAdvertiserID(payload, command.AdvertiserID)
+	if err != nil {
+		return CreateCommandResult{}, err
+	}
+	request := CreateRequest{
+		AdvertiserID: advertiserID, AuthAccountID: strings.TrimSpace(command.AuthAccountID),
+		Submit: command.Submit && len(blocking) == 0, Payload: payload,
+	}
+	executed, err := service.Create.Execute(ctx, request)
+	if err != nil && strings.TrimSpace(executed.Mode) == "" {
+		return CreateCommandResult{}, err
+	}
+	result := createCommandResult(executed, summary, blocking, command.ConfigPath)
+	if err != nil {
+		result.ExitCode = 1
+		return result, err
+	}
+	if command.Submit && len(blocking) != 0 {
+		result.Mode, result.Status, result.SubmitBlocked, result.ExitCode = "submit", "blocked", true, 1
+	}
+	return result, nil
+}
+
+func (service CommandService) BatchWorks(
+	ctx context.Context,
+	command BatchWorksCommand,
+) (BatchCommandResult, error) {
+	started := service.now()
+	if service.Config == nil {
+		return BatchCommandResult{}, errors.New("Qianchuan batch command dependencies are incomplete")
+	}
+	concurrency := command.Concurrency
+	if concurrency == 0 {
+		concurrency = DefaultBatchConcurrency
+	}
+	if concurrency < 1 || concurrency > applicationworkmetadata.MaxConcurrency {
+		return BatchCommandResult{}, errors.New("concurrency must be between 1 and 10")
+	}
+	if len(command.WorkURLs) == 0 {
+		return BatchCommandResult{}, errors.New("at least one work URL is required")
+	}
+	config, err := service.Config.Read(ctx)
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	exported, err := domaintemplates.ExportQianchuanPlanPayload(
+		config, domaintemplates.QianchuanTemplateProduct, command.PlanTemplate, "",
+	)
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	if !exported.Active {
+		return BatchCommandResult{}, errors.New("Qianchuan product template is not active")
+	}
+	metadata := LinkMetadataPerformance{Configured: domain.WorkMetadataConfigured(config)}
+	metadataEndpoint := ""
+	if !command.NoLinkMetadataAPI {
+		metadataEndpoint, err = domain.WorkMetadataEndpoint(config)
+		if err != nil {
+			return BatchCommandResult{}, err
+		}
+		metadata.Enabled = metadataEndpoint != ""
+	}
+	linkResolver := service.Links
+	if metadata.Enabled && service.MetadataLinks != nil {
+		linkResolver, err = service.MetadataLinks(metadataEndpoint)
+		if err != nil {
+			return BatchCommandResult{}, err
+		}
+	}
+	if linkResolver == nil {
+		return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
+	}
+	links, err := linkResolver.Resolve(ctx, applicationworkmetadata.ResolveRequest{
+		URLs: append([]string(nil), command.WorkURLs...), Concurrency: concurrency,
+	})
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	linksFinished := service.now()
+	resolved, productSkipped := filterLinkProductHints(links.Resolved, exported.ProductIDs)
+	links.Resolved = resolved
+	skipped := append(qianchuanSkippedLinks(links.Skipped), productSkipped...)
+	cachePerformance := OwnerHintCachePerformance{}
+	baseRequest := BatchRequest{
+		AdvertiserID: exported.AdvertiserID, AuthAccountID: strings.TrimSpace(command.AuthAccountID),
+		Submit: command.Submit, TemplateID: exported.TemplateID, TemplateName: exported.DisplayName,
+		ProductName: exported.ProductName, TemplatePayload: exported.Payload,
+		IncludePayloads: command.IncludePayloads, Skipped: skipped,
+	}
+	if len(links.Resolved) == 0 {
+		result, executeErr := service.Batch.Execute(ctx, baseRequest)
+		finished := service.now()
+		return BatchCommandResult{
+			BatchResult: result,
+			Performance: batchPerformance(started, linksFinished, linksFinished, linksFinished, finished, metadata, cachePerformance),
+		}, executeErr
+	}
+	lease, scopedContext, err := service.readLease(ctx, exported.AdvertiserID, command.AuthAccountID)
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	credentialsFinished := service.now()
+	cachedHints := map[string]OwnerHint{}
+	if service.OwnerHints != nil {
+		cachedHints, err = service.OwnerHints.Load(scopedContext, exported.AdvertiserID, resolvedWorkIDs(links.Resolved))
+		if err != nil {
+			cachedHints = map[string]OwnerHint{}
+			cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
+		}
+	}
+	linkHints := ownerHintsFromResolvedLinks(links.Resolved)
+	ownerHints := mergeOwnerHints(cachedHints, linkHints)
+	cachePerformance.Loaded = len(ownerHints)
+	cachePerformance.LoadedFromCache = len(cachedHints)
+	cachePerformance.LoadedFromLinkMetadata = len(linkHints)
+	verification, err := service.Verifier.Verify(scopedContext, WorkVerificationRequest{
+		AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
+		ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints),
+	})
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	cachePerformance.OwnerHintSummary = verification.OwnerHintSummary
+	if service.OwnerHints != nil {
+		stored, storeErr := service.OwnerHints.Store(scopedContext, exported.AdvertiserID, verification.ResolvedOwnerHints)
+		if storeErr != nil {
+			if cachePerformance.Warning == nil {
+				cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_write_failed", storeErr)
+			}
+		} else {
+			cachePerformance.Stored = stored
+		}
+	}
+	materialsFinished := service.now()
+	baseRequest.ReadAccessToken = lease.AccessToken
+	baseRequest.Works = verification.Matched
+	baseRequest.Skipped = append(baseRequest.Skipped, verification.Skipped...)
+	baseRequest.QueryFailures = verification.QueryFailures
+	batch := service.Batch
+	if command.Submit {
+		batch.Guard.Credentials = commandLeaseCredentials{
+			lease: lease, advertiserID: exported.AdvertiserID,
+		}
+	}
+	result, executeErr := batch.Execute(scopedContext, baseRequest)
+	finished := service.now()
+	return BatchCommandResult{
+		BatchResult: result,
+		Performance: batchPerformance(started, linksFinished, credentialsFinished, materialsFinished, finished, metadata, cachePerformance),
+	}, executeErr
+}
+
+func (service CommandService) RemoveWorks(
+	ctx context.Context,
+	command RemoveWorksCommand,
+) (RemoveResult, error) {
+	if command.Submit && !command.ConfirmDelete {
+		return RemoveResult{}, errors.New("Qianchuan material deletion requires explicit confirm-delete")
+	}
+	if !command.Submit && command.ConfirmDelete {
+		return RemoveResult{}, errors.New("confirm-delete is valid only with submit")
+	}
+	if service.Links == nil {
+		return RemoveResult{}, errors.New("Qianchuan material removal link resolver is required")
+	}
+	concurrency := command.Concurrency
+	if concurrency == 0 {
+		concurrency = applicationworkmetadata.DefaultConcurrency
+	}
+	links, err := service.Links.Resolve(ctx, applicationworkmetadata.ResolveRequest{
+		URLs: append([]string(nil), command.WorkURLs...), Concurrency: concurrency,
+	})
+	if err != nil {
+		return RemoveResult{}, err
+	}
+	works := make([]RemoveWork, 0, len(links.Resolved))
+	for _, work := range links.Resolved {
+		works = append(works, RemoveWork{
+			InputIndex: work.InputIndex, InputURL: work.InputURL, AwemeItemID: work.AwemeItemID,
+		})
+	}
+	if len(works) == 0 {
+		return RemoveResult{
+			Mode: modeFromSubmit(command.Submit), Channel: "qianchuan",
+			AdvertiserID: strings.TrimSpace(command.AdvertiserID), AdID: strings.TrimSpace(command.AdID),
+			Endpoint: DeleteMaterialsEndpoint, RiskNotice: DeleteRiskNotice,
+			Counts:  map[string]int{"input_works": 0, "skipped_links": len(links.Skipped)},
+			Results: []RemoveRow{}, SkippedLinks: qianchuanSkippedLinks(links.Skipped), Batches: []RemoveBatch{},
+		}, nil
+	}
+	lease, scopedContext, err := service.readLease(ctx, command.AdvertiserID, command.AuthAccountID)
+	if err != nil {
+		return RemoveResult{}, err
+	}
+	executor := service.Remove
+	if command.Submit {
+		executor.Guard.Credentials = commandLeaseCredentials{
+			lease: lease, advertiserID: strings.TrimSpace(command.AdvertiserID),
+		}
+	}
+	return executor.Execute(scopedContext, RemoveCommand{
+		AdvertiserID: command.AdvertiserID, AuthAccountID: command.AuthAccountID,
+		ReadAccessToken: lease.AccessToken, AdID: command.AdID, Submit: command.Submit,
+		ConfirmDelete: command.ConfirmDelete, Works: works, SkippedLinks: qianchuanSkippedLinks(links.Skipped),
+	})
+}
+
+func (service CommandService) createPayload(
+	ctx context.Context,
+	command CreatePlanCommand,
+) (json.RawMessage, *CreateTemplateSummary, []string, error) {
+	sources := 0
+	if len(command.Payload) != 0 {
+		sources++
+	}
+	if strings.TrimSpace(command.PlanTemplate) != "" {
+		sources++
+	}
+	if strings.TrimSpace(command.LiveTemplate) != "" {
+		sources++
+	}
+	if sources != 1 {
+		return nil, nil, nil, errors.New("exactly one Qianchuan payload or template source is required")
+	}
+	if len(command.Payload) != 0 {
+		if strings.TrimSpace(command.Name) != "" {
+			return nil, nil, nil, errors.New("name is supported only with a product plan template")
+		}
+		return append(json.RawMessage(nil), command.Payload...), nil, []string{}, nil
+	}
+	if service.Config == nil {
+		return nil, nil, nil, errors.New("Qianchuan plan command config reader is required")
+	}
+	config, err := service.Config.Read(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	kind, selector := domaintemplates.QianchuanTemplateProduct, command.PlanTemplate
+	if strings.TrimSpace(command.LiveTemplate) != "" {
+		kind, selector = domaintemplates.QianchuanTemplateLive, command.LiveTemplate
+	}
+	exported, err := domaintemplates.ExportQianchuanPlanPayload(config, kind, selector, command.Name)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	summary := &CreateTemplateSummary{
+		TemplateID: exported.TemplateID, Name: exported.DisplayName,
+		ProductName: exported.ProductName, CreatorName: exported.CreatorName,
+	}
+	blocking := []string{}
+	if kind == domaintemplates.QianchuanTemplateProduct {
+		summary.TemplateType = "商品全域"
+		blocking = append(blocking, "runtime_creator_materials")
+	} else {
+		summary.TemplateType = "直播全域"
+	}
+	if !exported.Active {
+		blocking = append(blocking, "template_not_active")
+	}
+	return exported.Payload, summary, blocking, nil
+}
+
+func (service CommandService) readLease(
+	ctx context.Context,
+	advertiserID string,
+	authAccountID string,
+) (authapplication.TokenLease, context.Context, error) {
+	if service.Tokens == nil {
+		return authapplication.TokenLease{}, nil, errors.New("Qianchuan read token provider is required")
+	}
+	lease, err := service.Tokens.Ensure(ctx, authapplication.TokenQuery{
+		Channel: "qianchuan", AdvertiserID: strings.TrimSpace(advertiserID),
+		AuthAccountID: strings.TrimSpace(authAccountID),
+	})
+	if err != nil {
+		return authapplication.TokenLease{}, nil, err
+	}
+	scoped, err := authapplication.WithTokenLease(ctx, lease)
+	if err != nil {
+		return authapplication.TokenLease{}, nil, err
+	}
+	return lease, scoped, nil
+}
+
+type commandLeaseCredentials struct {
+	lease        authapplication.TokenLease
+	advertiserID string
+}
+
+func (provider commandLeaseCredentials) AccessToken(
+	ctx context.Context,
+	channel domainplans.Channel,
+	advertiserID string,
+	_ string,
+) (sharedplans.CredentialLease, error) {
+	if ctx == nil || channel != domainplans.ChannelQianchuan ||
+		strings.TrimSpace(advertiserID) != provider.advertiserID ||
+		provider.lease.Channel != "qianchuan" {
+		return sharedplans.CredentialLease{}, errors.New("preloaded Qianchuan token lease does not match write scope")
+	}
+	if strings.TrimSpace(provider.lease.AuthorizationID) == "" || strings.TrimSpace(provider.lease.AccessToken) == "" {
+		return sharedplans.CredentialLease{}, errors.New("preloaded Qianchuan token lease is incomplete")
+	}
+	return sharedplans.CredentialLease{
+		AuthorizationID: provider.lease.AuthorizationID, AccessToken: provider.lease.AccessToken,
+	}, nil
+}
+
+func commandAdvertiserID(payload json.RawMessage, override string) (string, error) {
+	object, err := decodeCreatePayload(payload)
+	if err != nil {
+		return "", err
+	}
+	advertiserID := payloadID(object["advertiser_id"])
+	if !validPositiveID(advertiserID) {
+		return "", errors.New("Qianchuan payload advertiser_id must be a positive decimal ID")
+	}
+	override = strings.TrimSpace(override)
+	if override != "" && override != advertiserID {
+		return "", errors.New("Qianchuan payload advertiser_id does not match command advertiser_id")
+	}
+	return advertiserID, nil
+}
+
+func createCommandResult(
+	executed CreateResult,
+	summary *CreateTemplateSummary,
+	blocking []string,
+	configPath string,
+) CreateCommandResult {
+	return CreateCommandResult{
+		Mode: executed.Mode, Channel: "qianchuan", Config: strings.TrimSpace(configPath), PlanTemplate: summary,
+		Preflight: createPreflight(executed.Payload), BlockingFields: append([]string(nil), blocking...),
+		Endpoint: executed.Endpoint, Payload: executed.Payload, Status: executed.Status,
+		AdID: executed.AdID, RequestID: executed.RequestID, FailureStage: executed.FailureStage,
+		DispatchState: executed.DispatchState, Reconciliation: executed.Reconciliation,
+		LastResponse: executed.LastResponse,
+	}
+}
+
+func createPreflight(payload map[string]any) CreatePreflight {
+	delivery, _ := payload["delivery_setting"].(map[string]any)
+	preflight := CreatePreflight{
+		AdvertiserID:  payloadID(payload["advertiser_id"]),
+		MarketingGoal: strings.TrimSpace(fmt.Sprint(payload["marketing_goal"])),
+		Name:          strings.TrimSpace(fmt.Sprint(payload["name"])),
+		AwemeID:       payloadID(payload["aweme_id"]), Budget: delivery["budget"],
+		SmartBidType: strings.TrimSpace(fmt.Sprint(delivery["smart_bid_type"])),
+		ROI2Goal:     delivery["roi2_goal"],
+	}
+	if preflight.Name == "<nil>" {
+		preflight.Name = ""
+	}
+	if preflight.AwemeID == "<nil>" {
+		preflight.AwemeID = ""
+	}
+	if values, ok := payload["product_ids"].([]any); ok {
+		preflight.ProductCount = len(values)
+	}
+	if creatives, ok := payload["multi_product_creative_list"].([]any); ok {
+		for _, raw := range creatives {
+			creative, _ := raw.(map[string]any)
+			preflight.VideoCount += anySliceLength(creative["video_material"])
+			preflight.ImageCount += anySliceLength(creative["image_material"])
+			preflight.CarouselCount += anySliceLength(creative["carousel_material"])
+		}
+	}
+	return preflight
+}
+
+func anySliceLength(value any) int {
+	values, _ := value.([]any)
+	return len(values)
+}
+
+func qianchuanWorkInputs(values []domain.ResolvedWorkLink, hints map[string]OwnerHint) []WorkInput {
+	result := make([]WorkInput, 0, len(values))
+	for _, value := range values {
+		var hint *OwnerHint
+		if selected, exists := hints[value.AwemeItemID]; exists {
+			copy := selected
+			hint = &copy
+		}
+		result = append(result, WorkInput{
+			InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
+			OwnerHint: hint,
+		})
+	}
+	return result
+}
+
+func filterLinkProductHints(
+	values []domain.ResolvedWorkLink,
+	productIDs []string,
+) ([]domain.ResolvedWorkLink, []SkippedWork) {
+	allowed := stringSetFrom(productIDs)
+	resolved := make([]domain.ResolvedWorkLink, 0, len(values))
+	skipped := []SkippedWork{}
+	for _, value := range values {
+		hintedProductID := ""
+		if value.ProductHint != nil {
+			hintedProductID = strings.TrimSpace(value.ProductHint.ProductID)
+		}
+		if hintedProductID != "" {
+			if _, exists := allowed[hintedProductID]; !exists {
+				skipped = append(skipped, SkippedWork{
+					InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
+					Reason: "link_metadata_product_mismatch", Message: "作品绑定商品与投放模板商品不匹配",
+					HintedProductID: hintedProductID, TemplateProductIDs: append([]string(nil), productIDs...),
+				})
+				continue
+			}
+		}
+		resolved = append(resolved, value)
+	}
+	return resolved, skipped
+}
+
+func resolvedWorkIDs(values []domain.ResolvedWorkLink) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value.AwemeItemID)
+	}
+	return result
+}
+
+func ownerHintsFromResolvedLinks(values []domain.ResolvedWorkLink) map[string]OwnerHint {
+	result := map[string]OwnerHint{}
+	for _, value := range values {
+		if value.OwnerHint == nil {
+			continue
+		}
+		hint := OwnerHint{
+			AwemeID:     strings.TrimSpace(value.OwnerHint.AwemeID),
+			AwemeShowID: strings.TrimSpace(value.OwnerHint.AwemeShowID),
+		}
+		if validPositiveID(hint.AwemeID) {
+			result[value.AwemeItemID] = hint
+		}
+	}
+	return result
+}
+
+func mergeOwnerHints(cached, metadata map[string]OwnerHint) map[string]OwnerHint {
+	result := make(map[string]OwnerHint, len(cached)+len(metadata))
+	for itemID, hint := range cached {
+		result[itemID] = hint
+	}
+	for itemID, hint := range metadata {
+		result[itemID] = hint
+	}
+	return result
+}
+
+func ownerHintCacheWarning(code string, err error) map[string]string {
+	message := strings.TrimSpace(err.Error())
+	if len(message) > 256 {
+		message = message[:256]
+	}
+	return map[string]string{"code": code, "message": message}
+}
+
+func qianchuanSkippedLinks(values []domain.SkippedWorkLink) []SkippedWork {
+	result := make([]SkippedWork, 0, len(values))
+	for _, value := range values {
+		result = append(result, SkippedWork{
+			InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
+			Reason: value.Reason, Message: value.Message,
+		})
+	}
+	return result
+}
+
+func batchPerformance(
+	started time.Time,
+	linksFinished time.Time,
+	credentialsFinished time.Time,
+	materialsFinished time.Time,
+	finished time.Time,
+	metadata LinkMetadataPerformance,
+	cache OwnerHintCachePerformance,
+) BatchPerformance {
+	return BatchPerformance{
+		LinkResolutionSeconds:       durationSeconds(started, linksFinished),
+		CredentialResolutionSeconds: durationSeconds(linksFinished, credentialsFinished),
+		MaterialResolutionSeconds:   durationSeconds(credentialsFinished, materialsFinished),
+		PlanReconciliationSeconds:   durationSeconds(materialsFinished, finished),
+		TotalSeconds:                durationSeconds(started, finished),
+		OwnerHintCache:              cache,
+		LinkMetadata:                metadata,
+	}
+}
+
+func durationSeconds(start, end time.Time) float64 {
+	if start.IsZero() || end.Before(start) {
+		return 0
+	}
+	return float64(end.Sub(start).Round(time.Millisecond)) / float64(time.Second)
+}
+
+func (service CommandService) now() time.Time {
+	if service.Now != nil {
+		return service.Now()
+	}
+	return time.Now()
+}
+
+func modeFromSubmit(submit bool) string {
+	if submit {
+		return "submit"
+	}
+	return "dry_run"
+}

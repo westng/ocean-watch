@@ -1,0 +1,41 @@
+schema_version: 1
+verified_at: 2026-07-23
+module: github.com/oceanengine/ad_open_sdk_go
+version: v1.1.92
+tag_commit: 3b0bab7648f8e94fba1fd8bcfb96c43539b95c28
+tag_source: https://api.github.com/repos/oceanengine/ad_open_sdk_go/git/ref/tags/v1.1.92
+module_proxy:
+  sum: h1:1yL4xoERfG94Cwm/2q9mm2iJfdpgn9fOecnaG49Qqn8=
+  go_mod_sum: h1:XB4KPTfLan7+UuBpm2/81+rY8BnqMkn4xprAfne6e/s=
+  zip_sha256: a6c61d5804ff3c3de388f6f4dccbc284aca068546b50264512affc1ca8165de4
+  go_mod_sha256: 0326e1ceab10b3d28324a3453bc4dbbe0f42bd3897e42213e74e8489f9e76b32
+license:
+  spdx: Apache-2.0
+  file: LICENSE
+  sha256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+toolchain:
+  target: go1.26.5
+  sdk_minimum: go1.18
+core_compile:
+  command: go test . ./api ./config ./middleware ./models
+  packages:
+    - github.com/oceanengine/ad_open_sdk_go
+    - github.com/oceanengine/ad_open_sdk_go/api
+    - github.com/oceanengine/ad_open_sdk_go/config
+    - github.com/oceanengine/ad_open_sdk_go/middleware
+    - github.com/oceanengine/ad_open_sdk_go/models
+  result: pass
+service_contracts:
+  expected_endpoint_count: 51
+  expected_generated_service_count: 51
+  common_api_allowed_count: 0
+security_scan:
+  scanner: govulncheck@v1.6.0
+  database: https://vuln.go.dev
+  database_updated: 2026-07-22T20:36:55Z
+  toolchain: go1.26.5
+  sdk_scope_command: 'govulncheck -scan=module -show=version'
+  sdk_scope_result: no_vulnerabilities_found
+  bootstrap_scope_command: 'govulncheck -show=version ./...'
+  bootstrap_scope_result: no_vulnerabilities_found
+  note: 'Module scan intentionally avoids the generated SDK symbol graph; symbol scan is a required P1/P5 CI gate after the Go module boundary exists.'

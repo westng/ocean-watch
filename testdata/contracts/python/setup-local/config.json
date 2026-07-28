@@ -1,0 +1,28 @@
+{
+  "config_schema_version": 2,
+  "default_channel": "marketing",
+  "channels": {
+    "marketing": {
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:18787/oauth/callback"
+      }
+    },
+    "qianchuan": {
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:18787/oauth/callback"
+      }
+    }
+  },
+  "account": {
+    "channel": "marketing",
+    "advertiser_id": "REPLACE_WITH_ADVERTISER_ID"
+  },
+  "plan_templates": {},
+  "plan_template_schema_version": 5
+}

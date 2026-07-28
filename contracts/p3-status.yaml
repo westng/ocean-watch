@@ -1,0 +1,133 @@
+schema_version: 1
+as_of: 2026-07-26
+branch: codex/go-sdk-migration
+stage: P3
+scope: isolated_go_candidate
+production_route_changed: false
+tasks:
+  P3-01:
+    status: shadow_complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/domain/marketing/materials.go
+      - prototype/ocean-watch-go/internal/ports/marketing/materials.go
+      - prototype/ocean-watch-go/internal/application/materials/marketing.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_materials.go
+      - prototype/ocean-watch-go/internal/cli/marketing_materials.go
+      - prototype/ocean-watch-go/internal/application/materials/marketing_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_materials_test.go
+      - prototype/ocean-watch-go/internal/cli/marketing_materials_test.go
+      - prototype/ocean-watch-go/internal/domain/marketing/discovery.go
+      - prototype/ocean-watch-go/internal/ports/marketing/discovery.go
+      - prototype/ocean-watch-go/internal/application/discovery/marketing.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_discovery.go
+      - prototype/ocean-watch-go/internal/cli/marketing_discovery.go
+      - prototype/ocean-watch-go/internal/application/discovery/marketing_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_discovery_test.go
+      - prototype/ocean-watch-go/internal/cli/marketing_discovery_test.go
+    verified:
+      - all four Marketing material commands use generated SDK Services in Shadow
+      - invalid channel and endpoint arguments stop before config credentials or HTTP
+      - each command reads config once and never writes it
+      - only Marketing credentials are resolved and Python fallback is never invoked
+      - --out bytes equal stdout and high IDs remain exact strings
+      - creator authorization and homepage facts remain distinct
+      - DPA product_platform_id remains compatibility output only
+      - all seven Marketing discovery commands use ten generated SDK Services in Shadow
+      - discovery pagination is complete and default city CSV parsing preserves the Python contract
+      - discovery config writes use one compare-and-swap only after complete success
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test ./internal/application/materials ./internal/application/discovery ./internal/adapters/oceanengine ./internal/cli -count=1
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/application/discovery ./internal/adapters/oceanengine ./internal/cli -count=1
+    remaining_gate: real read-only Marketing canary plus Marketing Adapter and Quality Owner sign-off
+  P3-02:
+    status: shadow_complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/application/qianchuan/read.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/qianchuan_read.go
+      - prototype/ocean-watch-go/internal/cli/qianchuan_read.go
+      - prototype/ocean-watch-go/internal/application/reports/qianchuan.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/qianchuan_reports.go
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/application/qianchuan ./internal/application/reports ./internal/adapters/oceanengine ./internal/cli
+    remaining_gate: real read-only Qianchuan canary and Qianchuan API Owner sign-off
+  P3-03:
+    status: shadow_complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/domain/reports/marketing.go
+      - prototype/ocean-watch-go/internal/ports/reports/marketing.go
+      - prototype/ocean-watch-go/internal/application/reports/marketing.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_reports.go
+      - prototype/ocean-watch-go/internal/cli/marketing_reports.go
+      - prototype/ocean-watch-go/internal/application/reports/marketing_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/marketing_reports_test.go
+      - prototype/ocean-watch-go/internal/cli/marketing_reports_test.go
+    verified:
+      - reports schema custom plans and materials use generated SDK Services in Shadow
+      - all Python-compatible report arguments map to the Go application queries
+      - invalid arguments stop before config credentials or HTTP
+      - every command reads config once resolves only Marketing credentials and never invokes Python fallback
+      - full-page Decimal summaries field negotiation exact material joins and mandatory plan Presentation are preserved
+      - high IDs remain exact strings and default date ranges use the current Asia/Shanghai day
+      - --out bytes equal stdout and explicit CSV output preserves BOM columns values and empty-result compatibility
+      - all four default production routes remain Python
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test ./internal/platform/pagination ./internal/application/reports ./internal/adapters/oceanengine ./internal/cli -count=1
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/application/reports ./internal/adapters/oceanengine ./internal/cli -count=1
+    remaining_gate: real read-only Marketing canary plus Marketing Adapter Quality and Skill Contract Owner sign-off
+  P3-04:
+    status: shadow_complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/domain/reports/qianchuan.go
+      - prototype/ocean-watch-go/internal/ports/reports/qianchuan.go
+      - prototype/ocean-watch-go/internal/application/reports/qianchuan.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/qianchuan_reports.go
+      - prototype/ocean-watch-go/internal/cli/qianchuan_reports.go
+      - prototype/ocean-watch-go/internal/application/reports/qianchuan_test.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/qianchuan_reports_test.go
+      - prototype/ocean-watch-go/internal/cli/qianchuan_reports_test.go
+    contracts:
+      financial_source: /v1.0/qianchuan/report/uni_promotion/data/get/
+      plan_list_finance_used: false
+      presentation_columns: 15
+      default_route: Python
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test ./internal/application/reports ./internal/adapters/oceanengine ./internal/cli -count=1
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/application/reports ./internal/adapters/oceanengine ./internal/cli -count=1
+    remaining_gate: MCP Shadow comparison, real read-only canary, and Quality plus Qianchuan API Owner sign-off
+  P3-05:
+    status: complete_automated
+    evidence:
+      - prototype/ocean-watch-go/internal/platform/pagination
+      - prototype/ocean-watch-go/internal/platform/retry
+      - prototype/ocean-watch-go/internal/platform/requestcontrol
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/retry.go
+      - prototype/ocean-watch-go/internal/adapters/oceanengine/client.go
+      - prototype/ocean-watch-go/internal/cli/request_control.go
+      - prototype/ocean-watch-go/internal/performance/request_budgets_test.go
+    verified:
+      - failed page retries only that page
+      - duplicate IDs and contradictory pagination fail closed
+      - transient Qianchuan rate limits and RPC timeouts are bounded
+      - every real HTTP attempt including retries consumes the atomic command budget
+      - zero-budget local commands cannot reach the SDK transport
+      - authorization and endpoint concurrency are isolated by channel and authorization identity
+      - limiter waits honor cancellation and expose only redacted counters
+      - accounts list uses zero network attempts
+      - two-account reports call only account aggregate endpoints and never the Qianchuan plan list
+      - three-page failures follow page sequence 1,2,2,2,3 without restarting page 1
+    local_checks:
+      - GOTOOLCHAIN=go1.26.5 go test ./internal/performance -run TestRequestBudgets -count=30
+      - GOTOOLCHAIN=go1.26.5 go test -bench BenchmarkRequestBudgets -benchmem ./internal/performance
+      - GOTOOLCHAIN=go1.26.5 go test -race ./internal/performance ./internal/platform/requestcontrol ./internal/platform/pagination ./internal/platform/retry ./internal/cli -count=1
+    cross_stage_evidence:
+      - prototype/ocean-watch-go/internal/performance/request_budgets_test.go
+      - P4-05 55-link case verifies one wide authorization scan plus 50+5 ownership and product checks
+    remaining_gate: real read-only canary and required Runtime Limiting plus Quality Owner sign-off
+g3:
+  status: automated_ready_external_gate_pending
+  migration_state: Shadow
+  blockers:
+    - real read-only canary evidence is absent by development-mode policy
+    - native Linux and Windows CI evidence does not exist for the unpushed candidate branch
+    - required Adapter, Runtime, Quality, and Skill Contract Owner sign-offs are not represented in Git
+  allowed_next_work: continue P3-P5 only as isolated candidate implementation; keep every production route on Python

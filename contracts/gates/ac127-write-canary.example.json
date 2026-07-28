@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "kind": "ac127_write_canary",
+  "approval_id": "AC127-EXAMPLE-DO-NOT-USE",
+  "git_commit": "1111111111111111111111111111111111111111",
+  "product_version": "0.0.0",
+  "candidate_identity_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "expires_at": "2000-01-01T00:00:00Z",
+  "advertiser_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "max_objects": 1,
+  "max_spend": 0,
+  "commands": ["plans create-qianchuan"],
+  "endpoints": ["/v1.0/qianchuan/uni_aweme/ad/create/"],
+  "stop_owner": "PENDING",
+  "approvals": [
+    {
+      "role": "MT",
+      "approver": "",
+      "decision": "pending",
+      "approved_at": null,
+      "notes": "Example only; replace every value and obtain a current approval."
+    },
+    {
+      "role": "SO",
+      "approver": "",
+      "decision": "pending",
+      "approved_at": null,
+      "notes": "Example only; this file cannot authorize a canary."
+    }
+  ]
+}

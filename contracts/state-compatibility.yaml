@@ -1,0 +1,87 @@
+schema_version: 1
+source_commit: 5ff6439ce28cb848548a6f2d3b7cefe297e96282
+config:
+  environment_variables:
+    explicit_path: ADS_PLAN_MONITOR_CONFIG
+    home_root: CODEX_HOME
+  resolution_order:
+    - explicit_command_path
+    - ADS_PLAN_MONITOR_CONFIG
+    - checkout_project_config_when_present
+    - CODEX_HOME_ads_plan_monitor_config
+  project_path: config/ads-plan-monitor/config.json
+  home_path: $CODEX_HOME/ads-plan-monitor/config.json
+  first_read_is_write_free: true
+  atomic_write:
+    temporary_file_in_same_directory: true
+    fsync_file: true
+    replace_operation: os.replace
+    backup_suffix: .bak
+    directory_fsync: best_effort
+  lock_suffix: .lock
+authorization:
+  schema_version: 2
+  legacy_path: $CODEX_HOME/ads-plan-monitor/state/authorizations.json
+  channel_root: $CODEX_HOME/ads-plan-monitor/state/channels/<channel>
+  current_pointer: current.json
+  manifest_pattern: manifest-<generation>.json
+  pointer_fields:
+    - schema_version
+    - generation
+    - sha256
+  commit_requirements:
+    - write_manifest_before_pointer
+    - read_back_manifest_checksum
+    - atomically_replace_pointer
+    - preserve_previous_generation
+  channel_lock_pattern: authorizations.json.<channel>.lock
+  identity_indexes:
+    - account_index
+    - advertiser_index
+managed_accounts:
+  schema_version: 1
+  config_key: managed_accounts
+  schema_key: managed_account_schema_version
+  uniqueness: channel + advertiser_id
+  list_default: enabled_only
+  list_network_requests: 0
+  list_credential_reads: 0
+templates:
+  marketing_schema_key: plan_template_schema_version
+  qianchuan_product_schema_key: qianchuan_product_template_schema_version
+  qianchuan_live_schema_key: qianchuan_live_template_schema_version
+credentials:
+  service: ads-plan-monitor
+  legacy_account: oceanengine-oauth
+  app_account_pattern: oceanengine-app-<channel>
+  authorization_account_pattern: oceanengine-auth-<channel>-<authorization_id>-r<revision>
+  backends:
+    darwin: macos-keychain
+    windows: windows-dpapi
+    linux: linux-secret-service
+  plaintext_fallback: explicit ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1 only
+  never_persist_in_config:
+    - app_id
+    - secret
+    - access_token
+    - refresh_token
+    - access_token_expires_at
+    - refresh_token_expires_at
+    - last_token_update_at
+    - last_authorized_account_sync_at
+  unknown_fields: preserve_on_state_roundtrip
+journal:
+  root: $CODEX_HOME/ads-plan-monitor/state/migration
+  filename: journal.json
+  schema_version: 1
+  arbitrary_paths: forbidden
+owner_hint_cache:
+  path: $CODEX_HOME/ads-plan-monitor/state/cache/qianchuan-work-owners.json
+  schema_version: 1
+  ttl_days: 30
+  lock_suffix: .lock
+runs:
+  root: $CODEX_HOME/ads-plan-monitor/state/runs
+  filename_pattern: <run_id>.json
+  symlinks: forbidden
+  path_escape: forbidden

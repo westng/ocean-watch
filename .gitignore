@@ -37,3 +37,4 @@ oceanengine-auth-*.dpapi
 *.tmp
 *.bak
 tmp/
+artifacts/

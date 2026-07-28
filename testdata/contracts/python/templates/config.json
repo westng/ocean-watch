@@ -1,0 +1,156 @@
+{
+  "future_root": "preserved",
+  "plan_template_schema_version": 5,
+  "default_channel": "marketing",
+  "default_plan_template": {
+    "defaults": {
+      "daily_budget": 300,
+      "roi_goal": 1.5,
+      "gender": "NONE",
+      "ages": [],
+      "product_info": {
+        "product_image_type": "DPA",
+        "product_image_fields": [
+          "images_url"
+        ]
+      }
+    },
+    "resolved_ids": {
+      "city_ids": [
+        110000,
+        120000
+      ],
+      "city_names": [
+        "示例地区甲",
+        "示例地区乙"
+      ]
+    }
+  },
+  "plan_templates": {
+    "巨量营销-1000000000000001-示例商品-3001-混剪素材": {
+      "display_name": "巨量营销-1000000000000001-示例商品-3001-混剪素材",
+      "bindings": {
+        "advertiser_id": "1000000000000001",
+        "platform": "示例平台",
+        "traffic_source": "CID",
+        "product_id": "3001",
+        "product_name": "示例商品"
+      },
+      "material_strategy": {
+        "source_type": "ACCOUNT_UPLOAD",
+        "selection_mode": "MANUAL",
+        "max_materials_per_unit": 5
+      },
+      "copy_materials": {
+        "titles": [
+          "示例标题一",
+          "示例标题二"
+        ]
+      },
+      "overrides": {}
+    }
+  },
+  "qianchuan_product_template_schema_version": 4,
+  "default_qianchuan_product_template": {
+    "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
+    "business_usable": false,
+    "bindings": {
+      "channel": "qianchuan",
+      "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+      "product_name": "REPLACE_WITH_PRODUCT_NAME",
+      "product_ids": []
+    },
+    "delivery_setting": {
+      "smart_bid_type": "SMART_BID_CUSTOM",
+      "roi2_goal": 1.7,
+      "qcpx_mode": "QCPX_MODE_ON",
+      "budget": 5000,
+      "video_schedule_type": "SCHEDULE_FROM_NOW",
+      "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
+    },
+    "material_strategy": {
+      "source_type": "CREATOR_RUNTIME_QUERY",
+      "persist_material_ids": false
+    }
+  },
+  "qianchuan_product_templates": {
+    "qcpt_example": {
+      "template_id": "qcpt_example",
+      "display_name": "巨量千川-2000000000000001-示例商品-8000000000000001/8000000000000002-商品全域",
+      "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
+      "status": "active",
+      "bindings": {
+        "channel": "qianchuan",
+        "advertiser_id": "2000000000000001",
+        "product_name": "示例商品",
+        "product_ids": [
+          "8000000000000001",
+          "8000000000000002"
+        ]
+      },
+      "delivery_setting": {
+        "smart_bid_type": "SMART_BID_CUSTOM",
+        "roi2_goal": 1.7,
+        "qcpx_mode": "QCPX_MODE_ON",
+        "budget": 5000,
+        "video_schedule_type": "SCHEDULE_FROM_NOW",
+        "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
+      },
+      "material_strategy": {
+        "source_type": "CREATOR_RUNTIME_QUERY",
+        "persist_material_ids": false
+      }
+    }
+  },
+  "qianchuan_live_template_schema_version": 1,
+  "default_qianchuan_live_template": {
+    "template_type": "QIANCHUAN_LIVE_ALL_DOMAIN",
+    "business_usable": false,
+    "bindings": {
+      "channel": "qianchuan",
+      "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
+      "creator_name": "REPLACE_WITH_CREATOR_NAME",
+      "aweme_id": "REPLACE_WITH_AWEME_ID"
+    },
+    "delivery_setting": {
+      "smart_bid_type": "SMART_BID_CONSERVATIVE",
+      "budget": 5000,
+      "live_schedule_type": "SCHEDULE_FROM_NOW",
+      "daily_delivery_time": 8.5
+    },
+    "creative_setting": {
+      "smart_select_material": true
+    },
+    "material_strategy": {
+      "source_type": "LIVE_SMART_SELECTION",
+      "persist_material_ids": false
+    }
+  },
+  "qianchuan_live_templates": {
+    "qclt_example": {
+      "template_id": "qclt_example",
+      "display_name": "巨量千川-2000000000000001-示例达人-9988776655-直播全域",
+      "template_type": "QIANCHUAN_LIVE_ALL_DOMAIN",
+      "status": "active",
+      "bindings": {
+        "channel": "qianchuan",
+        "advertiser_id": "2000000000000001",
+        "creator_name": "示例达人",
+        "aweme_id": "9988776655"
+      },
+      "delivery_setting": {
+        "smart_bid_type": "SMART_BID_CONSERVATIVE",
+        "budget": 5000,
+        "live_schedule_type": "SCHEDULE_FROM_NOW",
+        "daily_delivery_time": 8.5
+      },
+      "creative_setting": {
+        "smart_select_material": true
+      },
+      "material_strategy": {
+        "source_type": "LIVE_SMART_SELECTION",
+        "persist_material_ids": false
+      }
+    }
+  }
+}

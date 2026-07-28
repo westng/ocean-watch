@@ -19,6 +19,7 @@ SENSITIVE_KEYS = {
     "app_id",
     "developer_id",
     "secret",
+    "auth_code",
     "access_token",
     "refresh_token",
     "access_token_expires_at",

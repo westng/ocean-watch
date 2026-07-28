@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/westng/ocean-watch/contracts/acceptance/candidate-identity.schema.json",
+  "title": "Ocean Watch immutable release candidate identity",
+  "type": "object",
+  "required": ["schema_version", "git_sha", "product_version", "plugin_version", "sdk_version", "source_tree_sha256", "candidate_checksums_sha256", "release_public_key_sha256", "release"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "git_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$", "not": {"const": "0000000000000000000000000000000000000000"}},
+    "product_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "plugin_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\+codex\\.[A-Za-z0-9.-]+$"},
+    "sdk_version": {"const": "v1.1.92"},
+    "source_tree_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "candidate_checksums_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "release_public_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "release": {"const": true}
+  },
+  "additionalProperties": false
+}
