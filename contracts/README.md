@@ -16,7 +16,7 @@ This directory freezes the current Python CLI boundary before the Go migration.
 - `p2-status.yaml` records automated identity and account evidence while real dual-channel canary and owner approvals remain pending.
 - `p3-status.yaml` records automated Shadow evidence for migrated read paths; it must not be interpreted as G3 approval while shared resilience, real canary evidence, native cross-platform CI, and sign-offs remain incomplete.
 - `p4-status.yaml` records automated Shadow evidence for write paths and keeps AC-127, observation windows, and G4 owner approvals explicitly external and pending.
-- `p5-status.yaml` records signed-candidate, launcher, rollback, synthetic journey, six-source aggregation, independent signoff, sealing, and publication automation without treating a dirty local build, implemented workflow, or fail-closed canary guard as G5 approval.
+- `p5-status.yaml` records retained candidate, launcher, rollback, synthetic journey, six-source, signoff, and sealing tooling while explicitly marking the protected Go release workflow as deferred; the current source-only Plugin Release never implies G5 approval.
 - `gates/ac127-write-canary.schema.json` defines the expiring commit-bound MT and SO authorization required before an explicit canary driver may start; the example is intentionally expired and pending.
 
 Regeneration must run against a clean source revision. Review command additions, removals, help changes, defaults, and output changes before accepting the new baseline. Never store real credentials, account data, work links, or raw official responses here.

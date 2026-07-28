@@ -175,36 +175,37 @@ class AcceptanceDocumentationTests(unittest.TestCase):
         self.assertIn("cmd/contract-runner capture-python", script)
         self.assertIn("cmd/contract-runner compare", script)
 
-    def test_ci_and_release_workflows_preserve_acceptance_evidence(self):
+    def test_ci_and_release_workflows_stay_focused(self):
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        evidence = (ROOT / ".github" / "workflows" / "g5-evidence.yml").read_text(
-            encoding="utf-8"
-        )
         native_candidate = (ROOT / "scripts" / "acceptance" / "native_candidate.py").read_text(
             encoding="utf-8"
         )
         tag = (ROOT / ".github" / "workflows" / "tag.yml").read_text(encoding="utf-8")
-        self.assertIn("Capture native P0 state evidence", ci)
-        self.assertIn("probe_state_compatibility.py --out", ci)
-        self.assertIn("p0-state-${{ runner.os }}", ci)
-        self.assertIn("ci-test-candidate-${{ github.sha }}", ci)
-        self.assertIn("ci-native-${{ matrix.platform }}-${{ github.sha }}", ci)
-        self.assertIn("run.sh --suite native-candidate", ci)
-        self.assertIn("run.ps1 -Suite native-candidate", ci)
-        self.assertIn("g5-formal-candidate-${{ github.sha }}-${{ github.run_id }}", evidence)
-        self.assertIn("g5-native-${{ matrix.platform }}-${{ github.sha }}-${{ github.run_id }}", evidence)
-        self.assertIn("g5-automated-evidence-${{ github.sha }}-${{ github.run_id }}", evidence)
-        self.assertGreaterEqual(evidence.count("retention-days: 90"), 4)
-        self.assertIn("actions/upload-artifact@v4", evidence)
-        self.assertIn("ac-125-supply-chain.json", evidence)
-        self.assertIn("path: ${{ runner.temp }}/native/${{ matrix.platform }}", evidence)
+        workflow_names = {
+            path.name for path in (ROOT / ".github" / "workflows").glob("*.yml")
+        }
+
+        self.assertEqual(workflow_names, {"ci.yml", "tag.yml"})
+        self.assertIn("branches: [main]", ci)
+        self.assertIn('python-version: "3.12"', ci)
+        self.assertIn('python-version: "3.9"', ci)
+        self.assertIn("ubuntu-latest", ci)
+        self.assertIn("windows-latest", ci)
+        self.assertIn("macos-latest", ci)
+        self.assertIn("go -C prototype/ocean-watch-go test ./...", ci)
+        self.assertIn("go -C prototype/runtime-bootstrap test ./...", ci)
+        self.assertNotIn("build-test-candidate", ci)
+        self.assertNotIn("native-test-candidate", ci)
+        self.assertNotIn("actions/upload-artifact", ci)
         self.assertIn("release/ac-124-platform.json", native_candidate)
         self.assertIn("release/ac-126-upgrade-rollback.json", native_candidate)
         self.assertIn("contracts/ac-128-user-journeys.json", native_candidate)
-        self.assertIn("scripts/acceptance/verify_gosec_report.py", evidence)
-        self.assertEqual(tag.count("gh run download"), 2)
-        self.assertEqual(tag.count("sealed_release.py verify"), 2)
+        self.assertIn("name: Release", tag)
+        self.assertIn("workflow_dispatch", tag)
+        self.assertIn("scripts/version_tag.py notes", tag)
+        self.assertIn('gh release create "${VERSION_TAG}"', tag)
         self.assertNotIn("scripts/release/build_candidate.py", tag)
+        self.assertNotIn("sealed_release.py", tag)
         controls = json.loads(
             (ROOT / "contracts" / "security" / "gosec-controls.json").read_text(
                 encoding="utf-8"

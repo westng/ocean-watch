@@ -48,7 +48,7 @@ ocean-watch setup doctor
 
 ### 版本与发布
 
-本项目以 Git 仓库版本 Tag 作为 Codex Marketplace 安装源，并把同一提交经过 G5 证据与独立签字密封的运行时候选资产发布到 GitHub Release。Codex 当前不会直接从 Release ZIP 安装 Plugin；生产运行时策略仍关闭，所有命令继续走 Python，直到 Go 迁移门禁和独立审批全部通过。版本变化统一记录在 `CHANGELOG.md`；需要固定版本时，在注册 Marketplace 时指定 Tag：
+本项目以 Git 仓库版本 Tag 作为 Codex Marketplace 安装源，并为同一提交创建使用中文 Changelog 的 GitHub Release。当前 Release 不构建或发布 Go 运行时候选资产；生产运行时策略仍关闭，所有命令继续走 Python，直到 Go 迁移门禁和独立审批全部通过。版本变化统一记录在 `CHANGELOG.md`；需要固定版本时，在注册 Marketplace 时指定 Tag：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
@@ -215,7 +215,7 @@ python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI 在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 上验证现行运行时，并测试两个 Go module、构建非发布候选和执行五平台 native candidate 消费。普通 CI 使用公开测试签名身份，不产生可发布资产；任一失败 Job 都不能作为阶段 Gate 证据。
+CI 使用 Python `3.12` 在 Windows、macOS 和 Linux 验证现行运行时，使用 Python `3.9` 在 Linux 执行兼容性检查，并在 Linux 测试两个 Go module。日常 CI 不构建候选、不执行五平台 native candidate 消费，也不产生 G5 Gate 证据。
 
 ## License
 

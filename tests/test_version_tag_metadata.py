@@ -17,7 +17,8 @@ class VersionTagMetadataTests(unittest.TestCase):
         self.assertEqual(result["plugin_base"], result["project"])
 
     def test_version_tag_is_derived_from_project_version(self):
-        self.assertEqual(version_tag.derive_version_tag(ROOT), "v0.9.1")
+        project_version = version_tag.project_version(ROOT)
+        self.assertEqual(version_tag.derive_version_tag(ROOT), f"v{project_version}")
 
     def test_version_contract_rejects_non_semantic_version(self):
         with self.assertRaisesRegex(version_tag.VersionTagError, "MAJOR.MINOR.PATCH"):
@@ -25,8 +26,18 @@ class VersionTagMetadataTests(unittest.TestCase):
 
     def test_version_tag_rejects_pending_changes_and_wrong_version(self):
         version = version_tag.project_version(ROOT)
+        pending = f"""# Changelog
+
+## 未发布
+
+- Pending change.
+
+## {version} - 2026-07-28
+
+- Released.
+"""
         with self.assertRaisesRegex(version_tag.VersionTagError, "未发布段落"):
-            version_tag.validate_versions(ROOT, tag=f"v{version}")
+            version_tag.validate_tag_changelog(pending, version)
         major, minor, patch = (int(part) for part in version.split("."))
         mismatched_tag = f"v{major}.{minor}.{patch + 1}"
         with self.assertRaisesRegex(version_tag.VersionTagError, "does not match"):
@@ -81,33 +92,28 @@ class VersionTagMetadataTests(unittest.TestCase):
         self.assertIn("- 修复发布流程。", notes)
         self.assertNotIn("旧版本", notes)
 
-    def test_tag_workflow_only_publishes_a_verified_sealed_release(self):
+    def test_release_workflow_publishes_an_immutable_changelog_release(self):
         workflow = (ROOT / ".github/workflows/tag.yml").read_text(encoding="utf-8")
         validate_job, publish_job = workflow.split("\n  publish:\n", maxsplit=1)
         parsed = yaml.load(workflow, Loader=yaml.BaseLoader)
-        inputs = parsed["on"]["workflow_dispatch"]["inputs"]
 
-        self.assertIn("name: Publish Sealed Release", workflow)
-        self.assertEqual(set(inputs), {"sealed_run_id"})
+        self.assertIn("name: Release", workflow)
+        self.assertIn(parsed["on"]["workflow_dispatch"], (None, ""))
         self.assertNotIn("\n  push:\n", workflow)
         self.assertIn("scripts/version_tag.py tag", workflow)
         self.assertIn("scripts/version_tag.py check --tag", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
-        self.assertIn("GITHUB_REF_PROTECTED", validate_job)
         self.assertIn('refs/tags/${VERSION_TAG}^{commit}', workflow)
         self.assertIn("Publish immutable version Tag", workflow)
         self.assertIn('git push origin "${GITHUB_SHA}:refs/tags/${VERSION_TAG}"', workflow)
         self.assertNotIn("scripts/release/build_candidate.py", workflow)
-        self.assertEqual(workflow.count("gh run download"), 2)
-        self.assertEqual(workflow.count("sealed_release.py verify"), 2)
-        self.assertEqual(workflow.count("verify_workflow_run.py"), 2)
-        self.assertEqual(workflow.count("verify_gate_signoff.py"), 2)
-        self.assertEqual(workflow.count("--reject-tracked-signoff"), 2)
-        self.assertEqual(workflow.count("--expected-workflow-path .github/workflows/g5-seal.yml"), 2)
         self.assertIn("scripts/version_tag.py notes", workflow)
         self.assertIn('gh release create "${VERSION_TAG}"', workflow)
-        self.assertIn('gh release download "${VERSION_TAG}"', workflow)
-        self.assertIn("scripts/release/verify_published_release.py", workflow)
+        self.assertIn("Existing Release notes do not match CHANGELOG.md.", workflow)
+        self.assertNotIn("sealed_run_id", workflow)
+        self.assertNotIn("gh run download", workflow)
+        self.assertNotIn("sealed_release.py", workflow)
+        self.assertNotIn("environment:", workflow)
         self.assertNotIn("--clobber", workflow)
         self.assertNotIn("OCEAN_WATCH_RELEASE_SIGNING_KEY", workflow)
         self.assertNotIn("OCEAN_WATCH_RELEASE_PUBLIC_KEY", workflow)
@@ -115,7 +121,6 @@ class VersionTagMetadataTests(unittest.TestCase):
         self.assertNotIn("contents: write", validate_job)
         self.assertIn("needs: validate", publish_job)
         self.assertIn("contents: write", publish_job)
-        self.assertIn("environment: g5-release-publish", publish_job)
         self.assertIn("persist-credentials: true", publish_job)
         self.assertNotIn("persist-credentials: false", publish_job)
 

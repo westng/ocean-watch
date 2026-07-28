@@ -48,7 +48,7 @@ See the Chinese [Getting started guide](docs/getting-started.md) for the complet
 
 ### Versions and releases
 
-Repository version Tags remain the Codex Marketplace installation source. Runtime candidate assets from the same commit are published to GitHub Release only after G5 evidence and independent approvals have been sealed. Codex does not currently install the Plugin directly from that Release ZIP; the production runtime policy remains disabled and every command stays on Python until all Go migration gates and independent approvals pass. Version changes remain in `CHANGELOG.md`. To pin a version, register the Marketplace at its Tag:
+Repository version Tags remain the Codex Marketplace installation source, with a GitHub Release created from the matching Chinese Changelog section. The current Release does not build or publish Go runtime candidate assets. The production runtime policy remains disabled and every command stays on Python until all Go migration gates and independent approvals pass. Version changes remain in `CHANGELOG.md`. To pin a version, register the Marketplace at its Tag:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch --ref vX.Y.Z
@@ -214,7 +214,7 @@ python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI validates the production Python runtime on Python `3.9` and `3.12` across Windows, macOS, and Linux, tests both Go modules, builds a non-release candidate, and consumes it on five native targets. Ordinary CI uses a public test signing identity and cannot produce a release; a failed job is never Gate evidence.
+CI validates the production runtime with Python `3.12` on Windows, macOS, and Linux, runs Python `3.9` compatibility checks on Linux, and tests both Go modules on Linux. Daily CI does not build candidates, consume native candidates on five platforms, or produce G5 Gate evidence.
 
 ## License
 
