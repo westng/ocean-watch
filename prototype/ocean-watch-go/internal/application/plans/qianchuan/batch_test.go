@@ -28,6 +28,7 @@ const (
 func TestBatchWorkIdempotencyAndPresentation(t *testing.T) {
 	t.Run("verification scans creators once and batches works by fifty", testBatchVerificationLimits)
 	t.Run("owner hints use targeted verification with one broad fallback", testBatchOwnerHintVerification)
+	t.Run("multiple creator plans are filtered by verified work products", testBatchPlanProductDisambiguation)
 	t.Run("unknown append reconciles and rerun writes nothing", testBatchAppendIdempotency)
 }
 
@@ -191,6 +192,37 @@ func testBatchAppendIdempotency(t *testing.T) {
 	assertBatchPresentation(t, second.Presentation, request.Works)
 	if credentials.calls != 2 || locks.calls != 2 || locks.releases != 2 {
 		t.Fatalf("submit guard counts changed: credentials=%d locks=%d releases=%d", credentials.calls, locks.calls, locks.releases)
+	}
+}
+
+func testBatchPlanProductDisambiguation(t *testing.T) {
+	const otherProductID = "5000000000000002"
+	const otherPlanID = "2000000000000002"
+	finder := &batchMultiplePlanFinder{}
+	service := BatchService{
+		Reader:     &batchStateReader{materials: map[string]domainqianchuan.PlanMaterial{}},
+		Reconciler: finder,
+	}
+	request := BatchRequest{
+		AdvertiserID: batchAdvertiserID, ReadAccessToken: batchToken,
+		TemplateID: "fixture-template", TemplateName: "fixture-template-name", ProductName: "fixture-product",
+		TemplatePayload: json.RawMessage(`{"advertiser_id":1000000000000001,"marketing_goal":"VIDEO_PROM_GOODS","product_ids":[5000000000000001,5000000000000002],"delivery_setting":{"smart_bid_type":"SMART_BID_CUSTOM","roi2_goal":1.75,"budget":5000,"video_schedule_type":"SCHEDULE_FROM_NOW"}}`),
+		Works:           batchVerifiedWorks(1),
+	}
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(finder.targets) != 1 || !reflect.DeepEqual(finder.targets[0].ProductIDs, []string{batchProductID}) {
+		t.Fatalf("reconciliation used template products instead of verified work products: %#v", finder.targets)
+	}
+	if result.ExitCode != 0 || len(result.Results) != 1 || result.Results[0].Status != "would_append" ||
+		result.Results[0].AdID != batchPlanID {
+		t.Fatalf("product disambiguation selected the wrong action: %#v", result)
+	}
+	if result.Results[0].AdID == otherPlanID || !reflect.DeepEqual(result.Results[0].ProductIDs, []string{batchProductID}) {
+		t.Fatalf("product disambiguation selected the mismatched plan: %#v", result.Results[0])
 	}
 }
 
@@ -486,6 +518,29 @@ func (batchExistingPlanFinder) FindCurrentPlans(
 			AdID: batchPlanID, Name: "fixture-plan", Status: "DISABLE",
 			AwemeID: batchCreatorID, ProductIDs: []string{batchProductID},
 		}},
+	}}, nil
+}
+
+type batchMultiplePlanFinder struct {
+	targets []CreatorTarget
+}
+
+func (finder *batchMultiplePlanFinder) FindCurrentPlans(
+	_ context.Context,
+	request CurrentPlanRequest,
+) (CurrentPlanResult, error) {
+	finder.targets = append([]CreatorTarget(nil), request.Targets...)
+	return CurrentPlanResult{Matches: map[string][]ExistingPlan{
+		batchCreatorID: {
+			{
+				AdID: batchPlanID, Name: "matching-plan", Status: "DISABLE",
+				AwemeID: batchCreatorID, ProductIDs: []string{batchProductID},
+			},
+			{
+				AdID: "2000000000000002", Name: "other-product-plan", Status: "DISABLE",
+				AwemeID: batchCreatorID, ProductIDs: []string{"5000000000000002"},
+			},
+		},
 	}}, nil
 }
 

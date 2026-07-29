@@ -177,7 +177,7 @@ func (service BatchService) execute(
 	for _, group := range request.groups {
 		targets = append(targets, CreatorTarget{
 			AwemeID: group.creator.AwemeID, VisibleID: group.creator.VisibleID,
-			ProductIDs: request.productIDs,
+			ProductIDs: matchedProductIDs(group.works),
 		})
 	}
 	discovery, err := service.Reconciler.FindCurrentPlans(ctx, CurrentPlanRequest{
@@ -189,7 +189,10 @@ func (service BatchService) execute(
 	presentationRows := make([]map[string]any, 0)
 	for _, group := range request.groups {
 		groupResult := newBatchGroupResult(group, request.productIDs)
-		plans := discovery.Matches[group.creator.AwemeID]
+		plans := filterExistingPlansForProducts(
+			discovery.Matches[group.creator.AwemeID],
+			matchedProductIDs(group.works),
+		)
 		switch len(plans) {
 		case 0:
 			groupResult, err = service.executeNewGroup(
@@ -736,6 +739,35 @@ func filterWorksForProducts(works []VerifiedWork, productIDs []string) []Verifie
 		if len(matched) != 0 {
 			work.MatchedProductIDs = matched
 			result = append(result, work)
+		}
+	}
+	return result
+}
+
+func matchedProductIDs(works []VerifiedWork) []string {
+	result := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, work := range works {
+		for _, productID := range work.MatchedProductIDs {
+			if _, duplicate := seen[productID]; duplicate {
+				continue
+			}
+			seen[productID] = struct{}{}
+			result = append(result, productID)
+		}
+	}
+	return result
+}
+
+func filterExistingPlansForProducts(plans []ExistingPlan, productIDs []string) []ExistingPlan {
+	allowed := stringSetFrom(productIDs)
+	result := make([]ExistingPlan, 0, len(plans))
+	for _, plan := range plans {
+		for _, productID := range plan.ProductIDs {
+			if _, matched := allowed[productID]; matched {
+				result = append(result, plan)
+				break
+			}
 		}
 	}
 	return result

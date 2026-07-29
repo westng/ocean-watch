@@ -321,6 +321,49 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         videos = gateway.add_calls[0]["multi_product_creative_list"][0]["video_material"]
         self.assertEqual([row["aweme_item_id"] for row in videos], [102])
 
+    def test_multiple_creator_plans_are_filtered_by_material_products(self):
+        gateway = FakeGateway(plans={
+            "9001": [
+                existing_plan("7001", product_ids=["1001"]),
+                existing_plan("7002", product_ids=["2002"]),
+            ],
+        })
+
+        results, _ = batch.execute_plan_actions(
+            template(),
+            [material("101", product_ids=["1001"])],
+            gateway,
+            FakeExecutor(),
+            concurrency=2,
+            submit=False,
+        )
+
+        self.assertEqual(results[0]["status"], "would_append")
+        self.assertEqual(results[0]["ad_id"], "7001")
+        self.assertEqual(results[0]["product_ids"], ["1001"])
+
+    def test_multiple_product_matching_plans_remain_ambiguous(self):
+        gateway = FakeGateway(plans={
+            "9001": [
+                existing_plan("7001", product_ids=["1001"]),
+                existing_plan("7002", product_ids=["1001", "2002"]),
+                existing_plan("7003", product_ids=["3003"]),
+            ],
+        })
+
+        results, _ = batch.execute_plan_actions(
+            template(),
+            [material("101", product_ids=["1001"])],
+            gateway,
+            FakeExecutor(),
+            concurrency=2,
+            submit=False,
+        )
+
+        self.assertEqual(results[0]["status"], "failed")
+        self.assertEqual(results[0]["reason"], "multiple_existing_plans")
+        self.assertEqual(results[0]["candidate_ad_ids"], ["7001", "7002"])
+
     def test_new_creator_uses_template_and_runtime_homepage_materials(self):
         gateway = FakeGateway()
         executor = FakeExecutor()

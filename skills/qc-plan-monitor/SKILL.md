@@ -215,7 +215,7 @@ The optional public-link metadata endpoint must come from local config at `integ
 
 Return `performance` timings for link resolution, credential preparation, material resolution, plan reconciliation, and the whole command. Use these fields when diagnosing latency instead of describing the whole preflight as link parsing. Do not create user-facing result files unless `--out` is explicit; the internal owner-hint cache is the only permitted automatic local optimization state.
 
-Before writing, list current product all-domain plans and confirm candidates through plan detail. Treat paused plans as existing and deleted plans as absent. The official product all-domain contract allows one plan per creator:
+Before writing, list current product all-domain plans and confirm candidates through plan detail. Treat paused plans as existing and deleted plans as absent. Resolve an existing plan by creator identity plus the products matched by that creator's verified materials:
 
 The plan list exposes the visible Douyin ID in `room_info.anchor_id`, while plan detail exposes the numeric `aweme_id`. Use both identities to select list candidates, then require the numeric detail `aweme_id` to match before treating a plan as existing. Never compare only one identifier type and never create a new plan merely because the list uses the visible ID.
 
@@ -223,10 +223,11 @@ The plan-list `start_time` and `end_time` describe the returned data period, not
 
 Retry transient `40100` rate limits, `51010` service timeouts, retryable transport failures, and explicit RPC timeouts with bounded backoff while reading the product all-domain plan list and candidate plan details. A failed list page must retry that same page without restarting the completed portion of the current-day scan. Do not retry non-transient business errors or any write request through this read retry path.
 
-- No plan: create from template delivery settings and the first 100 eligible homepage works.
+- Filter every creator candidate by intersecting its detail-derived `product_ids` with the creator group's verified-material `matched_product_ids` before deciding the action.
+- No product-matched plan: create from template delivery settings and the first 100 eligible homepage works.
 - Homepage-work creation omits `creative_card` by default and must never send an empty card object. The official field table makes the whole card conditional on merchant account type, while the verified creator-homepage flow accepts omission. If a future account reports the whole card as missing, return that account-specific failure instead of inventing selling points.
 - Existing plan: do not change any plan setting; list all plan videos and append only missing `aweme_item_id` values.
-- More than one exact plan: fail that creator without choosing one.
+- More than one product-matched plan after filtering: fail that creator with `multiple_existing_plans` without choosing one. Never report this ambiguity from creator matches that bind only unrelated products.
 - More than 100 works: create once, then append remaining chunks through the dedicated add-material endpoint.
 
 Default to dry-run. Add `--submit` only after explicit online-write permission. Different creators may execute concurrently; one creator is always serialized, and a submit run takes an advertiser-scoped process lock. Return one final summary. Do not emit per-link progress or create a file unless `--out` is explicit.

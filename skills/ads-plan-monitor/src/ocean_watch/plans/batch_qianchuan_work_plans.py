@@ -130,6 +130,28 @@ def group_by_creator(material_rows):
     return groups
 
 
+def matched_product_ids(rows):
+    product_ids = set()
+    for row in rows:
+        for product_id in row.get("matched_product_ids") or []:
+            product_id = str(product_id).strip()
+            if product_id:
+                product_ids.add(product_id)
+    return product_ids
+
+
+def filter_plans_by_matched_products(plans, rows):
+    products = matched_product_ids(rows)
+    return [
+        plan for plan in plans
+        if products.intersection(
+            str(product_id).strip()
+            for product_id in plan.get("product_ids") or []
+            if str(product_id).strip()
+        )
+    ]
+
+
 def filter_supported_materials(rows):
     eligible = []
     skipped = []
@@ -430,7 +452,10 @@ def execute_plan_actions(
     )
 
     def execute(aweme_id, rows):
-        plans = discovery["matches"].get(aweme_id) or []
+        plans = filter_plans_by_matched_products(
+            discovery["matches"].get(aweme_id) or [],
+            rows,
+        )
         if len(plans) > 1:
             return {
                 **base_group_result(aweme_id, rows),
