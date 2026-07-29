@@ -20,12 +20,12 @@ codex plugin add ocean-watch@ocean-watch
 
 ## 发布前置条件
 
-- `pyproject.toml`、`ocean_watch.__version__` 和 `.codex-plugin/plugin.json` 的基础版本一致。
-- 版本使用 `MAJOR.MINOR.PATCH`，Tag 使用对应的 `vMAJOR.MINOR.PATCH`。
-- `CHANGELOG.md` 存在 `## X.Y.Z - YYYY-MM-DD` 段落，且 `## 未发布` 没有实质内容。
+- 当前 `pyproject.toml`、`ocean_watch.__version__` 和 `.codex-plugin/plugin.json` 的基础版本一致。
+- `CHANGELOG.md` 的 `## 未发布` 中存在至少一条实质内容；没有内容时不会发布空版本。
 - 发布工作流从当前 `origin/main` 手动触发。
-- `main` 的 CI 已通过，发布前质量门禁再次通过。
-- 同名 Tag 不存在，或已经指向本次 `GITHUB_SHA`。
+- `main` 的 CI 已通过，发布工作流会在生成版本文件后再次运行质量门禁。
+- 线上最新正式 Release Tag 使用 `vMAJOR.MINOR.PATCH`；工作流自动递增 patch。
+- 目标 Tag 不存在，或已经指向本次发布提交。
 - 同名 Release 不存在，或标题、状态和 Changelog notes 与本次结果完全一致。
 
 当前 Release 工作流不要求 GitHub Environment、签名 Secret 或公钥 Variable。未来正式发布 Go 资产时，必须另行设计并评审受保护环境、信任根、跨平台候选、证据、签字与密封流程，不能把底层工具存在视为发布门禁已经启用。
@@ -63,18 +63,17 @@ python3 skills/qc-plan-monitor/run.py --version
 git diff --check
 ```
 
-`scripts/version_tag.py check` 在日常开发阶段只检查版本元数据一致性；发布归档后使用 `--tag vX.Y.Z` 额外检查日期版本段和空的 `未发布` 段落。
+`scripts/version_tag.py check` 在日常开发阶段只检查版本元数据一致性。Release 工作流调用 `prepare`，根据线上最新正式 Release 自动生成下一个 patch 版本，再使用 `--tag vX.Y.Z` 检查日期版本段和空的 `未发布` 段落。
 
 ## 维护者发版
 
-1. 将 `CHANGELOG.md` 的 `未发布` 内容整理到 `## X.Y.Z - YYYY-MM-DD`，并保留空的 `## 未发布`。
-2. 同步项目、Python package 和 Plugin 基础版本；Plugin 的 `+codex.*` cachebuster 随版本更新。
-3. 完成本地预检、评审和 `main` CI，确认发布提交就是当前 `origin/main`。
-4. 从 `main` 手动触发 GitHub Actions 的 **Release** 工作流，无需填写参数。
-5. 核对 Tag 指向、Release 标题和中文说明，再用该 Tag 注册或更新 Marketplace。
+1. 将所有待发布行为准确记录在 `CHANGELOG.md` 的 `## 未发布` 中并推送到 `main`。
+2. 等待 `main` CI 通过。
+3. 从 `main` 手动触发 GitHub Actions 的 **Release** 工作流，无需填写参数。
+4. 工作流自动读取线上最新正式 Release、递增 patch、归档 Changelog、同步项目/Python package/Plugin 版本、生成发布提交并推送回 `main`。
+5. 质量门禁通过后，工作流为该发布提交创建 Tag 和 GitHub Release；核对结果后再用该 Tag 注册或更新 Marketplace。
 
 ```bash
-python3 scripts/version_tag.py check --tag vX.Y.Z
 gh workflow run tag.yml --repo westng/ocean-watch --ref main
 ```
 
