@@ -4,6 +4,8 @@
 
 ## 未发布
 
+## 1.0.1 - 2026-07-29
+
 ### 变更
 
 - 将正式发布改为 GitHub Actions 一键流程：自动按线上最新正式版本递增 patch、归档未发布日志、同步项目/Python 包/Plugin 版本、生成并推送发布提交，然后创建不可变 Tag 与 GitHub Release。
