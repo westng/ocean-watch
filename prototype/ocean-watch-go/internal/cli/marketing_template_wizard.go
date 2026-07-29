@@ -217,19 +217,19 @@ func runMarketingTemplateWizard(
 	if err != nil {
 		return err
 	}
-	landingPageURL, err := reader.value("落地页链接", links["landing_page_url"], false)
+	landingPageURL, err := reader.opaqueValue("落地页链接", links["landing_page_url"])
 	if err != nil {
 		return err
 	}
-	openURL, err := reader.value("直达链接", links["open_url"], false)
+	openURL, err := reader.opaqueValue("直达链接", links["open_url"])
 	if err != nil {
 		return err
 	}
-	trackURL, err := reader.value("展示监测链接", firstListText(tracking["track_url"]), false)
+	trackURL, err := reader.opaqueValue("展示监测链接", firstListText(tracking["track_url"]))
 	if err != nil {
 		return err
 	}
-	actionTrackURL, err := reader.value("点击/有效触点监测链接", firstListText(tracking["action_track_url"]), false)
+	actionTrackURL, err := reader.opaqueValue("点击/有效触点监测链接", firstListText(tracking["action_track_url"]))
 	if err != nil {
 		return err
 	}

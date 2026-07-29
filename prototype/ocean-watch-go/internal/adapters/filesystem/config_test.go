@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -62,6 +63,32 @@ func TestConfigStoreInitializeCreatesOnceAndForceKeepsBackup(t *testing.T) {
 	current, err = store.Read(context.Background())
 	if err != nil || current["owner"] != "forced" {
 		t.Fatalf("force config missing: %#v, %v", current, err)
+	}
+}
+
+func TestConfigStorePreservesOpaqueCIDLinkStrings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	want := map[string]any{
+		"links": map[string]any{
+			"landing_page_url": "  custom+cid://landing?repeat=1&repeat=2&TODO=保留&encoded=%2f%2F  ",
+			"open_url":         " openapp.custom://opaque?params=%7B%22url%22%3A%22a%252Fb%22%7D ",
+		},
+		"tracking_urls": map[string]any{
+			"track_url":        []any{" https://any-host.invalid/display?kind=click&unknown=1&unknown=2 "},
+			"action_track_url": []any{" custom-track://click?kind=impress&REPLACE_WITH=value&raw=%26%3D "},
+		},
+	}
+	store := ConfigStore{Path: path}
+	created, err := store.Initialize(context.Background(), want, false)
+	if err != nil || !created {
+		t.Fatalf("initialize = %v, %v", created, err)
+	}
+	got, err := store.Read(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("opaque CID links changed after save/load: got %#v want %#v", got, want)
 	}
 }
 

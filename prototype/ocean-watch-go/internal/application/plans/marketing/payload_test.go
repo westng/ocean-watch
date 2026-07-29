@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+const jdCIDLandingPageURL = "https://u.jd.com/XDHeeIk?e=CPS-267838-__TRACK_ID__&adUserId=__ADVERTISER_ID__&linkid=2983407830480205&VvvV=1&ref=551e3f1c"
+
+const jdCIDOpenURL = "openapp.jdmobile://virtual?params=%7B%22category%22%3A%22jump%22%2C%22des%22%3A%22union%22%2C%22url%22%3A%22https%3A%2F%2Fu.jd.com%2FX1Hee1P%3Fe%3DCPS-267838-__TRACK_ID__%26adUserId%3D__ADVERTISER_ID__%22%2C%22unionSource%22%3A%22cidJL%22%7D&linkid=2983407830480205&VvvV=1&ref=551e3f1c"
+
+const jdCIDTrackingQuery = "unionId=2030788709&taskId=267838&businessSource=cid&oaidMd5=__OAID_MD5__&caid_original=__CAID__&convertId=__CONVERT_ID__&planName=__PROJECT_NAME__&language=__SL__&ua=__UA__&mac=__MAC1__&geo=__GEO__&idfaMd5=__IDFA_MD5__&requestId=__TRACK_ID__&mid3=__MID3__&unitId=__PROMOTION_ID__&callbackUrl=__CALLBACK_URL__&planId=__PROJECT_ID__&mid1=__MID1__&androidId=__ANDROIDID__&oaid=__OAID__&os=__OS__&unitName=__PROMOTION_NAME__&idfa=__IDFA__&advertisingSpaceId=__UNION_SITE__&userId=__ADVERTISER_ID__&site=__CSITE__&clientIp=__IP__&info1=__ITEM_ID__&imei=__IMEI__&callback=__CALLBACK_PARAM__&ts=__TS__&p1=1&linkid=2983407830480205&VvvV=1"
+
+const jdCIDImpressionURL = "https://mktm.jd.com/u/impress?" + jdCIDTrackingQuery
+const jdCIDClickURL = "https://mktm.jd.com/u/click?" + jdCIDTrackingQuery
+
 func TestBuildMarketingPayloadsMatchesPythonGolden(t *testing.T) {
 	config := marketingPayloadFixture()
 	payloads, err := BuildPayloads(config, PayloadOptions{MaterialDate: "7.25"})
@@ -118,6 +127,74 @@ func TestBuildMarketingPayloadsSupportsCustomImagesAndOverrides(t *testing.T) {
 	}
 }
 
+func TestBuildMarketingPayloadsKeepsJDCIDLinksByteForByte(t *testing.T) {
+	config := marketingPayloadFixture()
+	config["_selected_plan_template"] = map[string]any{"bindings": map[string]any{"platform": "京东", "traffic_source": "CID"}}
+	config["links"] = map[string]any{"landing_page_url": jdCIDLandingPageURL, "open_url": jdCIDOpenURL}
+	config["tracking_urls"] = map[string]any{
+		"track_url": []any{jdCIDImpressionURL}, "action_track_url": []any{jdCIDClickURL},
+	}
+	payloads, err := BuildPayloads(config, PayloadOptions{MaterialDate: "7.25"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	materials := payloads.Promotion["promotion_materials"].(map[string]any)
+	if !reflect.DeepEqual(materials["external_url_material_list"], []any{jdCIDLandingPageURL}) || materials["open_url"] != jdCIDOpenURL {
+		t.Fatalf("JD CID landing or open URL changed: %#v", materials)
+	}
+	tracking := payloads.Project["track_url_setting"].(map[string]any)
+	if !reflect.DeepEqual(tracking["track_url"], []any{jdCIDImpressionURL}) || !reflect.DeepEqual(tracking["action_track_url"], []any{jdCIDClickURL}) {
+		t.Fatalf("JD CID tracking URLs changed: %#v", tracking)
+	}
+	if len(payloads.MissingFields) != 0 {
+		t.Fatalf("valid JD CID links were blocked: %#v", payloads.MissingFields)
+	}
+}
+
+func TestBuildMarketingPayloadsDoesNotInterpretCIDLinkContents(t *testing.T) {
+	config := marketingPayloadFixture()
+	config["_selected_plan_template"] = map[string]any{"bindings": map[string]any{"platform": "京东", "traffic_source": "CID"}}
+	config["links"] = map[string]any{
+		"landing_page_url": "custom+cid://opaque/path?repeat=1&repeat=2&TODO=保留&encoded=%2f%2F&projectid=__PROJECT_ID__#Fragment",
+		"open_url":         "another-scheme://任意路径?x=1&x=2&raw=%7bVALUE%7d",
+	}
+	config["tracking_urls"] = map[string]any{
+		"track_url":        []any{"track-anywhere://path?kind=click&unknown=1&unknown=2"},
+		"action_track_url": []any{"https://example.com/not-inferred?kind=impress&TODO=value"},
+	}
+	payloads, err := BuildPayloads(config, PayloadOptions{MaterialDate: "7.25"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	materials := payloads.Promotion["promotion_materials"].(map[string]any)
+	links := config["links"].(map[string]any)
+	if !reflect.DeepEqual(materials["external_url_material_list"], []any{links["landing_page_url"]}) || materials["open_url"] != links["open_url"] {
+		t.Fatalf("opaque CID links changed: %#v", materials)
+	}
+	if !reflect.DeepEqual(payloads.Project["track_url_setting"], config["tracking_urls"]) {
+		t.Fatalf("opaque CID tracking links changed: %#v", payloads.Project["track_url_setting"])
+	}
+	for _, field := range []string{"links.landing_page_url", "links.open_url", "tracking_urls.track_url", "tracking_urls.action_track_url"} {
+		if containsString(payloads.MissingFields, field) {
+			t.Fatalf("opaque CID field %s was interpreted: %#v", field, payloads.MissingFields)
+		}
+	}
+}
+
+func TestMarketingLinkPassthroughErrorsDetectsAnyPayloadChange(t *testing.T) {
+	config := marketingPayloadFixture()
+	payloads, err := BuildPayloads(config, PayloadOptions{MaterialDate: "7.25"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	materials := payloads.Promotion["promotion_materials"].(map[string]any)
+	materials["external_url_material_list"] = []any{config["links"].(map[string]any)["landing_page_url"].(string) + "&changed=1"}
+	errors := marketingLinkPassthroughErrors(config, payloads.Project, payloads.Promotion)
+	if !containsString(errors, "links.landing_page_url") {
+		t.Fatalf("changed CID link was not detected: %#v", errors)
+	}
+}
+
 func TestMarketingPayloadMissingFieldsBlocksRuntimeAssetsAndInvalidCopy(t *testing.T) {
 	config := marketingPayloadFixture()
 	config["materials"] = map[string]any{}
@@ -136,8 +213,8 @@ func TestMarketingPayloadMissingFieldsBlocksRuntimeAssetsAndInvalidCopy(t *testi
 		t.Fatal(err)
 	}
 	want := []string{
-		"tracking_urls.track_url", "tracking_urls.action_track_url", "resolved_ids.city_ids",
-		"materials.video_ids", "links.landing_page_url", "links.open_url", "titles",
+		"tracking_urls.action_track_url", "resolved_ids.city_ids",
+		"materials.video_ids", "links.open_url", "titles",
 		"defaults.product_info.selling_points", "resolved_ids.event_asset_ids",
 	}
 	if !reflect.DeepEqual(payloads.MissingFields, want) {

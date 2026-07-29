@@ -56,6 +56,11 @@ Required headers:
 - `delivery_setting.budget_mode` supports `BUDGET_MODE_INFINITE`, `BUDGET_MODE_DAY`, `BUDGET_MODE_TOTAL`.
 - `delivery_setting.pricing` supports `PRICING_OCPM`; automatic delivery supports only `PRICING_OCPM`.
 - `track_url_setting.track_url` and `track_url_setting.action_track_url` hold display and click/action tracking links.
+- CID link values are opaque strings: do not decode, re-encode, normalize, append macros, or reuse
+  query parameters across fields. The project payload owns the display/click tracking arrays; the
+  promotion payload owns `external_url_material_list` and `open_url`.
+- Do not infer validity or field meaning from the domain, scheme, path, or query parameters. Preserve
+  the user-provided string in its selected field through template save/load and payload construction.
 
 ## Promotion Create Confirmed Fields
 

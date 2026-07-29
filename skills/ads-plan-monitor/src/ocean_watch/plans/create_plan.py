@@ -35,6 +35,42 @@ def contains_unresolved_value(value):
     return value is None
 
 
+def opaque_link_missing(value):
+    if value is None or value == "":
+        return True
+    if isinstance(value, list):
+        return not value or any(item is None or item == "" for item in value)
+    return False
+
+
+def link_passthrough_errors(config, project_payload, promotion_payload):
+    promotion_materials = promotion_payload.get("promotion_materials") or {}
+    expected_landing_page = get_path(config, "links.landing_page_url", "")
+    comparisons = {
+        "links.landing_page_url": (
+            [expected_landing_page],
+            promotion_materials.get("external_url_material_list"),
+        ),
+        "links.open_url": (
+            get_path(config, "links.open_url", ""),
+            promotion_materials.get("open_url"),
+        ),
+        "tracking_urls.track_url": (
+            get_path(config, "tracking_urls.track_url", []),
+            (project_payload.get("track_url_setting") or {}).get("track_url"),
+        ),
+        "tracking_urls.action_track_url": (
+            get_path(config, "tracking_urls.action_track_url", []),
+            (project_payload.get("track_url_setting") or {}).get("action_track_url"),
+        ),
+    }
+    return [
+        field
+        for field, (expected, actual) in comparisons.items()
+        if actual != expected
+    ]
+
+
 def api_integer_if_decimal(value):
     if isinstance(value, str) and value.isdigit():
         return int(value)
@@ -269,9 +305,9 @@ def missing_fields(config, project_payload, promotion_payload, submit):
         missing.append("defaults.project_name_template")
     if contains_unresolved_value(promotion_payload.get("name")):
         missing.append("defaults.promotion_name_template")
-    if contains_unresolved_value(project_payload["track_url_setting"]["track_url"]):
+    if opaque_link_missing(project_payload["track_url_setting"]["track_url"]):
         missing.append("tracking_urls.track_url")
-    if contains_unresolved_value(project_payload["track_url_setting"]["action_track_url"]):
+    if opaque_link_missing(project_payload["track_url_setting"]["action_track_url"]):
         missing.append("tracking_urls.action_track_url")
     if is_missing(project_payload["audience"]["city"]):
         missing.append("resolved_ids.city_ids")
@@ -288,10 +324,11 @@ def missing_fields(config, project_payload, promotion_payload, submit):
             missing.append("defaults.product_info.product_image_fields")
     elif is_missing(get_path(config, "resolved_ids.product_image_ids")):
         missing.append("resolved_ids.product_image_ids")
-    if contains_unresolved_value(get_path(config, "links.landing_page_url")):
+    if opaque_link_missing(get_path(config, "links.landing_page_url")):
         missing.append("links.landing_page_url")
-    if contains_unresolved_value(get_path(config, "links.open_url")):
+    if opaque_link_missing(get_path(config, "links.open_url")):
         missing.append("links.open_url")
+    missing.extend(link_passthrough_errors(config, project_payload, promotion_payload))
     if contains_unresolved_value(promotion_payload.get("source")):
         missing.append("defaults.source")
     titles = promotion_payload["promotion_materials"].get("title_material_list") or []
@@ -310,7 +347,7 @@ def missing_fields(config, project_payload, promotion_payload, submit):
     product_id = get_path(config, "defaults.product_id")
     if is_missing(unique_product_id) and contains_unresolved_value(product_id):
         missing.append("defaults.product_id")
-    return missing
+    return list(dict.fromkeys(missing))
 
 
 def main(argv=None):
@@ -377,7 +414,6 @@ def main(argv=None):
         return 2
     project_payload, promotion_payload = build_payloads(config, args)
     missing = missing_fields(config, project_payload, promotion_payload, args.submit)
-
     delivery_setting = project_payload["delivery_setting"]
     preflight_summary = {
         "advertiser_id": project_payload["advertiser_id"],

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -333,10 +334,10 @@ func MarketingPayloadMissingFields(config map[string]any, payloads Payloads) []s
 		missing = append(missing, "defaults.promotion_name_template")
 	}
 	trackSettings := configuration.Object(project["track_url_setting"])
-	if configuration.ContainsUnresolved(trackSettings["track_url"]) {
+	if opaqueLinkMissing(trackSettings["track_url"]) {
 		missing = append(missing, "tracking_urls.track_url")
 	}
-	if configuration.ContainsUnresolved(trackSettings["action_track_url"]) {
+	if opaqueLinkMissing(trackSettings["action_track_url"]) {
 		missing = append(missing, "tracking_urls.action_track_url")
 	}
 	if configuration.Missing(configuration.Value(project, "audience.city")) {
@@ -358,12 +359,13 @@ func MarketingPayloadMissingFields(config map[string]any, payloads Payloads) []s
 	} else if configuration.Missing(configuration.Value(config, "resolved_ids.product_image_ids")) {
 		missing = append(missing, "resolved_ids.product_image_ids")
 	}
-	if configuration.ContainsUnresolved(configuration.Value(config, "links.landing_page_url")) {
+	if opaqueLinkMissing(configuration.Value(config, "links.landing_page_url")) {
 		missing = append(missing, "links.landing_page_url")
 	}
-	if configuration.ContainsUnresolved(configuration.Value(config, "links.open_url")) {
+	if opaqueLinkMissing(configuration.Value(config, "links.open_url")) {
 		missing = append(missing, "links.open_url")
 	}
+	missing = append(missing, marketingLinkPassthroughErrors(config, project, promotion)...)
 	if configuration.ContainsUnresolved(promotion["source"]) {
 		missing = append(missing, "defaults.source")
 	}
@@ -382,6 +384,60 @@ func MarketingPayloadMissingFields(config map[string]any, payloads Payloads) []s
 		missing = append(missing, "resolved_ids.event_asset_ids")
 	}
 	return uniqueOrderedStrings(missing)
+}
+
+func opaqueLinkMissing(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case string:
+		return typed == ""
+	case []any:
+		if len(typed) == 0 {
+			return true
+		}
+		for _, item := range typed {
+			if item == nil || item == "" {
+				return true
+			}
+		}
+		return false
+	case []string:
+		if len(typed) == 0 {
+			return true
+		}
+		for _, item := range typed {
+			if item == "" {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func marketingLinkPassthroughErrors(config, project, promotion map[string]any) []string {
+	trackSettings := configuration.Object(project["track_url_setting"])
+	materials := configuration.Object(configuration.Value(promotion, "promotion_materials"))
+	expectedLandingPage := textValue(configuration.Value(config, "links.landing_page_url"))
+	comparisons := []struct {
+		field    string
+		expected any
+		actual   any
+	}{
+		{"links.landing_page_url", []any{expectedLandingPage}, materials["external_url_material_list"]},
+		{"links.open_url", configuration.Value(config, "links.open_url"), materials["open_url"]},
+		{"tracking_urls.track_url", anySlice(configuration.Value(config, "tracking_urls.track_url")), trackSettings["track_url"]},
+		{"tracking_urls.action_track_url", anySlice(configuration.Value(config, "tracking_urls.action_track_url")), trackSettings["action_track_url"]},
+	}
+	errors := []string{}
+	for _, comparison := range comparisons {
+		if !reflect.DeepEqual(comparison.expected, comparison.actual) {
+			errors = append(errors, comparison.field)
+		}
+	}
+	return errors
 }
 
 func renderMarketingName(template string, values map[string]string) string {

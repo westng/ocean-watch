@@ -61,6 +61,18 @@ func TestQianchuanTemplateWizardCancellationIsWriteFree(t *testing.T) {
 	}
 }
 
+func TestOpaqueValuePreservesCIDLinkCharacters(t *testing.T) {
+	want := "  custom+cid://opaque/path?repeat=1&repeat=2&TODO=保留&encoded=%2f%2F#Fragment  "
+	reader := newPromptReader(strings.NewReader(want+"\n"), new(bytes.Buffer))
+	got, err := reader.opaqueValue("CID 链接", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("opaque CID input changed: got %q want %q", got, want)
+	}
+}
+
 func TestQianchuanTemplateWizardConfirmationUsesOneCAS(t *testing.T) {
 	store := &wizardStoreSpy{config: map[string]any{"future": "preserved"}, revision: "captured-revision"}
 	stdout := new(bytes.Buffer)

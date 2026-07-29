@@ -44,9 +44,7 @@ class ExitAndValidationTests(unittest.TestCase):
         self.assertTrue(validate_config.mode_is_ready(result, "all"))
 
         incomplete = copy.deepcopy(config)
-        incomplete["plan_templates"][name]["links"]["open_url"] = (
-            "https://example.com/open"
-        )
+        incomplete["plan_templates"][name]["links"]["open_url"] = ""
         result = validate_config.validate_config(
             incomplete,
             credentials,
@@ -121,7 +119,7 @@ class ExitAndValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.json"
             config = valid_config()
-            config["links"]["open_url"] = "https://example.com/open"
+            config["links"]["open_url"] = ""
             config_path.write_text(json.dumps(config), encoding="utf-8")
             credentials = {"app_id": "app", "secret": "secret", "access_token": "token"}
             runtime = channels.runtime_config(config, "marketing")

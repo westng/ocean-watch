@@ -316,7 +316,7 @@ func MarketingCandidateReadiness(config map[string]any, name string, candidate m
 		missing = append(missing, "api.base_url")
 	}
 	for _, field := range []string{"tracking_urls.track_url", "tracking_urls.action_track_url"} {
-		if containsMarketingUnresolved(marketingPath(effective, field)) {
+		if marketingOpaqueLinkMissing(marketingPath(effective, field)) {
 			missing = append(missing, field)
 		}
 	}
@@ -326,10 +326,10 @@ func MarketingCandidateReadiness(config map[string]any, name string, candidate m
 	if isMissing(marketingPath(effective, "resolved_ids.unique_product_id")) && isMissing(marketingPath(effective, "resolved_ids.product_platform_id")) {
 		missing = append(missing, "resolved_ids.product_platform_id")
 	}
-	if containsMarketingUnresolved(marketingPath(effective, "links.landing_page_url")) {
+	if marketingOpaqueLinkMissing(marketingPath(effective, "links.landing_page_url")) {
 		missing = append(missing, "links.landing_page_url")
 	}
-	if containsMarketingUnresolved(marketingPath(effective, "links.open_url")) {
+	if marketingOpaqueLinkMissing(marketingPath(effective, "links.open_url")) {
 		missing = append(missing, "links.open_url")
 	}
 	productInfo := mapOrEmpty(marketingPath(effective, "defaults.product_info"))
@@ -371,6 +371,37 @@ func MarketingCandidateReadiness(config map[string]any, name string, candidate m
 		"ready_for_plan_creation": len(templateMissing) == 0,
 		"template_missing_fields": templateMissing,
 		"runtime_missing_fields":  runtimeMissing,
+	}
+}
+
+func marketingOpaqueLinkMissing(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return true
+	case string:
+		return typed == ""
+	case []any:
+		if len(typed) == 0 {
+			return true
+		}
+		for _, item := range typed {
+			if item == nil || item == "" {
+				return true
+			}
+		}
+		return false
+	case []string:
+		if len(typed) == 0 {
+			return true
+		}
+		for _, item := range typed {
+			if item == "" {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 

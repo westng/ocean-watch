@@ -25,6 +25,33 @@ from tests.support import (
 )
 from tests.support import payload_args as args
 
+JD_CID_LANDING_PAGE_URL = (
+    "https://u.jd.com/XDHeeIk?e=CPS-267838-__TRACK_ID__"
+    "&adUserId=__ADVERTISER_ID__&linkid=2983407830480205"
+    "&VvvV=1&ref=551e3f1c"
+)
+JD_CID_OPEN_URL = (
+    "openapp.jdmobile://virtual?params=%7B%22category%22%3A%22jump%22%2C"
+    "%22des%22%3A%22union%22%2C%22url%22%3A%22https%3A%2F%2Fu.jd.com"
+    "%2FX1Hee1P%3Fe%3DCPS-267838-__TRACK_ID__%26adUserId%3D"
+    "__ADVERTISER_ID__%22%2C%22unionSource%22%3A%22cidJL%22%7D"
+    "&linkid=2983407830480205&VvvV=1&ref=551e3f1c"
+)
+JD_CID_TRACKING_QUERY = (
+    "unionId=2030788709&taskId=267838&businessSource=cid"
+    "&oaidMd5=__OAID_MD5__&caid_original=__CAID__&convertId=__CONVERT_ID__"
+    "&planName=__PROJECT_NAME__&language=__SL__&ua=__UA__&mac=__MAC1__"
+    "&geo=__GEO__&idfaMd5=__IDFA_MD5__&requestId=__TRACK_ID__&mid3=__MID3__"
+    "&unitId=__PROMOTION_ID__&callbackUrl=__CALLBACK_URL__&planId=__PROJECT_ID__"
+    "&mid1=__MID1__&androidId=__ANDROIDID__&oaid=__OAID__&os=__OS__"
+    "&unitName=__PROMOTION_NAME__&idfa=__IDFA__&advertisingSpaceId=__UNION_SITE__"
+    "&userId=__ADVERTISER_ID__&site=__CSITE__&clientIp=__IP__&info1=__ITEM_ID__"
+    "&imei=__IMEI__&callback=__CALLBACK_PARAM__&ts=__TS__&p1=1"
+    "&linkid=2983407830480205&VvvV=1"
+)
+JD_CID_IMPRESSION_URL = "https://mktm.jd.com/u/impress?" + JD_CID_TRACKING_QUERY
+JD_CID_CLICK_URL = "https://mktm.jd.com/u/click?" + JD_CID_TRACKING_QUERY
+
 
 class CreatePlanTests(unittest.TestCase):
 
@@ -34,11 +61,96 @@ class CreatePlanTests(unittest.TestCase):
         self.assertNotIn("{suffix}", promotion["name"])
         self.assertTrue(promotion["name"].endswith("_01"))
 
-    def test_example_links_block_submission(self):
+    def test_link_domain_is_not_used_for_validation(self):
         config = valid_config()
         config["links"]["landing_page_url"] = "https://example.com/landing"
         project, promotion = create_plan.build_payloads(config, args())
         missing = create_plan.missing_fields(config, project, promotion, True)
+        self.assertNotIn("links.landing_page_url", missing)
+
+    def test_jd_cid_links_are_kept_byte_for_byte_in_official_fields(self):
+        config = valid_config()
+        config["_selected_plan_template"] = {
+            "bindings": {"platform": "京东", "traffic_source": "CID"},
+        }
+        config["links"] = {
+            "landing_page_url": JD_CID_LANDING_PAGE_URL,
+            "open_url": JD_CID_OPEN_URL,
+        }
+        config["tracking_urls"] = {
+            "track_url": [JD_CID_IMPRESSION_URL],
+            "action_track_url": [JD_CID_CLICK_URL],
+        }
+
+        project, promotion = create_plan.build_payloads(config, args())
+
+        self.assertEqual(
+            promotion["promotion_materials"]["external_url_material_list"],
+            [JD_CID_LANDING_PAGE_URL],
+        )
+        self.assertEqual(
+            promotion["promotion_materials"]["open_url"],
+            JD_CID_OPEN_URL,
+        )
+        self.assertEqual(
+            project["track_url_setting"],
+            {
+                "track_url": [JD_CID_IMPRESSION_URL],
+                "action_track_url": [JD_CID_CLICK_URL],
+            },
+        )
+        missing = create_plan.missing_fields(config, project, promotion, True)
+        for field in (
+            "links.landing_page_url",
+            "links.open_url",
+            "tracking_urls.track_url",
+            "tracking_urls.action_track_url",
+        ):
+            self.assertNotIn(field, missing)
+
+    def test_cid_links_are_not_interpreted_or_rejected_by_content(self):
+        config = valid_config()
+        config["_selected_plan_template"] = {
+            "bindings": {"platform": "京东", "traffic_source": "CID"},
+        }
+        opaque_links = {
+            "landing_page_url": (
+                "custom+cid://opaque/path?repeat=1&repeat=2&TODO=保留"
+                "&encoded=%2f%2F&projectid=__PROJECT_ID__#Fragment"
+            ),
+            "open_url": "another-scheme://任意路径?x=1&x=2&raw=%7bVALUE%7d",
+        }
+        opaque_tracking = {
+            "track_url": ["track-anywhere://path?kind=click&unknown=1&unknown=2"],
+            "action_track_url": ["https://example.com/not-inferred?kind=impress&TODO=value"],
+        }
+        config["links"] = opaque_links
+        config["tracking_urls"] = opaque_tracking
+
+        project, promotion = create_plan.build_payloads(config, args())
+        missing = create_plan.missing_fields(config, project, promotion, True)
+
+        self.assertEqual(
+            promotion["promotion_materials"]["external_url_material_list"],
+            [opaque_links["landing_page_url"]],
+        )
+        self.assertEqual(
+            promotion["promotion_materials"]["open_url"],
+            opaque_links["open_url"],
+        )
+        self.assertEqual(project["track_url_setting"], opaque_tracking)
+        self.assertNotIn("links.landing_page_url", missing)
+        self.assertNotIn("links.open_url", missing)
+        self.assertNotIn("tracking_urls.track_url", missing)
+        self.assertNotIn("tracking_urls.action_track_url", missing)
+
+    def test_cid_link_change_is_blocked_before_submission(self):
+        config = valid_config()
+        project, promotion = create_plan.build_payloads(config, args())
+        promotion["promotion_materials"]["external_url_material_list"][0] += "&changed=1"
+
+        missing = create_plan.missing_fields(config, project, promotion, True)
+
         self.assertIn("links.landing_page_url", missing)
 
     def test_double_brace_and_todo_values_are_unresolved(self):
@@ -563,6 +675,92 @@ class CreatePlanTests(unittest.TestCase):
                 "AGE_BETWEEN_41_49",
             ],
         )
+
+    def test_cid_links_stay_identical_from_wizard_through_saved_payload(self):
+        config = business_template_config()
+        landing_page_url = (
+            "  custom+cid://landing/path?repeat=1&repeat=2&TODO=保留"
+            "&encoded=%2f%2F&projectid=__PROJECT_ID__#Fragment  "
+        )
+        open_url = (
+            " openapp.custom://opaque?params=%7B%22url%22%3A%22a%252Fb%22%7D"
+            "&x=1&x=2 "
+        )
+        track_url = (
+            " https://any-host.invalid/display?kind=click&unknown=1&unknown=2 "
+        )
+        action_track_url = (
+            " custom-track://click?kind=impress&REPLACE_WITH=value&raw=%26%3D "
+        )
+        answers = PromptAnswers({
+            "请选择来源编号": "0",
+            "广告主 ID": "456",
+            "平台": "京东",
+            "流量来源": "CID",
+            "商品名称": "链接透传商品",
+            "商品 ID": "product-cid",
+            "产品卖点": "链接透传商品推荐",
+            "日预算": "5000",
+            "净成交 ROI 出价": "1.7",
+            "性别": "2",
+            "年龄": "24-49",
+            "素材来源": "1",
+            "素材选择方式": "",
+            "每单元素材数量": "",
+            "输入文案标题": ["这是一条链接透传测试文案", ""],
+            "计划来源": "链接透传来源",
+            "落地页链接": landing_page_url,
+            "直达链接": open_url,
+            "展示监测链接": track_url,
+            "点击/有效触点监测链接": action_track_url,
+            "确认创建此业务模板": "y",
+        })
+
+        updated, result = manage_plan_templates.run_create_wizard(
+            config,
+            input_fn=answers,
+            output_fn=lambda _: None,
+        )
+
+        self.assertTrue(result["confirmed"])
+        name = result["template"]
+        template = updated["plan_templates"][name]
+        self.assertEqual(template["overrides"]["links"], {
+            "landing_page_url": landing_page_url,
+            "open_url": open_url,
+        })
+        self.assertEqual(template["overrides"]["tracking_urls"], {
+            "track_url": [track_url],
+            "action_track_url": [action_track_url],
+        })
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            manage_plan_templates.save_config(path, updated)
+            loaded = manage_plan_templates.load_config(path)
+
+        saved = loaded["plan_templates"][name]["overrides"]
+        self.assertEqual(saved["links"], template["overrides"]["links"])
+        self.assertEqual(
+            saved["tracking_urls"],
+            template["overrides"]["tracking_urls"],
+        )
+        effective = plan_templates.apply(
+            loaded,
+            name,
+            advertiser_id="456",
+            channel="marketing",
+        )
+        project, promotion = create_plan.build_payloads(effective, args())
+        self.assertEqual(
+            promotion["promotion_materials"]["external_url_material_list"],
+            [landing_page_url],
+        )
+        self.assertEqual(promotion["promotion_materials"]["open_url"], open_url)
+        self.assertEqual(project["track_url_setting"], {
+            "track_url": [track_url],
+            "action_track_url": [action_track_url],
+        })
 
     def test_create_wizard_clones_business_template_and_clears_account_assets(self):
         config = business_template_config()

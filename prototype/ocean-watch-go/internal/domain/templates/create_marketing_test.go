@@ -56,6 +56,43 @@ func TestBuildMarketingTemplateDefaultCandidate(t *testing.T) {
 	}
 }
 
+func TestMarketingCandidateKeepsOpaqueCIDLinksUnchanged(t *testing.T) {
+	config := marketingCreateFixture()
+	normalized, _, err := MarketingCreateSources(config, "ACCOUNT_UPLOAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, candidate, err := BuildMarketingTemplate(normalized, "", nil, MarketingCreateInput{
+		AdvertiserID: "1000000000000101", Platform: "京东", TrafficSource: "CID",
+		ProductID: "9000000000000101", ProductName: "向导商品甲",
+		SellingPoints: "向导商品值得推荐", DailyBudget: 600, ROIGoal: 1.8,
+		Gender: "GENDER_FEMALE", Ages: []any{"AGE_BETWEEN_24_30"},
+		MaterialSourceType: "ACCOUNT_UPLOAD", SelectionMode: "MANUAL", MaxMaterials: 5,
+		Titles: []any{"这是一条向导测试标题"}, PlanSource: "向导来源",
+		LandingPageURL: "custom+cid://opaque/path?repeat=1&repeat=2&TODO=保留&projectid=__PROJECT_ID__",
+		OpenURL:        "another-scheme://任意路径?x=1&x=2&raw=%7bVALUE%7d",
+		TrackURL:       "track-anywhere://path?kind=click&unknown=1&unknown=2",
+		ActionTrackURL: "https://example.com/not-inferred?kind=impress&TODO=value",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readiness := MarketingCandidateReadiness(normalized, name, candidate)
+	if readiness["ready_for_plan_creation"] != true {
+		t.Fatalf("opaque CID links were interpreted: %#v", readiness)
+	}
+	overrides := mapOrEmpty(candidate["overrides"])
+	if !reflect.DeepEqual(overrides["links"], map[string]any{
+		"landing_page_url": "custom+cid://opaque/path?repeat=1&repeat=2&TODO=保留&projectid=__PROJECT_ID__",
+		"open_url":         "another-scheme://任意路径?x=1&x=2&raw=%7bVALUE%7d",
+	}) || !reflect.DeepEqual(overrides["tracking_urls"], map[string]any{
+		"track_url":        []any{"track-anywhere://path?kind=click&unknown=1&unknown=2"},
+		"action_track_url": []any{"https://example.com/not-inferred?kind=impress&TODO=value"},
+	}) {
+		t.Fatalf("opaque CID links changed in candidate: %#v", overrides)
+	}
+}
+
 func TestMarketingClonePoliciesClearOwnedFields(t *testing.T) {
 	config := marketingCreateFixture()
 	sourceName := "巨量营销-1-旧商品-2-混剪素材"

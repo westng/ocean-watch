@@ -23,6 +23,11 @@ func newPromptReader(input io.Reader, output io.Writer) *promptReader {
 }
 
 func (reader *promptReader) line(prompt string) (string, error) {
+	value, err := reader.opaqueLine(prompt)
+	return strings.TrimSpace(value), err
+}
+
+func (reader *promptReader) opaqueLine(prompt string) (string, error) {
 	if _, err := io.WriteString(reader.output, prompt); err != nil {
 		return "", err
 	}
@@ -32,7 +37,7 @@ func (reader *promptReader) line(prompt string) (string, error) {
 		}
 		return "", io.ErrUnexpectedEOF
 	}
-	return strings.TrimSpace(reader.scanner.Text()), nil
+	return reader.scanner.Text(), nil
 }
 
 func (reader *promptReader) value(label string, defaultValue any, required bool) (string, error) {
@@ -55,6 +60,24 @@ func (reader *promptReader) value(label string, defaultValue any, required bool)
 			return "", nil
 		}
 	}
+}
+
+func (reader *promptReader) opaqueValue(label string, defaultValue any) (string, error) {
+	suffix := ""
+	if !emptyPromptDefault(defaultValue) {
+		suffix = " [" + promptString(defaultValue) + "]"
+	}
+	value, err := reader.opaqueLine(label + suffix + ": ")
+	if err != nil {
+		return "", err
+	}
+	if value != "" {
+		return value, nil
+	}
+	if !emptyPromptDefault(defaultValue) {
+		return promptString(defaultValue), nil
+	}
+	return "", nil
 }
 
 func (reader *promptReader) yesNo(label string, defaultValue bool) (bool, error) {

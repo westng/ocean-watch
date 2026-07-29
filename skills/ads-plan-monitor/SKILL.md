@@ -195,6 +195,17 @@ Use `templates show --channel marketing|qianchuan --template TEMPLATE` for one-t
   block before project creation.
 - Titles live in `copy_materials.titles`; each title must contain 5–30 characters.
 - New product or advertiser cloning clears account/product-owned assets according to the wizard preview.
+- Treat the four CID link inputs as opaque, independent values. Preserve every character exactly as
+  supplied, including macro spelling, query order, percent encoding, case, and repeated parameters.
+  Never decode/re-encode, normalize, append runtime macros, copy parameters between fields, or
+  derive one link from another. Map them only as follows:
+  `landing_page_url -> promotion_materials.external_url_material_list`,
+  `open_url -> promotion_materials.open_url`,
+  `track_url -> project.track_url_setting.track_url`, and
+  `action_track_url -> project.track_url_setting.action_track_url`.
+- Do not validate, infer, or restrict a CID link by domain, scheme, path, parameter name, parameter
+  count, or field contents. The user-provided value is authoritative. Saving, loading, previewing,
+  and submission must preserve the same string in the same field without additions or omissions.
 
 All business-template channels share `渠道-广告账户ID-商品名-商品ID-模版类型`. For Marketing, the generated name is:
 
@@ -222,6 +233,8 @@ Default to dry-run. Submit only after explicit online-write permission, using `-
   material fields.
 - Query and revalidate current material availability.
 - Block unresolved values such as `REPLACE_WITH`, `TODO`, `待填`, or unsupported placeholders.
+- Show the four CID links field by field and compare each complete string with the confirmed
+  template value before submission. Do not expose or request expanded runtime macro values.
 - Show advertiser, template, project/promotion names, budget/bid/ROI when present, material count, product ID, operation, missing fields, and endpoints.
 - Never invent city, video, cover, image, product, brand, category, event, or landing-page IDs.
 

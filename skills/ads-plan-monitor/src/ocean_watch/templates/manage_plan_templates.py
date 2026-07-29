@@ -185,6 +185,16 @@ def prompt_value(input_fn, label, default=None, required=False):
             return None
 
 
+def prompt_opaque_value(input_fn, label, default=None):
+    suffix = f" [{default}]" if default not in (None, "") else ""
+    value = input_fn(f"{label}{suffix}: ")
+    if value != "":
+        return value
+    if default not in (None, ""):
+        return str(default)
+    return None
+
+
 def prompt_yes_no(input_fn, label, default=False):
     hint = "Y/n" if default else "y/N"
     value = input_fn(f"{label} [{hint}]: ").strip().lower()
@@ -590,14 +600,18 @@ def run_create_wizard(
         ages=ages,
         name=generated_name,
         source_name=prompt_value(input_fn, "计划来源", defaults.get("source")),
-        landing_page_url=prompt_value(input_fn, "落地页链接", links.get("landing_page_url")),
-        open_url=prompt_value(input_fn, "直达链接", links.get("open_url")),
-        track_url=prompt_value(
+        landing_page_url=prompt_opaque_value(
+            input_fn,
+            "落地页链接",
+            links.get("landing_page_url"),
+        ),
+        open_url=prompt_opaque_value(input_fn, "直达链接", links.get("open_url")),
+        track_url=prompt_opaque_value(
             input_fn,
             "展示监测链接",
             (tracking.get("track_url") or [None])[0],
         ),
-        action_track_url=prompt_value(
+        action_track_url=prompt_opaque_value(
             input_fn,
             "点击/有效触点监测链接",
             (tracking.get("action_track_url") or [None])[0],
