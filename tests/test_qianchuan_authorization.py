@@ -534,15 +534,23 @@ class QianchuanAuthorizationTests(unittest.TestCase):
             {
                 "code": 0,
                 "data": {
-                    "list": [{"advertiser_id": 201}],
-                    "page_info": {"total_page": 2},
+                    "adv_id_list": [{"adv_id": 201}],
+                    "page_info": {
+                        "page": 1,
+                        "total_number": 2,
+                        "total_page": 2,
+                    },
                 },
             },
             {
                 "code": 0,
                 "data": {
-                    "list": [{"advertiser_id": 202}],
-                    "page_info": {"total_page": 2},
+                    "adv_id_list": [{"adv_id": 202}],
+                    "page_info": {
+                        "page": 2,
+                        "total_number": 2,
+                        "total_page": 2,
+                    },
                 },
             },
         ]
@@ -555,28 +563,33 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertEqual(request.call_args_list[0].args[2]["permission"], ["QC_AWEME"])
 
     def test_empty_role_expansion_accepts_official_zero_page_contract(self):
-        response = {
-            "code": 0,
-            "data": {
-                "list": [],
-                "page_info": {
-                    "page": 1,
-                    "page_size": 100,
-                    "total_number": 0,
-                    "total_page": 0,
+        for response_page in (0, 1):
+            response = {
+                "code": 0,
+                "data": {
+                    "list": [],
+                    "page_info": {
+                        "page": response_page,
+                        "page_size": 100,
+                        "total_number": 0,
+                        "total_page": 0,
+                    },
                 },
-            },
-        }
-        account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
-        with mock.patch.object(token_manager, "get_api_json", return_value=response):
-            identifiers, result = token_manager.fetch_role_advertiser_ids(
-                qianchuan_runtime(),
-                account,
-            )
+            }
+            account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
+            with self.subTest(page=response_page), mock.patch.object(
+                token_manager,
+                "get_api_json",
+                return_value=response,
+            ):
+                identifiers, result = token_manager.fetch_role_advertiser_ids(
+                    qianchuan_runtime(),
+                    account,
+                )
 
-        self.assertEqual(identifiers, [])
-        self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["pages"], 1)
+                self.assertEqual(identifiers, [])
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["pages"], 1)
 
     def test_zero_page_role_expansion_rejects_inconsistent_data(self):
         account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
@@ -606,8 +619,12 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         response = {
             "code": 0,
             "data": {
-                "list": [201, 202],
-                "page_info": {"total_page": 1},
+                "advertiser_ids": [201, 202],
+                "page_info": {
+                    "page": 1,
+                    "total_number": 2,
+                    "total_page": 1,
+                },
             },
         }
         account = {"account_role": "PLATFORM_ROLE_QIANCHUAN_AGENT", "account_id": 101}
@@ -624,6 +641,67 @@ class QianchuanAuthorizationTests(unittest.TestCase):
             request.call_args.kwargs["base_url"],
             channel_adapters.DEFAULT_TOKEN_BASE_URL,
         )
+
+    def test_qianchuan_shop_role_accepts_legacy_list_response(self):
+        response = {
+            "code": 0,
+            "data": {
+                "list": [201],
+                "page_info": {"total_page": 1},
+            },
+        }
+        account = {
+            "account_role": "PLATFORM_ROLE_SHOP_ACCOUNT",
+            "shop_id": 101,
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            identifiers, _ = token_manager.fetch_role_advertiser_ids(
+                qianchuan_runtime(),
+                account,
+            )
+
+        self.assertEqual(identifiers, [201])
+
+    def test_qianchuan_agent_role_accepts_legacy_list_response(self):
+        response = {
+            "code": 0,
+            "data": {
+                "list": [201],
+                "page_info": {"total_page": 1},
+            },
+        }
+        account = {
+            "account_role": "PLATFORM_ROLE_QIANCHUAN_AGENT",
+            "account_id": 101,
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            identifiers, _ = token_manager.fetch_role_advertiser_ids(
+                qianchuan_runtime(),
+                account,
+            )
+
+        self.assertEqual(identifiers, [201])
+
+    def test_qianchuan_agent_prefers_legacy_list_when_both_fields_exist(self):
+        response = {
+            "code": 0,
+            "data": {
+                "list": [201],
+                "advertiser_ids": [202],
+                "page_info": {"total_number": 1, "total_page": 1},
+            },
+        }
+        account = {
+            "account_role": "PLATFORM_ROLE_QIANCHUAN_AGENT",
+            "account_id": 101,
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            identifiers, _ = token_manager.fetch_role_advertiser_ids(
+                qianchuan_runtime(),
+                account,
+            )
+
+        self.assertEqual(identifiers, [201])
 
     def test_missing_optional_agent_permission_keeps_other_accounts(self):
         accounts = [

@@ -428,6 +428,119 @@ class TokenRefreshTests(unittest.TestCase):
                 token_manager.fetch_role_advertiser_ids(config, account)
         request.assert_called_once()
 
+    def test_role_expansion_rejects_response_page_mismatch(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        response = {
+            "code": 0,
+            "data": {
+                "list": [{"advertiser_id": 201}],
+                "page_info": {"page": 2, "total_number": 1, "total_page": 1},
+            },
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "Malformed pagination metadata"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+
+    def test_role_expansion_rejects_changed_total_number(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        responses = [
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {
+                        "page": 1,
+                        "total_number": 2,
+                        "total_page": 2,
+                    },
+                },
+            },
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 202}],
+                    "page_info": {
+                        "page": 2,
+                        "total_number": 3,
+                        "total_page": 2,
+                    },
+                },
+            },
+        ]
+        with mock.patch.object(token_manager, "get_api_json", side_effect=responses):
+            with self.assertRaisesRegex(RuntimeError, "Malformed pagination metadata"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+
+    def test_role_expansion_rejects_pagination_field_disappearing(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        responses = [
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {
+                        "page": 1,
+                        "total_number": 2,
+                        "total_page": 2,
+                    },
+                },
+            },
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 202}],
+                    "page_info": {"page": 2, "total_page": 2},
+                },
+            },
+        ]
+        with mock.patch.object(token_manager, "get_api_json", side_effect=responses):
+            with self.assertRaisesRegex(RuntimeError, "Malformed pagination metadata"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+
+    def test_role_expansion_rejects_incomplete_total_number(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        response = {
+            "code": 0,
+            "data": {
+                "list": [{"advertiser_id": 201}, {"advertiser_id": 202}],
+                "page_info": {
+                    "page": 1,
+                    "total_number": 3,
+                    "total_page": 1,
+                },
+            },
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "Incomplete advertiser pagination"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+
+    def test_role_expansion_rejects_duplicate_ids_across_pages(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        responses = [
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {"page": 1, "total_page": 2},
+                },
+            },
+            {
+                "code": 0,
+                "data": {
+                    "list": [{"advertiser_id": 201}],
+                    "page_info": {"page": 2, "total_page": 2},
+                },
+            },
+        ]
+        with mock.patch.object(token_manager, "get_api_json", side_effect=responses):
+            with self.assertRaisesRegex(RuntimeError, "Duplicate advertiser IDs"):
+                token_manager.fetch_role_advertiser_ids(config, account)
+
     def test_advertiser_verification_batches_fifty_ids(self):
         config = self.expiring_config()
 

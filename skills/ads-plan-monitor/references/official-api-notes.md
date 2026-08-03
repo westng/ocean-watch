@@ -32,6 +32,9 @@ The OAuth advertiser endpoint returns authorization subjects, not only direct ad
 - `ADVERTISER`: use the subject advertiser ID directly.
 - `CUSTOMER_ADMIN` and `CUSTOMER_OPERATOR`: query customer-center advertisers with `cc_account_id` and `account_source=AD`.
 - `PLATFORM_ROLE_ENTERPRISE_BP_ADMIN` and `PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR`: query EBP advertisers with `enterprise_organization_id` and `account_source=AD`.
+- Traverse every declared role-expansion page. When the response supplies `page` or
+  `total_number`, require the page number and totals to remain consistent and reject missing or
+  duplicate advertiser IDs instead of saving a partial authorization snapshot.
 - Deduplicate candidates, then validate them through advertiser info in chunks of 50.
 
 Required headers:

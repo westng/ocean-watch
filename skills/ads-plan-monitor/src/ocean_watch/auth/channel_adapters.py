@@ -20,8 +20,8 @@ AGENT_ADVERTISER_PATH = "/2/agent/advertiser/select/"
 class RoleExpansion:
     path: str
     base_params: dict
-    list_key: str
-    id_keys: tuple
+    row_sources: tuple
+    fallback_sources: bool = False
     base_url: Optional[str] = None
     optional_permission_codes: tuple = ()
 
@@ -65,8 +65,7 @@ class MarketingChannelAdapter(ChannelAdapter):
             return RoleExpansion(
                 path=CUSTOMER_CENTER_ADVERTISER_PATH,
                 base_params={"cc_account_id": source_id, "account_source": "AD"},
-                list_key="list",
-                id_keys=("advertiser_id", "account_id"),
+                row_sources=(("list", ("advertiser_id", "account_id")),),
             )
         if role in {
             "PLATFORM_ROLE_ENTERPRISE_BP_ADMIN",
@@ -81,8 +80,7 @@ class MarketingChannelAdapter(ChannelAdapter):
                     "enterprise_organization_id": source_id,
                     "account_source": "AD",
                 },
-                list_key="account_list",
-                id_keys=("account_id", "advertiser_id"),
+                row_sources=(("account_list", ("account_id", "advertiser_id")),),
             )
         return None
 
@@ -109,8 +107,11 @@ class QianchuanChannelAdapter(ChannelAdapter):
             return RoleExpansion(
                 path=AGENT_ADVERTISER_PATH,
                 base_params={"advertiser_id": source_id},
-                list_key="list",
-                id_keys=("advertiser_id", "account_id", "id"),
+                row_sources=(
+                    ("list", ("advertiser_id", "account_id", "id")),
+                    ("advertiser_ids", ()),
+                ),
+                fallback_sources=True,
                 base_url=DEFAULT_TOKEN_BASE_URL,
                 optional_permission_codes=(40002,),
             )
@@ -124,8 +125,10 @@ class QianchuanChannelAdapter(ChannelAdapter):
             return RoleExpansion(
                 path=QIANCHUAN_SHOP_ADVERTISER_PATH,
                 base_params={"shop_id": source_id, "permission": ["QC_AWEME"]},
-                list_key="list",
-                id_keys=("advertiser_id", "account_id", "id"),
+                row_sources=(
+                    ("adv_id_list", ("adv_id",)),
+                    ("list", ("advertiser_id", "account_id", "id")),
+                ),
             )
         if role in {"CUSTOMER_ADMIN", "CUSTOMER_OPERATOR"}:
             source_id = first_positive_id(account, ("account_id", "account_string_id"))
@@ -134,8 +137,7 @@ class QianchuanChannelAdapter(ChannelAdapter):
             return RoleExpansion(
                 path=CUSTOMER_CENTER_ADVERTISER_PATH,
                 base_params={"cc_account_id": source_id, "account_source": "QIANCHUAN"},
-                list_key="list",
-                id_keys=("advertiser_id", "account_id"),
+                row_sources=(("list", ("advertiser_id", "account_id")),),
             )
         if role in {
             "PLATFORM_ROLE_ENTERPRISE_BP_ADMIN",
@@ -150,8 +152,7 @@ class QianchuanChannelAdapter(ChannelAdapter):
                     "enterprise_organization_id": source_id,
                     "account_source": "QIANCHUAN",
                 },
-                list_key="account_list",
-                id_keys=("account_id", "advertiser_id"),
+                row_sources=(("account_list", ("account_id", "advertiser_id")),),
             )
         return None
 

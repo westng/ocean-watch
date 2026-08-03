@@ -300,7 +300,7 @@ def nonnegative_integer(value):
     return parsed
 
 
-def role_expansion_total_pages(data, rows, role):
+def role_expansion_page_info(data, rows, role, requested_page):
     page_info = data.get("page_info")
     if not isinstance(page_info, dict) or "total_page" not in page_info:
         raise RuntimeError(
@@ -312,13 +312,54 @@ def role_expansion_total_pages(data, rows, role):
             f"Malformed pagination metadata while expanding advertiser role {role}"
         )
 
-    if total_pages == 0:
+    has_page = "page" in page_info
+    if has_page:
+        response_page = nonnegative_integer(page_info.get("page"))
+        if response_page != requested_page and not (
+            requested_page == 1 and response_page == 0 and total_pages == 0
+        ):
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+
+    total_number = None
+    has_total_number = "total_number" in page_info
+    if has_total_number:
         total_number = nonnegative_integer(page_info.get("total_number"))
+        if total_number is None:
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+
+    if total_pages == 0:
         if rows or total_number != 0:
             raise RuntimeError(
                 f"Malformed pagination metadata while expanding advertiser role {role}"
             )
-    return total_pages
+    return total_pages, total_number, has_page, has_total_number
+
+
+def role_expansion_ids(data, expansion, role):
+    identifiers = []
+    for list_key, id_keys in expansion.row_sources:
+        rows = data.get(list_key) or []
+        if not isinstance(rows, list):
+            raise RuntimeError(
+                f"Malformed advertiser rows while expanding advertiser role {role}"
+            )
+        source_identifiers = response_ids(rows, id_keys)
+        if len(source_identifiers) != len(rows):
+            raise RuntimeError(
+                f"Malformed advertiser rows while expanding advertiser role {role}"
+            )
+        identifiers.extend(source_identifiers)
+        if expansion.fallback_sources and rows:
+            break
+    if len(identifiers) != len(set(identifiers)):
+        raise RuntimeError(
+            f"Duplicate advertiser IDs while expanding advertiser role {role}"
+        )
+    return identifiers
 
 
 def fetch_role_advertiser_ids(config, account):
@@ -340,8 +381,12 @@ def fetch_role_advertiser_ids(config, account):
         return [], {"role": role, "status": "unsupported_role", "count": 0}
 
     identifiers = []
+    seen_identifiers = set()
     page = 1
     expected_total_pages = None
+    expected_total_number = None
+    expected_has_page = None
+    expected_has_total_number = None
     while True:
         response = get_api_json(
             config,
@@ -359,9 +404,24 @@ def fetch_role_advertiser_ids(config, account):
                 in expansion.optional_permission_codes,
             }
         data = response.get("data") or {}
-        rows = data.get(expansion.list_key) or []
-        identifiers.extend(response_ids(rows, expansion.id_keys))
-        total_pages = role_expansion_total_pages(data, rows, role)
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"Malformed advertiser response while expanding advertiser role {role}"
+            )
+        page_identifiers = role_expansion_ids(data, expansion, role)
+        duplicate_ids = seen_identifiers.intersection(page_identifiers)
+        if duplicate_ids:
+            raise RuntimeError(
+                f"Duplicate advertiser IDs while expanding advertiser role {role}"
+            )
+        identifiers.extend(page_identifiers)
+        seen_identifiers.update(page_identifiers)
+        total_pages, total_number, has_page, has_total_number = role_expansion_page_info(
+            data,
+            page_identifiers,
+            role,
+            page,
+        )
         if total_pages > MAX_ROLE_EXPANSION_PAGES:
             raise RuntimeError(
                 "Advertiser role expansion exceeds the pagination safety cap: "
@@ -373,11 +433,33 @@ def fetch_role_advertiser_ids(config, account):
             raise RuntimeError(
                 f"Malformed pagination metadata while expanding advertiser role {role}"
             )
+        if expected_has_page is None:
+            expected_has_page = has_page
+        elif has_page != expected_has_page:
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+        if expected_has_total_number is None:
+            expected_has_total_number = has_total_number
+        elif has_total_number != expected_has_total_number:
+            raise RuntimeError(
+                f"Malformed pagination metadata while expanding advertiser role {role}"
+            )
+        if total_number is not None:
+            if expected_total_number is None:
+                expected_total_number = total_number
+            elif total_number != expected_total_number:
+                raise RuntimeError(
+                    f"Malformed pagination metadata while expanding advertiser role {role}"
+                )
         if page >= total_pages:
             break
         page += 1
-    unique_ids = list(dict.fromkeys(identifiers))
-    return unique_ids, {"role": role, "status": "ok", "count": len(unique_ids), "pages": page}
+    if expected_total_number is not None and len(identifiers) != expected_total_number:
+        raise RuntimeError(
+            f"Incomplete advertiser pagination while expanding advertiser role {role}"
+        )
+    return identifiers, {"role": role, "status": "ok", "count": len(identifiers), "pages": page}
 
 
 def verify_advertiser_ids(config, advertiser_ids):

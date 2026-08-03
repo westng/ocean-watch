@@ -25,8 +25,14 @@ Official docs:
 - Shop advertisers: `GET https://api.oceanengine.com/open_api/v1.0/qianchuan/shop/advertiser/list/`.
 - Agent advertisers: `GET https://ad.oceanengine.com/open_api/2/agent/advertiser/select/`.
 - `PLATFORM_ROLE_SHOP_ACCOUNT` expands with `shop_id` and `permission=["QC_AWEME"]`.
-- `PLATFORM_ROLE_QIANCHUAN_AGENT` uses the authorization subject as `advertiser_id`; `data.list` contains Qianchuan advertiser IDs.
+- Shop advertiser responses primarily expose `data.adv_id_list[].adv_id`; retain compatibility
+  with `data.list` without dropping the official field.
+- `PLATFORM_ROLE_QIANCHUAN_AGENT` uses the authorization subject as `advertiser_id`; prefer a
+  non-empty `data.list` and fall back to `data.advertiser_ids` when the list is empty.
 - Customer-center and EBP expansion use `account_source=QIANCHUAN`.
+- Traverse every declared expansion page. Validate response page numbers and stable pagination
+  totals when supplied, reject duplicate advertiser IDs, and require the final unique count to
+  equal `total_number` before persisting the authorization snapshot.
 - Candidate advertisers are verified through advertiser info in batches of 50 before persistence.
 - Missing optional agent permission error `40002` is a partial discovery result; other expansion failures remain blocking.
 
