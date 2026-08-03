@@ -140,6 +140,7 @@ type CommandService struct {
 	Create        CreateExecutor
 	Batch         BatchService
 	Remove        RemoveExecutor
+	Locks         sharedplans.AdvertiserLocker
 	Now           func() time.Time
 }
 
@@ -254,49 +255,63 @@ func (service CommandService) BatchWorks(
 		return BatchCommandResult{}, err
 	}
 	credentialsFinished := service.now()
-	cachedHints := map[string]OwnerHint{}
-	if service.OwnerHints != nil {
-		cachedHints, err = service.OwnerHints.Load(scopedContext, exported.AdvertiserID, resolvedWorkIDs(links.Resolved))
-		if err != nil {
-			cachedHints = map[string]OwnerHint{}
-			cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
-		}
+	if service.Locks == nil {
+		return BatchCommandResult{}, errors.New("Qianchuan batch advertiser lock is required")
 	}
-	linkHints := ownerHintsFromResolvedLinks(links.Resolved)
-	ownerHints := mergeOwnerHints(cachedHints, linkHints)
-	cachePerformance.Loaded = len(ownerHints)
-	cachePerformance.LoadedFromCache = len(cachedHints)
-	cachePerformance.LoadedFromLinkMetadata = len(linkHints)
-	verification, err := service.Verifier.Verify(scopedContext, WorkVerificationRequest{
-		AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
-		ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints),
+	var result BatchResult
+	var executeErr error
+	materialsFinished := credentialsFinished
+	scope := domainplans.WriteScope{
+		Channel: domainplans.ChannelQianchuan, AdvertiserID: exported.AdvertiserID,
+		LockFamily: domainplans.LockQianchuanWorks,
+	}
+	err = sharedplans.WithAdvertiserLock(scopedContext, service.Locks, scope, func(lockedContext context.Context) error {
+		cachedHints := map[string]OwnerHint{}
+		if service.OwnerHints != nil {
+			cachedHints, err = service.OwnerHints.Load(lockedContext, exported.AdvertiserID, resolvedWorkIDs(links.Resolved))
+			if err != nil {
+				cachedHints = map[string]OwnerHint{}
+				cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
+			}
+		}
+		linkHints := ownerHintsFromResolvedLinks(links.Resolved)
+		ownerHints := mergeOwnerHints(cachedHints, linkHints)
+		cachePerformance.Loaded = len(ownerHints)
+		cachePerformance.LoadedFromCache = len(cachedHints)
+		cachePerformance.LoadedFromLinkMetadata = len(linkHints)
+		verification, verifyErr := service.Verifier.Verify(lockedContext, WorkVerificationRequest{
+			AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
+			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints),
+		})
+		if verifyErr != nil {
+			return verifyErr
+		}
+		cachePerformance.OwnerHintSummary = verification.OwnerHintSummary
+		if service.OwnerHints != nil {
+			stored, storeErr := service.OwnerHints.Store(lockedContext, exported.AdvertiserID, verification.ResolvedOwnerHints)
+			if storeErr != nil {
+				if cachePerformance.Warning == nil {
+					cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_write_failed", storeErr)
+				}
+			} else {
+				cachePerformance.Stored = stored
+			}
+		}
+		materialsFinished = service.now()
+		baseRequest.ReadAccessToken = lease.AccessToken
+		baseRequest.Works = verification.Matched
+		baseRequest.Skipped = append(baseRequest.Skipped, verification.Skipped...)
+		baseRequest.QueryFailures = verification.QueryFailures
+		batch := service.Batch
+		if command.Submit {
+			batch.Guard.Credentials = commandLeaseCredentials{lease: lease, advertiserID: exported.AdvertiserID}
+		}
+		result, executeErr = batch.Execute(lockedContext, baseRequest)
+		return executeErr
 	})
-	if err != nil {
+	if err != nil && executeErr == nil {
 		return BatchCommandResult{}, err
 	}
-	cachePerformance.OwnerHintSummary = verification.OwnerHintSummary
-	if service.OwnerHints != nil {
-		stored, storeErr := service.OwnerHints.Store(scopedContext, exported.AdvertiserID, verification.ResolvedOwnerHints)
-		if storeErr != nil {
-			if cachePerformance.Warning == nil {
-				cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_write_failed", storeErr)
-			}
-		} else {
-			cachePerformance.Stored = stored
-		}
-	}
-	materialsFinished := service.now()
-	baseRequest.ReadAccessToken = lease.AccessToken
-	baseRequest.Works = verification.Matched
-	baseRequest.Skipped = append(baseRequest.Skipped, verification.Skipped...)
-	baseRequest.QueryFailures = verification.QueryFailures
-	batch := service.Batch
-	if command.Submit {
-		batch.Guard.Credentials = commandLeaseCredentials{
-			lease: lease, advertiserID: exported.AdvertiserID,
-		}
-	}
-	result, executeErr := batch.Execute(scopedContext, baseRequest)
 	finished := service.now()
 	return BatchCommandResult{
 		BatchResult: result,
@@ -352,11 +367,24 @@ func (service CommandService) RemoveWorks(
 			lease: lease, advertiserID: strings.TrimSpace(command.AdvertiserID),
 		}
 	}
-	return executor.Execute(scopedContext, RemoveCommand{
-		AdvertiserID: command.AdvertiserID, AuthAccountID: command.AuthAccountID,
-		ReadAccessToken: lease.AccessToken, AdID: command.AdID, Submit: command.Submit,
-		ConfirmDelete: command.ConfirmDelete, Works: works, SkippedLinks: qianchuanSkippedLinks(links.Skipped),
+	if service.Locks == nil {
+		return RemoveResult{}, errors.New("Qianchuan material removal advertiser lock is required")
+	}
+	var result RemoveResult
+	scope := domainplans.WriteScope{
+		Channel: domainplans.ChannelQianchuan, AdvertiserID: strings.TrimSpace(command.AdvertiserID),
+		LockFamily: domainplans.LockQianchuanWorks,
+	}
+	err = sharedplans.WithAdvertiserLock(scopedContext, service.Locks, scope, func(lockedContext context.Context) error {
+		var executeErr error
+		result, executeErr = executor.Execute(lockedContext, RemoveCommand{
+			AdvertiserID: command.AdvertiserID, AuthAccountID: command.AuthAccountID,
+			ReadAccessToken: lease.AccessToken, AdID: command.AdID, Submit: command.Submit,
+			ConfirmDelete: command.ConfirmDelete, Works: works, SkippedLinks: qianchuanSkippedLinks(links.Skipped),
+		})
+		return executeErr
 	})
+	return result, err
 }
 
 func (service CommandService) createPayload(
@@ -429,7 +457,7 @@ func (service CommandService) readLease(
 	if err != nil {
 		return authapplication.TokenLease{}, nil, err
 	}
-	scoped, err := authapplication.WithTokenLease(ctx, lease)
+	scoped, err := authapplication.WithAdvertiserTokenLease(ctx, lease, strings.TrimSpace(advertiserID))
 	if err != nil {
 		return authapplication.TokenLease{}, nil, err
 	}
@@ -537,10 +565,17 @@ func qianchuanWorkInputs(values []domain.ResolvedWorkLink, hints map[string]Owne
 		}
 		result = append(result, WorkInput{
 			InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
-			OwnerHint: hint,
+			OwnerHint: hint, ProductIDHint: resolvedProductHint(value),
 		})
 	}
 	return result
+}
+
+func resolvedProductHint(value domain.ResolvedWorkLink) string {
+	if value.ProductHint == nil {
+		return ""
+	}
+	return strings.TrimSpace(value.ProductHint.ProductID)
 }
 
 func filterLinkProductHints(

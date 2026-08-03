@@ -190,6 +190,7 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
                     client,
                     retry_delays=(1, 2),
                     sleep_fn=sleeps.append,
+                    jitter_fn=lambda delay: delay,
                 )
 
                 result = gateway.list_product_plans(
@@ -215,6 +216,7 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             client,
             retry_delays=(1, 2),
             sleep_fn=sleeps.append,
+            jitter_fn=lambda delay: delay,
         )
 
         detail = gateway.get_plan_detail("1234567890123456", "7001")
@@ -233,6 +235,7 @@ class QianchuanPlanGatewayTests(unittest.TestCase):
             client,
             retry_delays=(0,),
             sleep_fn=lambda _delay: None,
+            jitter_fn=lambda delay: delay,
         )
 
         detail = gateway.get_plan_detail("1234567890123456", "7001")

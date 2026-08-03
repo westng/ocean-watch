@@ -254,6 +254,26 @@ def _is_timeout_error(error):
     return isinstance(reason, (TimeoutError, socket.timeout))
 
 
+def _business_payload(response):
+    if not isinstance(response, dict):
+        return None
+    if "code" in response:
+        return response
+    result = response.get("result")
+    if not isinstance(result, dict):
+        return None
+    for item in result.get("content") or []:
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        try:
+            payload = json.loads(item.get("text"))
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
 class StreamableHttpMcpClient:
     """Minimal MCP client for Ocean Engine's official Streamable HTTP server."""
 
@@ -268,6 +288,7 @@ class StreamableHttpMcpClient:
         opener=None,
         client_name="ocean-watch",
         client_version=__version__,
+        request_throttle=None,
     ):
         parsed = urlparse(str(endpoint))
         if parsed.scheme != "https" or parsed.hostname != OFFICIAL_MCP_HOST:
@@ -292,6 +313,7 @@ class StreamableHttpMcpClient:
         self.opener = opener or default_opener
         self.client_name = client_name
         self.client_version = client_version
+        self.request_throttle = request_throttle
         self.session_id = None
         self.initialized = False
         self._request_id = 0
@@ -320,7 +342,11 @@ class StreamableHttpMcpClient:
         except (TypeError, ValueError):
             pass
         expected_id = payload.get("id") if isinstance(payload, dict) else None
+        throttle_acquired = False
         try:
+            if self.request_throttle is not None:
+                self.request_throttle.acquire()
+                throttle_acquired = True
             with self.opener(request, timeout=self.timeout) as response:
                 session_id = _response_header(response, "Mcp-Session-Id")
                 if session_id:
@@ -338,6 +364,11 @@ class StreamableHttpMcpClient:
                     raise ApiError("Official MCP returned an empty response")
                 if expected_id is not None:
                     decoded = _validate_json_rpc_response(decoded, expected_id)
+                if self.request_throttle is not None:
+                    self.request_throttle.observe(
+                        _business_payload(decoded),
+                        headers=getattr(response, "headers", None),
+                    )
                 return decoded
         except urllib.error.HTTPError as exc:
             decoded = None
@@ -351,6 +382,11 @@ class StreamableHttpMcpClient:
             except (ApiError, OSError, TimeoutError):
                 pass
             status = exc.code
+            if self.request_throttle is not None:
+                self.request_throttle.observe(
+                    {"http_status": status},
+                    headers=exc.headers,
+                )
             details = {
                 "transport_error": "http",
                 "http_status": status,
@@ -379,6 +415,9 @@ class StreamableHttpMcpClient:
                 "Unable to connect to the official Qianchuan MCP",
                 {"transport_error": "connection", "retryable": True},
             ) from exc
+        finally:
+            if throttle_acquired:
+                self.request_throttle.release()
 
     def _next_id(self):
         self._request_id += 1

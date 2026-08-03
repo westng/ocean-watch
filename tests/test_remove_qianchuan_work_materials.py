@@ -111,10 +111,33 @@ class RemoveQianchuanWorkMaterialTests(unittest.TestCase):
 
     def test_dry_run_maps_work_to_nested_material_id_without_writing(self):
         client = FakeClient([material(101, 8001)])
-        result, exit_code = self.execute(arguments(101), client)
+        lock_state = {"held": False, "entered": 0}
+
+        class TrackingLock:
+            def __enter__(self):
+                lock_state["held"] = True
+                lock_state["entered"] += 1
+
+            def __exit__(self, *_args):
+                lock_state["held"] = False
+
+        original_get = client.get
+
+        def guarded_get(path, params=None):
+            self.assertTrue(lock_state["held"])
+            return original_get(path, params)
+
+        client.get = guarded_get
+        result, exit_code = remove_work.execute(
+            arguments(101),
+            client=client,
+            lock_factory=lambda _path: TrackingLock(),
+        )
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["results"][0]["status"], "would_delete")
         self.assertEqual(result["results"][0]["material_id"], "8001")
+        self.assertEqual(lock_state["entered"], 1)
+        self.assertFalse(lock_state["held"])
         self.assertFalse(any(method == "POST" for method, _, _ in client.calls))
 
     def test_submit_deletes_custom_material_and_verifies_status(self):

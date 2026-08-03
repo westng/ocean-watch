@@ -84,7 +84,7 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - `search_key_words` searches the visible Douyin ID or creator name. The plugin requires an exact local `aweme_show_id` match and uses the returned numeric `aweme_id`.
 - Product-filtered creator videos: `GET https://ad.oceanengine.com/open_api/v1.0/qianchuan/file/video/aweme/get/`.
 - The video request requires `advertiser_id`, numeric `aweme_id`, and supports `filtering.product_id`, cursor pagination, and `count` from 1 to 50.
-- Query template products separately and deduplicate works while preserving every matched product ID.
+- Query template products separately and deduplicate works while preserving every matched product ID. When a link supplies a template-matching product hint, verify that work only against the hinted product; the hint narrows the official query but never replaces it.
 - Creator identity and material results are runtime data. They never belong in a Qianchuan product template.
 
 ## Products, Plans, Materials, And Updates
@@ -103,6 +103,9 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - `/v1.0/qianchuan/file/video/aweme/get/` accepts up to 50 `filtering.aweme_item_ids` and an optional `filtering.product_id`. Resolve creator ownership first, then verify each template product.
 - `/v1.0/qianchuan/uni_promotion/list/` uses `marketing_goal=VIDEO_PROM_GOODS`, `filtering.status=ALL`, and `adlab_scene=UNI_PROJECT`. `ALL` includes paused plans and excludes deleted plans.
 - Plan-list `start_time` and `end_time` are required data-period fields and do not filter plan creation time; creation dates have separate optional fields. Batch work-link reconciliation queries the current local day (`00:00:00` through `23:59:59`) because it only decides whether to create a plan or append materials, and traverses every declared page for that day.
+- One batch command scans the current-day plan list once after grouping all verified works, independent of input-link or creator count. A transient page failure retries only that page with jittered backoff; `40100` or HTTP `429` also activates the shared command cooldown and honors `Retry-After` when present.
+- Dry-run and submit serialize the complete official-query phase per advertiser. Both Qianchuan API base clients share the same request throttle and hard command budget so concurrent material checks cannot burst immediately into plan reconciliation. Official traffic is single-in-flight per advertiser across endpoints and Plugin processes, uses a 250 ms minimum dispatch interval, and shares bounded `40100`/HTTP 429 cooldown state between Python and Go.
+- Batch creation/append and work-material removal each have a hard 512-attempt budget; retries consume the same budget and exhaustion fails before dispatch. Batch create/append, deletion reconciliation, plan creation, and plan-setting mutations share the `qianchuan-advertiser-{advertiser_id}.lock`; batch and deletion dry-runs also hold it during official reads and reconciliation.
 - Plan detail returns exact `aweme_id`, `product_infos`, status, and operation status. Never choose among multiple exact creator matches.
 - Plan-list `room_info.anchor_id` is the visible Douyin ID, not the numeric detail `aweme_id`. Candidate reconciliation must carry both identifiers and use plan detail for the final numeric identity check.
 - Plan material list returns `material_info.video_material.aweme_item_id`; query `material_status=ALL` and deduplicate before any write.

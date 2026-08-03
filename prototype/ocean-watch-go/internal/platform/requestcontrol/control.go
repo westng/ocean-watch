@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	DefaultAuthorizationConcurrency = 4
-	DefaultEndpointConcurrency      = 4
-	DefaultCommandRequestLimit      = int64(4096)
+	DefaultAuthorizationConcurrency   = 4
+	DefaultEndpointConcurrency        = 4
+	QianchuanAuthorizationConcurrency = 1
+	QianchuanMinimumRequestInterval   = 250 * time.Millisecond
+	QianchuanRateLimitCooldown        = 5 * time.Second
+	DefaultCommandRequestLimit        = int64(4096)
 )
 
 var (
@@ -28,11 +31,36 @@ const (
 	authorizationContextKey contextKey = iota
 	budgetContextKey
 	metricsContextKey
+	advertiserContextKey
 )
 
 type AuthorizationScope struct {
 	Channel         string
 	AuthorizationID string
+}
+
+func WithAdvertiser(ctx context.Context, advertiserID string) (context.Context, error) {
+	if ctx == nil {
+		return nil, errors.New("request context is required")
+	}
+	advertiserID = strings.TrimSpace(advertiserID)
+	if advertiserID == "" || len(advertiserID) > 64 || advertiserID[0] == '0' {
+		return nil, errors.New("request advertiser identity is invalid")
+	}
+	for _, character := range advertiserID {
+		if character < '0' || character > '9' {
+			return nil, errors.New("request advertiser identity is invalid")
+		}
+	}
+	return context.WithValue(ctx, advertiserContextKey, advertiserID), nil
+}
+
+func Advertiser(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	advertiserID, ok := ctx.Value(advertiserContextKey).(string)
+	return advertiserID, ok && advertiserID != ""
 }
 
 func WithAuthorization(
@@ -320,7 +348,11 @@ func (governor *Governor) slots(
 	defer governor.mu.Unlock()
 	authorizationSlot := governor.authorizations[authorization]
 	if authorizationSlot == nil {
-		authorizationSlot = make(chan struct{}, governor.limits.AuthorizationConcurrency)
+		capacity := governor.limits.AuthorizationConcurrency
+		if authorization.channel == "qianchuan" {
+			capacity = QianchuanAuthorizationConcurrency
+		}
+		authorizationSlot = make(chan struct{}, capacity)
 		governor.authorizations[authorization] = authorizationSlot
 	}
 	endpointSlot := governor.endpoints[endpoint]

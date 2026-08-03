@@ -4,13 +4,12 @@ import datetime as dt
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
 
 import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import QianchuanClientFactory, qianchuan_advertiser_lock_path
 from ocean_watch.core.data import get_path
 from ocean_watch.core.output import write_json
 from ocean_watch.core.process_lock import ProcessLock
@@ -37,6 +36,8 @@ from ocean_watch.templates import qianchuan_product_templates
 MAX_MATERIALS_PER_WRITE = 100
 VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
 DEFAULT_QIANCHUAN_CONCURRENCY = 8
+BATCH_LOCK_TIMEOUT_SECONDS = 600
+BATCH_REQUEST_LIMIT = 512
 BATCH_PRESENTATION_COLUMNS = (
     ("ad_id", "计划ID"),
     ("creator_name", "达人昵称"),
@@ -670,7 +671,7 @@ def summarize(mode, template, link_result, material_result, group_results, unsup
     }
 
 
-def execute(args, *, link_resolver=None, clients=None, now=None):
+def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=ProcessLock):
     started_at = time.monotonic()
     concurrency = validate_concurrency(args.concurrency)
     if not args.work_url:
@@ -725,80 +726,89 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
                 "configured": metadata_configured,
                 "enabled": metadata_enabled,
             },
+            "request_budget": {
+                "limit": BATCH_REQUEST_LIMIT,
+                "used": 0,
+                "remaining": BATCH_REQUEST_LIMIT,
+            },
         }
         return result, 0
 
     advertiser_id = template["bindings"]["advertiser_id"]
-    if clients is None:
-        runtime = channels.runtime_config(
-            raw_config,
-            channel="qianchuan",
-            capability="qianchuan_create",
-        )
-        runtime = token_manager.ensure_access_token(
-            config_path,
-            runtime,
-            channel="qianchuan",
-            advertiser_id=advertiser_id,
-            auth_account_id=args.auth_account_id,
-        )
-        api_client = OceanEngineClient(
-            get_path(runtime, "api.base_url"),
-            get_path(runtime, "api.access_token"),
-        )
-        video_client = OceanEngineClient(
-            get_path(runtime, "api.legacy_base_url")
-            or get_path(runtime, "oauth.token_base_url"),
-            get_path(runtime, "api.access_token"),
-        )
-    else:
-        api_client, video_client = clients
-
-    cached_owner_hints = qianchuan_work_owner_cache.load_owner_hints(
-        advertiser_id,
-        [row["aweme_item_id"] for row in link_result["resolved"]],
-    )
-    link_owner_hints = {
-        row["aweme_item_id"]: row["owner_hint"]
-        for row in link_result["resolved"]
-        if row.get("owner_hint")
-    }
-    owner_hints = {**cached_owner_hints, **link_owner_hints}
-    material_started_at = time.monotonic()
-    material_result = resolve_work_materials(
-        api_client,
-        video_client,
-        advertiser_id,
-        template["bindings"]["product_ids"],
-        link_result["resolved"],
-        concurrency=concurrency,
-        owner_hints=owner_hints,
-    )
-    cache_write_count = 0
-    cache_warning = None
-    try:
-        cache_write_count = qianchuan_work_owner_cache.update_owner_hints(
+    lock = lock_factory(
+        qianchuan_advertiser_lock_path(
+            authorization_store.state_root(),
             advertiser_id,
-            material_result.get("resolved_owner_hints"),
-        )
-    except (OSError, TimeoutError) as error:
-        cache_warning = {
-            "code": "owner_hint_cache_write_failed",
-            "message": str(error)[:256],
-        }
-    material_finished_at = time.monotonic()
-    gateway = QianchuanPlanGateway(api_client)
-    plan_executor = QianchuanPlanExecutor(api_client)
-    lock = (
-        ProcessLock(
-            authorization_store.state_root()
-            / "locks"
-            / f"qianchuan-work-plans-{advertiser_id}.lock"
-        )
-        if args.submit
-        else nullcontext()
+        ),
+        timeout=BATCH_LOCK_TIMEOUT_SECONDS,
     )
     with lock:
+        client_factory = None
+        if clients is None:
+            runtime = channels.runtime_config(
+                raw_config,
+                channel="qianchuan",
+                capability="qianchuan_create",
+            )
+            runtime = token_manager.ensure_access_token(
+                config_path,
+                runtime,
+                channel="qianchuan",
+                advertiser_id=advertiser_id,
+                auth_account_id=args.auth_account_id,
+            )
+            client_factory = QianchuanClientFactory(
+                authorization_store.state_root(),
+                advertiser_id,
+                request_limit=BATCH_REQUEST_LIMIT,
+            )
+            api_client = client_factory.client(
+                get_path(runtime, "api.base_url"),
+                get_path(runtime, "api.access_token"),
+            )
+            video_client = client_factory.client(
+                get_path(runtime, "api.legacy_base_url")
+                or get_path(runtime, "oauth.token_base_url"),
+                get_path(runtime, "api.access_token"),
+            )
+        else:
+            api_client, video_client = clients
+
+        cached_owner_hints = qianchuan_work_owner_cache.load_owner_hints(
+            advertiser_id,
+            [row["aweme_item_id"] for row in link_result["resolved"]],
+        )
+        link_owner_hints = {
+            row["aweme_item_id"]: row["owner_hint"]
+            for row in link_result["resolved"]
+            if row.get("owner_hint")
+        }
+        owner_hints = {**cached_owner_hints, **link_owner_hints}
+        material_started_at = time.monotonic()
+        material_result = resolve_work_materials(
+            api_client,
+            video_client,
+            advertiser_id,
+            template["bindings"]["product_ids"],
+            link_result["resolved"],
+            concurrency=concurrency,
+            owner_hints=owner_hints,
+        )
+        cache_write_count = 0
+        cache_warning = None
+        try:
+            cache_write_count = qianchuan_work_owner_cache.update_owner_hints(
+                advertiser_id,
+                material_result.get("resolved_owner_hints"),
+            )
+        except (OSError, TimeoutError) as error:
+            cache_warning = {
+                "code": "owner_hint_cache_write_failed",
+                "message": str(error)[:256],
+            }
+        material_finished_at = time.monotonic()
+        gateway = QianchuanPlanGateway(api_client)
+        plan_executor = QianchuanPlanExecutor(api_client)
         group_results, unsupported = execute_plan_actions(
             template,
             material_result["matched"],
@@ -845,6 +855,15 @@ def execute(args, *, link_resolver=None, clients=None, now=None):
             "configured": metadata_configured,
             "enabled": metadata_enabled,
         },
+        "request_budget": (
+            client_factory.budget_snapshot()
+            if client_factory is not None
+            else {
+                "limit": BATCH_REQUEST_LIMIT,
+                "used": 0,
+                "remaining": BATCH_REQUEST_LIMIT,
+            }
+        ),
     }
     failed = bool(material_result["query_failures"]) or any(
         row["status"] in {

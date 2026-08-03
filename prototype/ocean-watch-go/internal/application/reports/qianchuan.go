@@ -214,7 +214,7 @@ func (service Service) MaterialReport(ctx context.Context, query MaterialQuery) 
 	if err != nil {
 		return MaterialResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return MaterialResult{}, err
 	}
@@ -280,7 +280,7 @@ func (service Service) PlanReport(ctx context.Context, query PlanQuery) (PlanRes
 	if err != nil {
 		return PlanResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return PlanResult{}, err
 	}

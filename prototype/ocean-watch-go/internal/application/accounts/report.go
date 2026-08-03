@@ -9,6 +9,7 @@ import (
 
 	authapplication "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/auth"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
+	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 const (
@@ -158,6 +159,12 @@ func (reporter Reporter) queryAccount(
 	ctx, err = authapplication.WithTokenLease(ctx, lease)
 	if err != nil {
 		return failedRow(account, err)
+	}
+	if account.Channel == domain.Qianchuan {
+		ctx, err = requestcontrol.WithAdvertiser(ctx, account.AdvertiserID)
+		if err != nil {
+			return failedRow(account, err)
+		}
 	}
 	adapter := reporter.Marketing
 	if account.Channel == domain.Qianchuan {

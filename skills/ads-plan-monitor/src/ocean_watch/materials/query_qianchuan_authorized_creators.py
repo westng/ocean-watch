@@ -5,7 +5,8 @@ import json
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import QianchuanClientFactory
+from ocean_watch.auth import authorization_store
 from ocean_watch.core.data import get_path
 from ocean_watch.core.output import write_json
 from ocean_watch.materials.qianchuan_creator_accounts import list_authorized_awemes
@@ -38,7 +39,10 @@ def main(argv=None):
         advertiser_id=args.advertiser_id,
         auth_account_id=args.auth_account_id,
     )
-    client = OceanEngineClient(
+    client = QianchuanClientFactory(
+        authorization_store.state_root(),
+        args.advertiser_id,
+    ).client(
         get_path(runtime, "api.base_url"),
         get_path(runtime, "api.access_token"),
     )

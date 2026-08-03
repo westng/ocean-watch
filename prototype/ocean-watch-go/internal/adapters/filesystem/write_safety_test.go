@@ -367,11 +367,11 @@ func TestAdvertiserLockNamesMatchPythonProtocol(t *testing.T) {
 		},
 		{
 			scope: domainplans.WriteScope{Channel: domainplans.ChannelQianchuan, AdvertiserID: "456", LockFamily: domainplans.LockQianchuanWorks},
-			name:  "qianchuan-work-plans-456.lock",
+			name:  "qianchuan-advertiser-456.lock",
 		},
 		{
 			scope: domainplans.WriteScope{Channel: domainplans.ChannelQianchuan, AdvertiserID: "789", LockFamily: domainplans.LockPlanSettings},
-			name:  "qianchuan-plan-settings-789.lock",
+			name:  "qianchuan-advertiser-789.lock",
 		},
 	}
 	for _, testCase := range tests {
@@ -382,6 +382,24 @@ func TestAdvertiserLockNamesMatchPythonProtocol(t *testing.T) {
 		if name != testCase.name {
 			t.Fatalf("got %q, want %q", name, testCase.name)
 		}
+	}
+}
+
+func TestQianchuanWriteFamiliesShareAdvertiserLock(t *testing.T) {
+	works, err := advertiserLockName(domainplans.WriteScope{
+		Channel: domainplans.ChannelQianchuan, AdvertiserID: "456", LockFamily: domainplans.LockQianchuanWorks,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := advertiserLockName(domainplans.WriteScope{
+		Channel: domainplans.ChannelQianchuan, AdvertiserID: "456", LockFamily: domainplans.LockPlanSettings,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if works != settings || works != "qianchuan-advertiser-456.lock" {
+		t.Fatalf("Qianchuan lock families diverged: works=%q settings=%q", works, settings)
 	}
 }
 

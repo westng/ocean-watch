@@ -147,6 +147,8 @@ class QianchuanPlanReportTests(unittest.TestCase):
             top=10,
             status="ALL",
         )
+        throttle = client_class.call_args.kwargs["request_throttle"]
+        self.assertEqual(throttle.state_path.name, "qianchuan-1234567890123456.json")
         write_json.assert_called_once_with(result, None)
 
     def test_uses_report_values_without_guessing_scale_and_builds_weighted_summary(self):

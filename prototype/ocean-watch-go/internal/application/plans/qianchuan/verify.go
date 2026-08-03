@@ -17,10 +17,11 @@ const (
 )
 
 type WorkInput struct {
-	InputIndex  int        `json:"input_index"`
-	InputURL    string     `json:"input_url,omitempty"`
-	AwemeItemID string     `json:"aweme_item_id,omitempty"`
-	OwnerHint   *OwnerHint `json:"owner_hint,omitempty"`
+	InputIndex    int        `json:"input_index"`
+	InputURL      string     `json:"input_url,omitempty"`
+	AwemeItemID   string     `json:"aweme_item_id,omitempty"`
+	OwnerHint     *OwnerHint `json:"owner_hint,omitempty"`
+	ProductIDHint string     `json:"product_id_hint,omitempty"`
 }
 
 type VerifiedWork struct {
@@ -262,22 +263,24 @@ func (verifier WorkVerifier) Verify(
 	}
 	matches := map[string]domainqianchuan.CreatorVideo{}
 	matchedProducts := map[string]map[string]struct{}{}
-	failedProducts := map[string]bool{}
+	failedProductWorks := map[string]bool{}
 	for _, creatorID := range resolvedCreatorOrder {
 		creator := creatorsByID[creatorID]
 		creatorWorks := worksByCreator[creatorID]
 		if len(creatorWorks) == 0 {
 			continue
 		}
-		ids := workInputIDs(creatorWorks)
+		idsByProduct := workIDsByProductHint(creatorWorks, productIDs)
 		for _, productID := range productIDs {
-			for _, batch := range stringBatches(ids, WorkQueryBatchSize) {
+			for _, batch := range stringBatches(idsByProduct[productID], WorkQueryBatchSize) {
 				result.ProductQueryCount++
 				videos, fetchErr := verifier.queryWorks(
 					ctx, request, creator.AwemeID, productID, batch,
 				)
 				if fetchErr != nil {
-					failedProducts[creator.AwemeID] = true
+					for _, itemID := range batch {
+						failedProductWorks[itemID] = true
+					}
 					result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
 						AwemeID: creator.AwemeID, ProductID: productID, Message: fetchErr.Error(),
 					})
@@ -307,7 +310,7 @@ func (verifier WorkVerifier) Verify(
 		productSet := matchedProducts[work.AwemeItemID]
 		if len(productSet) == 0 {
 			reason, message := "product_mismatch", "作品与模板绑定商品不匹配"
-			if failedProducts[owner.Creator.AwemeID] {
+			if failedProductWorks[work.AwemeItemID] {
 				reason, message = "product_query_incomplete", "作品商品复核不完整，未将作品视为商品不匹配"
 			}
 			result.Skipped = append(result.Skipped, skippedFromWork(work, reason, message, nil))
@@ -433,6 +436,7 @@ func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork) {
 	for index, value := range values {
 		value.InputURL = strings.TrimSpace(value.InputURL)
 		value.AwemeItemID = strings.TrimSpace(value.AwemeItemID)
+		value.ProductIDHint = strings.TrimSpace(value.ProductIDHint)
 		if value.InputIndex < 0 {
 			value.InputIndex = index
 		}
@@ -568,6 +572,21 @@ func workInputIDs(works []WorkInput) []string {
 	result := make([]string, len(works))
 	for index, work := range works {
 		result[index] = work.AwemeItemID
+	}
+	return result
+}
+
+func workIDsByProductHint(works []WorkInput, productIDs []string) map[string][]string {
+	result := make(map[string][]string, len(productIDs))
+	allowed := stringSetFrom(productIDs)
+	for _, work := range works {
+		if _, valid := allowed[work.ProductIDHint]; work.ProductIDHint != "" && valid {
+			result[work.ProductIDHint] = append(result[work.ProductIDHint], work.AwemeItemID)
+			continue
+		}
+		for _, productID := range productIDs {
+			result[productID] = append(result[productID], work.AwemeItemID)
+		}
 	}
 	return result
 }

@@ -384,7 +384,9 @@ func (runner Runner) runQianchuanRead(
 		factory := runtime.ClientFactory
 		if factory == nil {
 			var err error
-			factory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{})
+			factory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{
+				SharedQianchuanControl: filesystem.QianchuanRequestController{Root: stateRoot},
+			})
 			if err != nil {
 				WriteDomainError(stdout, domain.NewError("unexpected_error", err.Error(), 1, nil))
 				return 1

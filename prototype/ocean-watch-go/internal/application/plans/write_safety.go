@@ -38,6 +38,43 @@ type JournalScopeLocker interface {
 	AcquireScope(context.Context, string) (func() error, error)
 }
 
+type advertiserLockContextKey struct{}
+
+func WithAdvertiserLock(
+	ctx context.Context,
+	locks AdvertiserLocker,
+	scope domainplans.WriteScope,
+	action func(context.Context) error,
+) error {
+	if ctx == nil {
+		return errors.New("advertiser lock context is required")
+	}
+	if locks == nil || action == nil {
+		return errors.New("advertiser lock dependencies are incomplete")
+	}
+	if err := scope.Validate(); err != nil {
+		return err
+	}
+	if advertiserLockHeld(ctx, scope) {
+		return action(ctx)
+	}
+	release, err := locks.Acquire(ctx, scope)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = release() }()
+	locked := context.WithValue(ctx, advertiserLockContextKey{}, scope)
+	return action(locked)
+}
+
+func advertiserLockHeld(ctx context.Context, scope domainplans.WriteScope) bool {
+	if ctx == nil {
+		return false
+	}
+	held, ok := ctx.Value(advertiserLockContextKey{}).(domainplans.WriteScope)
+	return ok && held.Channel == scope.Channel && held.AdvertiserID == scope.AdvertiserID
+}
+
 type GuardedMutation struct {
 	Scope         domainplans.WriteScope
 	AuthAccountID string
@@ -114,14 +151,18 @@ func (executor GuardedExecutor) Execute(
 	if err != nil {
 		return MutationResult{}, err
 	}
-	release, err := executor.Locks.Acquire(ctx, request.Scope)
+	ctx, err = requestcontrol.WithAdvertiser(ctx, request.Scope.AdvertiserID)
 	if err != nil {
 		return MutationResult{}, err
 	}
-	defer func() { _ = release() }()
-	value, err := action(ctx, MutationExecution{
-		Capability: capability, AuthorizationID: lease.AuthorizationID,
-		AccessToken: lease.AccessToken, Dispatcher: NewOnceDispatcher(request.Scope),
+	var value any
+	err = WithAdvertiserLock(ctx, executor.Locks, request.Scope, func(locked context.Context) error {
+		var actionErr error
+		value, actionErr = action(locked, MutationExecution{
+			Capability: capability, AuthorizationID: lease.AuthorizationID,
+			AccessToken: lease.AccessToken, Dispatcher: NewOnceDispatcher(request.Scope),
+		})
+		return actionErr
 	})
 	if err != nil {
 		return MutationResult{Mode: "submit", Value: value}, err

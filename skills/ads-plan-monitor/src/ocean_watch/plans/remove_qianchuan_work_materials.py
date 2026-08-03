@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import json
-from contextlib import nullcontext
 
 import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import QianchuanClientFactory, qianchuan_advertiser_lock_path
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError, ConfigurationError
 from ocean_watch.core.output import write_json
@@ -23,6 +22,7 @@ from ocean_watch.plans.qianchuan_plan_gateway import (
 )
 
 MAX_MATERIALS_PER_DELETE = 100
+REMOVE_REQUEST_LIMIT = 512
 CUSTOM_MATERIAL = "CUSTOM"
 DELETED_STATUS = "DELETED"
 MULTI_BINDING_DELETE_NOTICE = (
@@ -314,20 +314,21 @@ def execute(args, *, link_resolver=None, client=None, lock_factory=ProcessLock):
             advertiser_id=advertiser_id,
             auth_account_id=args.auth_account_id,
         )
-        client = OceanEngineClient(
+        client = QianchuanClientFactory(
+            authorization_store.state_root(),
+            advertiser_id,
+            request_limit=REMOVE_REQUEST_LIMIT,
+        ).client(
             get_path(runtime, "api.base_url"),
             get_path(runtime, "api.access_token"),
         )
 
     gateway = QianchuanPlanGateway(client)
-    lock = (
-        lock_factory(
-            authorization_store.state_root()
-            / "locks"
-            / f"qianchuan-work-plans-{advertiser_id}.lock"
+    lock = lock_factory(
+        qianchuan_advertiser_lock_path(
+            authorization_store.state_root(),
+            advertiser_id,
         )
-        if args.submit
-        else nullcontext()
     )
     with lock:
         plan = gateway.get_plan_detail(advertiser_id, ad_id)

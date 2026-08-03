@@ -1,6 +1,8 @@
 package oceanengine
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +23,7 @@ const (
 	OAuthHost             = "ad.oceanengine.com"
 	DefaultRequestTimeout = 30 * time.Second
 	DefaultMaxResponse    = int64(8 << 20)
+	qianchuanEnvelopePeek = 64 << 10
 )
 
 type HostProfile string
@@ -46,18 +49,20 @@ type ClientProfile struct {
 }
 
 type FactoryOptions struct {
-	TransportFactory func(HostProfile) http.RoundTripper
-	MaxResponseBytes int64
-	RequestGovernor  *requestcontrol.Governor
-	RequestLimits    requestcontrol.Limits
+	TransportFactory       func(HostProfile) http.RoundTripper
+	MaxResponseBytes       int64
+	RequestGovernor        *requestcontrol.Governor
+	RequestLimits          requestcontrol.Limits
+	SharedQianchuanControl requestcontrol.SharedController
 }
 
 type ClientFactory struct {
-	mu               sync.Mutex
-	clients          map[clientKey]*Client
-	transportFactory func(HostProfile) http.RoundTripper
-	maxResponseBytes int64
-	requestGovernor  *requestcontrol.Governor
+	mu                     sync.Mutex
+	clients                map[clientKey]*Client
+	transportFactory       func(HostProfile) http.RoundTripper
+	maxResponseBytes       int64
+	requestGovernor        *requestcontrol.Governor
+	sharedQianchuanControl requestcontrol.SharedController
 }
 
 type clientKey struct {
@@ -121,10 +126,11 @@ func NewClientFactory(options FactoryOptions) (*ClientFactory, error) {
 		}
 	}
 	return &ClientFactory{
-		clients:          map[clientKey]*Client{},
-		transportFactory: transportFactory,
-		maxResponseBytes: maxResponseBytes,
-		requestGovernor:  governor,
+		clients:                map[clientKey]*Client{},
+		transportFactory:       transportFactory,
+		maxResponseBytes:       maxResponseBytes,
+		requestGovernor:        governor,
+		sharedQianchuanControl: options.SharedQianchuanControl,
 	}, nil
 }
 
@@ -157,6 +163,7 @@ func (factory *ClientFactory) Client(
 	client := newClient(
 		channel, definition, timeoutProfile, timeout, factory.maxResponseBytes,
 		factory.requestGovernor, transport,
+		factory.sharedQianchuanControl,
 	)
 	factory.clients[key] = client
 	return client, nil
@@ -188,9 +195,11 @@ func newClient(
 	maxResponseBytes int64,
 	governor *requestcontrol.Governor,
 	transport http.RoundTripper,
+	sharedQianchuanControl requestcontrol.SharedController,
 ) *Client {
 	governedTransport := &governedTransport{
 		base: transport, channel: channel, governor: governor,
+		sharedQianchuanControl: sharedQianchuanControl,
 	}
 	guardedTransport := &securityTransport{
 		base: governedTransport, host: profile.Host, scheme: profile.Scheme,
@@ -231,9 +240,10 @@ func (client *Client) Profile() ClientProfile {
 }
 
 type governedTransport struct {
-	base     http.RoundTripper
-	channel  string
-	governor *requestcontrol.Governor
+	base                   http.RoundTripper
+	channel                string
+	governor               *requestcontrol.Governor
+	sharedQianchuanControl requestcontrol.SharedController
 }
 
 func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -255,11 +265,109 @@ func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Resp
 	if err != nil {
 		return nil, &notDispatchedError{cause: err}
 	}
-	defer release()
+	var sharedRelease func(error, *http.Response) error
+	if transport.channel == "qianchuan" && transport.sharedQianchuanControl != nil {
+		advertiserID, ok := requestcontrol.Advertiser(request.Context())
+		if !ok {
+			release()
+			return nil, &notDispatchedError{cause: requestcontrol.ErrAdvertiserScopeMissing}
+		}
+		sharedRelease, err = transport.sharedQianchuanControl.Acquire(request.Context(), advertiserID)
+		if err != nil {
+			release()
+			return nil, &notDispatchedError{cause: err}
+		}
+	}
 	if err := requestcontrol.ReserveAttempt(request.Context()); err != nil {
+		if sharedRelease != nil {
+			_ = sharedRelease(err, nil)
+		}
+		release()
 		return nil, &notDispatchedError{cause: err}
 	}
-	return transport.base.RoundTrip(request)
+	response, requestErr := transport.base.RoundTrip(request)
+	if sharedRelease == nil {
+		if requestErr != nil || response == nil || response.Body == nil {
+			release()
+			return response, requestErr
+		}
+		response.Body = &releaseOnCloseBody{ReadCloser: response.Body, release: release}
+		return response, nil
+	}
+	if requestErr != nil || response == nil || response.Body == nil {
+		if releaseErr := sharedRelease(requestErr, response); requestErr == nil && releaseErr != nil {
+			requestErr = releaseErr
+		}
+		release()
+		return response, requestErr
+	}
+	response.Body = &sharedControlledBody{body: response.Body, response: response, release: sharedRelease}
+	response.Body = &releaseOnCloseBody{ReadCloser: response.Body, release: release}
+	return response, nil
+}
+
+type releaseOnCloseBody struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (body *releaseOnCloseBody) Close() error {
+	err := body.ReadCloser.Close()
+	body.once.Do(body.release)
+	return err
+}
+
+type sharedControlledBody struct {
+	body     io.ReadCloser
+	response *http.Response
+	release  func(error, *http.Response) error
+	buffer   bytes.Buffer
+	once     sync.Once
+	err      error
+}
+
+func (body *sharedControlledBody) Read(target []byte) (int, error) {
+	count, err := body.body.Read(target)
+	if body.buffer.Len() < qianchuanEnvelopePeek && count > 0 {
+		remaining := qianchuanEnvelopePeek - body.buffer.Len()
+		body.buffer.Write(target[:min(count, remaining)])
+	}
+	return count, err
+}
+
+func (body *sharedControlledBody) Close() error {
+	if body.buffer.Len() < qianchuanEnvelopePeek {
+		_, _ = io.CopyN(
+			&body.buffer,
+			body.body,
+			int64(qianchuanEnvelopePeek-body.buffer.Len()),
+		)
+	}
+	closeErr := body.body.Close()
+	body.once.Do(func() {
+		requestErr := closeErr
+		var envelope struct {
+			Code json.RawMessage `json:"code"`
+		}
+		if json.Unmarshal(body.buffer.Bytes(), &envelope) == nil && qianchuanRateLimitCode(envelope.Code) {
+			requestErr = errors.New("Ocean Engine API business error 40100")
+		}
+		body.err = body.release(requestErr, body.response)
+	})
+	if closeErr != nil {
+		return closeErr
+	}
+	return body.err
+}
+
+func qianchuanRateLimitCode(value json.RawMessage) bool {
+	var numeric int64
+	if json.Unmarshal(value, &numeric) == nil {
+		return numeric == 40100
+	}
+	var text string
+	return json.Unmarshal(value, &text) == nil && text == "40100"
 }
 
 func endpointFamily(path string) (string, error) {

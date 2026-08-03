@@ -13,6 +13,7 @@ const (
 	paginatedReadRequestLimit   int64 = 4096
 	creatorReadRequestLimit     int64 = 16384
 	mutationCommandRequestLimit int64 = 65536
+	qianchuanBatchRequestLimit  int64 = 512
 )
 
 func commandRequestLimit(command contracts.Command) (int64, error) {
@@ -48,6 +49,9 @@ func commandRequestLimit(command contracts.Command) (int64, error) {
 			return paginatedReadRequestLimit, nil
 		}
 	case "plans":
+		if command.Action == "batch-qianchuan-works" || command.Action == "remove-qianchuan-work" {
+			return qianchuanBatchRequestLimit, nil
+		}
 		return mutationCommandRequestLimit, nil
 	}
 	return 0, fmt.Errorf("request budget profile is missing for command %s", command.Name())

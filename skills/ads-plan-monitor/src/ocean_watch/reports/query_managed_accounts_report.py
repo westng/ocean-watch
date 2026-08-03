@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal, InvalidOperation
 
 from ocean_watch.accounts import managed_accounts
-from ocean_watch.api.client import OceanEngineClient
-from ocean_watch.auth import channels, token_manager
+from ocean_watch.api import OceanEngineClient, QianchuanClientFactory
+from ocean_watch.auth import authorization_store, channels, token_manager
 from ocean_watch.core import config_paths
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError, ConfigurationError, OceanWatchError
@@ -164,7 +164,11 @@ def qianchuan_account_report(config_path, account, start_date, end_date):
         advertiser_id=account["advertiser_id"],
         auth_account_id=account.get("auth_account_id"),
     )
-    client = OceanEngineClient(
+    client = QianchuanClientFactory(
+        authorization_store.state_root(),
+        account["advertiser_id"],
+        client_class=OceanEngineClient,
+    ).client(
         get_path(runtime, "api.base_url"),
         get_path(runtime, "api.access_token"),
     )

@@ -5,6 +5,8 @@ from decimal import Decimal, InvalidOperation
 
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
+from ocean_watch.api import qianchuan_request_throttle
+from ocean_watch.auth import authorization_store
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ApiError
 from ocean_watch.core.output import write_json
@@ -727,6 +729,10 @@ def main(argv=None):
         QIANCHUAN_MCP_ENDPOINT,
         get_path(runtime, "api.access_token"),
         tool_range=QIANCHUAN_REPORT_TOOLS,
+        request_throttle=qianchuan_request_throttle(
+            authorization_store.state_root(),
+            args.advertiser_id,
+        ),
     )
     result = query_plan_report(
         client,

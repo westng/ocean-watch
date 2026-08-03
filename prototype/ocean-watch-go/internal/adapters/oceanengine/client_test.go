@@ -271,6 +271,26 @@ type governedBlockingTransport struct {
 	calls   atomic.Int32
 }
 
+type sharedControlFixture struct {
+	acquired chan struct{}
+	released chan error
+}
+
+func (fixture *sharedControlFixture) Acquire(
+	context.Context,
+	string,
+) (func(error, *http.Response) error, error) {
+	if fixture.acquired != nil {
+		fixture.acquired <- struct{}{}
+	}
+	return func(requestErr error, _ *http.Response) error {
+		if fixture.released != nil {
+			fixture.released <- requestErr
+		}
+		return nil
+	}, nil
+}
+
 func (transport *governedBlockingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	transport.calls.Add(1)
 	select {
@@ -337,6 +357,139 @@ func TestGovernedTransportLimitsSameAuthorizationAndCancelsWait(t *testing.T) {
 	close(base.release)
 	if err := <-firstResult; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestQianchuanGovernedTransportHoldsSlotUntilResponseBodyCloses(t *testing.T) {
+	governor, err := requestcontrol.NewGovernor(requestcontrol.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseCalls := make(chan string, 2)
+	base := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		baseCalls <- request.Header.Get("X-Fixture-Request")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"code":0}`)),
+			Request:    request,
+		}, nil
+	})
+	transport := &governedTransport{
+		base: base, channel: "qianchuan", governor: governor,
+		sharedQianchuanControl: &sharedControlFixture{},
+	}
+	ctx, _, _ := controlledTestRequestContext(t, "qianchuan", testAuthorizationID, 2)
+	ctx, err = requestcontrol.WithAdvertiser(ctx, "1234567890123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := transport.RoundTrip(governedRequest(t, ctx, "first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marker := <-baseCalls; marker != "first" {
+		t.Fatalf("first marker = %q", marker)
+	}
+	secondResult := make(chan *http.Response, 1)
+	secondError := make(chan error, 1)
+	go func() {
+		response, callErr := transport.RoundTrip(governedRequest(t, ctx, "second"))
+		secondResult <- response
+		secondError <- callErr
+	}()
+	select {
+	case marker := <-baseCalls:
+		t.Fatalf("second request entered before first body closed: %q", marker)
+	case <-time.After(30 * time.Millisecond):
+	}
+	if err := first.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case marker := <-baseCalls:
+		if marker != "second" {
+			t.Fatalf("second marker = %q", marker)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second request remained blocked after first body closed")
+	}
+	second := <-secondResult
+	if err := <-secondError; err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQianchuanBusinessRateLimitIsObservedWhenBodyCloses(t *testing.T) {
+	governor, err := requestcontrol.NewGovernor(requestcontrol.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := &sharedControlFixture{released: make(chan error, 1)}
+	transport := &governedTransport{
+		base: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"code":40100,"message":"limited"}`)),
+				Request:    request,
+			}, nil
+		}),
+		channel: "qianchuan", governor: governor, sharedQianchuanControl: shared,
+	}
+	ctx, _, _ := controlledTestRequestContext(t, "qianchuan", testAuthorizationID, 1)
+	ctx, err = requestcontrol.WithAdvertiser(ctx, "1234567890123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := transport.RoundTrip(governedRequest(t, ctx, "limited"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(response.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	observed := <-shared.released
+	if observed == nil || !strings.Contains(observed.Error(), "40100") {
+		t.Fatalf("business rate limit was not observed: %v", observed)
+	}
+}
+
+func TestQianchuanBusinessRateLimitIsObservedWhenUnreadBodyCloses(t *testing.T) {
+	governor, err := requestcontrol.NewGovernor(requestcontrol.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := &sharedControlFixture{released: make(chan error, 1)}
+	transport := &governedTransport{
+		base: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"code":40100,"message":"limited"}`)),
+				Request:    request,
+			}, nil
+		}),
+		channel: "qianchuan", governor: governor, sharedQianchuanControl: shared,
+	}
+	ctx, _, _ := controlledTestRequestContext(t, "qianchuan", testAuthorizationID, 1)
+	ctx, err = requestcontrol.WithAdvertiser(ctx, "1234567890123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := transport.RoundTrip(governedRequest(t, ctx, "limited"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	observed := <-shared.released
+	if observed == nil || !strings.Contains(observed.Error(), "40100") {
+		t.Fatalf("unread business rate limit was not observed: %v", observed)
 	}
 }
 

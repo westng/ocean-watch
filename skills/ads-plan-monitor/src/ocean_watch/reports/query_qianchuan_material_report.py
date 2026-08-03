@@ -7,7 +7,8 @@ from decimal import Decimal, InvalidOperation
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import QianchuanClientFactory
+from ocean_watch.auth import authorization_store
 from ocean_watch.core.data import get_path, split_csv
 from ocean_watch.core.errors import ApiError, ConfigurationError
 from ocean_watch.core.output import write_json
@@ -255,7 +256,10 @@ def main(argv=None):
         auth_account_id=args.auth_account_id,
     )
     queried = query_material_report(
-        OceanEngineClient(
+        QianchuanClientFactory(
+            authorization_store.state_root(),
+            args.advertiser_id,
+        ).client(
             get_path(runtime, "api.base_url"),
             get_path(runtime, "api.access_token"),
         ),

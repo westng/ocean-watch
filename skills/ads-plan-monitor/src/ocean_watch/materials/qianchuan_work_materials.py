@@ -13,13 +13,22 @@ from ocean_watch.materials.query_qianchuan_creator_videos import (
 )
 
 MAX_ITEM_IDS_PER_QUERY = 50
-RATE_LIMIT_CODE = 40100
+RATE_LIMIT_CODE = "40100"
 RATE_LIMIT_RETRY_DELAYS = (1, 2, 4)
 
 
 def chunks(values, size):
     values = list(values)
     return [values[index : index + size] for index in range(0, len(values), size)]
+
+
+def work_product_ids(work, template_product_ids):
+    hinted_product_id = str(
+        ((work.get("product_hint") or {}).get("product_id")) or ""
+    ).strip()
+    if hinted_product_id and hinted_product_id in template_product_ids:
+        return [hinted_product_id]
+    return template_product_ids
 
 
 def creator_is_usable(creator):
@@ -41,7 +50,7 @@ def compact_query_error(error, *, aweme_id, product_id=None):
 
 def is_rate_limit_error(error):
     details = getattr(error, "details", {}) or {}
-    return details.get("code") == RATE_LIMIT_CODE
+    return str(details.get("code") or "") == RATE_LIMIT_CODE
 
 
 def run_video_queries(
@@ -302,23 +311,31 @@ def resolve_work_materials(
             "candidate_aweme_ids": sorted(owners),
         })
 
-    item_ids_by_creator = {}
+    works_by_creator = {}
     creators_by_id = {}
     for item_id, owner in resolved_owners.items():
         aweme_id = owner["creator"]["aweme_id"]
         creators_by_id[aweme_id] = owner["creator"]
-        item_ids_by_creator.setdefault(aweme_id, []).append(item_id)
+        works_by_creator.setdefault(aweme_id, []).append(work_by_id[item_id])
 
-    product_tasks = [
-        {
-            "creator": creators_by_id[aweme_id],
-            "product_id": product_id,
-            "item_ids": item_chunk,
-        }
-        for aweme_id, item_ids in item_ids_by_creator.items()
-        for product_id in product_ids
-        for item_chunk in chunks(item_ids, MAX_ITEM_IDS_PER_QUERY)
-    ]
+    product_tasks = []
+    for aweme_id, creator_works in works_by_creator.items():
+        item_ids_by_product = {}
+        for work in creator_works:
+            for product_id in work_product_ids(work, product_ids):
+                item_ids_by_product.setdefault(product_id, []).append(
+                    work["aweme_item_id"]
+                )
+        for product_id in product_ids:
+            for item_chunk in chunks(
+                item_ids_by_product.get(product_id) or [],
+                MAX_ITEM_IDS_PER_QUERY,
+            ):
+                product_tasks.append({
+                    "creator": creators_by_id[aweme_id],
+                    "product_id": product_id,
+                    "item_ids": item_chunk,
+                })
     product_results, product_failures = run_video_queries(
         video_client,
         advertiser_id,
@@ -413,6 +430,7 @@ def resolve_work_materials(
             "authorized_hint_query_count": hint_auth_query_count,
             "authorized_hint_failure_count": len(hint_auth_failures),
             "official_video_query_count": len(hinted_tasks) + len(broad_tasks),
+            "product_video_query_count": len(product_tasks),
         },
         "authorized_creator_query": {
             "mode": "broad_scan" if broad_item_ids else "targeted_hint",

@@ -503,6 +503,7 @@ func (runner Runner) qianchuanCommandService(
 		}
 	}
 	service.Verifier = applicationqianchuan.WorkVerifier{Reader: components.reader}
+	service.Locks = components.locker
 	reconciler := applicationqianchuan.CurrentDayReconciler{Reader: components.reader, Now: runtime.Now}
 	guard := sharedplans.GuardedExecutor{Credentials: components.credentials, Locks: components.locker, Now: runtime.Now}
 	service.Create = applicationqianchuan.CreateExecutor{Guard: guard, Writer: components.writer, Reconciler: reconciler}
@@ -554,7 +555,9 @@ func (runner Runner) qianchuanPlanComponents(
 	factory := runtime.ClientFactory
 	var err error
 	if factory == nil && (runtime.Reader == nil || runtime.Writer == nil) {
-		factory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{})
+		factory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{
+			SharedQianchuanControl: filesystem.QianchuanRequestController{Root: stateRoot},
+		})
 		if err != nil {
 			return qianchuanPlanComponents{}, err
 		}

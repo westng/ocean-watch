@@ -66,6 +66,12 @@ func TestNegativeAndUninitializedBudgetsAreRejected(t *testing.T) {
 	}
 }
 
+func TestAdvertiserScopeRejectsLeadingZero(t *testing.T) {
+	if _, err := WithAdvertiser(context.Background(), "0123"); err == nil {
+		t.Fatal("advertiser scope accepted a leading-zero ID")
+	}
+}
+
 func TestGovernorSeparatesAuthorizationAndEndpointScopes(t *testing.T) {
 	governor, err := NewGovernor(Limits{AuthorizationConcurrency: 2, EndpointConcurrency: 1})
 	if err != nil {
@@ -107,7 +113,7 @@ func TestGovernorWaitIsCancelableAndReleasesPartialAcquisition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := AuthorizationScope{Channel: "qianchuan", AuthorizationID: "authorization-a"}
+	scope := AuthorizationScope{Channel: "marketing", AuthorizationID: "authorization-a"}
 	release, err := governor.Acquire(ctx, scope, "plans")
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +134,36 @@ func TestGovernorWaitIsCancelableAndReleasesPartialAcquisition(t *testing.T) {
 	snapshot := metrics.Snapshot()
 	if snapshot.LimiterWaits == 0 || snapshot.LimiterCancellations != 1 || snapshot.LimiterWaitDuration <= 0 {
 		t.Fatalf("limiter wait was not observable: %#v", snapshot)
+	}
+}
+
+func TestGovernorSerializesQianchuanAcrossEndpointFamilies(t *testing.T) {
+	governor, err := NewGovernor(Limits{AuthorizationConcurrency: 4, EndpointConcurrency: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, _, metrics, err := PrepareCommandContext(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := AuthorizationScope{Channel: "qianchuan", AuthorizationID: "authorization-a"}
+	release, err := governor.Acquire(ctx, scope, "plans")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	if _, err := governor.Acquire(waitCtx, scope, "materials"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Qianchuan authorization allowed concurrent endpoint traffic: %v", err)
+	}
+	release()
+	second, err := governor.Acquire(ctx, scope, "materials")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second()
+	if metrics.Snapshot().LimiterCancellations != 1 {
+		t.Fatalf("Qianchuan limiter wait was not observed: %#v", metrics.Snapshot())
 	}
 }
 

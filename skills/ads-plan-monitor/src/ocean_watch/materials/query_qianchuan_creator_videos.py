@@ -5,7 +5,8 @@ import json
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import OceanEngineClient, QianchuanClientFactory
+from ocean_watch.auth import authorization_store
 from ocean_watch.core.data import get_path, is_missing
 from ocean_watch.core.errors import ApiError, ConfigurationError
 from ocean_watch.core.output import write_json
@@ -246,11 +247,16 @@ def main(argv=None):
         advertiser_id=advertiser_id,
         auth_account_id=args.auth_account_id,
     )
-    authorized_aweme_client = OceanEngineClient(
+    client_factory = QianchuanClientFactory(
+        authorization_store.state_root(),
+        advertiser_id,
+        client_class=OceanEngineClient,
+    )
+    authorized_aweme_client = client_factory.client(
         get_path(runtime, "api.base_url"),
         get_path(runtime, "api.access_token"),
     )
-    video_client = OceanEngineClient(
+    video_client = client_factory.client(
         get_path(runtime, "api.legacy_base_url")
         or get_path(runtime, "oauth.token_base_url"),
         get_path(runtime, "api.access_token"),

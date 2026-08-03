@@ -66,8 +66,11 @@ func advertiserLockName(scope domainplans.WriteScope) (string, error) {
 	case domainplans.LockMarketingPlans:
 		return "marketing-plans-" + scope.AdvertiserID + ".lock", nil
 	case domainplans.LockQianchuanWorks:
-		return "qianchuan-work-plans-" + scope.AdvertiserID + ".lock", nil
+		return "qianchuan-advertiser-" + scope.AdvertiserID + ".lock", nil
 	case domainplans.LockPlanSettings:
+		if scope.Channel == domainplans.ChannelQianchuan {
+			return "qianchuan-advertiser-" + scope.AdvertiserID + ".lock", nil
+		}
 		return string(scope.Channel) + "-plan-settings-" + scope.AdvertiserID + ".lock", nil
 	default:
 		return "", errors.New("unsupported advertiser lock family")

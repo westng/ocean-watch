@@ -59,7 +59,50 @@ class SequentialOpener:
         return response
 
 
+class RecordingThrottle:
+    def __init__(self):
+        self.events = []
+
+    def acquire(self):
+        self.events.append("acquire")
+
+    def observe(self, payload, *, headers=None):
+        self.events.append(("observe", payload, headers))
+
+    def release(self):
+        self.events.append("release")
+
+
 class StreamableHttpMcpClientTests(unittest.TestCase):
+    def test_throttle_observes_business_rate_limit_before_release(self):
+        throttle = RecordingThrottle()
+        response = FakeResponse({
+            "jsonrpc": "2.0",
+            "id": "ocean-watch-1",
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": '{"code":40100,"message":"limited"}',
+                }],
+            },
+        })
+        client = mcp_streamable_http.StreamableHttpMcpClient(
+            "https://open.oceanengine.com/qianchuan/mcp",
+            "secret-token",
+            tool_range=["report_tool"],
+            opener=SequentialOpener([response]),
+            request_throttle=throttle,
+        )
+        client.initialized = True
+
+        with self.assertRaises(ApiError):
+            client.call_tool("report_tool", {})
+
+        self.assertEqual(throttle.events[0], "acquire")
+        self.assertEqual(throttle.events[1][0], "observe")
+        self.assertEqual(throttle.events[1][1]["code"], 40100)
+        self.assertEqual(throttle.events[2], "release")
+
     def test_initializes_and_calls_only_allowed_tool(self):
         opener = SequentialOpener([
             FakeResponse({

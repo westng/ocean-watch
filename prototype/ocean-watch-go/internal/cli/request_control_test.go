@@ -41,6 +41,19 @@ func TestLocalCommandFamiliesHaveZeroNetworkBudget(t *testing.T) {
 	}
 }
 
+func TestQianchuanBatchCommandsHaveHardRequestBudget(t *testing.T) {
+	for _, name := range []string{"plans batch-qianchuan-works", "plans remove-qianchuan-work"} {
+		command, ok := commandByName(name)
+		if !ok {
+			t.Fatalf("fixture command is missing: %s", name)
+		}
+		limit, err := commandRequestLimit(command)
+		if err != nil || limit != qianchuanBatchRequestLimit {
+			t.Fatalf("%s network budget = %d, %v; want %d", name, limit, err, qianchuanBatchRequestLimit)
+		}
+	}
+}
+
 func TestRunnerObserverReportsZeroNetworkUseForAccountList(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")

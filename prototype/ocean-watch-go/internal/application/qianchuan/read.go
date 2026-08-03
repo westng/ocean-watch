@@ -254,7 +254,7 @@ func (service Service) QueryProducts(ctx context.Context, query ProductQuery, mo
 	if err != nil {
 		return ProductResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return ProductResult{}, err
 	}
@@ -309,7 +309,7 @@ func (service Service) ListPlans(ctx context.Context, query PlanListQuery) (Plan
 	if err != nil {
 		return PlanListResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return PlanListResult{}, err
 	}
@@ -369,7 +369,7 @@ func (service Service) ShowPlan(ctx context.Context, scope CredentialScope, adID
 	if err != nil {
 		return PlanDetailResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, scope.AdvertiserID)
 	if err != nil {
 		return PlanDetailResult{}, err
 	}
@@ -403,7 +403,7 @@ func (service Service) ListPlanMaterials(ctx context.Context, query PlanMaterial
 	if err != nil {
 		return PlanMaterialsResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return PlanMaterialsResult{}, err
 	}
@@ -454,7 +454,7 @@ func (service Service) ListAuthorizedCreators(
 	if err != nil {
 		return AuthorizedCreatorResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, query.AdvertiserID)
 	if err != nil {
 		return AuthorizedCreatorResult{}, err
 	}
@@ -517,7 +517,7 @@ func (service Service) QueryCreatorVideos(
 	if err != nil {
 		return CreatorVideoResult{}, err
 	}
-	ctx, err = authapplication.WithTokenLease(ctx, lease)
+	ctx, err = authapplication.WithAdvertiserTokenLease(ctx, lease, scope.AdvertiserID)
 	if err != nil {
 		return CreatorVideoResult{}, err
 	}

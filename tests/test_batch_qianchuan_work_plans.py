@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from ocean_watch.plans import batch_qianchuan_work_plans as batch
+from ocean_watch.plans import qianchuan_plan_gateway
 from ocean_watch.templates import qianchuan_product_templates
 
 
@@ -99,6 +100,20 @@ class FakeGateway:
         with self.lock:
             self.add_calls.append(payload)
         return payload, {"code": 0, "request_id": f"add-{ad_id}"}
+
+
+class TrackingLock:
+    def __init__(self, state, path, timeout):
+        self.state = state
+        self.state["path"] = path
+        self.state["timeout"] = timeout
+
+    def __enter__(self):
+        self.state["held"] = True
+        return self
+
+    def __exit__(self, *_args):
+        self.state["held"] = False
 
 
 def existing_plan(ad_id, status="DISABLE", product_ids=None):
@@ -364,6 +379,46 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         self.assertEqual(results[0]["reason"], "multiple_existing_plans")
         self.assertEqual(results[0]["candidate_ad_ids"], ["7001", "7002"])
 
+    def test_fifty_five_works_scan_the_plan_list_once_for_all_creators(self):
+        calls = []
+
+        class CountingPlanClient:
+            def get(self, path, params=None):
+                calls.append((path, copy.deepcopy(params)))
+                if path == qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH:
+                    return {
+                        "code": 0,
+                        "data": {
+                            "ad_list": [],
+                            "page_info": {"total_page": 1},
+                        },
+                    }
+                raise AssertionError(path)
+
+        materials = [
+            material(str(1000 + index), str(9000 + (index % 5)))
+            for index in range(55)
+        ]
+        results, skipped = batch.execute_plan_actions(
+            template(),
+            materials,
+            qianchuan_plan_gateway.QianchuanPlanGateway(CountingPlanClient()),
+            FakeExecutor(),
+            concurrency=8,
+            submit=False,
+            now=dt.datetime(2026, 7, 15, 12, 30, 45),
+        )
+
+        list_calls = [
+            row for row in calls
+            if row[0] == qianchuan_plan_gateway.QIANCHUAN_PLAN_LIST_PATH
+        ]
+        self.assertEqual(len(list_calls), 1)
+        self.assertEqual(len(results), 5)
+        self.assertEqual(sum(len(row["input_item_ids"]) for row in results), 55)
+        self.assertEqual({row["status"] for row in results}, {"would_create"})
+        self.assertEqual(skipped, [])
+
     def test_new_creator_uses_template_and_runtime_homepage_materials(self):
         gateway = FakeGateway()
         executor = FakeExecutor()
@@ -539,6 +594,19 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
                 },
                 "owner_hint_summary": {"verified": 1},
             }
+            lock_state = {"held": False}
+
+            def lock_factory(path, timeout):
+                return TrackingLock(lock_state, path, timeout)
+
+            def resolve_materials(*_args, **_kwargs):
+                self.assertTrue(lock_state["held"])
+                return material_result
+
+            def execute_actions(*_args, **_kwargs):
+                self.assertTrue(lock_state["held"])
+                return [{"aweme_id": "9001", "status": "would_create"}], []
+
             with mock.patch.object(
                 batch,
                 "resolve_work_links",
@@ -546,11 +614,11 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
             ), mock.patch.object(
                 batch,
                 "resolve_work_materials",
-                return_value=material_result,
+                side_effect=resolve_materials,
             ), mock.patch.object(
                 batch,
                 "execute_plan_actions",
-                return_value=([{"aweme_id": "9001", "status": "would_create"}], []),
+                side_effect=execute_actions,
             ), mock.patch.object(
                 batch.token_manager,
                 "ensure_access_token",
@@ -568,15 +636,67 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
                 result, exit_code = batch.execute(
                     args,
                     clients=(object(), object()),
+                    lock_factory=lock_factory,
                 )
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["counts"]["would_create"], 1)
         self.assertEqual(result["counts"]["input_links"], 1)
+        self.assertEqual(
+            result["performance"]["request_budget"],
+            {
+                "limit": batch.BATCH_REQUEST_LIMIT,
+                "used": 0,
+                "remaining": batch.BATCH_REQUEST_LIMIT,
+            },
+        )
         cache = result["performance"]["owner_hint_cache"]
         self.assertEqual(cache["loaded"], 1)
         self.assertEqual(cache["stored"], 0)
         self.assertEqual(cache["warning"]["code"], "owner_hint_cache_write_failed")
+        self.assertFalse(lock_state["held"])
+        self.assertEqual(lock_state["timeout"], batch.BATCH_LOCK_TIMEOUT_SECONDS)
+        self.assertEqual(
+            lock_state["path"].name,
+            "qianchuan-advertiser-1234567890123456.lock",
+        )
         ensure_token.assert_not_called()
+
+    def test_empty_batch_exposes_full_unused_request_budget(self):
+        config = qianchuan_product_templates.ensure_config({})
+        config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            args = SimpleNamespace(
+                config=str(config_path),
+                plan_template="qcpt_test",
+                work_url=["https://v.douyin.com/invalid/"],
+                concurrency=2,
+                auth_account_id=None,
+                submit=False,
+                include_payloads=False,
+                no_link_metadata_api=False,
+                out=None,
+            )
+            with mock.patch.object(
+                batch,
+                "resolve_work_links",
+                return_value={
+                    "resolved": [],
+                    "skipped": [{"input_index": 0, "reason": "invalid_work_url"}],
+                },
+            ):
+                result, exit_code = batch.execute(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            result["performance"]["request_budget"],
+            {
+                "limit": batch.BATCH_REQUEST_LIMIT,
+                "used": 0,
+                "remaining": batch.BATCH_REQUEST_LIMIT,
+            },
+        )
 
 
 if __name__ == "__main__":

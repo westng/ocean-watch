@@ -6,12 +6,15 @@ import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+import ocean_watch.auth.authorization_store as authorization_store
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
+from ocean_watch.api import QianchuanClientFactory, qianchuan_advertiser_lock_path
 from ocean_watch.core.data import get_path, is_missing
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.core.output import write_json
+from ocean_watch.core.process_lock import ProcessLock
 from ocean_watch.plans.qianchuan_executor import (
     QianchuanPlanExecutionRequest,
     QianchuanPlanExecutor,
@@ -457,17 +460,28 @@ def main(argv=None):
         )
 
     if args.submit and not blocking_fields:
+        client_factory = QianchuanClientFactory(
+            authorization_store.state_root(),
+            str(payload["advertiser_id"]),
+        )
         executor = QianchuanPlanExecutor.from_credentials(
             get_path(runtime, "api.base_url"),
             get_path(runtime, "api.access_token"),
+            client_factory=client_factory.client,
         )
     else:
         executor = QianchuanPlanExecutor(None)
-    result = executor.execute(QianchuanPlanExecutionRequest(
-        payload=payload,
-        submit=args.submit,
-        blocking_fields=blocking_fields,
-    ))
+    request = QianchuanPlanExecutionRequest(
+        payload=payload, submit=args.submit, blocking_fields=blocking_fields,
+    )
+    if args.submit and not blocking_fields:
+        with ProcessLock(qianchuan_advertiser_lock_path(
+            authorization_store.state_root(),
+            str(payload["advertiser_id"]),
+        )):
+            result = executor.execute(request)
+    else:
+        result = executor.execute(request)
     output = {
         "mode": "submit" if args.submit else "dry_run",
         "channel": "qianchuan",

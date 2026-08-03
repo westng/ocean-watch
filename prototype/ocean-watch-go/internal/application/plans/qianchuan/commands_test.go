@@ -76,6 +76,7 @@ func testBatchCommandReadScope(t *testing.T) {
 		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
 		Verifier: WorkVerifier{Reader: reader},
 		Batch:    BatchService{Reader: reader, Reconciler: commandNoPlanFinder{}},
+		Locks:    commandLocker{},
 		Now:      func() time.Time { return time.Date(2026, time.July, 26, 12, 0, 0, 0, time.UTC) },
 	}
 	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{
@@ -222,6 +223,7 @@ func testBatchOwnerHintCacheBoundary(t *testing.T) {
 		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
 		OwnerHints: cache, Verifier: WorkVerifier{Reader: reader},
 		Batch: BatchService{Reader: reader, Reconciler: commandNoPlanFinder{}},
+		Locks: commandLocker{},
 	}
 	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{
 		PlanTemplate: "qcpt_command", WorkURLs: []string{"https://www.douyin.com/video/6000000000000001"},

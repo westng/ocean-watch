@@ -1,4 +1,5 @@
 import datetime as dt
+import random
 import time
 
 from ocean_watch.core.data import get_path
@@ -16,7 +17,11 @@ UNI_PROJECT = "UNI_PROJECT"
 MAX_PAGE_SIZE = 100
 RETRYABLE_READ_API_CODES = {"40100", "51010"}
 RETRYABLE_READ_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
-READ_RETRY_DELAYS = (1, 2, 4)
+READ_RETRY_DELAYS = (2, 5, 10)
+
+
+def jittered_delay(delay):
+    return delay * random.uniform(0.8, 1.2)
 
 
 def decimal_id(value, field):
@@ -78,10 +83,18 @@ def is_retryable_read_error(error):
 
 
 class QianchuanPlanGateway:
-    def __init__(self, client, *, retry_delays=READ_RETRY_DELAYS, sleep_fn=time.sleep):
+    def __init__(
+        self,
+        client,
+        *,
+        retry_delays=READ_RETRY_DELAYS,
+        sleep_fn=time.sleep,
+        jitter_fn=jittered_delay,
+    ):
         self.client = client
         self.retry_delays = tuple(retry_delays)
         self.sleep_fn = sleep_fn
+        self.jitter_fn = jitter_fn
 
     def get_with_retry(self, path, params):
         for attempt in range(len(self.retry_delays) + 1):
@@ -93,7 +106,7 @@ class QianchuanPlanGateway:
             else:
                 if not is_retryable_read_response(response) or attempt >= len(self.retry_delays):
                     return response
-            self.sleep_fn(self.retry_delays[attempt])
+            self.sleep_fn(self.jitter_fn(self.retry_delays[attempt]))
         raise AssertionError("unreachable")
 
     def list_product_plans(
@@ -269,9 +282,9 @@ class QianchuanPlanGateway:
         expected_pages = None
         while page <= max_pages:
             response = require_success(
-                self.client.get(
+                self.get_with_retry(
                     QIANCHUAN_PLAN_MATERIALS_PATH,
-                    params={
+                    {
                         "advertiser_id": int(advertiser_id),
                         "ad_id": int(ad_id),
                         "filtering": {

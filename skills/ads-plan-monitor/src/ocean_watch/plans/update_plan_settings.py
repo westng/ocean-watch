@@ -6,7 +6,11 @@ from decimal import Decimal, InvalidOperation
 import ocean_watch.auth.channels as channels
 import ocean_watch.auth.token_manager as token_manager
 import ocean_watch.core.config_paths as config_paths
-from ocean_watch.api import OceanEngineClient
+from ocean_watch.api import (
+    OceanEngineClient,
+    QianchuanClientFactory,
+    qianchuan_advertiser_lock_path,
+)
 from ocean_watch.auth import authorization_store
 from ocean_watch.core.data import get_path
 from ocean_watch.core.errors import ConfigurationError
@@ -160,6 +164,11 @@ def response_failed(response):
 
 
 def mutation_lock_path(channel, advertiser_id):
+    if channel == "qianchuan":
+        return qianchuan_advertiser_lock_path(
+            authorization_store.state_root(),
+            advertiser_id,
+        )
     return (
         authorization_store.state_root()
         / "locks"
@@ -276,10 +285,19 @@ def main(argv=None):
             advertiser_id=args.advertiser_id,
             auth_account_id=args.auth_account_id,
         )
-        client = OceanEngineClient(
-            get_path(runtime, "api.base_url"),
-            get_path(runtime, "api.access_token"),
-        )
+        if args.channel == "qianchuan":
+            client = QianchuanClientFactory(
+                authorization_store.state_root(),
+                args.advertiser_id,
+            ).client(
+                get_path(runtime, "api.base_url"),
+                get_path(runtime, "api.access_token"),
+            )
+        else:
+            client = OceanEngineClient(
+                get_path(runtime, "api.base_url"),
+                get_path(runtime, "api.access_token"),
+            )
         with ProcessLock(mutation_lock_path(args.channel, args.advertiser_id)):
             response = client.post(endpoint, payload)
         failed, errors = response_failed(response)
