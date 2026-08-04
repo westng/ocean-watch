@@ -55,6 +55,65 @@ func testCreateCommandValidationError(t *testing.T) {
 	}
 }
 
+func TestCreatePayloadNormalizesOfficialNumericIDsBeforeDryRun(t *testing.T) {
+	service := CommandService{Create: CreateExecutor{}}
+	payload := json.RawMessage(`{
+		"advertiser_id":"1000000000000001",
+		"aweme_id":"4000000000000001",
+		"name":"达人🧀计划",
+		"marketing_goal":"VIDEO_PROM_GOODS",
+		"product_ids":["5000000000000001"],
+		"delivery_setting":{"smart_bid_type":"SMART_BID_CUSTOM","roi2_goal":1.75,"budget":5000},
+		"multi_product_creative_list":[{
+			"product_id":"5000000000000001",
+			"video_material":[{"aweme_item_id":"6000000000000001","image_mode":"VIDEO_VERTICAL"}],
+			"block_video_material":[{"aweme_item_id":"6000000000000002"}]
+		}]
+	}`)
+
+	result, err := service.CreatePlan(context.Background(), CreatePlanCommand{Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	creative := result.Payload["multi_product_creative_list"].([]any)[0].(map[string]any)
+	video := creative["video_material"].([]any)[0].(map[string]any)
+	blocked := creative["block_video_material"].([]any)[0].(map[string]any)
+	if result.Payload["name"] != "达人计划" ||
+		result.Payload["aweme_id"] != json.Number("4000000000000001") ||
+		creative["product_id"] != json.Number("5000000000000001") ||
+		video["aweme_item_id"] != json.Number("6000000000000001") ||
+		blocked["aweme_item_id"] != json.Number("6000000000000002") {
+		t.Fatalf("Qianchuan numeric IDs were not normalized before preview: %#v", result.Payload)
+	}
+}
+
+func TestCreateLivePayloadNormalizesProgrammaticAwemeItemIDs(t *testing.T) {
+	service := CommandService{Create: CreateExecutor{}}
+	payload := json.RawMessage(`{
+		"advertiser_id":"1000000000000001",
+		"aweme_id":"4000000000000001",
+		"marketing_goal":"LIVE_PROM_GOODS",
+		"delivery_setting":{"smart_bid_type":"SMART_BID_CONSERVATIVE","budget":5000},
+		"programmatic_creative_media_list":{
+			"video_material":[{"aweme_item_id":"6000000000000001","image_mode":"VIDEO_VERTICAL"}],
+			"block_video_material":[{"aweme_item_id":"6000000000000002"}]
+		}
+	}`)
+
+	result, err := service.CreatePlan(context.Background(), CreatePlanCommand{Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	programmatic := result.Payload["programmatic_creative_media_list"].(map[string]any)
+	video := programmatic["video_material"].([]any)[0].(map[string]any)
+	blocked := programmatic["block_video_material"].([]any)[0].(map[string]any)
+	if result.Payload["aweme_id"] != json.Number("4000000000000001") ||
+		video["aweme_item_id"] != json.Number("6000000000000001") ||
+		blocked["aweme_item_id"] != json.Number("6000000000000002") {
+		t.Fatalf("Qianchuan live numeric IDs were not normalized before preview: %#v", result.Payload)
+	}
+}
+
 func testCreateCommandDryRunBoundary(t *testing.T) {
 	tokens := &commandTokenProvider{}
 	writer := &commandWriter{}

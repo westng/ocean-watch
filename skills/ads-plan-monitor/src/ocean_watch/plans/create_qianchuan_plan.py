@@ -122,6 +122,14 @@ def validate_video_materials(materials, field, errors, homepage_only_vertical=Fa
         aweme_item_id = material.get("aweme_item_id")
         if is_missing(video_id) and is_missing(aweme_item_id):
             errors.append(f"{item_field}.video_id|aweme_item_id")
+        elif not is_missing(aweme_item_id):
+            try:
+                material["aweme_item_id"] = api_integer(
+                    aweme_item_id,
+                    f"{item_field}.aweme_item_id",
+                )
+            except ConfigurationError:
+                errors.append(f"{item_field}.aweme_item_id")
         image_mode = material.get("image_mode")
         if image_mode not in VIDEO_IMAGE_MODES:
             errors.append(f"{item_field}.image_mode")
@@ -143,8 +151,13 @@ def validate_product_creatives(payload, errors):
             errors.append(field)
             continue
         product_id = creative.get("product_id")
-        if is_missing(product_id) or str(product_id) not in product_ids:
+        try:
+            creative["product_id"] = api_integer(product_id, f"{field}.product_id")
+        except ConfigurationError:
             errors.append(f"{field}.product_id")
+        else:
+            if str(creative["product_id"]) not in product_ids:
+                errors.append(f"{field}.product_id")
         if creative.get("creative_type") not in {None, "PROGRAMMATIC_CREATIVE"}:
             errors.append(f"{field}.creative_type")
         video_materials = creative.get("video_material") or []
@@ -154,6 +167,11 @@ def validate_product_creatives(payload, errors):
             errors.append(field)
         if video_materials:
             validate_video_materials(video_materials, f"{field}.video_material", errors)
+        normalize_aweme_item_ids(
+            creative.get("block_video_material"),
+            f"{field}.block_video_material",
+            errors,
+        )
         for image_index, image in enumerate(image_materials):
             image_field = f"{field}.image_material[{image_index}]"
             if not isinstance(image, dict) or image.get("image_mode") not in PRODUCT_IMAGE_MODES:
@@ -211,9 +229,31 @@ def validate_live_creatives(payload, errors):
             errors,
             homepage_only_vertical=True,
         )
+    normalize_aweme_item_ids(
+        programmatic.get("block_video_material"),
+        "programmatic_creative_media_list.block_video_material",
+        errors,
+    )
     for index, title in enumerate(programmatic.get("title_material") or []):
         if not isinstance(title, dict) or is_missing(title.get("title")):
             errors.append(f"programmatic_creative_media_list.title_material[{index}].title")
+
+
+def normalize_aweme_item_ids(values, field, errors):
+    if values is None:
+        return
+    for index, item in enumerate(require_list(values, field, errors)):
+        item_field = f"{field}[{index}]"
+        if not isinstance(item, dict):
+            errors.append(item_field)
+            continue
+        try:
+            item["aweme_item_id"] = api_integer(
+                item.get("aweme_item_id"),
+                f"{item_field}.aweme_item_id",
+            )
+        except ConfigurationError:
+            errors.append(f"{item_field}.aweme_item_id")
 
 
 def normalize_and_validate(payload, advertiser_id=None, today=None):
@@ -277,7 +317,18 @@ def normalize_and_validate(payload, advertiser_id=None, today=None):
                 ]
             except ConfigurationError:
                 errors.append("product_ids")
+        if "aweme_id" in normalized:
+            try:
+                normalized["aweme_id"] = api_integer(
+                    normalized.get("aweme_id"),
+                    "aweme_id",
+                )
+            except ConfigurationError:
+                errors.append("aweme_id")
         if normalized.get("name") is not None:
+            normalized["name"] = qianchuan_product_templates.sanitize_plan_name(
+                normalized["name"]
+            )
             name_length = official_character_length(normalized["name"])
             if not 1 <= name_length <= 100:
                 errors.append("name")

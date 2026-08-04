@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const defaultConfigSHA256 = "fdcf42ee6f641bb130a61e9d04d6bf5d72377269c2261aeb309862f51fe9f124"
+const defaultConfigSHA256 = "827e5e2d757d91beb4bf4f650158680f1483973d2091e28f5e7f04ec6c286401"
 
 func TestEmbeddedDefaultConfigMatchesFrozenPythonTemplate(t *testing.T) {
 	payload := DefaultConfigBytes()

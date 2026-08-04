@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	qianchuanProductSchemaVersion    = 6
+	qianchuanProductSchemaVersion    = 7
 	qianchuanProductSchemaVersionKey = "qianchuan_product_template_schema_version"
 	qianchuanProductDefaultKey       = "default_qianchuan_product_template"
 	qianchuanProductTemplatesKey     = "qianchuan_product_templates"
@@ -21,6 +21,18 @@ const (
 
 var qianchuanProductIDSeparator = regexp.MustCompile(`[/,，\s]+`)
 var qianchuanPlanNamePlaceholder = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+func usesLegacyQianchuanPlanName(value any) bool {
+	if value == nil {
+		return true
+	}
+	planName, ok := value.(string)
+	if !ok {
+		return false
+	}
+	planName = strings.TrimSpace(planName)
+	return planName == "" || planName == qianchuanProductLegacyPlanName
+}
 
 func defaultQianchuanProductTemplate() map[string]any {
 	return map[string]any{
@@ -107,9 +119,22 @@ func ensureQianchuanProductConfig(config map[string]any) (map[string]any, error)
 	}
 	if version < 6 {
 		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
-			planName := strings.TrimSpace(stringValue(value["plan_name_template"]))
-			if planName == "" || planName == qianchuanProductLegacyPlanName {
+			if usesLegacyQianchuanPlanName(value["plan_name_template"]) {
 				value["plan_name_template"] = qianchuanProductDefaultPlanName
+			}
+		}
+	}
+	if version < 7 {
+		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
+			if usesLegacyQianchuanPlanName(value["plan_name_template"]) {
+				value["plan_name_template"] = qianchuanProductDefaultPlanName
+			}
+		}
+		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
+			if template, ok := value.(map[string]any); ok {
+				if usesLegacyQianchuanPlanName(template["plan_name_template"]) {
+					template["plan_name_template"] = qianchuanProductDefaultPlanName
+				}
 			}
 		}
 	}

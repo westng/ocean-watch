@@ -211,7 +211,10 @@ def build_plan_name(
             pattern = remove_optional_placeholder(pattern, key)
     for key, value in values.items():
         pattern = pattern.replace("{" + key + "}", str(value))
-    name = weighted_truncate(pattern, 100)
+    name = weighted_truncate(
+        qianchuan_product_templates.sanitize_plan_name(pattern),
+        100,
+    )
     if not name:
         raise ValueError("Qianchuan rendered plan name is empty")
     return name

@@ -186,6 +186,9 @@ func normalizeCreateRequest(request CreateRequest) (normalizedCreateRequest, err
 	if err != nil {
 		return normalizedCreateRequest{}, err
 	}
+	if err := normalizeCreatePayloadIDs(object); err != nil {
+		return normalizedCreateRequest{}, err
+	}
 	if fmt.Sprint(object["advertiser_id"]) != request.AdvertiserID {
 		return normalizedCreateRequest{}, errors.New("Qianchuan payload advertiser_id does not match command scope")
 	}
@@ -210,7 +213,11 @@ func normalizeCreateRequest(request CreateRequest) (normalizedCreateRequest, err
 		if err != nil {
 			return normalizedCreateRequest{}, err
 		}
-		if name != "" && weightedLength(name) > 100 {
+		if object["name"] != nil {
+			name = sanitizePlanName(name)
+			object["name"] = name
+		}
+		if object["name"] != nil && (name == "" || weightedLength(name) > 100) {
 			return normalizedCreateRequest{}, errors.New("Qianchuan plan name exceeds 100 weighted characters")
 		}
 		if object["aweme_id"] != nil && !validPositiveID(awemeID) {
@@ -224,12 +231,133 @@ func normalizeCreateRequest(request CreateRequest) (normalizedCreateRequest, err
 			return normalizedCreateRequest{}, errors.New("Qianchuan live payload does not support name")
 		}
 	}
-	digest := sha256.Sum256(request.Payload)
+	normalizedPayload, err := json.Marshal(object)
+	if err != nil {
+		return normalizedCreateRequest{}, errors.New("Qianchuan plan payload could not be normalized")
+	}
+	request.Payload = normalizedPayload
+	digest := sha256.Sum256(normalizedPayload)
 	return normalizedCreateRequest{
 		CreateRequest: request, payloadObject: object, goal: goal, planName: name,
 		awemeID: awemeID, productIDs: productIDs,
 		operationKey: "qianchuan-plan-" + hex.EncodeToString(digest[:16]),
 	}, nil
+}
+
+func normalizeCreatePayloadIDs(object map[string]any) error {
+	if err := normalizePayloadID(object, "advertiser_id", "advertiser_id", true); err != nil {
+		return err
+	}
+	if err := normalizePayloadID(object, "aweme_id", "aweme_id", false); err != nil {
+		return err
+	}
+	if rawProductIDs, exists := object["product_ids"]; exists {
+		productIDs, err := payloadIDs(rawProductIDs, "product_ids", 30)
+		if err != nil {
+			return err
+		}
+		object["product_ids"] = numberIDs(productIDs)
+	}
+	if err := normalizePayloadObjectList(
+		object["product_channel_info"], "product_channel_info",
+		func(item map[string]any, field string) error {
+			if err := normalizePayloadID(item, "product_id", field+".product_id", true); err != nil {
+				return err
+			}
+			return normalizePayloadID(item, "channel_id", field+".channel_id", true)
+		},
+	); err != nil {
+		return err
+	}
+	if err := normalizePayloadObjectList(
+		object["multi_product_creative_list"], "multi_product_creative_list",
+		func(item map[string]any, field string) error {
+			if err := normalizePayloadID(item, "product_id", field+".product_id", true); err != nil {
+				return err
+			}
+			if err := normalizeAwemeItemIDList(item["video_material"], field+".video_material", false); err != nil {
+				return err
+			}
+			return normalizeAwemeItemIDList(item["block_video_material"], field+".block_video_material", true)
+		},
+	); err != nil {
+		return err
+	}
+	programmatic, exists := object["programmatic_creative_media_list"].(map[string]any)
+	if object["programmatic_creative_media_list"] != nil && !exists {
+		return errors.New("Qianchuan programmatic_creative_media_list must be an object")
+	}
+	if exists {
+		if err := normalizeAwemeItemIDList(
+			programmatic["video_material"],
+			"programmatic_creative_media_list.video_material",
+			false,
+		); err != nil {
+			return err
+		}
+		if err := normalizeAwemeItemIDList(
+			programmatic["block_video_material"],
+			"programmatic_creative_media_list.block_video_material",
+			true,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizePayloadObjectList(
+	value any,
+	field string,
+	normalize func(map[string]any, string) error,
+) error {
+	if value == nil {
+		return nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("Qianchuan %s must be an array", field)
+	}
+	for index, value := range items {
+		item, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("Qianchuan %s[%d] must be an object", field, index)
+		}
+		if err := normalize(item, fmt.Sprintf("%s[%d]", field, index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeAwemeItemIDList(value any, field string, required bool) error {
+	return normalizePayloadObjectList(value, field, func(item map[string]any, itemField string) error {
+		return normalizePayloadID(item, "aweme_item_id", itemField+".aweme_item_id", required)
+	})
+}
+
+func normalizePayloadID(object map[string]any, key, field string, required bool) error {
+	value, exists := object[key]
+	if !exists || value == nil || strings.TrimSpace(fmt.Sprint(value)) == "" {
+		if required {
+			return fmt.Errorf("Qianchuan %s must be a positive decimal ID", field)
+		}
+		return nil
+	}
+	identifier := payloadID(value)
+	if !validPositiveID(identifier) {
+		return fmt.Errorf("Qianchuan %s must be a positive decimal ID", field)
+	}
+	object[key] = json.Number(identifier)
+	return nil
+}
+
+func numberIDs(values []string) []any {
+	result := make([]any, len(values))
+	for index, value := range values {
+		result[index] = json.Number(value)
+	}
+	return result
 }
 
 func decodeCreatePayload(payload json.RawMessage) (map[string]any, error) {

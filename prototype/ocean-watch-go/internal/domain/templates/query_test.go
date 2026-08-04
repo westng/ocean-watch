@@ -146,7 +146,7 @@ func templateTestConfig(t *testing.T) map[string]any {
       "overrides": {}
     }
   },
-  "qianchuan_product_template_schema_version": 6,
+  "qianchuan_product_template_schema_version": 7,
   "default_qianchuan_product_template": {
     "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
     "business_usable": false,

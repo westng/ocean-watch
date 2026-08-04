@@ -265,7 +265,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
         }
         migrated = product_templates.ensure_config(config)
         template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
-        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 6)
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 7)
         self.assertNotIn("shop_name", template["bindings"])
         self.assertEqual(
             template["display_name"],
@@ -273,7 +273,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
         )
         self.assertEqual(
             template["plan_name_template"],
-            product_templates.LEGACY_PLAN_NAME_TEMPLATE,
+            product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
         )
 
     def test_schema_v2_template_migrates_name_without_changing_identity(self):
@@ -293,7 +293,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
 
         migrated = product_templates.ensure_config(config)
 
-        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 6)
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 7)
         self.assertNotIn(product_templates.LEGACY_ACTIVE_TEMPLATE_KEY, migrated)
         migrated_template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
         self.assertEqual(migrated_template["template_id"], "qcpt_test")
@@ -323,7 +323,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "naming collision"):
             product_templates.ensure_config(config)
 
-    def test_schema_v4_migration_preserves_name_and_plan_name_behavior(self):
+    def test_schema_v4_migration_preserves_name_and_adopts_current_plan_name(self):
         template = product_templates.build_business_template(
             advertiser_id="1234567890123456",
             product_name="示例商品",
@@ -343,10 +343,10 @@ class QianchuanProductTemplateTests(unittest.TestCase):
         self.assertEqual(migrated_template["display_name"], "用户旧千川模板")
         self.assertEqual(
             migrated_template["plan_name_template"],
-            product_templates.LEGACY_PLAN_NAME_TEMPLATE,
+            product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
         )
 
-    def test_schema_v5_upgrades_only_default_plan_name_template(self):
+    def test_schema_v6_upgrades_legacy_default_business_plan_names(self):
         default = product_templates.default_template()
         default["plan_name_template"] = product_templates.LEGACY_PLAN_NAME_TEMPLATE
         business = product_templates.build_business_template(
@@ -358,14 +358,14 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             plan_name_template=product_templates.LEGACY_PLAN_NAME_TEMPLATE,
         )
         config = {
-            product_templates.SCHEMA_VERSION_KEY: 5,
+            product_templates.SCHEMA_VERSION_KEY: 6,
             product_templates.DEFAULT_TEMPLATE_KEY: default,
             product_templates.TEMPLATES_KEY: {"qcpt_test": business},
         }
 
         migrated = product_templates.ensure_config(config)
 
-        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 6)
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 7)
         self.assertEqual(
             migrated[product_templates.DEFAULT_TEMPLATE_KEY]["plan_name_template"],
             product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
@@ -374,7 +374,54 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             migrated[product_templates.TEMPLATES_KEY]["qcpt_test"][
                 "plan_name_template"
             ],
-            product_templates.LEGACY_PLAN_NAME_TEMPLATE,
+            product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
+        )
+
+    def test_schema_v6_preserves_explicit_custom_business_plan_name(self):
+        custom = "{creator_name}_{product_name}_{date}"
+        business = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123",
+            template_id="qcpt_test",
+            template_name="用户旧千川模板",
+            plan_name_template=custom,
+        )
+        config = {
+            product_templates.SCHEMA_VERSION_KEY: 6,
+            product_templates.TEMPLATES_KEY: {"qcpt_test": business},
+        }
+
+        migrated = product_templates.ensure_config(config)
+
+        self.assertEqual(
+            migrated[product_templates.TEMPLATES_KEY]["qcpt_test"][
+                "plan_name_template"
+            ],
+            custom,
+        )
+
+    def test_schema_v6_does_not_mask_invalid_plan_name_type(self):
+        business = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123",
+            template_id="qcpt_test",
+            template_name="用户旧千川模板",
+        )
+        business["plan_name_template"] = []
+        config = {
+            product_templates.SCHEMA_VERSION_KEY: 6,
+            product_templates.TEMPLATES_KEY: {"qcpt_test": business},
+        }
+
+        migrated = product_templates.ensure_config(config)
+
+        self.assertEqual(
+            migrated[product_templates.TEMPLATES_KEY]["qcpt_test"][
+                "plan_name_template"
+            ],
+            [],
         )
 
     def test_future_schema_is_not_downgraded(self):

@@ -82,7 +82,7 @@ func TestDeleteSubmitUsesCapturedRevision(t *testing.T) {
 
 func TestCurrentQianchuanMigrationSkipsCAS(t *testing.T) {
 	config := map[string]any{
-		"qianchuan_product_template_schema_version": 6,
+		"qianchuan_product_template_schema_version": 7,
 		"default_qianchuan_product_template": map[string]any{
 			"template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN", "business_usable": false,
 			"bindings":           map[string]any{"channel": "qianchuan", "advertiser_id": "REPLACE_WITH_ADVERTISER_ID", "product_name": "REPLACE_WITH_PRODUCT_NAME", "product_ids": []any{}},

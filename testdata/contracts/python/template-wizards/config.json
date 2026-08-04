@@ -106,7 +106,7 @@
     "tracking_urls": {},
     "titles": []
   },
-  "qianchuan_product_template_schema_version": 6,
+  "qianchuan_product_template_schema_version": 7,
   "qianchuan_product_templates": {},
   "default_qianchuan_product_template": {
     "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",

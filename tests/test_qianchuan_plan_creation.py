@@ -74,6 +74,24 @@ class QianchuanPlanCreationTests(unittest.TestCase):
         _, blocking = create_qianchuan_plan.normalize_and_validate(payload)
         self.assertNotIn("name", blocking)
 
+    def test_product_plan_name_is_sanitized_before_validation(self):
+        payload = product_payload()
+        payload["name"] = " 达人🧀  商品✨计划 "
+
+        normalized, blocking = create_qianchuan_plan.normalize_and_validate(payload)
+
+        self.assertEqual(blocking, ())
+        self.assertEqual(normalized["name"], "达人 商品计划")
+
+    def test_product_plan_name_empty_after_sanitation_is_blocked(self):
+        payload = product_payload()
+        payload["name"] = "🧀✨"
+
+        normalized, blocking = create_qianchuan_plan.normalize_and_validate(payload)
+
+        self.assertEqual(normalized["name"], "")
+        self.assertIn("name", blocking)
+
     def test_live_plan_requires_aweme_id_and_rejects_name(self):
         payload = live_payload()
         payload.pop("aweme_id")
@@ -128,6 +146,103 @@ class QianchuanPlanCreationTests(unittest.TestCase):
             blocking,
         )
         self.assertNotIn("multi_product_creative_list[0].creative_card", blocking)
+
+    def test_product_plan_normalizes_all_official_numeric_id_paths(self):
+        payload = product_payload()
+        payload["aweme_id"] = "48917855087"
+        payload["multi_product_creative_list"] = [{
+            "product_id": "9876543210987654",
+            "video_material": [{
+                "aweme_item_id": "7123456789012345678",
+                "image_mode": "VIDEO_VERTICAL",
+            }],
+            "block_video_material": [{
+                "aweme_item_id": "7123456789012345679",
+            }],
+        }]
+
+        normalized, blocking = create_qianchuan_plan.normalize_and_validate(payload)
+
+        self.assertEqual(blocking, ())
+        self.assertEqual(normalized["aweme_id"], 48917855087)
+        creative = normalized["multi_product_creative_list"][0]
+        self.assertEqual(creative["product_id"], 9876543210987654)
+        self.assertEqual(
+            creative["video_material"][0]["aweme_item_id"],
+            7123456789012345678,
+        )
+        self.assertEqual(
+            creative["block_video_material"][0]["aweme_item_id"],
+            7123456789012345679,
+        )
+
+    def test_product_plan_invalid_nested_ids_block_before_credentials(self):
+        payload = product_payload()
+        payload["aweme_id"] = "invalid"
+        payload["multi_product_creative_list"] = [{
+            "product_id": "invalid",
+            "video_material": [{
+                "aweme_item_id": "invalid",
+                "image_mode": "VIDEO_VERTICAL",
+            }],
+        }]
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                json.dumps(channels.migrate_config(valid_config())),
+                encoding="utf-8",
+            )
+            payload_path = Path(directory) / "payload.json"
+            payload_path.write_text(json.dumps(payload), encoding="utf-8")
+            output = StringIO()
+            with mock.patch.object(
+                create_qianchuan_plan.token_manager,
+                "ensure_access_token",
+            ) as ensure_token, redirect_stdout(output):
+                exit_code = create_qianchuan_plan.main([
+                    "--config",
+                    str(config_path),
+                    "--payload-file",
+                    str(payload_path),
+                    "--submit",
+                ])
+
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 1)
+        self.assertCountEqual(
+            result["blocking_fields"],
+            [
+                "aweme_id",
+                "multi_product_creative_list[0].product_id",
+                "multi_product_creative_list[0].video_material[0].aweme_item_id",
+            ],
+        )
+        ensure_token.assert_not_called()
+
+    def test_live_plan_normalizes_programmatic_aweme_item_ids(self):
+        payload = live_payload()
+        payload["programmatic_creative_media_list"] = {
+            "video_material": [{
+                "aweme_item_id": "7123456789012345678",
+                "image_mode": "VIDEO_VERTICAL",
+            }],
+            "block_video_material": [{
+                "aweme_item_id": "7123456789012345679",
+            }],
+        }
+
+        normalized, blocking = create_qianchuan_plan.normalize_and_validate(payload)
+
+        self.assertEqual(blocking, ())
+        programmatic = normalized["programmatic_creative_media_list"]
+        self.assertEqual(
+            programmatic["video_material"][0]["aweme_item_id"],
+            7123456789012345678,
+        )
+        self.assertEqual(
+            programmatic["block_video_material"][0]["aweme_item_id"],
+            7123456789012345679,
+        )
 
     def test_unknown_top_level_field_is_rejected(self):
         payload = product_payload()

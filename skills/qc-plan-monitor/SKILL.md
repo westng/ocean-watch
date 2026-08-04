@@ -186,7 +186,8 @@ Qianchuan product templates are independent from Marketing templates.
 - Product-template display names are user-defined labels. The wizard requires a non-empty name, while advertiser and product ownership remain exclusively in `bindings`.
 - Every product template stores a `plan_name_template` used only when creating a new product all-domain plan. Supported placeholders are `product_name`, `creator_name`, `aweme_id`, `douyin_id`, `date`, `time`, `datetime`, `month_day`, `type`, and `business`; `month_day` renders without zero-padding, for example `8.4`, and the rendered name is limited to 100 weighted characters.
 - The default product skeleton uses `{month_day}-{creator_name}-{product_name}-{type}-{business}`. When that template creates a new plan, pass the per-run values with `--plan-type` and `--business`; both are required only when referenced by the selected template. Existing-plan material append never requires them and never changes the existing plan name.
-- Schema v4 templates first receive `{product_name}-{creator_name}-{datetime}` to preserve their previous behavior. Schema v5 to v6 upgrades only the default skeleton to the new five-part format; existing business templates remain unchanged.
+- Schema v4 templates first receive `{product_name}-{creator_name}-{datetime}` to preserve their previous behavior. Schema v5 to v6 upgrades the default skeleton to the new five-part format. Schema v7 also upgrades business templates that are missing a pattern or still use that exact legacy default; explicitly customized patterns remain unchanged.
+- Before dry-run output or submission, remove Emoji, Unicode symbol, and control characters from rendered or raw product-plan names, normalize whitespace, then enforce the official 100-weighted-character limit. Stop before credentials if the cleaned name is empty.
 - Product IDs are deduplicated in input order and enforce the official maximum of 30.
 - Defaults are custom bidding, ROI `1.7`, budget `5000`, smart coupon on, long-term delivery, and net payment ROI optimization.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
@@ -321,6 +322,8 @@ Supported goals:
 
 - `VIDEO_PROM_GOODS`: one to 30 products; optional unique `name`; `aweme_id` depends on merchant account type.
 - `LIVE_PROM_GOODS`: requires `aweme_id`; does not support `name`.
+
+For raw official payloads, normalize decimal-string IDs before dry-run output or submission, including top-level `aweme_id`, product creative `product_id`, and nested `aweme_item_id` values in video and blocked-video material lists. Invalid IDs must block before credential resolution or an official request.
 
 Bid rules:
 

@@ -31,7 +31,7 @@ func TestValidateCurrentTemplateFixture(t *testing.T) {
 	if qianchuan["selected_template_kind"] != nil || qianchuan["valid"] != true {
 		t.Fatalf("unexpected Qianchuan validation: %#v", qianchuan)
 	}
-	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 6, "live": 1}) {
+	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 7, "live": 1}) {
 		t.Fatalf("unexpected Qianchuan schema versions: %#v", qianchuan)
 	}
 	if !reflect.DeepEqual(config, before) {
@@ -197,7 +197,34 @@ func TestUserNamesSurviveMarketingV5AndQianchuanV4Migration(t *testing.T) {
 	}
 	migratedTemplate := mapOrEmpty(migratedProduct[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
 	if !changed || migratedTemplate["display_name"] != "用户旧千川模板" ||
-		migratedTemplate["plan_name_template"] != qianchuanProductLegacyPlanName {
+		migratedTemplate["plan_name_template"] != qianchuanProductDefaultPlanName {
 		t.Fatalf("Qianchuan v4 migration changed user name or behavior: %#v", migratedTemplate)
+	}
+}
+
+func TestQianchuanV6MigrationPreservesCustomPlanName(t *testing.T) {
+	config := templateTestConfig(t)
+	config[qianchuanProductSchemaVersionKey] = 6
+	template := mapOrEmpty(config[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	template["plan_name_template"] = "{creator_name}_{product_name}_{date}"
+
+	migrated, _, changed, err := MigrateQianchuanProduct(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migratedTemplate := mapOrEmpty(migrated[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	if !changed || migratedTemplate["plan_name_template"] != "{creator_name}_{product_name}_{date}" {
+		t.Fatalf("custom Qianchuan plan name changed during v7 migration: %#v", migratedTemplate)
+	}
+}
+
+func TestQianchuanV6MigrationDoesNotMaskInvalidPlanNameType(t *testing.T) {
+	config := templateTestConfig(t)
+	config[qianchuanProductSchemaVersionKey] = 6
+	template := mapOrEmpty(config[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	template["plan_name_template"] = []any{}
+
+	if _, _, _, err := MigrateQianchuanProduct(config); err == nil || err.Error() != "plan_name_template is required" {
+		t.Fatalf("invalid Qianchuan plan name type was masked during v7 migration: %v", err)
 	}
 }

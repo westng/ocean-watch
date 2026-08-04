@@ -1,5 +1,6 @@
 import copy
 import re
+import unicodedata
 import uuid
 from decimal import Decimal, InvalidOperation
 
@@ -7,7 +8,7 @@ from ocean_watch.core.data import is_missing
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 MAX_PRODUCTS = 30
 TEMPLATE_TYPE = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 MATERIAL_SOURCE_TYPE = "CREATOR_RUNTIME_QUERY"
@@ -40,6 +41,14 @@ PLAN_NAME_PLACEHOLDERS = {
     "type",
     "business",
 }
+
+
+def uses_legacy_plan_name_template(value):
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip() in {"", LEGACY_PLAN_NAME_TEMPLATE}
 
 
 def default_template():
@@ -109,12 +118,22 @@ def ensure_config(config):
                 template.setdefault("plan_name_template", LEGACY_PLAN_NAME_TEMPLATE)
     if current_version < 6:
         default = normalized.get(DEFAULT_TEMPLATE_KEY)
-        if isinstance(default, dict) and default.get("plan_name_template") in {
-            None,
-            "",
-            LEGACY_PLAN_NAME_TEMPLATE,
-        }:
+        if isinstance(default, dict) and uses_legacy_plan_name_template(
+            default.get("plan_name_template")
+        ):
             default["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
+    if current_version < 7:
+        default = normalized.get(DEFAULT_TEMPLATE_KEY)
+        if isinstance(default, dict) and uses_legacy_plan_name_template(
+            default.get("plan_name_template")
+        ):
+            default["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
+        for template in (normalized.get(TEMPLATES_KEY) or {}).values():
+            if not isinstance(template, dict):
+                continue
+            plan_name_template = template.get("plan_name_template")
+            if uses_legacy_plan_name_template(plan_name_template):
+                template["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
     normalized[SCHEMA_VERSION_KEY] = SCHEMA_VERSION
     normalized.setdefault(DEFAULT_TEMPLATE_KEY, default_template())
     normalized.setdefault(TEMPLATES_KEY, {})
@@ -182,6 +201,20 @@ def validate_plan_name_template(value):
             {"placeholders": unknown},
         )
     return value
+
+
+def sanitize_plan_name(value):
+    characters = []
+    for character in str(value or ""):
+        if character.isspace():
+            characters.append(" ")
+            continue
+        if ord(character) in {0x20E3, 0xFE0E, 0xFE0F}:
+            continue
+        if unicodedata.category(character)[0] in {"C", "S"}:
+            continue
+        characters.append(character)
+    return " ".join("".join(characters).split())
 
 
 def validate_delivery_setting(setting):

@@ -181,6 +181,21 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
 
         self.assertEqual(name, "达" * 50)
 
+    def test_rendered_plan_name_removes_emoji_before_weighted_truncation(self):
+        selected = template()
+        selected["bindings"]["product_name"] = "奶酪✨产品"
+
+        name = batch.build_plan_name(
+            selected,
+            {"aweme_id": "9001", "aweme_name": "达人🧀甲"},
+            creator_name="达人🧀甲",
+            plan_type="实况🎬",
+            business="戴高兰",
+            now=dt.datetime(2026, 8, 4, 12, 30, 45),
+        )
+
+        self.assertEqual(name, "8.4-达人甲-奶酪产品-实况-戴高兰")
+
     def test_empty_rendered_plan_name_is_rejected(self):
         selected = template()
         selected["plan_name_template"] = "{douyin_id}"
@@ -189,6 +204,18 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
             batch.build_plan_name(
                 selected,
                 {"aweme_id": "9001", "aweme_name": "达人甲"},
+                now=dt.datetime(2026, 8, 4, 12, 30, 45),
+            )
+
+    def test_rendered_plan_name_empty_after_sanitation_is_rejected(self):
+        selected = template()
+        selected["plan_name_template"] = "{creator_name}"
+
+        with self.assertRaisesRegex(ValueError, "rendered plan name is empty"):
+            batch.build_plan_name(
+                selected,
+                {"aweme_id": "9001", "aweme_name": "🧀✨"},
+                creator_name="🧀✨",
                 now=dt.datetime(2026, 8, 4, 12, 30, 45),
             )
 

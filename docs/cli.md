@@ -242,7 +242,7 @@ ocean-watch qc-templates create-live
 ocean-watch qc-templates migrate-live
 ```
 
-向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符，渲染结果按官方限制截为 100 加权字符。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`；`month_day` 输出如 `8.4`，类型和商务在每次可能创建计划时填写，不写入模板。旧业务模板继续使用原计划名称形式。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符。渲染结果会先清除 Emoji、Unicode 符号和控制字符、归一化空白，再按官方限制截为 100 加权字符；清洗后为空会阻断。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`；`month_day` 输出如 `8.4`，类型和商务在每次可能创建计划时填写，不写入模板。Schema v7 会把缺失命名形式或仍使用旧默认形式的业务模板迁移到当前骨架，显式自定义形式保持不变。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
 
 直播模板从独立的 `default_qianchuan_live_template` 或已有直播模板复制，绑定广告主、直播账号名称和数值 `aweme_id`。默认设置为保守出价、预算 5000、长期投放和智能选材。直播模板不保存商品、作品或手工素材，使用 `plans create-qianchuan --live-template TEMPLATE_ID` 创建；该模式不接受计划名称。
 
@@ -340,7 +340,7 @@ ocean-watch plans create-qianchuan \
   --live-template LIVE_TEMPLATE_ID
 ```
 
-也可用 `--payload-file`、`--payload-json JSON` 或 `--payload-file -` 读取官方 payload；三种来源只能选择一个。`--advertiser-id` 可补充缺失的广告主 ID，但不能与 payload 或模板绑定冲突。在线提交增加 `--submit`，插件只解析该广告主的千川授权；成功返回 `data.ad_id`。
+也可用 `--payload-file`、`--payload-json JSON` 或 `--payload-file -` 读取官方 payload；三种来源只能选择一个。`--advertiser-id` 可补充缺失的广告主 ID，但不能与 payload 或模板绑定冲突。原始载荷中的顶层 `aweme_id`、商品创意 `product_id` 和视频/屏蔽视频素材 `aweme_item_id` 会在 dry-run 与提交前统一规范化为官方整数类型，无效 ID 会在读取凭据前阻断。在线提交增加 `--submit`，插件只解析该广告主的千川授权；成功返回 `data.ad_id`。
 
 千川创建直接调用 `/v1.0/qianchuan/uni_aweme/ad/create/`，不是营销的项目加单元两步事务。商品模板生成不含素材的基础 payload，并以 `runtime_creator_materials` 阻止模板单独在线提交；完整的运行时素材注入由下方作品链接批量命令处理。原始官方 payload 示例位于 `skills/qc-plan-monitor/assets/qianchuan-*-plan.example.json`。
 

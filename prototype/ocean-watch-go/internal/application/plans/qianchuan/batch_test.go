@@ -73,6 +73,18 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 	if got, err := service.planName(request, group); err != nil || got != strings.Repeat("达", 50) {
 		t.Fatalf("weighted plan-name limit changed: %q", got)
 	}
+	creator.Name = "达人🧀甲"
+	group.creator = creator
+	group.works[0].CreatorName = creator.Name
+	if got, err := service.planName(request, group); err != nil || got != "达人甲" {
+		t.Fatalf("plan-name emoji was not removed: %q", got)
+	}
+	creator.Name = "🧀✨"
+	group.creator = creator
+	group.works[0].CreatorName = creator.Name
+	if _, err := service.planName(request, group); err == nil {
+		t.Fatal("plan name empty after sanitation was accepted")
+	}
 	request.PlanNameTemplate = "{douyin_id}"
 	creator.VisibleID = ""
 	group.creator = creator

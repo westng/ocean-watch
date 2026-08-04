@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	sharedplans "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/plans"
@@ -667,7 +668,7 @@ func (service BatchService) planName(request normalizedBatchRequest, group batch
 	for key, value := range values {
 		pattern = strings.ReplaceAll(pattern, "{"+key+"}", value)
 	}
-	name := weightedTruncate(pattern, 100)
+	name := weightedTruncate(sanitizePlanName(pattern), 100)
 	if name == "" {
 		return "", errors.New("Qianchuan rendered plan name is empty")
 	}
@@ -955,6 +956,23 @@ func weightedTruncate(value string, maximum int) string {
 		length += width
 	}
 	return builder.String()
+}
+
+func sanitizePlanName(value string) string {
+	var builder strings.Builder
+	for _, character := range value {
+		if unicode.IsSpace(character) {
+			builder.WriteByte(' ')
+			continue
+		}
+		if character == '\u20e3' || character == '\ufe0e' || character == '\ufe0f' ||
+			!unicode.IsGraphic(character) ||
+			unicode.In(character, unicode.Sc, unicode.Sk, unicode.Sm, unicode.So) {
+			continue
+		}
+		builder.WriteRune(character)
+	}
+	return strings.Join(strings.Fields(builder.String()), " ")
 }
 
 func batchGroupFailed(status string) bool {
