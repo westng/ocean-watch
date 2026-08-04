@@ -1,7 +1,7 @@
 schema_version: 1
 source: skills/ads-plan-monitor/src/ocean_watch/cli/main.py
-source_commit: 5ff6439ce28cb848548a6f2d3b7cefe297e96282
-command_count: 75
+source_commit: 5a94797fb5385b0e2463d5cc5ef4ea73f63e292c
+command_count: 82
 global_help:
   argv:
   - --help
@@ -2163,6 +2163,316 @@ commands:
     - '  --top TOP             0 displays every row.'
     - '  --out OUT'
     stdout_sha256: e4d749487d3c7e0da9889c4cd399b397f7dcec992a4eb736f28132ea963e4262
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: account
+  command: qc-reports account
+  description: Qianchuan all-domain and overall account performance
+  dispatch_prefix:
+  - account
+  help:
+    argv:
+    - qc-reports
+    - account
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports account [-h] [--config CONFIG] --advertiser-id\n                              \
+      \        ADVERTISER_ID\n                                      [--auth-account-id AUTH_ACCOUNT_ID]\n                \
+      \                      [--start-date START_DATE]\n                                      [--end-date END_DATE] [--out\
+      \ OUT]\n                                      [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n          \
+      \                            [--field FIELD]\n                                      [--order-platform ORDER_PLATFORM]\n\
+      \                                      [--adlab-scene {OVERALL_PROJECT,UNI_PROJECT}]\n                             \
+      \         [--data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}]\n\nQuery official Qianchuan account report data.\n\noptions:\n\
+      \  -h, --help            show this help message and exit\n  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n  --auth-account-id\
+      \ AUTH_ACCOUNT_ID\n  --start-date START_DATE\n  --end-date END_DATE\n  --out OUT             Optional JSON output path.\
+      \ No file is written by\n                        default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n\
+      \  --field FIELD         Field or comma-separated fields.\n  --order-platform ORDER_PLATFORM\n  --adlab-scene {OVERALL_PROJECT,UNI_PROJECT}\n\
+      \  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}\n"
+    stderr: ''
+    parameter_lines:
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --field FIELD         Field or comma-separated fields.'
+    - '  --order-platform ORDER_PLATFORM'
+    - '  --adlab-scene {OVERALL_PROJECT,UNI_PROJECT}'
+    - '  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}'
+    stdout_sha256: 5240e5a7ad690527890603823e868bc8ac461ca0c36701ec40a3792930e1cd11
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: uni-account
+  command: qc-reports uni-account
+  description: Qianchuan all-domain account performance
+  dispatch_prefix:
+  - uni-account
+  help:
+    argv:
+    - qc-reports
+    - uni-account
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports uni-account [-h] [--config CONFIG]\n                                          --advertiser-id\
+      \ ADVERTISER_ID\n                                          [--auth-account-id AUTH_ACCOUNT_ID]\n                   \
+      \                       [--start-date START_DATE]\n                                          [--end-date END_DATE] [--out\
+      \ OUT]\n                                          [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n      \
+      \                                    [--field FIELD]\n                                          [--order-platform ORDER_PLATFORM]\n\
+      \nQuery official Qianchuan uni-account report data.\n\noptions:\n  -h, --help            show this help message and\
+      \ exit\n  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n  --auth-account-id AUTH_ACCOUNT_ID\n  --start-date START_DATE\n\
+      \  --end-date END_DATE\n  --out OUT             Optional JSON output path. No file is written by\n                 \
+      \       default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n  --field FIELD         Field or comma-separated\
+      \ fields.\n  --order-platform ORDER_PLATFORM\n"
+    stderr: ''
+    parameter_lines:
+    - '                                          --advertiser-id ADVERTISER_ID'
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --field FIELD         Field or comma-separated fields.'
+    - '  --order-platform ORDER_PLATFORM'
+    stdout_sha256: 58d26674924eb12ed24b64f7ffc69fe752e6af57fef91a25f84c7ba264b96425
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: schema
+  command: qc-reports schema
+  description: Qianchuan unified report dimensions and metrics
+  dispatch_prefix:
+  - schema
+  help:
+    argv:
+    - qc-reports
+    - schema
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports schema [-h] [--config CONFIG] --advertiser-id\n                               \
+      \      ADVERTISER_ID\n                                     [--auth-account-id AUTH_ACCOUNT_ID]\n                   \
+      \                  [--start-date START_DATE]\n                                     [--end-date END_DATE] [--out OUT]\n\
+      \                                     [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n                  \
+      \                   --data-topic DATA_TOPIC\n                                     [--data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}]\n\
+      \nQuery official Qianchuan schema report data.\n\noptions:\n  -h, --help            show this help message and exit\n\
+      \  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n  --auth-account-id AUTH_ACCOUNT_ID\n  --start-date START_DATE\n\
+      \  --end-date END_DATE\n  --out OUT             Optional JSON output path. No file is written by\n                 \
+      \       default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n  --data-topic DATA_TOPIC\n  --data-period\
+      \ {ALL_DATA,OVER_ALL_DATA,UNI_DATA}\n"
+    stderr: ''
+    parameter_lines:
+    - '                                     --data-topic DATA_TOPIC'
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --data-topic DATA_TOPIC'
+    - '  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}'
+    stdout_sha256: 3dc2aab137c14aa9a98c420d5bc631a1b7ac8bbe612b57ad5628b254a4579a08
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: custom
+  command: qc-reports custom
+  description: Qianchuan custom all-domain or overall report
+  dispatch_prefix:
+  - custom
+  help:
+    argv:
+    - qc-reports
+    - custom
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports custom [-h] [--config CONFIG] --advertiser-id\n                               \
+      \      ADVERTISER_ID\n                                     [--auth-account-id AUTH_ACCOUNT_ID]\n                   \
+      \                  [--start-date START_DATE]\n                                     [--end-date END_DATE] [--out OUT]\n\
+      \                                     [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n                  \
+      \                   --data-topic DATA_TOPIC --dimension\n                                     DIMENSION --metric METRIC\n\
+      \                                     [--filter FILTER]\n                                     [--data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}]\n\
+      \                                     [--order-field ORDER_FIELD]\n                                     [--order-type\
+      \ {ASC,DESC}]\n                                     [--page-size {10,20,50,100,200}]\n                             \
+      \        [--max-pages MAX_PAGES] [--top TOP]\n\nQuery official Qianchuan custom report data.\n\noptions:\n  -h, --help\
+      \            show this help message and exit\n  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n  --auth-account-id\
+      \ AUTH_ACCOUNT_ID\n  --start-date START_DATE\n  --end-date END_DATE\n  --out OUT             Optional JSON output path.\
+      \ No file is written by\n                        default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n\
+      \  --data-topic DATA_TOPIC\n  --dimension DIMENSION\n  --metric METRIC\n  --filter FILTER\n  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}\n\
+      \  --order-field ORDER_FIELD\n  --order-type {ASC,DESC}\n  --page-size {10,20,50,100,200}\n  --max-pages MAX_PAGES\n\
+      \  --top TOP\n"
+    stderr: ''
+    parameter_lines:
+    - '                                     --data-topic DATA_TOPIC --dimension'
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --data-topic DATA_TOPIC'
+    - '  --dimension DIMENSION'
+    - '  --metric METRIC'
+    - '  --filter FILTER'
+    - '  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}'
+    - '  --order-field ORDER_FIELD'
+    - '  --order-type {ASC,DESC}'
+    - '  --page-size {10,20,50,100,200}'
+    - '  --max-pages MAX_PAGES'
+    - '  --top TOP'
+    stdout_sha256: db153e4eae72bed1f619b0aa3f00a79550063a6d036f32083321b8663842b4f0
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: products
+  command: qc-reports products
+  description: Qianchuan product-dimension performance
+  dispatch_prefix:
+  - products
+  help:
+    argv:
+    - qc-reports
+    - products
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports products [-h] [--config CONFIG] --advertiser-id\n                             \
+      \          ADVERTISER_ID\n                                       [--auth-account-id AUTH_ACCOUNT_ID]\n             \
+      \                          [--start-date START_DATE]\n                                       [--end-date END_DATE] [--out\
+      \ OUT]\n                                       [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n         \
+      \                              [--report-mode {overall,uni}]\n                                       [--dimension DIMENSION]\n\
+      \                                       [--metric METRIC] [--filter FILTER]\n                                      \
+      \ [--data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}]\n                                       [--order-field ORDER_FIELD]\n\
+      \                                       [--order-type {ASC,DESC}]\n                                       [--page-size\
+      \ {10,20,50,100,200}]\n                                       [--max-pages MAX_PAGES] [--top TOP]\n\nQuery official\
+      \ Qianchuan products report data.\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG\n\
+      \  --advertiser-id ADVERTISER_ID\n  --auth-account-id AUTH_ACCOUNT_ID\n  --start-date START_DATE\n  --end-date END_DATE\n\
+      \  --out OUT             Optional JSON output path. No file is written by\n                        default.\n  --marketing-goal\
+      \ {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n  --report-mode {overall,uni}\n  --dimension DIMENSION\n  --metric METRIC\n\
+      \  --filter FILTER\n  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}\n  --order-field ORDER_FIELD\n  --order-type {ASC,DESC}\n\
+      \  --page-size {10,20,50,100,200}\n  --max-pages MAX_PAGES\n  --top TOP\n"
+    stderr: ''
+    parameter_lines:
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --report-mode {overall,uni}'
+    - '  --dimension DIMENSION'
+    - '  --metric METRIC'
+    - '  --filter FILTER'
+    - '  --data-period {ALL_DATA,OVER_ALL_DATA,UNI_DATA}'
+    - '  --order-field ORDER_FIELD'
+    - '  --order-type {ASC,DESC}'
+    - '  --page-size {10,20,50,100,200}'
+    - '  --max-pages MAX_PAGES'
+    - '  --top TOP'
+    stdout_sha256: 97f27d1f8386b9583ec16059a0ab5f112c9dfec49e339024af7e82acdce2e5e6
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: rooms
+  command: qc-reports rooms
+  description: Qianchuan live-room dimension performance
+  dispatch_prefix:
+  - rooms
+  help:
+    argv:
+    - qc-reports
+    - rooms
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports rooms [-h] [--config CONFIG] --advertiser-id\n                                \
+      \    ADVERTISER_ID\n                                    [--auth-account-id AUTH_ACCOUNT_ID]\n                      \
+      \              [--start-date START_DATE]\n                                    [--end-date END_DATE] [--out OUT]\n  \
+      \                                  [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n                     \
+      \               --room-id ROOM_ID [--metric METRIC]\n                                    [--order-platform {ALL,ECP_AWEME,QIANCHUAN}]\n\
+      \                                    [--smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}]\n                \
+      \                    [--dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}]\n                              \
+      \      [--order-field ORDER_FIELD]\n                                    [--order-type {ASC,DESC}]\n                \
+      \                    [--page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}]\n\
+      \                                    [--max-pages MAX_PAGES] [--top TOP]\n\nQuery official Qianchuan rooms report data.\n\
+      \noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n\
+      \  --auth-account-id AUTH_ACCOUNT_ID\n  --start-date START_DATE\n  --end-date END_DATE\n  --out OUT             Optional\
+      \ JSON output path. No file is written by\n                        default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n\
+      \  --room-id ROOM_ID\n  --metric METRIC\n  --order-platform {ALL,ECP_AWEME,QIANCHUAN}\n  --smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}\n\
+      \  --dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}\n  --order-field ORDER_FIELD\n  --order-type {ASC,DESC}\n\
+      \  --page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}\n\
+      \  --max-pages MAX_PAGES\n  --top TOP\n"
+    stderr: ''
+    parameter_lines:
+    - '                                    --room-id ROOM_ID [--metric METRIC]'
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --room-id ROOM_ID'
+    - '  --metric METRIC'
+    - '  --order-platform {ALL,ECP_AWEME,QIANCHUAN}'
+    - '  --smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}'
+    - '  --dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}'
+    - '  --order-field ORDER_FIELD'
+    - '  --order-type {ASC,DESC}'
+    - '  --page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}'
+    - '  --max-pages MAX_PAGES'
+    - '  --top TOP'
+    stdout_sha256: 5ebff3d50a7d44b05295c77adaf10fd62689cd8ef1e9fda35c7cd867f685c091
+    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- domain: qc-reports
+  action: authors
+  command: qc-reports authors
+  description: Qianchuan Douyin-author dimension performance
+  dispatch_prefix:
+  - authors
+  help:
+    argv:
+    - qc-reports
+    - authors
+    - --help
+    exit_code: 0
+    stdout: "usage: ocean-watch qc-reports authors [-h] [--config CONFIG] --advertiser-id\n                              \
+      \        ADVERTISER_ID\n                                      [--auth-account-id AUTH_ACCOUNT_ID]\n                \
+      \                      [--start-date START_DATE]\n                                      [--end-date END_DATE] [--out\
+      \ OUT]\n                                      [--marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}]\n          \
+      \                            --aweme-id AWEME_ID [--metric METRIC]\n                                      [--order-platform\
+      \ {ALL,ECP_AWEME,QIANCHUAN}]\n                                      [--smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}]\n\
+      \                                      [--dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}]\n            \
+      \                          [--order-field ORDER_FIELD]\n                                      [--order-type {ASC,DESC}]\n\
+      \                                      [--page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}]\n\
+      \                                      [--max-pages MAX_PAGES] [--top TOP]\n\nQuery official Qianchuan authors report\
+      \ data.\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG\n  --advertiser-id ADVERTISER_ID\n\
+      \  --auth-account-id AUTH_ACCOUNT_ID\n  --start-date START_DATE\n  --end-date END_DATE\n  --out OUT             Optional\
+      \ JSON output path. No file is written by\n                        default.\n  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}\n\
+      \  --aweme-id AWEME_ID\n  --metric METRIC\n  --order-platform {ALL,ECP_AWEME,QIANCHUAN}\n  --smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}\n\
+      \  --dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}\n  --order-field ORDER_FIELD\n  --order-type {ASC,DESC}\n\
+      \  --page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}\n\
+      \  --max-pages MAX_PAGES\n  --top TOP\n"
+    stderr: ''
+    parameter_lines:
+    - '                                      --aweme-id AWEME_ID [--metric METRIC]'
+    - '  --config CONFIG'
+    - '  --advertiser-id ADVERTISER_ID'
+    - '  --auth-account-id AUTH_ACCOUNT_ID'
+    - '  --start-date START_DATE'
+    - '  --end-date END_DATE'
+    - '  --out OUT             Optional JSON output path. No file is written by'
+    - '  --marketing-goal {ALL,VIDEO_PROM_GOODS,LIVE_PROM_GOODS}'
+    - '  --aweme-id AWEME_ID'
+    - '  --metric METRIC'
+    - '  --order-platform {ALL,ECP_AWEME,QIANCHUAN}'
+    - '  --smart-bid-type {SMART_BID_CONSERVATIVE,SMART_BID_CUSTOM}'
+    - '  --dimension {TIME_GRANULARITY_DAILY,TIME_GRANULARITY_HOURLY}'
+    - '  --order-field ORDER_FIELD'
+    - '  --order-type {ASC,DESC}'
+    - '  --page-size {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100}'
+    - '  --max-pages MAX_PAGES'
+    - '  --top TOP'
+    stdout_sha256: 12c645d6e2d8b64317962062dbb2d43c619e3aeffa16debe7dc9422da88807b3
     stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 - domain: discover
   action: projects

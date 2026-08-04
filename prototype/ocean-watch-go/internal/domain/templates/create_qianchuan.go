@@ -6,10 +6,12 @@ type QianchuanProductCreateSource struct {
 }
 
 type QianchuanProductCreateInput struct {
-	TemplateID   string
-	AdvertiserID string
-	ProductName  string
-	ProductIDs   any
+	TemplateID       string
+	TemplateName     string
+	AdvertiserID     string
+	ProductName      string
+	ProductIDs       any
+	PlanNameTemplate string
 }
 
 type QianchuanLiveCreateSource struct {
@@ -66,6 +68,10 @@ func BuildQianchuanProductTemplate(
 	if err != nil {
 		return nil, err
 	}
+	templateName, err := requiredText(input.TemplateName, "template_name")
+	if err != nil {
+		return nil, err
+	}
 	if source == nil {
 		source = defaultQianchuanProductTemplate()
 	}
@@ -77,9 +83,20 @@ func BuildQianchuanProductTemplate(
 	if err != nil {
 		return nil, err
 	}
+	planNameSource := any(input.PlanNameTemplate)
+	if !pythonTruthy(planNameSource) {
+		planNameSource = source["plan_name_template"]
+	}
+	if !pythonTruthy(planNameSource) {
+		planNameSource = qianchuanProductDefaultPlanName
+	}
+	planNameTemplate, err := validateQianchuanPlanNameTemplate(planNameSource)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"template_id":   templateID,
-		"display_name":  qianchuanProductDisplayName(advertiserID, productName, stringList(productIDs)),
+		"display_name":  templateName,
 		"template_type": qianchuanProductTemplateType,
 		"status":        "active",
 		"bindings": map[string]any{
@@ -88,7 +105,8 @@ func BuildQianchuanProductTemplate(
 			"product_name":  productName,
 			"product_ids":   productIDs,
 		},
-		"delivery_setting": delivery,
+		"delivery_setting":   delivery,
+		"plan_name_template": planNameTemplate,
 		"material_strategy": map[string]any{
 			"source_type":          qianchuanProductMaterialSource,
 			"persist_material_ids": false,

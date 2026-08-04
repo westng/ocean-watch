@@ -33,8 +33,8 @@
     }
   },
   "plan_templates": {},
-  "plan_template_schema_version": 5,
-  "qianchuan_product_template_schema_version": 4,
+  "plan_template_schema_version": 6,
+  "qianchuan_product_template_schema_version": 5,
   "qianchuan_product_templates": {},
   "default_qianchuan_product_template": {
     "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
@@ -53,6 +53,7 @@
       "video_schedule_type": "SCHEDULE_FROM_NOW",
       "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
     },
+    "plan_name_template": "{product_name}-{creator_name}-{datetime}",
     "material_strategy": {
       "source_type": "CREATOR_RUNTIME_QUERY",
       "persist_material_ids": false

@@ -66,6 +66,8 @@ func compactMarketingTemplate(row map[string]any) map[string]any {
 		"platform":                row["platform"],
 		"traffic_source":          row["traffic_source"],
 		"daily_budget":            delivery["daily_budget"],
+		"project_name_template":   row["project_name_template"],
+		"promotion_name_template": row["promotion_name_template"],
 		"roi_goal":                delivery["roi_goal"],
 		"gender":                  delivery["gender"],
 		"ages":                    delivery["ages"],
@@ -99,14 +101,16 @@ func listMarketingTemplates(config map[string]any) ([]map[string]any, error) {
 		ages := listOrEmpty(effectiveDefaults["ages"])
 		imageFields := listOrEmpty(productInfo["product_image_fields"])
 		row := map[string]any{
-			"name":              name,
-			"channel":           bindings["channel"],
-			"advertiser_id":     bindings["advertiser_id"],
-			"platform":          bindings["platform"],
-			"traffic_source":    bindings["traffic_source"],
-			"product_id":        bindings["product_id"],
-			"product_name":      bindings["product_name"],
-			"product_image_ids": clone(productImageIDs),
+			"name":                    name,
+			"project_name_template":   effectiveDefaults["project_name_template"],
+			"promotion_name_template": effectiveDefaults["promotion_name_template"],
+			"channel":                 bindings["channel"],
+			"advertiser_id":           bindings["advertiser_id"],
+			"platform":                bindings["platform"],
+			"traffic_source":          bindings["traffic_source"],
+			"product_id":              bindings["product_id"],
+			"product_name":            bindings["product_name"],
+			"product_image_ids":       clone(productImageIDs),
 			"product_image": map[string]any{
 				"type":                      productInfo["product_image_type"],
 				"fields":                    clone(imageFields),

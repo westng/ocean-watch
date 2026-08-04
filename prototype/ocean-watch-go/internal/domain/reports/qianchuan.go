@@ -16,11 +16,39 @@ type MaterialPage struct {
 	RequestID string
 }
 
-type PlanSchema struct {
+type QianchuanSchema struct {
 	Topic      string
 	Dimensions []string
 	Metrics    []string
 	RequestID  string
+}
+
+type PlanSchema = QianchuanSchema
+
+type QianchuanReportRow struct {
+	Dimensions map[string]any
+	Metrics    map[string]any
+}
+
+type QianchuanReportPage struct {
+	Rows      []QianchuanReportRow
+	PageInfo  domainqianchuan.PageInfo
+	RequestID string
+}
+
+type QianchuanAggregate struct {
+	Values    map[string]any
+	RequestID string
+}
+
+type QianchuanDimensionRow struct {
+	Values map[string]any
+}
+
+type QianchuanDimensionPage struct {
+	Rows      []QianchuanDimensionRow
+	PageInfo  domainqianchuan.PageInfo
+	RequestID string
 }
 
 type PlanMetricRow struct {

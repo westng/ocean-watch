@@ -349,6 +349,22 @@ class CreatePlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not support active_plan_template"):
             plan_templates.migrate(config)
 
+    def test_schema_v5_migration_preserves_user_template_name(self):
+        config = business_template_config()
+        old_name = only_plan_template_name(config)
+        template = config["plan_templates"].pop(old_name)
+        template["display_name"] = "用户旧模板"
+        config["plan_templates"] = {"用户旧模板": template}
+        config["plan_template_schema_version"] = 5
+
+        migrated = plan_templates.migrate(config)
+
+        self.assertEqual(migrated["plan_template_schema_version"], 6)
+        self.assertEqual(
+            migrated["plan_templates"]["用户旧模板"]["display_name"],
+            "用户旧模板",
+        )
+
     def test_v3_names_and_references_migrate_to_shared_rule(self):
         config = business_template_config()
         source_name = only_plan_template_name(config)
@@ -379,7 +395,7 @@ class CreatePlanTests(unittest.TestCase):
             "巨量营销-1234567890-test product-unique-product-1-混剪素材"
         )
         new_target_name = "巨量营销-1234567890-目标商品-product-2-混剪素材"
-        self.assertEqual(migrated["plan_template_schema_version"], 5)
+        self.assertEqual(migrated["plan_template_schema_version"], 6)
         self.assertEqual(set(migrated["plan_templates"]), {new_source_name, new_target_name})
         self.assertNotIn("active_plan_template", migrated)
         migrated_target = migrated["plan_templates"][new_target_name]
@@ -453,7 +469,9 @@ class CreatePlanTests(unittest.TestCase):
                 "titles": ["新商品"],
                 "selling_points": ["新商品值得推荐"],
             },
-            name=None,
+            name="用户自定义营销模板",
+            project_name_template="项目_{product_name}_{material_date}_{suffix}",
+            promotion_name_template="广告_{product_name}_{material_date}_{suffix}",
             source_name="新来源",
             landing_page_url="https://landing.test/new",
             open_url="testapp://new",
@@ -465,7 +483,15 @@ class CreatePlanTests(unittest.TestCase):
         )
         updated, name = manage_plan_templates.create_template(config, arguments)
         template = updated["plan_templates"][name]
-        self.assertEqual(name, "巨量营销-456-新商品-product-2-混剪素材")
+        self.assertEqual(name, "用户自定义营销模板")
+        self.assertEqual(
+            template["overrides"]["defaults"]["project_name_template"],
+            "项目_{product_name}_{material_date}_{suffix}",
+        )
+        self.assertEqual(
+            template["overrides"]["defaults"]["promotion_name_template"],
+            "广告_{product_name}_{material_date}_{suffix}",
+        )
         self.assertEqual(template["bindings"]["advertiser_id"], "456")
         self.assertEqual(template["bindings"]["product_id"], "product-2")
         self.assertEqual(
@@ -510,7 +536,7 @@ class CreatePlanTests(unittest.TestCase):
             traffic_source="CID",
             product_id="product-2",
             product_name="new product",
-            name=None,
+            name="跨账户模板",
             source_name=None,
             landing_page_url=None,
             open_url=None,
@@ -640,6 +666,9 @@ class CreatePlanTests(unittest.TestCase):
             "素材来源": "1",
             "素材选择方式": "",
             "每单元素材数量": "",
+            "模板名称": "新商品营销模板",
+            "项目名称形式": "项目_{product_name}_{material_date}_{suffix}",
+            "广告名称形式": "广告_{product_name}_{material_date}_{suffix}",
             "输入文案标题": ["第一条新文案", ""],
             "计划来源": "新来源",
             "落地页链接": "https://landing.test/new",
@@ -659,8 +688,12 @@ class CreatePlanTests(unittest.TestCase):
         self.assertTrue(result["validation"]["ready_for_plan_creation"])
         self.assertEqual(
             result["template"],
-            "巨量营销-456-新商品推荐文案-product-2-混剪素材",
+            "新商品营销模板",
         )
+        self.assertEqual(result["name_templates"], {
+            "project": "项目_{product_name}_{material_date}_{suffix}",
+            "promotion": "广告_{product_name}_{material_date}_{suffix}",
+        })
         self.assertEqual(result["product_image"]["type"], "DPA")
         self.assertFalse(result["product_image"]["manual_image_ids_required"])
         self.assertEqual(result["product_selling_points"], ["新商品推荐文案推荐"])
@@ -707,6 +740,9 @@ class CreatePlanTests(unittest.TestCase):
             "素材来源": "1",
             "素材选择方式": "",
             "每单元素材数量": "",
+            "模板名称": "链接透传模板",
+            "项目名称形式": "",
+            "广告名称形式": "",
             "输入文案标题": ["这是一条链接透传测试文案", ""],
             "计划来源": "链接透传来源",
             "落地页链接": landing_page_url,
@@ -800,6 +836,9 @@ class CreatePlanTests(unittest.TestCase):
             "素材来源": "",
             "素材选择方式": "",
             "每单元素材数量": "",
+            "模板名称": "跨账户同款模板",
+            "项目名称形式": "",
+            "广告名称形式": "",
             "输入文案标题": ["这是新商品测试文案", ""],
             "计划来源": "新来源",
             "落地页链接": "https://landing.test/new",
@@ -813,7 +852,7 @@ class CreatePlanTests(unittest.TestCase):
             input_fn=answers,
             output_fn=lambda _: None,
         )
-        name = "巨量营销-456-同款商品-product-2-混剪素材"
+        name = "跨账户同款模板"
         template = updated["plan_templates"][name]
         self.assertTrue(result["confirmed"])
         self.assertEqual(template["copy_materials"]["titles"], ["这是新商品测试文案"])
@@ -861,11 +900,11 @@ class CreatePlanTests(unittest.TestCase):
             "traffic_source": "CID",
             "product_id": "product-2",
             "product_name": "新商品",
-            "name": None,
+            "name": "同账户新商品模板",
             "titles": None,
         }
         name, template = template_workflow.build_template(config, values, source_name)
-        self.assertEqual(name, "巨量营销-1234567890-新商品-product-2-混剪素材")
+        self.assertEqual(name, "同账户新商品模板")
         self.assertEqual(template["copy_materials"]["titles"], [])
         self.assertNotIn("product_image_ids", template["overrides"]["resolved_ids"])
         self.assertNotIn("product_platform_id", template["overrides"]["resolved_ids"])
@@ -919,17 +958,6 @@ class CreatePlanTests(unittest.TestCase):
                 [f"商品卖点{index}推荐" for index in range(11)]
             )
 
-    def test_generated_template_name_contains_all_business_bindings(self):
-        self.assertEqual(
-            template_workflow.template_name(
-                "123",
-                "蛋白粉",
-                "product-1",
-                "ACCOUNT_UPLOAD",
-            ),
-            "巨量营销-123-蛋白粉-product-1-混剪素材",
-        )
-
     def test_age_presets_use_one_official_enum_family(self):
         self.assertEqual(
             manage_plan_templates.normalize_ages("24-49"),
@@ -959,7 +987,7 @@ class CreatePlanTests(unittest.TestCase):
             "traffic_source": "CID",
             "product_id": "unique-product-1",
             "product_name": "test product",
-            "name": None,
+            "name": "跨账户同款模板",
             "titles": None,
         }
         _, template = template_workflow.build_template(config, values, source_name)
@@ -1025,6 +1053,9 @@ class CreatePlanTests(unittest.TestCase):
             "素材来源": "1",
             "素材选择方式": "",
             "每单元素材数量": "",
+            "模板名称": "未完成模板",
+            "项目名称形式": "",
+            "广告名称形式": "",
             "输入文案标题": "",
             "计划来源": "",
             "落地页链接": "",
@@ -1052,7 +1083,7 @@ class CreatePlanTests(unittest.TestCase):
             traffic_source="CID",
             product_id="product-2",
             product_name="新商品",
-            name=None,
+            name="未完成模板",
             source_name=None,
             landing_page_url=None,
             open_url=None,
@@ -1083,6 +1114,9 @@ class CreatePlanTests(unittest.TestCase):
             "素材来源": "1",
             "素材选择方式": "",
             "每单元素材数量": "",
+            "模板名称": "预览模板",
+            "项目名称形式": "预览项目_{material_date}",
+            "广告名称形式": "预览广告_{product_name}",
             "输入文案标题": ["这是一条有效测试文案", ""],
             "计划来源": "新来源",
             "落地页链接": "https://landing.test/new",

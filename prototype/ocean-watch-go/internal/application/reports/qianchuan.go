@@ -96,9 +96,10 @@ type TokenProvider interface {
 }
 
 type Service struct {
-	Tokens TokenProvider
-	Reader portreports.QianchuanReader
-	Now    func() time.Time
+	Tokens        TokenProvider
+	Reader        portreports.QianchuanReader
+	UnifiedReader portreports.QianchuanUnifiedReader
+	Now           func() time.Time
 }
 
 type CredentialScope struct {
@@ -520,7 +521,7 @@ func validateScope(scope CredentialScope) error {
 	return nil
 }
 
-func validatePlanSchema(schema domainreports.PlanSchema) error {
+func validatePlanSchema(schema domainreports.QianchuanSchema) error {
 	if schema.Topic != PlanReportTopic || !contains(schema.Dimensions, "ad_id") {
 		return errors.New("Qianchuan plan report schema does not support the required topic and dimension")
 	}

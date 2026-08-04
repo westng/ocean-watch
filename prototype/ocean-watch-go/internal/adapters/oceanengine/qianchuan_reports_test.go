@@ -42,6 +42,14 @@ func (transport *qianchuanReportTransport) RoundTrip(request *http.Request) (*ht
 	body := transport.bodyOverride
 	if body == "" {
 		switch call.Path {
+		case "/open_api/v1.0/qianchuan/report/all_promotion/get/":
+			body = `{"code":0,"message":"OK","request_id":"all-request","data":{"stat_cost_for_roi2":12.5}}`
+		case "/open_api/v1.0/qianchuan/report/uni_promotion/get/":
+			body = `{"code":0,"message":"OK","request_id":"uni-request","data":{"stat_cost":8.5}}`
+		case "/open_api/v1.0/qianchuan/report/uni_promotion/dimension_data/room/get/":
+			body = `{"code":0,"message":"OK","request_id":"room-request","data":{"list":[{"advertiser_id":1000000000000001,"room_id":3000000000000001,"stat_cost_for_roi2":3.5}],"page_info":{"page":1,"page_size":100,"total_page":1,"total_number":1}}}`
+		case "/open_api/v1.0/qianchuan/report/uni_promotion/dimension_data/author/get/":
+			body = `{"code":0,"message":"OK","request_id":"author-request","data":{"list":[{"advertiser_id":1000000000000001,"aweme_id":4000000000000001,"stat_cost":4.5}],"page_info":{"page":1,"page_size":100,"total_page":1,"total_number":1}}}`
 		case "/open_api/v1.0/qianchuan/report/material/get/":
 			body = `{"code":0,"message":"OK","request_id":"material-request","data":{"list":[{"advertiser_id":1000000000000001,"material_id":5000000000000001,"material_type":"video","related_ad_ids":[2000000000000001],"fields":{"stat_cost":1.25,"pay_order_amount":2.5,"pay_order_count":1}}],"page_info":{"page":1,"total_page":1,"total_number":1}}}`
 		case "/open_api/v1.0/qianchuan/report/uni_promotion/config/get/":
@@ -65,6 +73,104 @@ func (transport *qianchuanReportTransport) RoundTrip(request *http.Request) (*ht
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: request,
 	}, nil
+}
+
+func TestQianchuanUnifiedGeneratedServices(t *testing.T) {
+	transport, adapter := qianchuanReportFixture(t)
+	ctx := testRequestContext(t, "qianchuan")
+	token := "TEST_QIANCHUAN_TOKEN_DO_NOT_USE"
+	scope := portreports.AggregateRequest{
+		AdvertiserID: "1000000000000001", AccessToken: token,
+		StartTime: "2026-08-01 00:00:00", EndTime: "2026-08-02 23:59:59",
+		Fields: []string{"stat_cost_for_roi2"}, MarketingGoal: "ALL", OrderPlatform: "QIANCHUAN",
+		AdlabScene: "OVERALL_PROJECT", DataPeriod: "ALL_DATA",
+	}
+	all, err := adapter.FetchAllPromotion(ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope.StartTime, scope.EndTime, scope.Fields = "2026-08-01", "2026-08-02", []string{"stat_cost"}
+	uni, err := adapter.FetchUniPromotion(ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := adapter.FetchRoomDimensionPage(ctx, portreports.DimensionPageRequest{
+		AdvertiserID: "1000000000000001", AccessToken: token, DimensionID: "3000000000000001",
+		StartTime: "2026-08-01 00:00:00", EndTime: "2026-08-02 23:59:59",
+		Dimension: "TIME_GRANULARITY_HOURLY", Metrics: []string{"stat_cost_for_roi2"},
+		OrderPlatform: "ECP_AWEME", SmartBidType: "SMART_BID_CUSTOM",
+		OrderField: "stat_cost_for_roi2", OrderType: "DESC", Page: 1, PageSize: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	author, err := adapter.FetchAuthorDimensionPage(ctx, portreports.DimensionPageRequest{
+		AdvertiserID: "1000000000000001", AccessToken: token, DimensionID: "4000000000000001",
+		StartTime: "2026-08-01 00:00:00", EndTime: "2026-08-02 23:59:59",
+		Dimension: "TIME_GRANULARITY_DAILY", Metrics: []string{"stat_cost"}, MarketingGoal: "ALL",
+		OrderPlatform: "ALL", SmartBidType: "SMART_BID_CONSERVATIVE",
+		OrderField: "stat_cost", OrderType: "DESC", Page: 1, PageSize: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.calls) != 4 || all.Values["stat_cost_for_roi2"].(json.Number).String() != "12.5" ||
+		uni.Values["stat_cost"].(json.Number).String() != "8.5" || len(room.Rows) != 1 || len(author.Rows) != 1 {
+		t.Fatalf("unified report mapping changed: all=%#v uni=%#v room=%#v author=%#v calls=%#v", all, uni, room, author, transport.calls)
+	}
+	allCall, uniCall, roomCall, authorCall := transport.calls[0], transport.calls[1], transport.calls[2], transport.calls[3]
+	if allCall.Path != "/open_api/v1.0/qianchuan/report/all_promotion/get/" ||
+		allCall.Query.Get("start_time") != "2026-08-01 00:00:00" ||
+		allCall.Query.Get("adlab_scene") != "OVERALL_PROJECT" || allCall.Query.Get("data_period") != "ALL_DATA" ||
+		uniCall.Path != "/open_api/v1.0/qianchuan/report/uni_promotion/get/" ||
+		uniCall.Query.Get("start_date") != "2026-08-01" ||
+		roomCall.Query.Get("room_id") != "3000000000000001" || roomCall.Query.Get("dimension") != "TIME_GRANULARITY_HOURLY" ||
+		!strings.Contains(roomCall.Query.Get("filtering"), "ECP_AWEME") || !strings.Contains(roomCall.Query.Get("filtering"), "SMART_BID_CUSTOM") ||
+		authorCall.Query.Get("aweme_id") != "4000000000000001" || authorCall.Query.Get("marketing_goal") != "ALL" {
+		t.Fatalf("generated unified query contract changed: %#v", transport.calls)
+	}
+}
+
+func TestQianchuanSchemaBatchesTopicsAndDataPeriod(t *testing.T) {
+	transport, adapter := qianchuanReportFixture(t)
+	topics := []string{applicationreports.QianchuanProductTopic, applicationreports.QianchuanOverallProductTopic}
+	transport.bodyOverride = `{"code":0,"message":"OK","request_id":"schema-request","data":{"custom_config_datas":[{"data_topic":"SITE_PROMOTION_PRODUCT_PRODUCT","dimensions":[{"field":"product_id"}],"metrics":[{"field":"stat_cost"}]},{"data_topic":"OVERALL_ROI_PRODUCT_PRODUCT","dimensions":[{"field":"product_id"}],"metrics":[{"field":"stat_cost"}]}]}}`
+	schemas, err := adapter.FetchSchemas(testRequestContext(t, "qianchuan"), portreports.SchemaRequest{
+		AdvertiserID: "1000000000000001", AccessToken: "TEST_QIANCHUAN_TOKEN_DO_NOT_USE",
+		Topics: topics, DataPeriod: "ALL_DATA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.calls) != 1 || len(schemas) != 2 || transport.calls[0].Query.Get("data_period") != "ALL_DATA" ||
+		!strings.Contains(transport.calls[0].Query.Get("data_topics"), applicationreports.QianchuanProductTopic) ||
+		!strings.Contains(transport.calls[0].Query.Get("data_topics"), applicationreports.QianchuanOverallProductTopic) {
+		t.Fatalf("schema batching changed: calls=%#v schemas=%#v", transport.calls, schemas)
+	}
+}
+
+func TestQianchuanCustomDataSupportsFiltersAndDataPeriod(t *testing.T) {
+	transport, adapter := qianchuanReportFixture(t)
+	page, err := adapter.FetchDataPage(testRequestContext(t, "qianchuan"), portreports.DataPageRequest{
+		AdvertiserID: "1000000000000001", AccessToken: "TEST_QIANCHUAN_TOKEN_DO_NOT_USE",
+		Topic: applicationreports.QianchuanOverallProductTopic, Dimensions: []string{"ad_id"},
+		Metrics:   applicationreports.DefaultPlanFields,
+		Filters:   []portreports.ReportFilter{{Field: "product_id", Operator: 7, Values: []string{"3747851714615705603"}}},
+		StartTime: "2026-08-04 00:00:00", EndTime: "2026-08-04 23:59:59",
+		OrderField: "stat_cost", OrderType: 2, DataPeriod: "ALL_DATA", Page: 1, PageSize: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := transport.calls[0]
+	filters := decodeReportQueryJSON(t, call.Query.Get("filters"))
+	if call.Query.Get("data_topic") != applicationreports.QianchuanOverallProductTopic ||
+		call.Query.Get("data_period") != "ALL_DATA" ||
+		!reflect.DeepEqual(filters, []any{map[string]any{
+			"field": "product_id", "operator": float64(7), "values": []any{"3747851714615705603"},
+		}}) || len(page.Rows) != 1 || page.Rows[0].Dimensions["ad_id"] != "2000000000000001" {
+		t.Fatalf("custom Qianchuan report contract changed: call=%#v page=%#v", call, page)
+	}
 }
 
 func qianchuanSchemaFixture() string {

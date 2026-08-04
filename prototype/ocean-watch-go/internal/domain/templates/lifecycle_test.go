@@ -20,7 +20,7 @@ func TestValidateCurrentTemplateFixture(t *testing.T) {
 	channels := result["channels"].([]any)
 	marketing := channels[0].(map[string]any)
 	qianchuan := channels[1].(map[string]any)
-	if marketing["schema_version"] != 5 || marketing["supported_schema_version"] != 5 || marketing["valid"] != true {
+	if marketing["schema_version"] != 6 || marketing["supported_schema_version"] != 6 || marketing["valid"] != true {
 		t.Fatalf("unexpected Marketing validation: %#v", marketing)
 	}
 	if !reflect.DeepEqual(marketing["errors"], []any{}) || !reflect.DeepEqual(marketing["templates"], []any{
@@ -31,7 +31,7 @@ func TestValidateCurrentTemplateFixture(t *testing.T) {
 	if qianchuan["selected_template_kind"] != nil || qianchuan["valid"] != true {
 		t.Fatalf("unexpected Qianchuan validation: %#v", qianchuan)
 	}
-	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 4, "live": 1}) {
+	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 5, "live": 1}) {
 		t.Fatalf("unexpected Qianchuan schema versions: %#v", qianchuan)
 	}
 	if !reflect.DeepEqual(config, before) {
@@ -164,5 +164,40 @@ func TestCurrentSchemaMigrationContracts(t *testing.T) {
 	}
 	if liveChanged || liveResult["migrated"] != false || !semanticEqual(config, liveConfig) {
 		t.Fatalf("current live migration was not idempotent: %#v", liveResult)
+	}
+}
+
+func TestUserNamesSurviveMarketingV5AndQianchuanV4Migration(t *testing.T) {
+	config := templateTestConfig(t)
+	marketingTemplates := config["plan_templates"].(map[string]any)
+	marketingTemplate := marketingTemplates[marketingFixtureName].(map[string]any)
+	delete(marketingTemplates, marketingFixtureName)
+	marketingTemplate["display_name"] = "用户旧营销模板"
+	marketingTemplates["用户旧营销模板"] = marketingTemplate
+	config["plan_template_schema_version"] = 5
+
+	migratedMarketing, legacyError, err := MigrateMarketing(config, false)
+	if err != nil || legacyError != nil {
+		t.Fatalf("Marketing v5 migration failed: %v, %v", legacyError, err)
+	}
+	if migratedMarketing["plan_template_schema_version"] != marketingSchemaVersion ||
+		mapOrEmpty(migratedMarketing["plan_templates"])["用户旧营销模板"] == nil {
+		t.Fatalf("Marketing user name changed during migration: %#v", migratedMarketing["plan_templates"])
+	}
+
+	productTemplates := config[qianchuanProductTemplatesKey].(map[string]any)
+	productTemplate := productTemplates["qcpt_example"].(map[string]any)
+	productTemplate["display_name"] = "用户旧千川模板"
+	delete(productTemplate, "plan_name_template")
+	config[qianchuanProductSchemaVersionKey] = 4
+
+	migratedProduct, _, changed, err := MigrateQianchuanProduct(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migratedTemplate := mapOrEmpty(migratedProduct[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	if !changed || migratedTemplate["display_name"] != "用户旧千川模板" ||
+		migratedTemplate["plan_name_template"] != qianchuanProductDefaultPlanName {
+		t.Fatalf("Qianchuan v4 migration changed user name or behavior: %#v", migratedTemplate)
 	}
 }

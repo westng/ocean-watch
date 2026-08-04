@@ -168,7 +168,7 @@ MCP is optional. Use `mcp configure`/`mcp status`, and use `mcp capabilities [--
 
 ## Template Contract
 
-Schema v5 has one `default_plan_template` and advertiser-bound business templates.
+Schema v6 has one `default_plan_template` and advertiser-bound business templates.
 
 `templates list` is the fast shared read path for Marketing and Qianchuan. It reads the local config once, calls no official API, and returns compact business-template rows plus default-skeleton counts. Every template record, including default skeletons, detailed rows, and single-template responses, must include top-level `channel=marketing|qianchuan`. Use `--channel marketing` or `--channel qianchuan` to filter, and `--include-details` only when full template diagnostics are needed.
 
@@ -207,15 +207,9 @@ Use `templates show --channel marketing|qianchuan --template TEMPLATE` for one-t
   count, or field contents. The user-provided value is authoritative. Saving, loading, previewing,
   and submission must preserve the same string in the same field without additions or omissions.
 
-All business-template channels share `渠道-广告账户ID-商品名-商品ID-模版类型`. For Marketing, the generated name is:
+Marketing business-template names are user-defined labels. The wizard must ask for a non-empty template name and keep business ownership exclusively in `bindings`; never derive or validate ownership by parsing the label.
 
-```text
-巨量营销-广告账户ID-商品名-商品ID-模版类型
-```
-
-The template type is `混剪素材` for `ACCOUNT_UPLOAD` and `原生素材` for `CREATOR_AUTHORIZED`. The wizard generates this name from the confirmed bindings. Do not ask for or accept a free-form replacement.
-
-Online project and promotion names must expose `混剪` for `ACCOUNT_UPLOAD` and `原生` for `CREATOR_AUTHORIZED`.
+The wizard separately asks for `project_name_template` and `promotion_name_template`. These forms are stored under `overrides.defaults`, shown in the preview, and rendered when a project and promotion are created. Existing templates keep their keys and display names during the v5-to-v6 migration.
 
 ## Marketing Create Workflow
 

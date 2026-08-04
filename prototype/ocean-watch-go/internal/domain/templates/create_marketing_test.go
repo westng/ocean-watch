@@ -15,20 +15,28 @@ func TestBuildMarketingTemplateDefaultCandidate(t *testing.T) {
 		t.Fatalf("unexpected sources: %#v", sources)
 	}
 	name, candidate, err := BuildMarketingTemplate(normalized, "", nil, MarketingCreateInput{
+		TemplateName: "用户营销模板甲",
 		AdvertiserID: "1000000000000101", Platform: "示例平台", TrafficSource: "CID",
 		ProductID: "9000000000000101", ProductName: "向导商品甲",
 		SellingPoints: "向导商品值得推荐", DailyBudget: 600, ROIGoal: 1.8,
 		Gender: "GENDER_FEMALE", Ages: []any{"AGE_BETWEEN_24_30", "AGE_BETWEEN_31_40", "AGE_BETWEEN_41_49"},
 		MaterialSourceType: "ACCOUNT_UPLOAD", SelectionMode: "MANUAL", MaxMaterials: 5,
 		Titles: []any{"这是一条向导测试标题"}, PlanSource: "向导来源",
-		LandingPageURL: "https://landing.example.test/a", OpenURL: "exampleapp://product/a",
+		ProjectNameTemplate:   "项目_{product_name}_{material_date}_{suffix}",
+		PromotionNameTemplate: "广告_{product_name}_{material_date}_{suffix}",
+		LandingPageURL:        "https://landing.example.test/a", OpenURL: "exampleapp://product/a",
 		TrackURL: "https://track.example.test/impression", ActionTrackURL: "https://track.example.test/click",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "巨量营销-1000000000000101-向导商品甲-9000000000000101-混剪素材" {
+	if name != "用户营销模板甲" {
 		t.Fatalf("unexpected name: %s", name)
+	}
+	nameDefaults := mapOrEmpty(mapOrEmpty(candidate["overrides"])["defaults"])
+	if nameDefaults["project_name_template"] != "项目_{product_name}_{material_date}_{suffix}" ||
+		nameDefaults["promotion_name_template"] != "广告_{product_name}_{material_date}_{suffix}" {
+		t.Fatalf("custom project/promotion name forms were not preserved: %#v", nameDefaults)
 	}
 	productInfo := mapOrEmpty(mapOrEmpty(mapOrEmpty(candidate["overrides"])["defaults"])["product_info"])
 	if productInfo["product_image_type"] != "DPA" || !reflect.DeepEqual(productInfo["product_image_fields"], []any{"images_url"}) {
@@ -63,6 +71,7 @@ func TestMarketingCandidateKeepsOpaqueCIDLinksUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	name, candidate, err := BuildMarketingTemplate(normalized, "", nil, MarketingCreateInput{
+		TemplateName: "用户营销模板甲",
 		AdvertiserID: "1000000000000101", Platform: "京东", TrafficSource: "CID",
 		ProductID: "9000000000000101", ProductName: "向导商品甲",
 		SellingPoints: "向导商品值得推荐", DailyBudget: 600, ROIGoal: 1.8,
@@ -109,6 +118,7 @@ func TestMarketingClonePoliciesClearOwnedFields(t *testing.T) {
 		},
 	}
 	_, candidate, err := BuildMarketingTemplate(config, sourceName, source, MarketingCreateInput{
+		TemplateName: "用户营销模板乙",
 		AdvertiserID: "3", Platform: "平台", TrafficSource: "CID", ProductID: "4", ProductName: "新商品",
 		SellingPoints: "新商品值得推荐", DailyBudget: 300, ROIGoal: 1.5, Gender: "NONE", Ages: []any{},
 		MaterialSourceType: "ACCOUNT_UPLOAD", SelectionMode: "MANUAL", MaxMaterials: 5,
@@ -157,6 +167,7 @@ func TestMarketingSameProductKeepsCopyAndProductAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, candidate, err := BuildMarketingTemplate(normalized, sourceName, sources[1].Template, MarketingCreateInput{
+		TemplateName: "用户营销模板丙",
 		AdvertiserID: "1", Platform: "平台", TrafficSource: "CID", ProductID: "2", ProductName: "商品",
 		SellingPoints: "来源商品值得推荐", DailyBudget: 300, ROIGoal: 1.5, Gender: "NONE", Ages: []any{},
 		MaterialSourceType: "ACCOUNT_UPLOAD", SelectionMode: "MANUAL", MaxMaterials: 5,
@@ -222,7 +233,7 @@ func marketingCreateFixture() map[string]any {
 		"config_schema_version":        2,
 		"channels":                     map[string]any{"marketing": map[string]any{"api": map[string]any{"base_url": "https://api.oceanengine.com/open_api"}}},
 		"account":                      map[string]any{"channel": "marketing", "advertiser_id": "REPLACE_WITH_ADVERTISER_ID"},
-		"plan_template_schema_version": 5,
+		"plan_template_schema_version": 6,
 		"plan_templates":               map[string]any{},
 		"default_plan_template": map[string]any{
 			"defaults": map[string]any{

@@ -27,10 +27,39 @@ type MaterialPageRequest struct {
 	PageSize     int
 }
 
+type SchemaRequest struct {
+	AdvertiserID string
+	AccessToken  string
+	Topics       []string
+	DataPeriod   string
+}
+
 type PlanSchemaRequest struct {
 	AdvertiserID string
 	AccessToken  string
 	Topic        string
+}
+
+type ReportFilter struct {
+	Field    string
+	Operator int64
+	Values   []string
+}
+
+type DataPageRequest struct {
+	AdvertiserID string
+	AccessToken  string
+	Topic        string
+	Dimensions   []string
+	Metrics      []string
+	Filters      []ReportFilter
+	StartTime    string
+	EndTime      string
+	OrderField   string
+	OrderType    int64
+	DataPeriod   string
+	Page         int
+	PageSize     int
 }
 
 type PlanMetricPageRequest struct {
@@ -45,6 +74,35 @@ type PlanMetricPageRequest struct {
 	OrderType    int64
 	Page         int
 	PageSize     int
+}
+
+type AggregateRequest struct {
+	AdvertiserID  string
+	AccessToken   string
+	StartTime     string
+	EndTime       string
+	Fields        []string
+	AdlabScene    string
+	DataPeriod    string
+	MarketingGoal string
+	OrderPlatform string
+}
+
+type DimensionPageRequest struct {
+	AdvertiserID  string
+	AccessToken   string
+	DimensionID   string
+	StartTime     string
+	EndTime       string
+	Dimension     string
+	Metrics       []string
+	MarketingGoal string
+	OrderPlatform string
+	SmartBidType  string
+	OrderField    string
+	OrderType     string
+	Page          int
+	PageSize      int
 }
 
 type PlanMetadataPageRequest struct {
@@ -65,4 +123,13 @@ type QianchuanReader interface {
 	FetchPlanSchema(context.Context, PlanSchemaRequest) (domainreports.PlanSchema, error)
 	FetchPlanMetricPage(context.Context, PlanMetricPageRequest) (domainreports.PlanMetricPage, error)
 	FetchPlanMetadataPage(context.Context, PlanMetadataPageRequest) (domainqianchuan.PlanPage, error)
+}
+
+type QianchuanUnifiedReader interface {
+	FetchSchemas(context.Context, SchemaRequest) ([]domainreports.QianchuanSchema, error)
+	FetchDataPage(context.Context, DataPageRequest) (domainreports.QianchuanReportPage, error)
+	FetchAllPromotion(context.Context, AggregateRequest) (domainreports.QianchuanAggregate, error)
+	FetchUniPromotion(context.Context, AggregateRequest) (domainreports.QianchuanAggregate, error)
+	FetchRoomDimensionPage(context.Context, DimensionPageRequest) (domainreports.QianchuanDimensionPage, error)
+	FetchAuthorDimensionPage(context.Context, DimensionPageRequest) (domainreports.QianchuanDimensionPage, error)
 }

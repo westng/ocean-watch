@@ -32,6 +32,10 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             template["material_strategy"]["source_type"],
             "CREATOR_RUNTIME_QUERY",
         )
+        self.assertEqual(
+            template["plan_name_template"],
+            "{product_name}-{creator_name}-{datetime}",
+        )
 
     def test_product_ids_use_slash_format_and_official_limit(self):
         values = [str(1000 + index) for index in range(30)]
@@ -52,10 +56,11 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123/1231231231",
             template_id="qcpt_test",
+            template_name="用户自定义模板",
         )
         self.assertEqual(
             template["display_name"],
-            "巨量千川-1234567890123456-示例商品-12123123123/1231231231-商品全域",
+            "用户自定义模板",
         )
         self.assertEqual(
             template["bindings"]["product_ids"],
@@ -68,6 +73,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123",
             template_id="qcpt_test",
+            template_name="用户自定义模板",
         )
         rendered = json.dumps(template)
         for forbidden in (
@@ -85,6 +91,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="来源产品",
             product_ids="1001",
             template_id="qcpt_source",
+            template_name="来源模板",
         )
         source["delivery_setting"]["roi2_goal"] = 2.0
         target = product_templates.build_business_template(
@@ -93,10 +100,27 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_ids="2001/2002",
             source=source,
             template_id="qcpt_target",
+            template_name="目标模板",
+            plan_name_template="{creator_name}-{product_name}-{date}",
         )
         self.assertEqual(target["delivery_setting"]["roi2_goal"], 2.0)
         self.assertEqual(target["bindings"]["advertiser_id"], "222")
         self.assertEqual(target["bindings"]["product_ids"], ["2001", "2002"])
+        self.assertEqual(
+            target["plan_name_template"],
+            "{creator_name}-{product_name}-{date}",
+        )
+
+    def test_unknown_plan_name_placeholder_is_rejected(self):
+        with self.assertRaisesRegex(Exception, "unsupported placeholders"):
+            product_templates.build_business_template(
+                advertiser_id="1234567890123456",
+                product_name="示例商品",
+                product_ids="12123123123",
+                template_id="qcpt_test",
+                template_name="用户自定义模板",
+                plan_name_template="{product_name}-{unknown_value}",
+            )
 
     def test_wizard_creates_template_without_default_business_state(self):
         answers = iter([
@@ -104,6 +128,8 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             "1234567890123456",
             "示例商品",
             "12123123123/1231231231",
+            "用户自定义模板",
+            "{product_name}-{creator_name}-{datetime}",
             "y",
         ])
         config, result = manage_qianchuan_templates.run_create_wizard(
@@ -118,6 +144,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             "12123123123",
             "1231231231",
         ])
+        self.assertEqual(result["name"], "用户自定义模板")
 
     def test_default_template_cannot_resolve_for_plan_creation(self):
         with self.assertRaisesRegex(Exception, "not found"):
@@ -136,6 +163,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123/1231231231",
             template_id="qcpt_test",
+            template_name="用户自定义模板",
         )
         payload = product_templates.payload_from_template(template, name="千川商品计划")
         self.assertEqual(payload["marketing_goal"], "VIDEO_PROM_GOODS")
@@ -153,6 +181,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123/1231231231",
             template_id="qcpt_test",
+            template_name="用户自定义模板",
         )
         config[product_templates.TEMPLATES_KEY] = {"qcpt_test": template}
         with tempfile.TemporaryDirectory() as directory:
@@ -186,6 +215,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123",
             template_id="qcpt_test",
+            template_name="用户自定义模板",
         )
         config[product_templates.TEMPLATES_KEY] = {"qcpt_test": template}
         with tempfile.TemporaryDirectory() as directory:
@@ -235,11 +265,15 @@ class QianchuanProductTemplateTests(unittest.TestCase):
         }
         migrated = product_templates.ensure_config(config)
         template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
-        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 4)
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 5)
         self.assertNotIn("shop_name", template["bindings"])
         self.assertEqual(
             template["display_name"],
             "巨量千川-1234567890123456-示例商品-12123123123-商品全域",
+        )
+        self.assertEqual(
+            template["plan_name_template"],
+            product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
         )
 
     def test_schema_v2_template_migrates_name_without_changing_identity(self):
@@ -248,6 +282,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123",
             template_id="qcpt_test",
+            template_name="临时模板",
         )
         template["display_name"] = "1234567890123456-商品全域-示例商品-12123123123"
         config = {
@@ -258,7 +293,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
 
         migrated = product_templates.ensure_config(config)
 
-        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 4)
+        self.assertEqual(migrated[product_templates.SCHEMA_VERSION_KEY], 5)
         self.assertNotIn(product_templates.LEGACY_ACTIVE_TEMPLATE_KEY, migrated)
         migrated_template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
         self.assertEqual(migrated_template["template_id"], "qcpt_test")
@@ -273,6 +308,7 @@ class QianchuanProductTemplateTests(unittest.TestCase):
             product_name="示例商品",
             product_ids="12123123123",
             template_id="qcpt_one",
+            template_name="临时模板",
         )
         duplicate = copy.deepcopy(template)
         duplicate["template_id"] = "qcpt_two"
@@ -286,6 +322,29 @@ class QianchuanProductTemplateTests(unittest.TestCase):
 
         with self.assertRaisesRegex(Exception, "naming collision"):
             product_templates.ensure_config(config)
+
+    def test_schema_v4_migration_preserves_name_and_plan_name_behavior(self):
+        template = product_templates.build_business_template(
+            advertiser_id="1234567890123456",
+            product_name="示例商品",
+            product_ids="12123123123",
+            template_id="qcpt_test",
+            template_name="用户旧千川模板",
+        )
+        template.pop("plan_name_template")
+        config = {
+            product_templates.SCHEMA_VERSION_KEY: 4,
+            product_templates.TEMPLATES_KEY: {"qcpt_test": template},
+        }
+
+        migrated = product_templates.ensure_config(config)
+        migrated_template = migrated[product_templates.TEMPLATES_KEY]["qcpt_test"]
+
+        self.assertEqual(migrated_template["display_name"], "用户旧千川模板")
+        self.assertEqual(
+            migrated_template["plan_name_template"],
+            product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
+        )
 
     def test_future_schema_is_not_downgraded(self):
         with self.assertRaisesRegex(Exception, "newer than supported"):

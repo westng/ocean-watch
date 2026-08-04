@@ -26,7 +26,11 @@ def marketing_template_validation(config, name, raw):
         fixed_fields = plan_templates.fixed_material_fields(template)
         if fixed_fields:
             errors.append("runtime material IDs stored in template: " + ", ".join(fixed_fields))
-        if int(config.get("plan_template_schema_version") or 1) >= 4:
+        version = int(config.get("plan_template_schema_version") or 1)
+        if version >= plan_templates.SCHEMA_VERSION:
+            if name != template["display_name"]:
+                errors.append("template display_name must match the template key")
+        elif version >= 4:
             canonical = plan_templates.canonical_template_name(template)
             if name != canonical or template["display_name"] != canonical:
                 errors.append(f"template name must be {canonical}")

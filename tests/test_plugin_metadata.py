@@ -124,6 +124,24 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertIn("Do not omit, merge, rename, reorder", content)
         self.assertIn("generic request for plan spend does not authorize simplification", content)
 
+    def test_qianchuan_unified_reports_keep_semantic_routing_contract(self):
+        skill_root = REPO_ROOT / "skills" / "qc-plan-monitor"
+        content = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        routing = (skill_root / "references" / "unified-report-routing.md").read_text(encoding="utf-8")
+        self.assertIn("Do not require users to name a command", content)
+        self.assertIn("examples below as illustrations", content)
+        self.assertIn("responsible/common account set on `accounts report`", content)
+        for command in (
+            "qc-reports account", "qc-reports uni-account", "qc-reports schema",
+            "qc-reports custom", "qc-reports products", "qc-reports rooms",
+            "qc-reports authors",
+        ):
+            self.assertIn(command, content)
+            self.assertIn(command, routing)
+        self.assertIn("SITE_PROMOTION_PRODUCT_PRODUCT", routing)
+        self.assertIn("OVERALL_ROI_PRODUCT_PRODUCT", routing)
+        self.assertIn("`qc-products list/search`", content)
+
     def test_qianchuan_batch_keeps_fixed_completion_table_contract(self):
         content = (
             REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"

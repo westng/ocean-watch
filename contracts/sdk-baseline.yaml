@@ -1,5 +1,5 @@
 schema_version: 1
-verified_at: 2026-07-23
+verified_at: 2026-08-04
 module: github.com/oceanengine/ad_open_sdk_go
 version: v1.1.92
 tag_commit: 3b0bab7648f8e94fba1fd8bcfb96c43539b95c28
@@ -26,8 +26,8 @@ core_compile:
     - github.com/oceanengine/ad_open_sdk_go/models
   result: pass
 service_contracts:
-  expected_endpoint_count: 51
-  expected_generated_service_count: 51
+  expected_endpoint_count: 54
+  expected_generated_service_count: 54
   common_api_allowed_count: 0
 security_scan:
   scanner: govulncheck@v1.6.0

@@ -64,6 +64,18 @@ func runQianchuanProductTemplateWizard(
 	if err != nil {
 		return err
 	}
+	templateName, err := reader.value("模板名称", source.Template["display_name"], true)
+	if err != nil {
+		return err
+	}
+	planNameTemplate, err := reader.value(
+		"计划名称形式",
+		defaultOr(source.Template["plan_name_template"], "{product_name}-{creator_name}-{datetime}"),
+		true,
+	)
+	if err != nil {
+		return err
+	}
 	templateID, err := generateTemplateID("qcpt_")
 	if err != nil {
 		return err
@@ -71,8 +83,9 @@ func runQianchuanProductTemplateWizard(
 	candidate, err := domaintemplates.BuildQianchuanProductTemplate(
 		source.Template,
 		domaintemplates.QianchuanProductCreateInput{
-			TemplateID: templateID, AdvertiserID: advertiserID,
-			ProductName: productName, ProductIDs: productIDs,
+			TemplateID: templateID, TemplateName: templateName,
+			AdvertiserID: advertiserID, ProductName: productName,
+			ProductIDs: productIDs, PlanNameTemplate: planNameTemplate,
 		},
 	)
 	if err != nil {

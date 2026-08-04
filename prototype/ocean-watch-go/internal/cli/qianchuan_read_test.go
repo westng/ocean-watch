@@ -231,7 +231,7 @@ func (transport *qianchuanRunnerTransport) snapshot() []qianchuanRunnerCall {
 
 func qianchuanRunnerTemplateFixture(status string) string {
 	return strings.Replace(`{
-  "qianchuan_product_template_schema_version": 4,
+  "qianchuan_product_template_schema_version": 5,
   "qianchuan_product_templates": {
     "qcpt_fixture": {
       "template_id": "qcpt_fixture",
@@ -252,6 +252,7 @@ func qianchuanRunnerTemplateFixture(status string) string {
         "video_schedule_type": "SCHEDULE_FROM_NOW",
         "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
       },
+      "plan_name_template": "{product_name}-{creator_name}-{datetime}",
       "material_strategy": {"source_type": "CREATOR_RUNTIME_QUERY", "persist_material_ids": false}
     }
   }
@@ -324,7 +325,7 @@ func TestRunnerQianchuanReadShadowAssemblesTokenAndSDKAdapters(t *testing.T) {
 	}
 	configPath := filepath.Join(root, "synthetic-config.json")
 	if err := os.WriteFile(configPath, []byte(`{
-  "qianchuan_product_template_schema_version": 4,
+  "qianchuan_product_template_schema_version": 5,
   "qianchuan_product_templates": {
     "qcpt_fixture": {
       "template_id": "qcpt_fixture",
@@ -345,6 +346,7 @@ func TestRunnerQianchuanReadShadowAssemblesTokenAndSDKAdapters(t *testing.T) {
         "video_schedule_type": "SCHEDULE_FROM_NOW",
         "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI"
       },
+      "plan_name_template": "{product_name}-{creator_name}-{datetime}",
       "material_strategy": {"source_type": "CREATOR_RUNTIME_QUERY", "persist_material_ids": false}
     }
   }

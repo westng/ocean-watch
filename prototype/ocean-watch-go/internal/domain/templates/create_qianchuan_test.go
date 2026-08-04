@@ -2,6 +2,7 @@ package templates
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -12,10 +13,12 @@ func TestBuildQianchuanProductTemplateIsPureAndDeduplicatesProducts(t *testing.T
 		t.Fatal(err)
 	}
 	candidate, err := BuildQianchuanProductTemplate(sources[0].Template, QianchuanProductCreateInput{
-		TemplateID:   "qcpt_123456789abc",
-		AdvertiserID: "2000000000000101",
-		ProductName:  "千川商品甲",
-		ProductIDs:   "8000000000000101/8000000000000102/8000000000000101",
+		TemplateID:       "qcpt_123456789abc",
+		TemplateName:     "用户千川模板甲",
+		AdvertiserID:     "2000000000000101",
+		ProductName:      "千川商品甲",
+		ProductIDs:       "8000000000000101/8000000000000102/8000000000000101",
+		PlanNameTemplate: "{creator_name}-{product_name}-{date}",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -28,6 +31,10 @@ func TestBuildQianchuanProductTemplateIsPureAndDeduplicatesProducts(t *testing.T
 	if len(normalized[qianchuanProductTemplatesKey].(map[string]any)) != 0 {
 		t.Fatal("candidate construction mutated normalized config")
 	}
+	if candidate["display_name"] != "用户千川模板甲" ||
+		candidate["plan_name_template"] != "{creator_name}-{product_name}-{date}" {
+		t.Fatalf("custom template and plan names were not preserved: %#v", candidate)
+	}
 	updated, err := ApplyQianchuanProductTemplate(normalized, candidate)
 	if err != nil {
 		t.Fatal(err)
@@ -37,13 +44,24 @@ func TestBuildQianchuanProductTemplateIsPureAndDeduplicatesProducts(t *testing.T
 	}
 }
 
+func TestBuildQianchuanProductTemplateRejectsUnknownPlanNamePlaceholder(t *testing.T) {
+	_, err := BuildQianchuanProductTemplate(nil, QianchuanProductCreateInput{
+		TemplateID: "qcpt_123456789abc", TemplateName: "用户千川模板甲",
+		AdvertiserID: "1", ProductName: "商品", ProductIDs: "2",
+		PlanNameTemplate: "{product_name}-{unknown_value}",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported placeholders") {
+		t.Fatalf("unknown plan-name placeholder was accepted: %v", err)
+	}
+}
+
 func TestApplyQianchuanProductTemplateRejectsDuplicateDisplayName(t *testing.T) {
 	normalized, sources, err := QianchuanProductCreateSources(map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, err := BuildQianchuanProductTemplate(sources[0].Template, QianchuanProductCreateInput{
-		TemplateID: "qcpt_123456789abc", AdvertiserID: "1", ProductName: "商品", ProductIDs: "2",
+		TemplateID: "qcpt_123456789abc", TemplateName: "用户千川模板甲", AdvertiserID: "1", ProductName: "商品", ProductIDs: "2",
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -38,6 +38,8 @@ def list_templates(config):
         titles = normalized["copy_materials"].get("titles") or []
         rows.append({
             "name": name,
+            "project_name_template": effective_defaults.get("project_name_template"),
+            "promotion_name_template": effective_defaults.get("promotion_name_template"),
             "channel": bindings.get("channel"),
             "advertiser_id": bindings.get("advertiser_id"),
             "platform": bindings.get("platform"),
@@ -158,6 +160,8 @@ def create_template(config, args):
         "creator_ids": getattr(args, "creator_ids", None),
         "creator_auth_types": getattr(args, "creator_auth_types", None),
         "minimum_remaining_days": getattr(args, "minimum_remaining_days", None),
+        "project_name_template": getattr(args, "project_name_template", None),
+        "promotion_name_template": getattr(args, "promotion_name_template", None),
     }
     name, template = template_workflow.build_template(config, values, args.from_template)
     if name in templates and not args.force:
@@ -565,13 +569,28 @@ def run_create_wizard(
             ),
             required=True,
         ))
-    generated_name = template_workflow.template_name(
-        advertiser_id,
-        product_name,
-        product_id,
-        material_source_type,
+    inherited_name_defaults = {
+        **template_workflow.SOURCE_NAME_TEMPLATES[material_source_type],
+        **defaults,
+    }
+    template_name = prompt_value(
+        input_fn,
+        "模板名称",
+        (source or {}).get("display_name"),
+        required=True,
     )
-    output_fn(f"模板名称（按绑定信息自动生成）: {generated_name}")
+    project_name_template = prompt_value(
+        input_fn,
+        "项目名称形式",
+        inherited_name_defaults.get("project_name_template"),
+        required=True,
+    )
+    promotion_name_template = prompt_value(
+        input_fn,
+        "广告名称形式",
+        inherited_name_defaults.get("promotion_name_template"),
+        required=True,
+    )
 
     preserve_business_defaults = policy == "same_advertiser_same_product"
     links = (overrides.get("links") or {}) if preserve_business_defaults else {}
@@ -598,7 +617,9 @@ def run_create_wizard(
         roi_goal=roi_goal,
         gender=gender,
         ages=ages,
-        name=generated_name,
+        name=template_name,
+        project_name_template=project_name_template,
+        promotion_name_template=promotion_name_template,
         source_name=prompt_value(input_fn, "计划来源", defaults.get("source")),
         landing_page_url=prompt_opaque_value(
             input_fn,
@@ -636,6 +657,10 @@ def run_create_wizard(
     preview = {
         "action": "create_business_template",
         "template": created_name,
+        "name_templates": {
+            "project": project_name_template,
+            "promotion": promotion_name_template,
+        },
         "source": created["created_from"],
         "bindings": created["bindings"],
         "advertiser_binding_verification": advertiser_verification,

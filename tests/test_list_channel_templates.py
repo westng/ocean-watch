@@ -21,6 +21,7 @@ def all_channel_config():
         "example drink",
         ["8234567890123456780", "8234567890123456781"],
         template_id="qcpt_example",
+        template_name="示例千川模板",
     )
     config[qianchuan_product_templates.SCHEMA_VERSION_KEY] = (
         qianchuan_product_templates.SCHEMA_VERSION

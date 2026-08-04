@@ -76,29 +76,32 @@ type MarketingCreateSource struct {
 }
 
 type MarketingCreateInput struct {
-	AdvertiserID       string
-	Platform           string
-	TrafficSource      string
-	ProductID          string
-	ProductName        string
-	ProductInfo        map[string]any
-	SellingPoints      any
-	DailyBudget        any
-	ROIGoal            any
-	Gender             string
-	Ages               any
-	MaterialSourceType string
-	SelectionMode      string
-	MaxMaterials       any
-	UnlimitedMaterials bool
-	CreatorIDs         any
-	MinimumRemaining   any
-	Titles             any
-	PlanSource         string
-	LandingPageURL     string
-	OpenURL            string
-	TrackURL           string
-	ActionTrackURL     string
+	TemplateName          string
+	AdvertiserID          string
+	Platform              string
+	TrafficSource         string
+	ProductID             string
+	ProductName           string
+	ProductInfo           map[string]any
+	SellingPoints         any
+	DailyBudget           any
+	ROIGoal               any
+	Gender                string
+	Ages                  any
+	MaterialSourceType    string
+	SelectionMode         string
+	MaxMaterials          any
+	UnlimitedMaterials    bool
+	CreatorIDs            any
+	MinimumRemaining      any
+	Titles                any
+	PlanSource            string
+	LandingPageURL        string
+	OpenURL               string
+	TrackURL              string
+	ActionTrackURL        string
+	ProjectNameTemplate   string
+	PromotionNameTemplate string
 }
 
 func MarketingCreateSources(
@@ -175,6 +178,10 @@ func BuildMarketingTemplate(
 	if err != nil {
 		return "", nil, err
 	}
+	templateName, err := requiredText(input.TemplateName, "template_name")
+	if err != nil {
+		return "", nil, err
+	}
 	targetBindings := map[string]any{
 		"channel":        "marketing",
 		"advertiser_id":  advertiserID,
@@ -207,7 +214,15 @@ func BuildMarketingTemplate(
 	defaults["product_name"] = productName
 	defaults["product_id"] = productID
 	for key, value := range marketingSourceNameTemplates[stringValue(strategy["source_type"])] {
-		defaults[key] = clone(value)
+		if !pythonTruthy(defaults[key]) {
+			defaults[key] = clone(value)
+		}
+	}
+	if strings.TrimSpace(input.ProjectNameTemplate) != "" {
+		defaults["project_name_template"] = strings.TrimSpace(input.ProjectNameTemplate)
+	}
+	if strings.TrimSpace(input.PromotionNameTemplate) != "" {
+		defaults["promotion_name_template"] = strings.TrimSpace(input.PromotionNameTemplate)
 	}
 	for key, value := range map[string]any{
 		"daily_budget": input.DailyBudget,
@@ -244,11 +259,7 @@ func BuildMarketingTemplate(
 	if strings.HasSuffix(policy, "new_product") && !pythonTruthy(input.Titles) {
 		titles = []any{}
 	}
-	templateType := "原生素材"
-	if strategy["source_type"] == "ACCOUNT_UPLOAD" {
-		templateType = "混剪素材"
-	}
-	name := strings.Join([]string{"巨量营销", advertiserID, productName, productID, templateType}, "-")
+	name := templateName
 	return name, map[string]any{
 		"display_name":      name,
 		"bindings":          targetBindings,
@@ -264,8 +275,8 @@ func ApplyMarketingTemplate(config map[string]any, name string, candidate map[st
 	if err != nil {
 		return nil, err
 	}
-	if name == "" || candidate["display_name"] != name || marketingCanonicalName(candidate) != name {
-		return nil, configurationError("Marketing template name must match its business bindings", map[string]any{"template": name})
+	if name == "" || candidate["display_name"] != name {
+		return nil, configurationError("Marketing template display_name must match the template key", map[string]any{"template": name})
 	}
 	templates := mapOrEmpty(normalized["plan_templates"])
 	if _, exists := templates[name]; exists {

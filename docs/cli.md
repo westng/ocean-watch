@@ -17,7 +17,7 @@ python3 skills/qc-plan-monitor/run.py
 
 ## 当前兼容命令目录
 
-下列 75 个 action 与 `contracts/commands.yaml` 一致，用于保护现有脚本、参数、退出码和 Presentation。它不是领域架构图：例如历史 `plans` 命名空间同时包含营销和千川写入，新 Go 实现仍按 Marketing/Qianchuan Application、Port 和 Adapter 分离。新增或废弃命令必须先修改运行时注册表并重新生成机器合同，不能只改本文。
+下列 82 个 action 与 `contracts/commands.yaml` 一致，用于保护现有脚本、参数、退出码和 Presentation。它不是领域架构图：例如历史 `plans` 命名空间同时包含营销和千川写入，新 Go 实现仍按 Marketing/Qianchuan Application、Port 和 Adapter 分离。新增或废弃命令必须先修改运行时注册表并重新生成机器合同，不能只改本文。
 
 ```text
 ocean-watch
@@ -98,7 +98,14 @@ ocean-watch
 │   └── plans
 ├── qc-reports
 │   ├── plans
-│   └── materials
+│   ├── materials
+│   ├── account
+│   ├── uni-account
+│   ├── schema
+│   ├── custom
+│   ├── products
+│   ├── rooms
+│   └── authors
 ├── discover
 │   ├── projects
 │   ├── promotions
@@ -216,13 +223,13 @@ ocean-watch templates delete --channel marketing --template TEMPLATE --submit
 
 `templates show` 是单模板快速查询入口，只读本地配置且不请求官方接口。营销模板使用完整模板名称，千川模板可使用 `template_id` 或完整模板名称；结果返回完整绑定、投放设置、素材策略和 `ready_for_plan_creation` 状态。
 
-`templates validate` 只读检查模板 Schema、规范名称、渠道/广告主/商品绑定、素材策略和运行时素材泄漏。`templates delete` 默认只预演；显式 `--submit` 才修改本地配置。营销模板仍被 `created_from` 或 `copied_from_template` 引用时会阻断，确认清理引用后再删除；`--force` 只跳过该引用保护，不替代 `--submit`。
+`templates validate` 只读检查模板 Schema、名称一致性、渠道/广告主/商品绑定、素材策略和运行时素材泄漏。`templates delete` 默认只预演；显式 `--submit` 才修改本地配置。营销模板仍被 `created_from` 或 `copied_from_template` 引用时会阻断，确认清理引用后再删除；`--force` 只跳过该引用保护，不替代 `--submit`。
 
 未传 `--channel` 时，`templates create` 必须先显示营销/千川及各自授权状态。选择营销后继续选择 `混剪素材（ACCOUNT_UPLOAD）` 或 `原生素材（CREATOR_AUTHORIZED）`；选择千川后继续选择商品全域或直播全域，再显示同类型来源模板。占位广告主 ID 不会作为默认值；已授权渠道会校验精确广告主 ID，只有唯一广告主才自动预填。未授权渠道仍可创建 `UNVERIFIED` 模板，但真实投放前必须完成该渠道授权。`set-copy` 只修改营销标题文案，不复制链接、账户资产或投放参数。
 
 真实业务模板不存在当前或默认指针。所有计划创建命令必须显式传 `--plan-template`；多营销账户批量创建使用 `--account-template ADVERTISER_ID=TEMPLATE_NAME` 为每个账户明确映射。
 
-营销向导会收集日预算、净成交 ROI、性别、年龄和官方要求的 6–9 位置产品卖点，并按 `巨量营销-广告账户ID-商品名-商品ID-模版类型` 自动生成名称；模版类型为“混剪素材”或“原生素材”。创建骨架的商品图来源是 `DPA` 商品库字段 `images_url`，因此不会询问图片 ID。提交前会验证 DPA 字段，并在不可用时从同广告主、同商品的官方单元自动解析主图；无可靠来源时在项目创建前阻断。缺失的转化资产也只从同账户、同商品项目解析，多个候选不会自动选择。
+营销向导要求用户填写模板名称，并分别填写创建计划时使用的项目名称形式和广告名称形式；名称形式保存为 `project_name_template`、`promotion_name_template`，创建前预览会逐项展示。模板归属始终由广告主、平台、流量来源和商品 `bindings` 决定，不解析用户填写的模板名称。向导还会收集日预算、净成交 ROI、性别、年龄和官方要求的 6–9 位置产品卖点。创建骨架的商品图来源是 `DPA` 商品库字段 `images_url`，因此不会询问图片 ID。提交前会验证 DPA 字段，并在不可用时从同广告主、同商品的官方单元自动解析主图；无可靠来源时在项目创建前阻断。缺失的转化资产也只从同账户、同商品项目解析，多个候选不会自动选择。
 
 千川商品全域模板使用独立命令：
 
@@ -235,7 +242,7 @@ ocean-watch qc-templates create-live
 ocean-watch qc-templates migrate-live
 ```
 
-向导从不可投放的默认骨架或已有千川商品模板复制创建，绑定广告主、产品和 1–30 个商品 ID。多个商品 ID 使用 `/` 分隔，名称使用 `巨量千川-广告账户ID-商品名-商品ID-商品全域`。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime` 占位符，渲染结果按官方限制截为 100 加权字符。旧模板升级后使用 `{product_name}-{creator_name}-{datetime}`，保持原有计划命名效果。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
 
 直播模板从独立的 `default_qianchuan_live_template` 或已有直播模板复制，绑定广告主、直播账号名称和数值 `aweme_id`。默认设置为保守出价、预算 5000、长期投放和智能选材。直播模板不保存商品、作品或手工素材，使用 `plans create-qianchuan --live-template TEMPLATE_ID` 创建；该模式不接受计划名称。
 
@@ -431,6 +438,42 @@ ocean-watch qc-reports materials \
 报表分页、计划 ID 和七个必需指标任一缺失、重复或非法时，命令拒绝返回不完整汇总。汇总先使用原始 `Decimal` 值跨全部页面计算，最后才按展示精度舍入。`--status ALL` 会保留历史财务行；计划列表无法补齐其元数据时，行内 `metadata_available=false`，汇总中的 `metadata_missing_count` 同步计数，名称、状态、成本保障、出价和预算保持为空。指定具体状态时必须解析到计划元数据，否则整次查询失败，避免错误筛选。
 
 `qc-reports materials` 调用官方 `/v1.0/qianchuan/report/material/get/`，支持素材 ID/类型/模式/来源筛选。展示上限只影响返回行，汇总始终基于全部已分页数据。自定义字段未包含成交金额或订单时，对应汇总为 `null`，不按零处理。
+
+千川全域与乘方账户、商品、直播间和达人报表：
+
+```bash
+ocean-watch qc-reports account \
+  --advertiser-id ADVERTISER_ID \
+  --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+ocean-watch qc-reports uni-account \
+  --advertiser-id ADVERTISER_ID
+ocean-watch qc-reports schema \
+  --advertiser-id ADVERTISER_ID \
+  --data-topic SITE_PROMOTION_PRODUCT_PRODUCT
+ocean-watch qc-reports custom \
+  --advertiser-id ADVERTISER_ID \
+  --data-topic DATA_TOPIC \
+  --dimension DIMENSION --metric METRIC
+ocean-watch qc-reports products \
+  --advertiser-id ADVERTISER_ID \
+  --report-mode uni \
+  --filter product_id=PRODUCT_ID
+ocean-watch qc-reports rooms \
+  --advertiser-id ADVERTISER_ID \
+  --room-id ROOM_ID \
+  --dimension TIME_GRANULARITY_HOURLY
+ocean-watch qc-reports authors \
+  --advertiser-id ADVERTISER_ID \
+  --aweme-id AWEME_ID
+```
+
+`qc-reports account` 调用 `/v1.0/qianchuan/report/all_promotion/get/`，用于指定广告主包含乘方的整体账户数据，默认 `adlab_scene=OVERALL_PROJECT`；`--data-period` 只允许用于该场景。`qc-reports uni-account` 调用 `/v1.0/qianchuan/report/uni_promotion/get/`，用于明确限制为全域的单广告主账户聚合。用户说“我负责的/我常用的账户表现”时仍使用 `accounts report` 查询账户集合，不能用这两个单广告主命令替代。
+
+`qc-reports schema` 可在一次请求中传入多个 `--data-topic`，返回官方可用维度和指标。`qc-reports custom` 使用明确的主题、维度和指标执行自定义查询；商品快捷入口按 `--report-mode uni|overall` 分别选择 `SITE_PROMOTION_PRODUCT_PRODUCT` 或 `OVERALL_ROI_PRODUCT_PRODUCT`。`--filter` 可重复传入 `field=value1,value2` 或官方 JSON 过滤对象。商品名称、可投状态或商品 ID 发现仍使用 `qc-products list/search`，不能与商品效果报表混用。
+
+直播间和达人报表分别调用 `/dimension_data/room/get/` 与 `/dimension_data/author/get/`。直播间需要精确数值 `room_id`，达人需要精确数值 `aweme_id`；只有用户要求小时视图时才使用 `TIME_GRANULARITY_HOURLY`。两者支持 `--order-platform` 与 `--smart-bid-type` 筛选。所有分页报表会遍历完整官方分页，`--top` 只限制展示，不改变汇总或请求完整性；临时限流、服务超时和可确认的传输超时只重试当前只读请求。
+
+Skill 会结合完整语句和上下文先识别账户、商品、直播间、达人、计划、素材或字段契约等业务对象，再选择命令。上述示例是脚本化入口，不是要求普通用户记住的固定话术。
 
 ## 计划参数调整
 

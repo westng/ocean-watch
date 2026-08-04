@@ -1,4 +1,4 @@
 interface:
   display_name: "巨量千川计划助手"
-  short_description: "千川授权、商品与直播模板、达人计划、素材报表和参数调整"
-  default_prompt: "Use $qc-plan-monitor to inspect Qianchuan products, creators, plans, and reports, then safely preview product or live all-domain operations."
+  short_description: "千川授权、模板、计划、素材及全域与乘方多维效果报表"
+  default_prompt: "Use $qc-plan-monitor to understand my Qianchuan intent, route account, product, room, author, plan, or material reports, and safely preview write operations."

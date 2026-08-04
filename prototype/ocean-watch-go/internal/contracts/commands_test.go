@@ -28,7 +28,7 @@ func TestCommandsMatchFrozenManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	actual := Names()
-	if len(actual) != 75 || len(manifestCommands) != len(actual) {
+	if len(actual) != 82 || len(manifestCommands) != len(actual) {
 		t.Fatalf("command counts differ: go=%d manifest=%d", len(actual), len(manifestCommands))
 	}
 	for index := range actual {

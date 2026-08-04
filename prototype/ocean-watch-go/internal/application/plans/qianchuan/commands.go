@@ -240,7 +240,8 @@ func (service CommandService) BatchWorks(
 		AdvertiserID: exported.AdvertiserID, AuthAccountID: strings.TrimSpace(command.AuthAccountID),
 		Submit: command.Submit, TemplateID: exported.TemplateID, TemplateName: exported.DisplayName,
 		ProductName: exported.ProductName, TemplatePayload: exported.Payload,
-		IncludePayloads: command.IncludePayloads, Skipped: skipped,
+		PlanNameTemplate: exported.PlanNameTemplate,
+		IncludePayloads:  command.IncludePayloads, Skipped: skipped,
 	}
 	if len(links.Resolved) == 0 {
 		result, executeErr := service.Batch.Execute(ctx, baseRequest)

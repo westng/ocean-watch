@@ -4,7 +4,7 @@ import copy
 from ocean_watch.core.data import deep_merge
 from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 MATERIAL_STRATEGY_SCHEMA_VERSION = 3
 NAMING_SCHEMA_VERSION = 4
 TEMPLATE_SECTIONS = ("defaults", "materials", "resolved_ids", "links", "tracking_urls")
@@ -390,7 +390,7 @@ def migrate(config, confirm_remove_legacy_materials=False):
         validated = copy.deepcopy(config)
         if "active_plan_template" in validated:
             raise ValueError(
-                "schema v5 does not support active_plan_template; migrate the config"
+                "schema v6 does not support active_plan_template; migrate the config"
             )
         for name, raw_template in (validated.get("plan_templates") or {}).items():
             normalized = normalize_template(validated, name, raw_template)
@@ -405,12 +405,17 @@ def migrate(config, confirm_remove_legacy_materials=False):
                     f"invalid plan template {name}: plan templates cannot store "
                     "runtime material IDs: " + ", ".join(fixed_fields)
                 )
-            canonical_name = canonical_template_name(normalized)
-            if name != canonical_name or normalized["display_name"] != canonical_name:
+            if is_missing(name) or normalized["display_name"] != name:
                 raise ValueError(
-                    f"invalid plan template {name}: expected canonical name {canonical_name}"
+                    f"invalid plan template {name}: display_name must match the template key"
                 )
         return validated
+
+    if input_version == 5:
+        migrated = copy.deepcopy(config)
+        migrated.pop("active_plan_template", None)
+        migrated["plan_template_schema_version"] = SCHEMA_VERSION
+        return migrate(migrated, confirm_remove_legacy_materials)
 
     if input_version == NAMING_SCHEMA_VERSION:
         migrated = copy.deepcopy(config)

@@ -57,10 +57,10 @@ ocean-watch auth sync-accounts \
 | `integrations.qianchuan_work_metadata.endpoint` | 可选千川作品解析服务，仅允许保存在本机配置 |
 | `managed_account_schema_version` | 用户负责账户簿版本，当前为 `1` |
 | `managed_accounts.<channel>` | 该渠道下用户主动维护的负责账户列表 |
-| `plan_template_schema_version` | 营销计划模板版本，当前为 `5` |
+| `plan_template_schema_version` | 营销计划模板版本，当前为 `6` |
 | `default_plan_template` | 创建模板的默认骨架，不可投放 |
 | `plan_templates` | 广告主绑定的真实业务模板 |
-| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `4` |
+| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `5` |
 | `default_qianchuan_product_template` | 千川商品全域默认骨架，不可投放 |
 | `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
 | `qianchuan_live_template_schema_version` | 千川直播模板版本，当前为 `1` |
@@ -166,19 +166,7 @@ Accept: application/json
 
 巨量营销默认模板的地域定向由行政区树的省级节点生成。官方 `audience.city` 是包含列表，因此默认配置写入港、澳、台、新疆、西藏之外的 29 个省级地域 ID，并在 `resolved_ids.city_names` 保存对应名称；不会添加官方接口不存在的“排除地域”字段。业务模板可以通过覆盖 `resolved_ids.city_ids` 和 `resolved_ids.city_names` 自定义地域。
 
-所有渠道的业务模板统一命名：
-
-```text
-渠道-广告账户ID-商品名-商品ID-模版类型
-```
-
-渠道段当前使用“巨量营销”或“巨量千川”。营销业务模板具体为：
-
-```text
-巨量营销-广告账户ID-商品名-商品ID-模版类型
-```
-
-`ACCOUNT_UPLOAD` 的模版类型显示为“混剪素材”，`CREATOR_AUTHORIZED` 显示为“原生素材”。名称由向导根据确认后的绑定信息自动生成，不接受自由名称。平台和流量来源仍保存在 `bindings` 中，但不进入名称。真实归属由 `bindings` 决定，不依赖名称解析。
+营销和千川商品业务模板都使用用户填写的名称。模板名称只是便于识别的标签，不编码广告主、商品或素材来源；真实归属始终由 `bindings` 决定，不依赖名称解析。营销向导还分别收集 `project_name_template` 和 `promotion_name_template`，在实际创建项目和广告时渲染对应名称。
 
 真实业务模板没有“当前”或“默认”状态。所有创建计划命令必须显式提供模板名称或模板 ID；`default_plan_template`、`default_qianchuan_product_template` 和 `default_qianchuan_live_template` 只用于复制创建新模板，永远不参与投放。
 
@@ -207,7 +195,7 @@ Accept: application/json
 - `ACCOUNT_UPLOAD`：账户上传素材，在线名称使用“混剪”。
 - `CREATOR_AUTHORIZED`：达人合作授权素材，在线名称使用“原生”。
 
-具体视频、封面、作品和 material ID 属于本次运行，不能写回营销 Schema v5 模板。
+具体视频、封面、作品和 material ID 属于本次运行，不能写回营销 Schema v6 模板。
 
 ### 创建模板
 
@@ -251,18 +239,14 @@ ocean-watch templates set-copy --template TARGET --from-template SOURCE
 
 ## 千川商品模板
 
-千川商品模板与营销 Schema v5 完全独立：
+千川商品模板与营销 Schema v6 完全独立：
 
 ```bash
 ocean-watch qc-templates list
 ocean-watch qc-templates create
 ```
 
-模板绑定一个千川广告主、产品名称和 1–30 个商品 ID。用户可见名称为：
-
-```text
-巨量千川-广告账户ID-商品名-商品ID1/商品ID2-商品全域
-```
+模板绑定一个千川广告主、产品名称和 1–30 个商品 ID，模板名称由用户填写。`plan_name_template` 定义创建新商品全域计划时的名称形式，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime` 占位符；渲染结果最多 100 加权字符。Schema v4 升级到 v5 时保留原模板 ID 和显示名称，并补入默认形式 `{product_name}-{creator_name}-{datetime}`，因此旧模板的计划命名行为不变。
 
 默认投放参数：
 

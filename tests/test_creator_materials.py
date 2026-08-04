@@ -346,6 +346,9 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             "每单元素材数量": "5",
             "达人 ID 白名单": "",
             "授权至少剩余天数": "1",
+            "模板名称": "新商品达人模板",
+            "项目名称形式": "",
+            "广告名称形式": "",
             "输入文案标题": ["这是一条达人模板文案", ""],
             "计划来源": "test source",
             "落地页链接": "https://landing.test/page",
@@ -359,7 +362,7 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             input_fn=answers,
             output_fn=lambda _: None,
         )
-        name = "巨量营销-1234567890123456-新商品-product-2-原生素材"
+        name = "新商品达人模板"
         strategy = updated["plan_templates"][name]["material_strategy"]
         self.assertTrue(result["confirmed"])
         self.assertEqual(strategy["source_type"], "CREATOR_AUTHORIZED")
@@ -394,6 +397,9 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             "每单元素材数量": "不限",
             "达人 ID 白名单": "",
             "授权至少剩余天数": "1",
+            "模板名称": "不限素材模板",
+            "项目名称形式": "",
+            "广告名称形式": "",
             "输入文案标题": ["这是一条不限素材模板文案", ""],
             "计划来源": "test source",
             "落地页链接": "https://landing.test/page",
@@ -407,7 +413,7 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             input_fn=answers,
             output_fn=lambda _: None,
         )
-        name = "巨量营销-1234567890123456-不限素材商品-product-3-原生素材"
+        name = "不限素材模板"
         self.assertTrue(result["confirmed"])
         self.assertIsNone(
             updated["plan_templates"][name]["material_strategy"][
@@ -439,6 +445,7 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
                 "creator_ids": ["8001"],
                 "creator_auth_types": ["VIDEO_ITEM"],
                 "minimum_remaining_days": 2,
+                "name": "跨账户达人模板",
             },
             source_name,
         )
@@ -451,7 +458,7 @@ class CreatorMaterialDevelopmentTests(unittest.TestCase):
             "material_strategy.creator_filters.creator_ids",
             template["created_from"]["cleared_fields"],
         )
-        self.assertTrue(name.endswith("-原生素材"))
+        self.assertEqual(name, "跨账户达人模板")
 
     def test_standard_create_entry_rejects_creator_template_before_token_use(self):
         config, name = creator_template_config()

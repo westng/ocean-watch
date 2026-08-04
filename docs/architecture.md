@@ -144,6 +144,12 @@ App Secret、Access Token、Refresh Token 和可选 MCP Developer ID 只进入�
 
 财务指标来自 `/v1.0/qianchuan/report/uni_promotion/data/get/`；计划列表只补充名称、状态、达人、商品、预算和目标 ROI，其 `stats_info` 不能作为金额。Go Shadow 使用 SDK REST；Python 生产路径在迁移期维持兼容实现和对比证据。
 
+### 千川全域与乘方维度报表
+
+Skill 先根据完整语句和上下文识别业务对象，不要求固定口令：负责账户集合表现继续进入 `accounts report`；指定单个广告主的乘方/综合账户表现进入 `qc-reports account`，明确仅全域时进入 `qc-reports uni-account`；商品效果、直播间效果和达人效果分别进入 `qc-reports products/rooms/authors`。商品资产发现仍属于 `qc-products`，计划行和素材行仍属于 `qc-reports plans/materials`。
+
+Application 把 7 个兼容命令映射到 6 个官方接口：账户聚合使用 `all_promotion/get` 或 `uni_promotion/get`，字段契约与自定义/商品数据使用 `config/get` 和 `data/get`，直播间与达人使用各自的 `dimension_data` 接口。Schema 多主题一次请求；分页数据必须完整遍历且仅重试失败页；展示上限不影响汇总。Go Shadow 直接使用官方生成 Service，Python 生产路径保持同一命令和输出合同，生产路由不因此自动切换。
+
 ### 千川批量创建
 
 批量判重只扫描执行当天的商品全域计划，逐页完成并仅在当前页退避；候选详情确认达人 + 商品。已有计划只追加缺失素材，没有计划才创建。禁止扩大为 180 天历史扫描。

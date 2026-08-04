@@ -39,6 +39,72 @@ type qianchuanReportReaderStub struct {
 	metadataPages    map[int]domainqianchuan.PlanPage
 }
 
+type qianchuanUnifiedReaderStub struct {
+	schemaRequests []portreports.SchemaRequest
+	dataRequests   []portreports.DataPageRequest
+	allRequests    []portreports.AggregateRequest
+	uniRequests    []portreports.AggregateRequest
+	roomRequests   []portreports.DimensionPageRequest
+	authorRequests []portreports.DimensionPageRequest
+	dataPages      map[int]domainreports.QianchuanReportPage
+	dimensionPages map[int]domainreports.QianchuanDimensionPage
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchSchemas(
+	_ context.Context,
+	request portreports.SchemaRequest,
+) ([]domainreports.QianchuanSchema, error) {
+	stub.schemaRequests = append(stub.schemaRequests, request)
+	schemas := make([]domainreports.QianchuanSchema, 0, len(request.Topics))
+	for _, topic := range request.Topics {
+		schemas = append(schemas, domainreports.QianchuanSchema{
+			Topic: topic, Dimensions: []string{"product_id"}, Metrics: []string{"stat_cost"},
+			RequestID: "schema-batch",
+		})
+	}
+	return schemas, nil
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchDataPage(
+	_ context.Context,
+	request portreports.DataPageRequest,
+) (domainreports.QianchuanReportPage, error) {
+	stub.dataRequests = append(stub.dataRequests, request)
+	return stub.dataPages[request.Page], nil
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchAllPromotion(
+	_ context.Context,
+	request portreports.AggregateRequest,
+) (domainreports.QianchuanAggregate, error) {
+	stub.allRequests = append(stub.allRequests, request)
+	return domainreports.QianchuanAggregate{Values: map[string]any{"stat_cost_for_roi2": 12.5}, RequestID: "all"}, nil
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchUniPromotion(
+	_ context.Context,
+	request portreports.AggregateRequest,
+) (domainreports.QianchuanAggregate, error) {
+	stub.uniRequests = append(stub.uniRequests, request)
+	return domainreports.QianchuanAggregate{Values: map[string]any{"stat_cost": 8.5}, RequestID: "uni"}, nil
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchRoomDimensionPage(
+	_ context.Context,
+	request portreports.DimensionPageRequest,
+) (domainreports.QianchuanDimensionPage, error) {
+	stub.roomRequests = append(stub.roomRequests, request)
+	return stub.dimensionPages[request.Page], nil
+}
+
+func (stub *qianchuanUnifiedReaderStub) FetchAuthorDimensionPage(
+	_ context.Context,
+	request portreports.DimensionPageRequest,
+) (domainreports.QianchuanDimensionPage, error) {
+	stub.authorRequests = append(stub.authorRequests, request)
+	return stub.dimensionPages[request.Page], nil
+}
+
 func (stub *qianchuanReportReaderStub) FetchMaterialPage(
 	_ context.Context,
 	request portreports.MaterialPageRequest,
@@ -199,6 +265,113 @@ func TestQianchuanPlanReportSDKParity(t *testing.T) {
 			"schema-request", "metric-request-1", "metric-request-2", "metadata-request-1",
 		}) || result.Transport != "official_sdk_rest" || result.AmountUnit != "CNY" {
 		t.Fatalf("plan diagnostics changed: %#v", result)
+	}
+}
+
+func TestQianchuanUnifiedReportRoutingAndPagination(t *testing.T) {
+	reader := &qianchuanUnifiedReaderStub{
+		dataPages: map[int]domainreports.QianchuanReportPage{
+			1: {
+				Rows: []domainreports.QianchuanReportRow{{
+					Dimensions: map[string]any{"product_id": "3000000000000001"},
+					Metrics:    map[string]any{"stat_cost": 5.5},
+				}},
+				PageInfo: domainqianchuan.PageInfo{Page: 1, TotalPages: 2, TotalNumber: 2}, RequestID: "data-1",
+			},
+			2: {
+				Rows: []domainreports.QianchuanReportRow{{
+					Dimensions: map[string]any{"product_id": "3000000000000002"},
+					Metrics:    map[string]any{"stat_cost": 3},
+				}},
+				PageInfo: domainqianchuan.PageInfo{Page: 2, TotalPages: 2, TotalNumber: 2}, RequestID: "data-2",
+			},
+		},
+		dimensionPages: map[int]domainreports.QianchuanDimensionPage{
+			1: {
+				Rows:     []domainreports.QianchuanDimensionRow{{Values: map[string]any{"stat_cost": 1.5}}},
+				PageInfo: domainqianchuan.PageInfo{Page: 1, TotalPages: 1, TotalNumber: 1}, RequestID: "dimension-1",
+			},
+		},
+	}
+	service := Service{Tokens: &qianchuanReportTokenStub{}, UnifiedReader: reader}
+	scope := CredentialScope{AdvertiserID: "1000000000000001", AuthAccountID: "9000000000000001"}
+
+	all, err := service.QianchuanAllPromotion(context.Background(), QianchuanAggregateQuery{
+		CredentialScope: scope, StartDate: "2026-08-01", EndDate: "2026-08-02",
+		Fields: []string{"stat_cost_for_roi2"}, AdlabScene: "OVERALL_PROJECT", DataPeriod: "ALL_DATA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	uni, err := service.QianchuanUniPromotion(context.Background(), QianchuanAggregateQuery{
+		CredentialScope: scope, StartDate: "2026-08-01", EndDate: "2026-08-02", Fields: []string{"stat_cost"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reader.allRequests) != 1 || len(reader.uniRequests) != 1 ||
+		reader.allRequests[0].StartTime != "2026-08-01 00:00:00" ||
+		reader.allRequests[0].AdlabScene != "OVERALL_PROJECT" || reader.allRequests[0].DataPeriod != "ALL_DATA" ||
+		reader.uniRequests[0].StartTime != "2026-08-01" || all.Endpoint != QianchuanAllPromotionEndpoint ||
+		uni.Endpoint != QianchuanUniPromotionEndpoint {
+		t.Fatalf("aggregate report routing changed: all=%#v uni=%#v", reader.allRequests, reader.uniRequests)
+	}
+
+	schema, err := service.QianchuanSchema(context.Background(), QianchuanSchemaQuery{
+		CredentialScope: scope, Topics: []string{QianchuanProductTopic, QianchuanOverallProductTopic},
+		DataPeriod: "ALL_DATA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(schema.Schemas) != 2 || len(reader.schemaRequests) != 1 ||
+		!reflect.DeepEqual(reader.schemaRequests[0].Topics, []string{QianchuanProductTopic, QianchuanOverallProductTopic}) ||
+		reader.schemaRequests[0].DataPeriod != "ALL_DATA" ||
+		!reflect.DeepEqual(schema.RequestIDs, []string{"schema-batch"}) {
+		t.Fatalf("schema topic routing changed: %#v", reader.schemaRequests)
+	}
+
+	custom, err := service.QianchuanCustom(context.Background(), QianchuanCustomQuery{
+		CredentialScope: scope, StartDate: "2026-08-04", EndDate: "2026-08-04",
+		DataTopic: QianchuanOverallProductTopic, Dimensions: []string{"product_id"}, Metrics: []string{"stat_cost"},
+		Filters:    []QianchuanFilter{{Field: "product_id", Operator: 7, Values: []string{"3000000000000001"}}},
+		DataPeriod: "ALL_DATA", OrderField: "stat_cost", OrderType: "DESC", PageSize: 100, MaxPages: 100, Top: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reader.dataRequests) != 2 || custom.TotalRowCount != 2 || custom.DisplayedCount != 1 || !custom.Truncated ||
+		reader.dataRequests[0].Topic != QianchuanOverallProductTopic || reader.dataRequests[0].DataPeriod != "ALL_DATA" ||
+		!reflect.DeepEqual(reader.dataRequests[0].Filters, []portreports.ReportFilter{{
+			Field: "product_id", Operator: 7, Values: []string{"3000000000000001"},
+		}}) {
+		t.Fatalf("custom report traversal changed: result=%#v requests=%#v", custom, reader.dataRequests)
+	}
+
+	room, err := service.QianchuanRoom(context.Background(), QianchuanDimensionQuery{
+		CredentialScope: scope, DimensionID: "4000000000000001", StartDate: "2026-08-04", EndDate: "2026-08-04",
+		Dimension: "TIME_GRANULARITY_HOURLY", Metrics: []string{"stat_cost_for_roi2"},
+		OrderPlatform: "ALL", SmartBidType: "SMART_BID_CUSTOM",
+		OrderField: "stat_cost_for_roi2", OrderType: "DESC", PageSize: 100, MaxPages: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	author, err := service.QianchuanAuthor(context.Background(), QianchuanDimensionQuery{
+		CredentialScope: scope, DimensionID: "5000000000000001", StartDate: "2026-08-04", EndDate: "2026-08-04",
+		Dimension: "TIME_GRANULARITY_DAILY", Metrics: []string{"stat_cost"}, MarketingGoal: "VIDEO_PROM_GOODS",
+		OrderField: "stat_cost", OrderType: "DESC", PageSize: 100, MaxPages: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reader.roomRequests) != 1 || len(reader.authorRequests) != 1 ||
+		reader.roomRequests[0].DimensionID != "4000000000000001" ||
+		reader.roomRequests[0].OrderPlatform != "ALL" || reader.roomRequests[0].SmartBidType != "SMART_BID_CUSTOM" ||
+		reader.authorRequests[0].DimensionID != "5000000000000001" ||
+		reader.authorRequests[0].MarketingGoal != "VIDEO_PROM_GOODS" ||
+		room.Endpoint != QianchuanRoomEndpoint || author.Endpoint != QianchuanAuthorEndpoint {
+		t.Fatalf("dimension report routing changed: room=%#v author=%#v", reader.roomRequests, reader.authorRequests)
 	}
 }
 

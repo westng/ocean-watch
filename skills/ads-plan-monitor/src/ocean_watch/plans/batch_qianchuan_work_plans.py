@@ -119,9 +119,25 @@ def build_plan_name(template, creator, now=None):
         or creator.get("aweme_show_id")
         or creator["aweme_id"]
     )
-    suffix = now.strftime("%Y%m%d%H%M%S")
-    prefix = f"{bindings['product_name']}-{creator_label}"
-    return f"{weighted_truncate(prefix, 84)}-{suffix}"
+    values = {
+        "product_name": bindings["product_name"],
+        "creator_name": creator_label,
+        "aweme_id": creator["aweme_id"],
+        "douyin_id": creator.get("aweme_show_id") or "",
+        "date": now.strftime("%Y%m%d"),
+        "time": now.strftime("%H%M%S"),
+        "datetime": now.strftime("%Y%m%d%H%M%S"),
+    }
+    pattern = qianchuan_product_templates.validate_plan_name_template(
+        template.get("plan_name_template")
+        or qianchuan_product_templates.DEFAULT_PLAN_NAME_TEMPLATE
+    )
+    for key, value in values.items():
+        pattern = pattern.replace("{" + key + "}", str(value))
+    name = weighted_truncate(pattern, 100)
+    if not name:
+        raise ValueError("Qianchuan rendered plan name is empty")
+    return name
 
 
 def group_by_creator(material_rows):

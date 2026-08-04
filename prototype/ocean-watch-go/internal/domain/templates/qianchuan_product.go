@@ -8,16 +8,18 @@ import (
 )
 
 const (
-	qianchuanProductSchemaVersion    = 4
+	qianchuanProductSchemaVersion    = 5
 	qianchuanProductSchemaVersionKey = "qianchuan_product_template_schema_version"
 	qianchuanProductDefaultKey       = "default_qianchuan_product_template"
 	qianchuanProductTemplatesKey     = "qianchuan_product_templates"
 	qianchuanProductLegacyActiveKey  = "active_qianchuan_product_template"
 	qianchuanProductTemplateType     = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 	qianchuanProductMaterialSource   = "CREATOR_RUNTIME_QUERY"
+	qianchuanProductDefaultPlanName  = "{product_name}-{creator_name}-{datetime}"
 )
 
 var qianchuanProductIDSeparator = regexp.MustCompile(`[/,，\s]+`)
+var qianchuanPlanNamePlaceholder = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 func defaultQianchuanProductTemplate() map[string]any {
 	return map[string]any{
@@ -37,6 +39,7 @@ func defaultQianchuanProductTemplate() map[string]any {
 			"video_schedule_type":  "SCHEDULE_FROM_NOW",
 			"deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
 		},
+		"plan_name_template": qianchuanProductDefaultPlanName,
 		"material_strategy": map[string]any{
 			"source_type":          qianchuanProductMaterialSource,
 			"persist_material_ids": false,
@@ -88,6 +91,18 @@ func ensureQianchuanProductConfig(config map[string]any) (map[string]any, error)
 	}
 	if version < 4 {
 		delete(normalized, qianchuanProductLegacyActiveKey)
+	}
+	if version < 5 {
+		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
+			if !pythonTruthy(value["plan_name_template"]) {
+				value["plan_name_template"] = qianchuanProductDefaultPlanName
+			}
+		}
+		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
+			if template, ok := value.(map[string]any); ok && !pythonTruthy(template["plan_name_template"]) {
+				template["plan_name_template"] = qianchuanProductDefaultPlanName
+			}
+		}
 	}
 	normalized[qianchuanProductSchemaVersionKey] = qianchuanProductSchemaVersion
 	if _, exists := normalized[qianchuanProductDefaultKey]; !exists {
@@ -206,6 +221,33 @@ func normalizeQianchuanProductIDs(value any) ([]any, error) {
 	return result, nil
 }
 
+func validateQianchuanPlanNameTemplate(value any) (string, error) {
+	template, err := requiredText(value, "plan_name_template")
+	if err != nil {
+		return "", err
+	}
+	allowed := map[string]bool{
+		"product_name": true, "creator_name": true, "aweme_id": true,
+		"douyin_id": true, "date": true, "time": true, "datetime": true,
+	}
+	unknown := []string{}
+	seenUnknown := map[string]bool{}
+	for _, match := range qianchuanPlanNamePlaceholder.FindAllStringSubmatch(template, -1) {
+		if !allowed[match[1]] && !seenUnknown[match[1]] {
+			seenUnknown[match[1]] = true
+			unknown = append(unknown, match[1])
+		}
+	}
+	sort.Strings(unknown)
+	if len(unknown) != 0 {
+		return "", configurationError(
+			"Qianchuan product plan_name_template contains unsupported placeholders",
+			map[string]any{"placeholders": stringsToAny(unknown)},
+		)
+	}
+	return template, nil
+}
+
 func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 	template, ok := value.(map[string]any)
 	if !ok {
@@ -234,6 +276,14 @@ func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	displayName, err := requiredText(template["display_name"], "template_name")
+	if err != nil {
+		return nil, err
+	}
+	planNameTemplate, err := validateQianchuanPlanNameTemplate(template["plan_name_template"])
+	if err != nil {
+		return nil, err
+	}
 	deliverySource := template["delivery_setting"]
 	if !pythonTruthy(deliverySource) {
 		deliverySource = defaultQianchuanProductTemplate()["delivery_setting"]
@@ -248,7 +298,7 @@ func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 	}
 	normalized := map[string]any{
 		"template_id":   templateID,
-		"display_name":  qianchuanProductDisplayName(advertiserID, productName, stringList(productIDs)),
+		"display_name":  displayName,
 		"template_type": qianchuanProductTemplateType,
 		"status":        status,
 		"bindings": map[string]any{
@@ -257,7 +307,8 @@ func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 			"product_name":  productName,
 			"product_ids":   productIDs,
 		},
-		"delivery_setting": delivery,
+		"delivery_setting":   delivery,
+		"plan_name_template": planNameTemplate,
 		"material_strategy": map[string]any{
 			"source_type":          qianchuanProductMaterialSource,
 			"persist_material_ids": false,

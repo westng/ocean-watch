@@ -205,6 +205,9 @@ func orderedMaterialStrategy(value map[string]any) orderedObject {
 
 func orderedQianchuanTemplate(candidate map[string]any, live bool) orderedObject {
 	keys := []string{"template_id", "display_name", "template_type", "status", "bindings", "delivery_setting"}
+	if !live {
+		keys = append(keys, "plan_name_template")
+	}
 	if live {
 		keys = append(keys, "creative_setting")
 	}

@@ -7,7 +7,7 @@ from ocean_watch.core.data import is_missing
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MAX_PRODUCTS = 30
 TEMPLATE_TYPE = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 MATERIAL_SOURCE_TYPE = "CREATOR_RUNTIME_QUERY"
@@ -24,6 +24,16 @@ DEFAULT_DELIVERY_SETTING = {
     "video_schedule_type": "SCHEDULE_FROM_NOW",
     "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
 }
+DEFAULT_PLAN_NAME_TEMPLATE = "{product_name}-{creator_name}-{datetime}"
+PLAN_NAME_PLACEHOLDERS = {
+    "product_name",
+    "creator_name",
+    "aweme_id",
+    "douyin_id",
+    "date",
+    "time",
+    "datetime",
+}
 
 
 def default_template():
@@ -37,6 +47,7 @@ def default_template():
             "product_ids": [],
         },
         "delivery_setting": copy.deepcopy(DEFAULT_DELIVERY_SETTING),
+        "plan_name_template": DEFAULT_PLAN_NAME_TEMPLATE,
         "material_strategy": {
             "source_type": MATERIAL_SOURCE_TYPE,
             "persist_material_ids": False,
@@ -83,6 +94,13 @@ def ensure_config(config):
                 template["display_name"] = name
     if current_version < 4:
         normalized.pop(LEGACY_ACTIVE_TEMPLATE_KEY, None)
+    if current_version < 5:
+        default = normalized.get(DEFAULT_TEMPLATE_KEY)
+        if isinstance(default, dict):
+            default.setdefault("plan_name_template", DEFAULT_PLAN_NAME_TEMPLATE)
+        for template in (normalized.get(TEMPLATES_KEY) or {}).values():
+            if isinstance(template, dict):
+                template.setdefault("plan_name_template", DEFAULT_PLAN_NAME_TEMPLATE)
     normalized[SCHEMA_VERSION_KEY] = SCHEMA_VERSION
     normalized.setdefault(DEFAULT_TEMPLATE_KEY, default_template())
     normalized.setdefault(TEMPLATES_KEY, {})
@@ -138,6 +156,18 @@ def display_name(advertiser_id, product_name, product_ids):
         product_ids,
         "商品全域",
     )
+
+
+def validate_plan_name_template(value):
+    value = required_text(value, "plan_name_template")
+    placeholders = set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", value))
+    unknown = sorted(placeholders - PLAN_NAME_PLACEHOLDERS)
+    if unknown:
+        raise ConfigurationError(
+            "Qianchuan product plan_name_template contains unsupported placeholders",
+            {"placeholders": unknown},
+        )
+    return value
 
 
 def validate_delivery_setting(setting):
@@ -212,6 +242,8 @@ def build_business_template(
     source=None,
     template_id=None,
     active=True,
+    template_name=None,
+    plan_name_template=None,
 ):
     advertiser_id = normalize_positive_id(advertiser_id, "advertiser_id")
     product_name = required_text(product_name, "product_name")
@@ -221,9 +253,15 @@ def build_business_template(
         source.get("delivery_setting") or DEFAULT_DELIVERY_SETTING
     )
     identifier = template_id or f"qcpt_{uuid.uuid4().hex[:12]}"
+    template_name = required_text(template_name, "template_name")
+    plan_name_template = validate_plan_name_template(
+        plan_name_template
+        or source.get("plan_name_template")
+        or DEFAULT_PLAN_NAME_TEMPLATE
+    )
     return {
         "template_id": identifier,
-        "display_name": display_name(advertiser_id, product_name, product_ids),
+        "display_name": template_name,
         "template_type": TEMPLATE_TYPE,
         "status": "active" if active else "inactive",
         "bindings": {
@@ -233,6 +271,7 @@ def build_business_template(
             "product_ids": product_ids,
         },
         "delivery_setting": delivery,
+        "plan_name_template": plan_name_template,
         "material_strategy": {
             "source_type": MATERIAL_SOURCE_TYPE,
             "persist_material_ids": False,
@@ -257,6 +296,7 @@ def validate_default_template(template):
     if bindings.get("product_ids") not in (None, []):
         raise ConfigurationError("Qianchuan product default template must not bind products")
     validate_delivery_setting(template.get("delivery_setting"))
+    validate_plan_name_template(template.get("plan_name_template"))
     if template.get("material_strategy") != {
         "source_type": MATERIAL_SOURCE_TYPE,
         "persist_material_ids": False,
@@ -286,6 +326,8 @@ def validate_business_template(template):
         source=template,
         template_id=required_text(template.get("template_id"), "template_id"),
         active=template.get("status") == "active",
+        template_name=template.get("display_name"),
+        plan_name_template=template.get("plan_name_template"),
     )
     if template.get("display_name") != normalized["display_name"]:
         raise ConfigurationError("Qianchuan product template display_name is inconsistent")
@@ -323,6 +365,7 @@ def list_templates(config):
             "product_ids": bindings["product_ids"],
             "product_count": len(bindings["product_ids"]),
             "material_source_type": MATERIAL_SOURCE_TYPE,
+            "plan_name_template": template["plan_name_template"],
         })
     return rows
 

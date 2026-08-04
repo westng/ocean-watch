@@ -16,6 +16,7 @@ Official docs:
 - Qianchuan MCP business tools: https://open.oceanengine.com/labels/12/docs/1839622960207943?origin=left_nav
 - Qianchuan MCP tool list: https://open.oceanengine.com/labels/12/docs/1847297003631945?origin=left_nav
 - Qianchuan MCP guide and examples: https://open.oceanengine.com/labels/12/docs/1849835441833027?origin=left_nav
+- Unified and overall reports: https://open.oceanengine.com/labels/12/docs/1824289224504835?origin=left_nav
 
 ## Authorization And Accounts
 
@@ -48,12 +49,18 @@ Official docs:
 - `status=ALL` preserves report rows when historical plan metadata is no longer returned and marks them as unavailable. A specific status filter requires resolved metadata and fails closed when it cannot be obtained.
 - Access Tokens remain in the operating-system credential backend, are refreshed before MCP use, and must never be written into Codex MCP configuration or output.
 
-## Qianchuan Account Aggregate
+## Qianchuan Unified And Overall Reports
 
-- Official document: https://open.oceanengine.com/labels/12/docs/1865675229008199
-- Account-dimension aggregate: `GET https://api.oceanengine.com/open_api/v1.0/qianchuan/report/uni_promotion/get/`.
-- Use it for responsible-account performance with `advertiser_id`, `start_date`, `end_date`, `marketing_goal=ALL`, `order_platform=QIANCHUAN`, and explicit account metric fields.
-- The response directly supplies advertiser-level aggregate `stat_cost`, ROI2 orders, GMV, and ROI. It does not require plan pagination or plan metadata enrichment.
+- Official documents: https://open.oceanengine.com/labels/12/docs/1824289224504835 and https://open.oceanengine.com/labels/12/docs/1865675229008199.
+- Combined/乘方 account aggregate: `GET /v1.0/qianchuan/report/all_promotion/get/`. The official Go SDK requires `adlab_scene`; `data_period` is valid only for `OVERALL_PROJECT`.
+- 全域 account aggregate: `GET /v1.0/qianchuan/report/uni_promotion/get/`. Use it for responsible-account performance with `advertiser_id`, `start_date`, `end_date`, `marketing_goal=ALL`, `order_platform=QIANCHUAN`, and explicit account metric fields.
+- Schema: `GET /v1.0/qianchuan/report/uni_promotion/config/get/`; custom/product data: `GET /v1.0/qianchuan/report/uni_promotion/data/get/`.
+- Live-room dimension: `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/room/get/`; author dimension: `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/author/get/`.
+- 全域 product topic is `SITE_PROMOTION_PRODUCT_PRODUCT`; 乘方 product topic is `OVERALL_ROI_PRODUCT_PRODUCT`.
+- Send all requested Schema topics in one `data_topics` request rather than multiplying calls by topic. Preserve optional supported `data_period`.
+- Custom/product filters use official operator `7`, string-preserving values, complete pagination, and stable `total_page`/`total_number` validation.
+- Room and author reports preserve optional `order_platform` and `smart_bid_type`; use hourly granularity only when the requested view requires it.
+- The account responses directly supply advertiser-level aggregate metrics. Product, room, and author responses require strict pagination; display limits never stop traversal.
 - Do not substitute `/v1.0/qianchuan/uni_promotion/list/`; that endpoint returns the account's plan list and belongs to plan-level queries only.
 
 ## All-Domain Plan Create

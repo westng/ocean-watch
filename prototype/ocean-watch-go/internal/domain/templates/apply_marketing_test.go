@@ -106,7 +106,7 @@ func TestApplyMarketingPlanTemplateCanReturnCreationBaseExplicitly(t *testing.T)
 func marketingApplyFixture() map[string]any {
 	name := "巨量营销-1001-商品甲-9001-混剪素材"
 	return map[string]any{
-		"plan_template_schema_version": 5,
+		"plan_template_schema_version": 6,
 		"default_channel":              "marketing",
 		"account":                      map[string]any{"channel": "marketing", "advertiser_id": "1001"},
 		"default_plan_template": map[string]any{

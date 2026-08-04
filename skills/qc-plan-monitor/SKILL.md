@@ -1,6 +1,6 @@
 ---
 name: qc-plan-monitor
-description: Dedicated 巨量千川 skill for local OAuth, responsible accounts, token refresh, product/live templates, creator/work/product discovery, all-domain plan creation and updates, material changes, plan/material reports, and run inspection. Use for 千川初始化、千川授权、查询或管理用户常用的、负责的、管理的、日常投放范围内的账户（包括口语、简称、错别字和上下文追问）、同步广告主、检查 Token 映射、创建/校验/删除商品或直播全域模板、查询达人/作品/商品/计划/素材、批量新建或追加商品全域计划、删除计划素材、调整计划状态/预算/ROI、查询消耗和 ROI, or validating official Qianchuan payloads.
+description: Dedicated 巨量千川 skill for local OAuth, responsible accounts, token refresh, product/live templates, creator/work/product discovery, all-domain plan creation and updates, material changes, account/plan/product/room/author reports across 全域与乘方, and run inspection. Use for 千川初始化、千川授权、查询或管理用户常用的、负责的、管理的、日常投放范围内的账户（包括口语、简称、错别字和上下文追问）、同步广告主、检查 Token 映射、创建/校验/删除商品或直播全域模板、查询达人/作品/商品/计划/素材、批量新建或追加商品全域计划、删除计划素材、调整计划状态/预算/ROI、按账户/商品/直播间/达人及日期查询全域或乘方消耗和 ROI, or validating official Qianchuan payloads.
 ---
 
 # QC Plan Monitor
@@ -26,6 +26,7 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 10. Prefer verified official MCP tools for supported Qianchuan reads and guarded writes, with OpenAPI fallback where safe.
 11. List/search products and inspect plan details, materials, local runs, and authorization mappings.
 12. Dry-run or explicitly submit guarded plan status, budget, and ROI updates.
+13. Route natural-language account, product, live-room, author, and custom 全域/乘方 report intent to the matching official report endpoint.
 
 Qianchuan live templates and live all-domain creation are implemented; model strategy remains read-only by default. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
 
@@ -72,6 +73,13 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 | Remove plan materials by work link | `plans remove-qianchuan-work` |
 | Query all-domain plan spend | `qc-reports plans` |
 | Query material performance | `qc-reports materials` |
+| Query account aggregate including 乘方 | `qc-reports account` |
+| Query only 全域 account aggregate | `qc-reports uni-account` |
+| Inspect report topics, dimensions, and metrics | `qc-reports schema` |
+| Query a custom 全域/乘方 topic | `qc-reports custom` |
+| Query product-dimension performance | `qc-reports products` |
+| Query live-room performance | `qc-reports rooms` |
+| Query Douyin-author performance | `qc-reports authors` |
 | Update status/budget/ROI | `qc-plans update-status/update-budget/update-roi` |
 | List/show local batch runs | `runs list` / `runs show` |
 | Manage responsible accounts | `accounts add/list/remove/enable/disable` |
@@ -121,6 +129,25 @@ For performance results, treat `accounts report` top-level `presentation` as man
 
 Qianchuan account performance must call `GET /v1.0/qianchuan/report/uni_promotion/get/`, the official all-domain advertiser-dimension aggregate endpoint documented at `1865675229008199`. Request the account-level `stat_cost`, ROI2 order, GMV, and ROI fields directly. Do not call `qianchuan_report_uni_promotion_data_get_v1`, `/v1.0/qianchuan/uni_promotion/list/`, or any plan-detail endpoint for an account aggregate. Those plan-level interfaces belong only to plan reports and plan operations.
 
+## Unified And Overall Report Intent
+
+Interpret report requests semantically from the full utterance and conversation context. Do not require users to name a command, endpoint, exact metric field, or fixed phrase. Treat the examples below as illustrations rather than an exact or exhaustive keyword list.
+
+First identify the requested subject and scope:
+
+- Keep a request about the performance of the user's responsible/common account set on `accounts report`, with an optional Qianchuan channel filter. Do not replace this multi-account workflow with a single-advertiser `qc-reports` command.
+- Use `qc-reports account` for one Qianchuan advertiser's account aggregate when the user asks for 乘方, the combined/overall account view, or a view that must include 乘方. Default `adlab_scene=OVERALL_PROJECT`; pass `data_period` only when its meaning is requested and the scene supports it.
+- Use `qc-reports uni-account` when the user explicitly limits one advertiser's account aggregate to 全域 and does not ask for 乘方 or a combined view.
+- Use `qc-reports products` when performance is grouped by, filtered to, or compared across products. Select `--report-mode uni` for 全域 and `--report-mode overall` for 乘方; preserve an explicit product ID as a report filter. Do not use `qc-products` for spend, GMV, ROI, orders, or other performance data.
+- Use `qc-products list/search` only for product assets, eligibility, names, inventory, or finding a product ID without performance metrics.
+- Use `qc-reports rooms` for a live-room performance subject and `qc-reports authors` for a Douyin account/creator performance subject. If the user supplies only a creator name or visible Douyin ID, resolve one exact authorized numeric `aweme_id` before the author report; never choose a fuzzy or ambiguous creator.
+- Use `qc-reports plans` for individual plan rows and plan-target comparison, and `qc-reports materials` for material performance. Do not substitute the account, product, room, or author aggregate for those subjects.
+- Use `qc-reports schema` when the user asks what report topics, dimensions, or metrics are available. Use `qc-reports custom` only when a nonstandard topic/dimension/metric combination is explicit or has been resolved from the schema.
+
+Carry explicit dates, date ranges, IDs, 全域/乘方 scope, marketing goal, time granularity, requested metrics, filters, and display limits into the command. Default omitted dates to the current local day. Ask only for a genuinely required unresolved advertiser or dimension identity; do not ask the user to restate natural language as a command.
+
+Read `references/unified-report-routing.md` before executing any `qc-reports account`, `uni-account`, `schema`, `custom`, `products`, `rooms`, or `authors` request. It defines endpoint contracts, required identifiers, topics, pagination, and output boundaries.
+
 ## MCP Preference And Capability Check
 
 MCP is an optional acceleration and capability surface, not a setup prerequisite. If the user has configured it, prefer MCP for a Qianchuan remote operation only after confirming that the exact tool is present in the current runtime inventory and that its current input schema matches the operation. Read `references/mcp-capability-routing.md` before choosing an MCP tool; it contains the supported Plugin-operation intersection and the read/write fallback rules.
@@ -156,7 +183,9 @@ Qianchuan product templates are independent from Marketing templates.
 - New business templates use the `qc-templates create` wizard and choose the default skeleton or an existing Qianchuan product template as the source.
 - Qianchuan business templates have no active/default pointer. Every material query or plan-creation workflow must provide an explicit template ID or confirmed display name.
 - Every business template binds one Qianchuan advertiser, product name, and 1–30 product IDs.
-- Display names use the shared `渠道-广告账户ID-商品名-商品ID-模版类型` rule: `巨量千川-广告账户ID-商品名-商品ID1/商品ID2-商品全域`.
+- Product-template display names are user-defined labels. The wizard requires a non-empty name, while advertiser and product ownership remain exclusively in `bindings`.
+- Every product template stores a `plan_name_template` used only when creating a new product all-domain plan. Supported placeholders are `product_name`, `creator_name`, `aweme_id`, `douyin_id`, `date`, `time`, and `datetime`; the rendered name is limited to 100 weighted characters.
+- Schema v4 templates migrate to v5 without changing their template IDs or display names and receive `{product_name}-{creator_name}-{datetime}`, preserving the previous generated plan-name behavior.
 - Product IDs are deduplicated in input order and enforce the official maximum of 30.
 - Defaults are custom bidding, ROI `1.7`, budget `5000`, smart coupon on, long-term delivery, and net payment ROI optimization.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
@@ -318,6 +347,7 @@ Use `runs list/show` only for Plugin-managed journals under the local state root
 - Qianchuan MCP business tools: `https://open.oceanengine.com/labels/12/docs/1839622960207943`
 - Qianchuan MCP tool list: `https://open.oceanengine.com/labels/12/docs/1847297003631945`
 - Qianchuan MCP guide and examples: `https://open.oceanengine.com/labels/12/docs/1849835441833027`
+- Qianchuan unified and overall reports: `https://open.oceanengine.com/labels/12/docs/1824289224504835`
 
 Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details and `references/mcp-capability-routing.md` before selecting an MCP business tool. If local notes conflict with official documentation, the current MCP schema, or official MCP results, use the current official source.
 

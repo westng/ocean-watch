@@ -115,7 +115,7 @@ func TestLegacyMarketingAndQianchuanProductMigrationAreReadOnly(t *testing.T) {
 func templateTestConfig(t *testing.T) map[string]any {
 	t.Helper()
 	const payload = `{
-  "plan_template_schema_version": 5,
+  "plan_template_schema_version": 6,
   "default_channel": "marketing",
   "default_plan_template": {
     "defaults": {
@@ -146,7 +146,7 @@ func templateTestConfig(t *testing.T) map[string]any {
       "overrides": {}
     }
   },
-  "qianchuan_product_template_schema_version": 4,
+  "qianchuan_product_template_schema_version": 5,
   "default_qianchuan_product_template": {
     "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
     "business_usable": false,
@@ -156,6 +156,7 @@ func templateTestConfig(t *testing.T) map[string]any {
       "product_name": "REPLACE_WITH_PRODUCT_NAME",
       "product_ids": []
     },
+    "plan_name_template": "{product_name}-{creator_name}-{datetime}",
     "delivery_setting": {
       "smart_bid_type": "SMART_BID_CUSTOM",
       "roi2_goal": 1.7,
@@ -178,6 +179,7 @@ func templateTestConfig(t *testing.T) map[string]any {
         "product_name": "示例商品",
         "product_ids": ["8000000000000001", "8000000000000002"]
       },
+      "plan_name_template": "{product_name}-{creator_name}-{datetime}",
       "delivery_setting": {
         "smart_bid_type": "SMART_BID_CUSTOM",
         "roi2_goal": 1.7,

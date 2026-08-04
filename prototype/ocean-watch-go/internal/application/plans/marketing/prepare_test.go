@@ -227,7 +227,7 @@ func marketingPrepareFixture(sourceType string) map[string]any {
 		"marketing": map[string]any{"api": map[string]any{"base_url": "https://api.oceanengine.com/open_api"}},
 		"qianchuan": map[string]any{},
 	}
-	base["plan_template_schema_version"] = 5
+	base["plan_template_schema_version"] = 6
 	base["default_plan_template"] = map[string]any{
 		"defaults":      configuration.Clone(base["defaults"]),
 		"materials":     configuration.Clone(base["materials"]),

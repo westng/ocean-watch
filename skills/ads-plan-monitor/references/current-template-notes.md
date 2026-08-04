@@ -9,8 +9,8 @@ Do not infer behavior from experiments, historical run files, or user-specific l
 
 ## Template Naming
 
-- Naming rule: `巨量营销-广告账户ID-商品名-商品ID-模版类型`
-- The wizard generates the name from bindings instead of accepting a free-form body.
+- Business-template names are user-defined labels; bindings remain authoritative.
+- Project and promotion name forms are stored separately as `project_name_template` and `promotion_name_template`.
 - Example placeholder: `巨量营销-REPLACE_WITH_ADVERTISER_ID-示例商品-REPLACE_WITH_PRODUCT_ID-混剪素材`
 - Real business templates live in the user's local `config/ads-plan-monitor/config.json` and must be selected explicitly for every creation workflow.
 
@@ -26,7 +26,7 @@ A practical create-plan template normally needs:
 - `copy_materials.titles`: reusable promotion title material.
 
 Specific video, cover, item, and material IDs belong to the current run. Never persist them in a
-Marketing schema v5 business template.
+Marketing schema v6 business template.
 
 ## Confirmed Defaults For This Skill
 

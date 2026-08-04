@@ -4,7 +4,6 @@ import copy
 
 import ocean_watch.auth.channels as channels
 import ocean_watch.plans.create_plan as create_plan
-import ocean_watch.templates.business_template_names as business_template_names
 import ocean_watch.templates.plan_templates as plan_templates
 
 ACCOUNT_FIELDS = {
@@ -76,20 +75,6 @@ def material_source_label(source_type):
         "ACCOUNT_UPLOAD": "上传素材",
         "CREATOR_AUTHORIZED": "达人素材",
     }.get(source_type, source_type)
-
-
-def template_name(
-    advertiser_id,
-    product_name,
-    product_id,
-    source_type,
-):
-    return business_template_names.format_marketing_template_name(
-        advertiser_id,
-        product_name,
-        product_id,
-        source_type,
-    )
 
 
 def normalize_titles(titles):
@@ -297,10 +282,27 @@ def build_template(config, values, source_name=None):
         provenance["cleared_fields"].append(
             "material_strategy.creator_filters.creator_ids"
         )
+    source_name_templates = SOURCE_NAME_TEMPLATES[material_strategy["source_type"]]
+    inherited_name_defaults = overrides.get("defaults") or {}
+    project_name_template = str(
+        values.get("project_name_template")
+        or inherited_name_defaults.get("project_name_template")
+        or source_name_templates["project_name_template"]
+    ).strip()
+    promotion_name_template = str(
+        values.get("promotion_name_template")
+        or inherited_name_defaults.get("promotion_name_template")
+        or source_name_templates["promotion_name_template"]
+    ).strip()
+    if not project_name_template:
+        raise ValueError("project_name_template is required")
+    if not promotion_name_template:
+        raise ValueError("promotion_name_template is required")
     overrides.setdefault("defaults", {}).update({
         "product_name": bindings["product_name"],
         "product_id": bindings["product_id"],
-        **SOURCE_NAME_TEMPLATES[material_strategy["source_type"]],
+        "project_name_template": project_name_template,
+        "promotion_name_template": promotion_name_template,
     })
     for field in ("daily_budget", "roi_goal", "gender", "ages"):
         if values.get(field) is not None:
@@ -333,12 +335,9 @@ def build_template(config, values, source_name=None):
     if provenance["policy"].endswith("new_product") and not titles:
         copy_materials = {"titles": []}
 
-    name = template_name(
-        bindings["advertiser_id"],
-        bindings["product_name"],
-        bindings["product_id"],
-        material_strategy["source_type"],
-    )
+    name = str(values.get("name") or "").strip()
+    if not name:
+        raise ValueError("plan template name is required")
     return name, {
         "display_name": name,
         "bindings": bindings,

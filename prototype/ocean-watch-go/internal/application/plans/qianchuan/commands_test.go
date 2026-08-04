@@ -447,7 +447,7 @@ func (commandLocker) Acquire(context.Context, domainplans.WriteScope) (func() er
 
 func commandProductConfig() map[string]any {
 	return map[string]any{
-		"qianchuan_product_template_schema_version": 4,
+		"qianchuan_product_template_schema_version": 5,
 		"qianchuan_product_templates": map[string]any{
 			"qcpt_command": map[string]any{
 				"template_id":   "qcpt_command",
@@ -463,6 +463,7 @@ func commandProductConfig() map[string]any {
 					"video_schedule_type":  "SCHEDULE_FROM_NOW",
 					"deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
 				},
+				"plan_name_template": "{product_name}-{creator_name}-{datetime}",
 				"material_strategy": map[string]any{
 					"source_type": "CREATOR_RUNTIME_QUERY", "persist_material_ids": false,
 				},

@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	sharedplans "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/plans"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
@@ -31,6 +32,36 @@ func TestBatchWorkIdempotencyAndPresentation(t *testing.T) {
 	t.Run("owner hints use targeted verification with one broad fallback", testBatchOwnerHintVerification)
 	t.Run("multiple creator plans are filtered by verified work products", testBatchPlanProductDisambiguation)
 	t.Run("unknown append reconciles and rerun writes nothing", testBatchAppendIdempotency)
+}
+
+func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
+	service := BatchService{Now: func() time.Time {
+		return time.Date(2026, 8, 4, 12, 30, 45, 0, time.Local)
+	}}
+	creator := domainqianchuan.AuthorizedCreator{
+		AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "达人甲",
+	}
+	request := normalizedBatchRequest{BatchRequest: BatchRequest{
+		ProductName:      "测试商品",
+		PlanNameTemplate: "{creator_name}_{douyin_id}_{aweme_id}_{product_name}_{date}_{time}_{datetime}",
+	}}
+	if got, err := service.planName(request, creator); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品_20260804_123045_20260804123045" {
+		t.Fatalf("custom plan name rendered as %q", got)
+	}
+	request.PlanNameTemplate = ""
+	if got, err := service.planName(request, creator); err != nil || got != "测试商品-达人甲-20260804123045" {
+		t.Fatalf("legacy-compatible default plan name rendered as %q", got)
+	}
+	request.PlanNameTemplate = "{creator_name}"
+	creator.Name = strings.Repeat("达", 60)
+	if got, err := service.planName(request, creator); err != nil || got != strings.Repeat("达", 50) {
+		t.Fatalf("weighted plan-name limit changed: %q", got)
+	}
+	request.PlanNameTemplate = "{douyin_id}"
+	creator.VisibleID = ""
+	if _, err := service.planName(request, creator); err == nil {
+		t.Fatal("empty rendered plan name was accepted")
+	}
 }
 
 func testBatchProductHintQueryLimits(t *testing.T) {

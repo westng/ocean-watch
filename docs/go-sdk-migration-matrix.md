@@ -19,9 +19,9 @@
 - `Python retained`：批准保留的兼容或诊断面，不是遗漏的 Go 业务路径。
 - `Rolled back`：曾启用 Go 后，发布路由已切回 Python。
 
-截至 2026-07-28，P1–P4 的大部分命令已达到 `Shadow`，但生产策略仍禁用，`ProductionRouteManifest` 将全部命令固定为 Python。Go 候选的默认开发 manifest 只启用已接入的本地命令；网络和写命令的 Shadow 由测试专用 manifest 显式开启。本机自动化通过不等于 Gate 已签字，也不代表生产 launcher 已切流。
+截至 2026-08-04，P1–P4 的大部分命令已达到 `Shadow`，但生产策略仍禁用，`ProductionRouteManifest` 将全部命令固定为 Python。Go 候选的默认开发 manifest 只启用已接入的本地命令；网络和写命令的 Shadow 由测试专用 manifest 显式开启。本机自动化通过不等于 Gate 已签字，也不代表生产 launcher 已切流。
 
-2026-07-23 的冻结盘点为：`COMMANDS` 共 `75` 个 CLI action，全部由第 2 节覆盖；Python 运行时调用 `49` 条官方 OpenAPI path，第 3 节另加入千川计划报表的 `config/get`、`data/get` 两条 path，共 `51` 条。固定 SDK 中对应的 `51/51` 个生成 Service、HTTP 方法和 host profile已核验，并由 `contracts/commands.yaml` 与 `contracts/sdk-baseline.yaml` 固化。命令或 endpoint 发生增删时必须重新生成机器清单，并以重新评审后的清单作为分母。
+2026-08-04 的当前盘点为：`COMMANDS` 共 `82` 个 CLI action，全部由第 2 节覆盖；原有 `51` 条官方路径加入乘方账户、直播间维度和达人维度 3 条新路径后，共 `54` 条唯一官方 OpenAPI path。全域账户、Schema 和自定义数据路径原本已在基线中，本次扩展其命令用途。固定 SDK 中对应生成 Service、HTTP 方法和 host profile均通过 Adapter 测试核验，并由 `contracts/commands.yaml` 与 `contracts/sdk-baseline.yaml` 固化。命令或 endpoint 发生增删时必须重新生成机器清单，并以重新评审后的清单作为分母。
 
 ### 当前实现说明
 
@@ -78,6 +78,13 @@
 | 营销计划报表 | `reports plans` | `reports.MarketingPlans` | P3 | 完整汇总、Presentation 固定列 | AC-105, AC-113, AC-114 | Shadow |
 | 千川计划报表 | `qc-reports plans` | `reports.QianchuanPlans` + SDK Report Adapter | P3 | `data/get` 财务源；list 只补元数据；不读 `stats_info` 金额 | AC-105, AC-113, AC-115 | Shadow |
 | 千川素材报表 | `qc-reports materials` | `reports.QianchuanMaterials` | P3 | 完整分页、缺失指标为 null | AC-112, AC-114 | Shadow |
+| 千川乘方账户报表 | `qc-reports account` | `reports.QianchuanAllPromotion` | P3 | 必传 `adlab_scene`；`data_period` 仅限 `OVERALL_PROJECT` | AC-113, AC-114 | Shadow |
+| 千川全域账户报表 | `qc-reports uni-account` | `reports.QianchuanUniPromotion` | P3 | 单广告主全域聚合；不替代负责账户集合报表 | AC-104, AC-113 | Shadow |
+| 千川报表字段 | `qc-reports schema` | `reports.QianchuanSchema` | P3 | 多主题单请求；保留官方字段契约 | AC-113, AC-114 | Shadow |
+| 千川自定义报表 | `qc-reports custom` | `reports.QianchuanCustom` | P3 | 主题/维度/指标/筛选原样映射；完整分页 | AC-112, AC-114 | Shadow |
+| 千川商品表现 | `qc-reports products` | `reports.QianchuanProducts` | P3 | 全域/乘方主题分离；商品资产走 `qc-products` | AC-112, AC-113 | Shadow |
+| 千川直播间表现 | `qc-reports rooms` | `reports.QianchuanRoom` | P3 | 精确 room ID；日/小时维度；完整分页 | AC-112, AC-114 | Shadow |
+| 千川达人表现 | `qc-reports authors` | `reports.QianchuanAuthor` | P3 | 精确数值 aweme ID；不与达人素材查询混用 | AC-112, AC-114 | Shadow |
 | 营销项目/单元发现 | `discover projects`、`discover promotions` | `discovery.MarketingPlans` | P3 | 绑定广告主、分页完整 | AC-112, AC-114 | Shadow |
 | DPA 发现 | `discover dpa` | `discovery.DPA` | P3 | 模式化 endpoint、字段验证 | AC-114 | Shadow |
 | 转化资产 | `discover events` | `discovery.EventAssets` | P3 | 广告主隔离、分页 | AC-112, AC-114 | Shadow |
@@ -143,16 +150,19 @@
 
 | Endpoint | SDK Service | 目标 Adapter 方法 | 分页/重试 | 使用命令 | 验收 |
 | --- | --- | --- | --- | --- | --- |
-| `GET /v1.0/qianchuan/report/uni_promotion/get/` | `QianchuanReportUniPromotionGetV10ApiService` | `qianchuan.QueryAccountReport` | 页级读重试 | `accounts report` | AC-104, AC-113 |
-| `GET /v1.0/qianchuan/report/uni_promotion/config/get/` | `QianchuanReportUniPromotionConfigGetV10ApiService` | `qianchuan.GetPlanReportSchema` | 读重试 | `qc-reports plans` | AC-113, AC-115 |
-| `GET /v1.0/qianchuan/report/uni_promotion/data/get/` | `QianchuanReportUniPromotionDataGetV10ApiService` | `qianchuan.QueryPlanReport` | 页级读重试 | `qc-reports plans` | AC-113, AC-115 |
+| `GET /v1.0/qianchuan/report/all_promotion/get/` | `QianchuanReportAllPromotionGetV10ApiService` | `qianchuan.FetchAllPromotion` | 只读重试 | `qc-reports account` | AC-113, AC-114 |
+| `GET /v1.0/qianchuan/report/uni_promotion/get/` | `QianchuanReportUniPromotionGetV10ApiService` | `qianchuan.FetchUniPromotion` | 只读重试 | `accounts report`、`qc-reports uni-account` | AC-104, AC-113 |
+| `GET /v1.0/qianchuan/report/uni_promotion/config/get/` | `QianchuanReportUniPromotionConfigGetV10ApiService` | `qianchuan.FetchSchemas` | 多主题单次请求；只读重试 | `qc-reports plans/schema` | AC-113, AC-115 |
+| `GET /v1.0/qianchuan/report/uni_promotion/data/get/` | `QianchuanReportUniPromotionDataGetV10ApiService` | `qianchuan.FetchDataPage` | 失败页原位读重试 | `qc-reports plans/custom/products` | AC-112, AC-113, AC-115 |
+| `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/room/get/` | `QianchuanReportUniPromotionDimensionDataRoomGetV10ApiService` | `qianchuan.FetchRoomDimensionPage` | 失败页原位读重试 | `qc-reports rooms` | AC-112, AC-114 |
+| `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/author/get/` | `QianchuanReportUniPromotionDimensionDataAuthorGetV10ApiService` | `qianchuan.FetchAuthorDimensionPage` | 失败页原位读重试 | `qc-reports authors` | AC-112, AC-114 |
 | `GET /v1.0/qianchuan/report/material/get/` | `QianchuanReportMaterialGetV10ApiService` | `qianchuan.QueryMaterialReport` | 页级读重试 | `qc-reports materials` | AC-112, AC-114 |
 | `GET /v1.0/qianchuan/uni_promotion/product/get/` | `QianchuanUniPromotionProductGetV10ApiService` | `qianchuan.ListProducts` | 页级读重试 | `qc-products list/search` | AC-112, AC-114 |
 | `GET /v1.0/qianchuan/uni_promotion/list/` | `QianchuanUniPromotionListV10ApiService` | `qianchuan.ListPlans` | 页级重试；批量判重固定当天 | `qc-plans list`、`qc-reports plans`、批量判重 | AC-112, AC-115, AC-119 |
 | `GET /v1.0/qianchuan/uni_promotion/ad/detail/` | `QianchuanUniPromotionAdDetailV10ApiService` | `qianchuan.GetPlanDetail` | 候选级读重试，包括临时 RPC timeout | `qc-plans show`、批量判重 | AC-114, AC-119 |
 | `GET /v1.0/qianchuan/uni_promotion/ad/material/get/` | `QianchuanUniPromotionAdMaterialGetV10ApiService` | `qianchuan.ListPlanMaterials` | 页级读重试 | `qc-plans materials`、追加/删除对账 | AC-112, AC-120, AC-121 |
 
-财务来源约束：账户表现只使用 `uni_promotion/get`；计划表现只使用 `data/get`；计划列表只补元数据，禁止读取 `stats_info` 推算金额。
+财务来源约束：负责账户集合表现和明确仅全域的单广告主表现使用 `uni_promotion/get`；包含乘方的单广告主账户表现使用 `all_promotion/get`；计划、商品和自定义主题表现使用 `data/get`；直播间和达人表现使用对应维度接口。计划列表只补元数据，禁止读取 `stats_info` 推算金额。
 
 ### 3.5 千川达人、作品与写入
 

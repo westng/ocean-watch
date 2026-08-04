@@ -53,6 +53,7 @@ from ocean_watch.reports import (
     query_marketing_plan_report,
     query_qianchuan_material_report,
     query_qianchuan_plan_report,
+    query_qianchuan_unified_report,
     query_report_config,
 )
 from ocean_watch.templates import (
@@ -261,6 +262,41 @@ COMMANDS = {
         query_qianchuan_material_report.main,
         (),
         "Qianchuan material performance",
+    ),
+    ("qc-reports", "account"): (
+        query_qianchuan_unified_report.main,
+        ("account",),
+        "Qianchuan all-domain and overall account performance",
+    ),
+    ("qc-reports", "uni-account"): (
+        query_qianchuan_unified_report.main,
+        ("uni-account",),
+        "Qianchuan all-domain account performance",
+    ),
+    ("qc-reports", "schema"): (
+        query_qianchuan_unified_report.main,
+        ("schema",),
+        "Qianchuan unified report dimensions and metrics",
+    ),
+    ("qc-reports", "custom"): (
+        query_qianchuan_unified_report.main,
+        ("custom",),
+        "Qianchuan custom all-domain or overall report",
+    ),
+    ("qc-reports", "products"): (
+        query_qianchuan_unified_report.main,
+        ("products",),
+        "Qianchuan product-dimension performance",
+    ),
+    ("qc-reports", "rooms"): (
+        query_qianchuan_unified_report.main,
+        ("rooms",),
+        "Qianchuan live-room dimension performance",
+    ),
+    ("qc-reports", "authors"): (
+        query_qianchuan_unified_report.main,
+        ("authors",),
+        "Qianchuan Douyin-author dimension performance",
     ),
     ("discover", "projects"): (query_projects.main, (), "Find projects"),
     ("discover", "promotions"): (query_promotions.main, (), "Find promotions"),

@@ -191,12 +191,29 @@ func runMarketingTemplateWizard(
 			return fmt.Errorf("授权至少剩余天数必须是整数")
 		}
 	}
-	templateType := "原生素材"
-	if materialSourceType == "ACCOUNT_UPLOAD" {
-		templateType = "混剪素材"
+	templateName, err := reader.value("模板名称", source.Template["display_name"], true)
+	if err != nil {
+		return err
 	}
-	generatedName := strings.Join([]string{"巨量营销", advertiserID, productName, productID, templateType}, "-")
-	_, _ = fmt.Fprintf(reader.output, "模板名称（按绑定信息自动生成）: %s\n", generatedName)
+	projectNameDefault := sourceDefaults["project_name_template"]
+	promotionNameDefault := sourceDefaults["promotion_name_template"]
+	if textValue(projectNameDefault) == "" || textValue(promotionNameDefault) == "" {
+		if materialSourceType == "ACCOUNT_UPLOAD" {
+			projectNameDefault = "{material_date}_混剪素材roi_详情页"
+			promotionNameDefault = "自动投放单元_{product_name}_{material_date}日_混剪"
+		} else {
+			projectNameDefault = "{material_date}_原生素材roi_详情页"
+			promotionNameDefault = "自动投放单元_{product_name}_{material_date}日_原生"
+		}
+	}
+	projectNameTemplate, err := reader.value("项目名称形式", projectNameDefault, true)
+	if err != nil {
+		return err
+	}
+	promotionNameTemplate, err := reader.value("广告名称形式", promotionNameDefault, true)
+	if err != nil {
+		return err
+	}
 	sameProduct := policy == "same_advertiser_same_product" || policy == "cross_advertiser_same_product"
 	inheritedTitles := []any{}
 	if sameProduct {
@@ -234,6 +251,7 @@ func runMarketingTemplateWizard(
 		return err
 	}
 	input := domaintemplates.MarketingCreateInput{
+		TemplateName: templateName,
 		AdvertiserID: advertiserID, Platform: platform, TrafficSource: trafficSource,
 		ProductID: productID, ProductName: productName, ProductInfo: productInfo,
 		SellingPoints: sellingPoints, DailyBudget: dailyBudget, ROIGoal: roiGoal,
@@ -242,6 +260,7 @@ func runMarketingTemplateWizard(
 		CreatorIDs: creatorIDs, MinimumRemaining: minimumRemaining, Titles: titles,
 		PlanSource: planSource, LandingPageURL: landingPageURL, OpenURL: openURL,
 		TrackURL: trackURL, ActionTrackURL: actionTrackURL,
+		ProjectNameTemplate: projectNameTemplate, PromotionNameTemplate: promotionNameTemplate,
 	}
 	createdName, candidate, err := domaintemplates.BuildMarketingTemplate(
 		normalized, source.Name, source.Template, input,
@@ -614,6 +633,10 @@ func orderedMarketingPreview(
 	return orderedObject{
 		{name: "action", value: "create_business_template"},
 		{name: "template", value: createdName},
+		{name: "name_templates", value: orderedObject{
+			{name: "project", value: mapValue(mapValue(candidate["overrides"])["defaults"])["project_name_template"]},
+			{name: "promotion", value: mapValue(mapValue(candidate["overrides"])["defaults"])["promotion_name_template"]},
+		}},
 		{name: "source", value: orderedMap(mapValue(candidate["created_from"]), []string{"type", "template", "policy", "cleared_fields"}, nil)},
 		{name: "bindings", value: orderedMap(mapValue(candidate["bindings"]), []string{"channel", "advertiser_id", "platform", "traffic_source", "product_id", "product_name"}, nil)},
 		{name: "advertiser_binding_verification", value: orderedVerification(verification)},
@@ -682,7 +705,7 @@ func orderedMarketingRows(values []any) []any {
 		result = append(result, orderedMap(
 			row,
 			[]string{
-				"name", "channel", "advertiser_id", "platform", "traffic_source",
+				"name", "project_name_template", "promotion_name_template", "channel", "advertiser_id", "platform", "traffic_source",
 				"product_id", "product_name", "product_image_ids", "product_image",
 				"delivery_settings", "material_source_type", "material_source_name",
 				"material_strategy", "copy_materials", "bindings", "legacy", "binding_error",

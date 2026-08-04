@@ -234,7 +234,7 @@ func TestSetupValidateUsesOnlyReadOnlyLocalState(t *testing.T) {
   "channels": {"marketing": {"api": {"base_url": "https://api.oceanengine.com/open_api"}}},
   "account": {"channel": "marketing", "advertiser_id": "1000000000000001"},
   "plan_templates": {},
-  "plan_template_schema_version": 5
+  "plan_template_schema_version": 6
 }`)
 	if err := os.WriteFile(configPath, config, 0o600); err != nil {
 		t.Fatal(err)

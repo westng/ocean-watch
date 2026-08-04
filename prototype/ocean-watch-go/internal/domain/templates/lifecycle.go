@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 )
 
-const marketingSchemaVersion = 5
+const marketingSchemaVersion = 6
 
 func Validate(config map[string]any, channel, selector string) (map[string]any, error) {
 	channels := []string{"marketing", "qianchuan"}
@@ -124,7 +124,11 @@ func marketingValidationRow(config map[string]any, name string, raw any) map[str
 		errorsList = append(errorsList, "runtime material IDs stored in template: "+strings.Join(fields, ", "))
 	}
 	version, _ := validationSchemaVersion(config["plan_template_schema_version"], "plan_template_schema_version")
-	if version >= 4 {
+	if version >= marketingSchemaVersion {
+		if name != stringValue(normalized["display_name"]) {
+			errorsList = append(errorsList, "template display_name must match the template key")
+		}
+	} else if version >= 4 {
 		canonical := marketingCanonicalName(normalized)
 		if name != canonical || normalized["display_name"] != canonical {
 			errorsList = append(errorsList, "template name must be "+canonical)
@@ -294,6 +298,9 @@ func validateQianchuanProductDefault(value any) error {
 		return configurationError("Qianchuan product default template must not bind products", nil)
 	}
 	if _, err := validateQianchuanProductDelivery(template["delivery_setting"]); err != nil {
+		return err
+	}
+	if _, err := validateQianchuanPlanNameTemplate(template["plan_name_template"]); err != nil {
 		return err
 	}
 	strategy, ok := template["material_strategy"].(map[string]any)
@@ -527,7 +534,7 @@ func MigrateMarketing(config map[string]any, confirmRemoveLegacyMaterials bool) 
 	if version == marketingSchemaVersion {
 		validated := cloneMap(config)
 		if _, exists := validated["active_plan_template"]; exists {
-			return nil, nil, configurationError("schema v5 does not support active_plan_template; migrate the config", nil)
+			return nil, nil, configurationError("schema v6 does not support active_plan_template; migrate the config", nil)
 		}
 		for _, name := range sortedKeys(mapOrEmpty(validated["plan_templates"])) {
 			row := marketingValidationRow(validated, name, mapOrEmpty(validated["plan_templates"])[name])
@@ -541,6 +548,12 @@ func MigrateMarketing(config map[string]any, confirmRemoveLegacyMaterials bool) 
 			}
 		}
 		return validated, nil, nil
+	}
+	if version == 5 {
+		migrated := cloneMap(config)
+		delete(migrated, "active_plan_template")
+		migrated["plan_template_schema_version"] = marketingSchemaVersion
+		return MigrateMarketingValue(migrated, confirmRemoveLegacyMaterials)
 	}
 	if version == 4 {
 		migrated := cloneMap(config)

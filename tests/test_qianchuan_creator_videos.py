@@ -31,6 +31,7 @@ def template(product_ids="1001/1002"):
         product_name="示例商品",
         product_ids=product_ids,
         template_id="qcpt_test",
+        template_name="测试千川模板",
     )
 
 

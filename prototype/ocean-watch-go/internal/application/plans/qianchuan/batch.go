@@ -28,18 +28,19 @@ var supportedWorkImageModes = map[string]struct{}{
 }
 
 type BatchRequest struct {
-	AdvertiserID    string
-	AuthAccountID   string
-	ReadAccessToken string
-	Submit          bool
-	TemplateID      string
-	TemplateName    string
-	ProductName     string
-	TemplatePayload json.RawMessage
-	IncludePayloads bool
-	Works           []VerifiedWork
-	Skipped         []SkippedWork
-	QueryFailures   []WorkQueryFailure
+	AdvertiserID     string
+	AuthAccountID    string
+	ReadAccessToken  string
+	Submit           bool
+	TemplateID       string
+	TemplateName     string
+	ProductName      string
+	PlanNameTemplate string
+	TemplatePayload  json.RawMessage
+	IncludePayloads  bool
+	Works            []VerifiedWork
+	Skipped          []SkippedWork
+	QueryFailures    []WorkQueryFailure
 }
 
 type BatchTemplateSummary struct {
@@ -301,7 +302,11 @@ func (service BatchService) executeNewGroup(
 	capability domainplans.WriteCapability,
 ) (BatchGroupResult, error) {
 	first, remaining := splitVerifiedWorks(group.works, BatchMaterialLimit)
-	planName := service.planName(request, group.creator)
+	planName, err := service.planName(request, group.creator)
+	if err != nil {
+		result.Status, result.Error = "failed", err.Error()
+		return result, err
+	}
 	payload, err := buildBatchCreatePayload(request, group.creator, planName, first)
 	if err != nil {
 		result.Status, result.Error = "failed", err.Error()
@@ -600,7 +605,7 @@ func newBatchGroupResult(group batchGroup, productIDs []string) BatchGroupResult
 	}
 }
 
-func (service BatchService) planName(request normalizedBatchRequest, creator domainqianchuan.AuthorizedCreator) string {
+func (service BatchService) planName(request normalizedBatchRequest, creator domainqianchuan.AuthorizedCreator) (string, error) {
 	label := creator.Name
 	if label == "" {
 		label = creator.VisibleID
@@ -612,8 +617,27 @@ func (service BatchService) planName(request normalizedBatchRequest, creator dom
 	if service.Now != nil {
 		now = service.Now()
 	}
-	prefix := weightedTruncate(request.ProductName+"-"+label, 84)
-	return prefix + "-" + now.Format("20060102150405")
+	values := map[string]string{
+		"product_name": request.ProductName,
+		"creator_name": label,
+		"aweme_id":     creator.AwemeID,
+		"douyin_id":    creator.VisibleID,
+		"date":         now.Format("20060102"),
+		"time":         now.Format("150405"),
+		"datetime":     now.Format("20060102150405"),
+	}
+	pattern := strings.TrimSpace(request.PlanNameTemplate)
+	if pattern == "" {
+		pattern = "{product_name}-{creator_name}-{datetime}"
+	}
+	for key, value := range values {
+		pattern = strings.ReplaceAll(pattern, "{"+key+"}", value)
+	}
+	name := weightedTruncate(pattern, 100)
+	if name == "" {
+		return "", errors.New("Qianchuan rendered plan name is empty")
+	}
+	return name, nil
 }
 
 func buildBatchCreatePayload(

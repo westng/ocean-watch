@@ -61,6 +61,8 @@ def create_template(
     product_ids,
     source=None,
     template_id=None,
+    template_name=None,
+    plan_name_template=None,
 ):
     config = product_templates.ensure_config(config)
     template = product_templates.build_business_template(
@@ -70,6 +72,8 @@ def create_template(
         source=source,
         template_id=template_id,
         active=True,
+        template_name=template_name,
+        plan_name_template=plan_name_template,
     )
     for existing in (config.get(product_templates.TEMPLATES_KEY) or {}).values():
         if existing.get("display_name") == template["display_name"]:
@@ -111,12 +115,27 @@ def run_create_wizard(
         inherited_ids,
         required=True,
     )
+    template_name = prompt_value(
+        input_fn,
+        "模板名称",
+        source.get("display_name"),
+        required=True,
+    )
+    plan_name_template = prompt_value(
+        input_fn,
+        "计划名称形式",
+        source.get("plan_name_template")
+        or product_templates.DEFAULT_PLAN_NAME_TEMPLATE,
+        required=True,
+    )
     candidate = product_templates.build_business_template(
         advertiser_id=advertiser_id,
         product_name=product_name,
         product_ids=product_ids,
         source=source,
         active=True,
+        template_name=template_name,
+        plan_name_template=plan_name_template,
     )
     preview = {
         "source_template": source_id,
@@ -138,6 +157,8 @@ def run_create_wizard(
         product_ids=product_ids,
         source=source,
         template_id=candidate["template_id"],
+        template_name=template_name,
+        plan_name_template=plan_name_template,
     )
     return updated, {
         "created": True,

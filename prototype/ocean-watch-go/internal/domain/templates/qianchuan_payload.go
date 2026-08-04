@@ -14,15 +14,16 @@ const (
 )
 
 type QianchuanPlanPayload struct {
-	TemplateID   string
-	DisplayName  string
-	Kind         QianchuanTemplateKind
-	AdvertiserID string
-	ProductName  string
-	CreatorName  string
-	ProductIDs   []string
-	Active       bool
-	Payload      json.RawMessage
+	TemplateID       string
+	DisplayName      string
+	Kind             QianchuanTemplateKind
+	AdvertiserID     string
+	ProductName      string
+	PlanNameTemplate string
+	CreatorName      string
+	ProductIDs       []string
+	Active           bool
+	Payload          json.RawMessage
 }
 
 func ExportQianchuanPlanPayload(
@@ -88,7 +89,8 @@ func exportQianchuanProductPayload(
 		TemplateID: stringValue(template["template_id"]), DisplayName: stringValue(template["display_name"]),
 		Kind: QianchuanTemplateProduct, AdvertiserID: advertiserID,
 		ProductName: stringValue(bindings["product_name"]), ProductIDs: append([]string(nil), productIDs...),
-		Active: template["status"] == "active", Payload: raw,
+		PlanNameTemplate: stringValue(template["plan_name_template"]),
+		Active:           template["status"] == "active", Payload: raw,
 	}, nil
 }
 

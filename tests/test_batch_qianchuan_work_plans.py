@@ -19,6 +19,7 @@ def template():
         product_name="Test Product",
         product_ids="1001",
         template_id="qcpt_test",
+        template_name="测试千川模板",
     )
 
 
@@ -60,6 +61,65 @@ class FakeExecutor:
         with self.lock:
             self.requests.append(copy.deepcopy(request))
         return copy.deepcopy(self.response)
+
+
+class QianchuanPlanNameTemplateTests(unittest.TestCase):
+    def test_default_plan_name_template_preserves_legacy_format(self):
+        name = batch.build_plan_name(
+            template(),
+            {
+                "aweme_id": "9001",
+                "aweme_show_id": "show-9001",
+                "aweme_name": "Creator 9001",
+            },
+            now=dt.datetime(2026, 8, 4, 12, 30, 45),
+        )
+
+        self.assertEqual(name, "Test Product-Creator 9001-20260804123045")
+
+    def test_custom_plan_name_template_renders_supported_placeholders(self):
+        selected = template()
+        selected["plan_name_template"] = (
+            "{creator_name}_{douyin_id}_{aweme_id}_{product_name}_{date}_{time}_{datetime}"
+        )
+
+        name = batch.build_plan_name(
+            selected,
+            {
+                "aweme_id": "9001",
+                "aweme_show_id": "show-9001",
+                "aweme_name": "达人甲",
+            },
+            now=dt.datetime(2026, 8, 4, 12, 30, 45),
+        )
+
+        self.assertEqual(
+            name,
+            "达人甲_show-9001_9001_Test Product_20260804_123045_20260804123045",
+        )
+
+    def test_rendered_plan_name_uses_weighted_character_limit(self):
+        selected = template()
+        selected["plan_name_template"] = "{creator_name}"
+
+        name = batch.build_plan_name(
+            selected,
+            {"aweme_id": "9001", "aweme_name": "达" * 60},
+            now=dt.datetime(2026, 8, 4, 12, 30, 45),
+        )
+
+        self.assertEqual(name, "达" * 50)
+
+    def test_empty_rendered_plan_name_is_rejected(self):
+        selected = template()
+        selected["plan_name_template"] = "{douyin_id}"
+
+        with self.assertRaisesRegex(ValueError, "rendered plan name is empty"):
+            batch.build_plan_name(
+                selected,
+                {"aweme_id": "9001", "aweme_name": "达人甲"},
+                now=dt.datetime(2026, 8, 4, 12, 30, 45),
+            )
 
 
 class FakeGateway:

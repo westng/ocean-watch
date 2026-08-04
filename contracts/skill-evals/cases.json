@@ -136,6 +136,87 @@
       }
     },
     {
+      "id": "qianchuan-overall-account-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "看一下千川账户 1000000000000001 昨天包含乘方的整体消耗和成交"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports account",
+        "channel": "qianchuan",
+        "forbidden_commands": ["accounts report", "qc-reports uni-account", "qc-reports plans"]
+      }
+    },
+    {
+      "id": "qianchuan-uni-account-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "只看 1000000000000001 今天的全域账户数据，不要乘方"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports uni-account",
+        "channel": "qianchuan",
+        "forbidden_commands": ["accounts report", "qc-reports account", "qc-reports plans"]
+      }
+    },
+    {
+      "id": "qianchuan-product-performance-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "商品 3747851714615705603 这周在乘方里的消耗、GMV 和 ROI 怎么样"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports products",
+        "channel": "qianchuan",
+        "forbidden_commands": ["qc-products list", "qc-products search", "qc-reports plans"]
+      }
+    },
+    {
+      "id": "qianchuan-product-asset-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "帮我找一下千川里叫血橙纤维饮的可投商品和商品 ID"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-products search",
+        "channel": "qianchuan",
+        "forbidden_commands": ["qc-reports products", "qc-reports custom"]
+      }
+    },
+    {
+      "id": "qianchuan-room-performance-context",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [
+        {"role": "user", "content": "广告主还是刚才那个，直播间 ID 是 3000000000000001"},
+        {"role": "assistant", "content": "收到。"},
+        {"role": "user", "content": "按小时看看昨晚这场直播的消耗和 ROI"}
+      ],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports rooms",
+        "channel": "qianchuan",
+        "forbidden_commands": ["qc-reports authors", "qc-reports plans"]
+      }
+    },
+    {
+      "id": "qianchuan-author-performance-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "查达人哆哆暴富 8 月 1 日到 3 日创建过的全域投放表现"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports authors",
+        "channel": "qianchuan",
+        "forbidden_commands": ["qc-materials creator-videos", "qc-reports plans"]
+      }
+    },
+    {
+      "id": "qianchuan-report-schema-natural-language",
+      "case_set": "qianchuan-unified-report-routing",
+      "turns": [{"role": "user", "content": "这个全域商品报表官方能查哪些维度和指标？"}],
+      "expected": {
+        "skill": "qc-plan-monitor",
+        "command": "qc-reports schema",
+        "channel": "qianchuan",
+        "forbidden_commands": ["qc-reports custom", "qc-products list"]
+      }
+    },
+    {
       "id": "qianchuan-batch-presentation",
       "case_set": "mandatory-presentation",
       "turns": [{"role": "user", "content": "按血橙纤维饮模板批量创建千川计划"}],

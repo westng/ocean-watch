@@ -12,12 +12,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MigrationContractTests(unittest.TestCase):
+    def test_sdk_baseline_covers_unified_report_services(self):
+        baseline = yaml.safe_load(
+            (ROOT / "contracts" / "sdk-baseline.yaml").read_text(encoding="utf-8")
+        )
+        service_contracts = baseline["service_contracts"]
+        self.assertEqual(service_contracts["expected_endpoint_count"], 54)
+        self.assertEqual(service_contracts["expected_generated_service_count"], 54)
+
+        anchor = (
+            ROOT / "prototype" / "ocean-watch-go" / "internal" / "adapters" / "oceanengine" / "anchor.go"
+        ).read_text(encoding="utf-8")
+        for service in (
+            "QianchuanReportAllPromotionGetV10Api",
+            "QianchuanReportUniPromotionDimensionDataRoomGetV10Api",
+            "QianchuanReportUniPromotionDimensionDataAuthorGetV10Api",
+        ):
+            with self.subTest(service=service):
+                self.assertIn(f"client.sdk.{service}().Get(ctx)", anchor)
+
     def test_command_manifest_covers_current_python_cli(self):
         manifest = yaml.safe_load((ROOT / "contracts" / "commands.yaml").read_text(encoding="utf-8"))
         expected = [f"{domain} {action}" for domain, action in cli.COMMANDS]
         actual = [row["command"] for row in manifest["commands"]]
 
-        self.assertEqual(manifest["command_count"], 75)
+        self.assertEqual(manifest["command_count"], 82)
         self.assertEqual(actual, expected)
         for row in manifest["commands"]:
             help_result = row["help"]

@@ -89,21 +89,29 @@ func (adapter QianchuanReportAdapter) FetchMaterialPage(
 	}, nil
 }
 
-func (adapter QianchuanReportAdapter) FetchPlanSchema(
+func (adapter QianchuanReportAdapter) FetchSchemas(
 	ctx context.Context,
-	request portreports.PlanSchemaRequest,
-) (domainreports.PlanSchema, error) {
+	request portreports.SchemaRequest,
+) ([]domainreports.QianchuanSchema, error) {
 	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
 	if err != nil {
-		return domainreports.PlanSchema{}, err
+		return nil, err
 	}
-	topic := models.QianchuanReportUniPromotionConfigGetV10DataTopics(request.Topic)
+	topics := make([]*models.QianchuanReportUniPromotionConfigGetV10DataTopics, len(request.Topics))
+	for index, topic := range request.Topics {
+		typed := models.QianchuanReportUniPromotionConfigGetV10DataTopics(topic)
+		topics[index] = typed.Ptr()
+	}
 	result, err := platformretry.Do(
 		ctx, readPolicy(adapter.Retry), ClassifyReadError,
 		func(ctx context.Context, _ int) (*models.QianchuanReportUniPromotionConfigGetV10Response, error) {
-			response, httpResponse, sdkErr := client.sdk.QianchuanReportUniPromotionConfigGetV10Api().Get(ctx).
+			builder := client.sdk.QianchuanReportUniPromotionConfigGetV10Api().Get(ctx).
 				AccessToken(request.AccessToken).AdvertiserId(advertiserID).
-				DataTopics([]*models.QianchuanReportUniPromotionConfigGetV10DataTopics{topic.Ptr()}).Execute()
+				DataTopics(topics)
+			if request.DataPeriod != "" {
+				builder = builder.DataPeriod(models.QianchuanReportUniPromotionConfigGetV10DataPeriod(request.DataPeriod))
+			}
+			response, httpResponse, sdkErr := builder.Execute()
 			if guardErr := guardPlanSchemaResponse(response, httpResponse, sdkErr); guardErr != nil {
 				return nil, guardErr
 			}
@@ -111,57 +119,91 @@ func (adapter QianchuanReportAdapter) FetchPlanSchema(
 		},
 	)
 	if err != nil {
-		return domainreports.PlanSchema{}, err
+		return nil, err
 	}
+	schemasByTopic := make(map[string]domainreports.QianchuanSchema, len(result.Data.CustomConfigDatas))
 	for _, config := range result.Data.CustomConfigDatas {
-		if config == nil || config.DataTopic == nil || string(*config.DataTopic) != request.Topic {
+		if config == nil || config.DataTopic == nil {
 			continue
 		}
 		dimensions := make([]string, 0, len(config.Dimensions))
 		for _, item := range config.Dimensions {
 			if item == nil || item.Field == nil || strings.TrimSpace(*item.Field) == "" {
-				return domainreports.PlanSchema{}, errors.New("Qianchuan plan report schema contains an invalid dimension")
+				return nil, errors.New("Qianchuan report schema contains an invalid dimension")
 			}
 			dimensions = append(dimensions, *item.Field)
 		}
 		metrics := make([]string, 0, len(config.Metrics))
 		for _, item := range config.Metrics {
 			if item == nil || item.Field == nil || strings.TrimSpace(*item.Field) == "" {
-				return domainreports.PlanSchema{}, errors.New("Qianchuan plan report schema contains an invalid metric")
+				return nil, errors.New("Qianchuan report schema contains an invalid metric")
 			}
 			metrics = append(metrics, *item.Field)
 		}
-		return domainreports.PlanSchema{
-			Topic: request.Topic, Dimensions: dimensions, Metrics: metrics,
+		topic := string(*config.DataTopic)
+		schemasByTopic[topic] = domainreports.QianchuanSchema{
+			Topic: topic, Dimensions: dimensions, Metrics: metrics,
 			RequestID: stringValue(result.RequestId),
-		}, nil
+		}
 	}
-	return domainreports.PlanSchema{}, fmt.Errorf("Qianchuan plan report schema omitted topic %s", request.Topic)
+	schemas := make([]domainreports.QianchuanSchema, 0, len(request.Topics))
+	for _, topic := range request.Topics {
+		schema, ok := schemasByTopic[topic]
+		if !ok {
+			return nil, fmt.Errorf("Qianchuan report schema omitted topic %s", topic)
+		}
+		schemas = append(schemas, schema)
+	}
+	return schemas, nil
 }
 
-func (adapter QianchuanReportAdapter) FetchPlanMetricPage(
+func (adapter QianchuanReportAdapter) FetchPlanSchema(
 	ctx context.Context,
-	request portreports.PlanMetricPageRequest,
-) (domainreports.PlanMetricPage, error) {
+	request portreports.PlanSchemaRequest,
+) (domainreports.PlanSchema, error) {
+	schemas, err := adapter.FetchSchemas(ctx, portreports.SchemaRequest{
+		AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+		Topics: []string{request.Topic},
+	})
+	if err != nil {
+		return domainreports.PlanSchema{}, err
+	}
+	return schemas[0], nil
+}
+
+func (adapter QianchuanReportAdapter) FetchDataPage(
+	ctx context.Context,
+	request portreports.DataPageRequest,
+) (domainreports.QianchuanReportPage, error) {
 	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
 	if err != nil {
-		return domainreports.PlanMetricPage{}, err
+		return domainreports.QianchuanReportPage{}, err
 	}
 	orderField, orderType := request.OrderField, request.OrderType
 	orderBy := []*models.QianchuanReportUniPromotionDataGetV10OrderByInner{{
 		Field: &orderField, Type: &orderType,
 	}}
+	filters := make([]*models.QianchuanReportUniPromotionDataGetV10FiltersInner, len(request.Filters))
+	for index, filter := range request.Filters {
+		filters[index] = &models.QianchuanReportUniPromotionDataGetV10FiltersInner{
+			Field: filter.Field, Operator: filter.Operator, Values: append([]string(nil), filter.Values...),
+		}
+	}
 	result, err := platformretry.Do(
 		ctx, readPolicy(adapter.Retry), ClassifyReadError,
 		func(ctx context.Context, _ int) (*models.QianchuanReportUniPromotionDataGetV10Response, error) {
-			response, httpResponse, sdkErr := client.sdk.QianchuanReportUniPromotionDataGetV10Api().Get(ctx).
+			builder := client.sdk.QianchuanReportUniPromotionDataGetV10Api().Get(ctx).
 				AccessToken(request.AccessToken).AdvertiserId(advertiserID).
 				DataTopic(models.QianchuanReportUniPromotionDataGetV10DataTopic(request.Topic)).
 				Dimensions(request.Dimensions).Metrics(request.Metrics).
-				Filters([]*models.QianchuanReportUniPromotionDataGetV10FiltersInner{}).
+				Filters(filters).
 				StartTime(request.StartTime).EndTime(request.EndTime).OrderBy(orderBy).
 				Page(int64(request.Page)).
-				PageSize(models.QianchuanReportUniPromotionDataGetV10PageSize(request.PageSize)).Execute()
+				PageSize(models.QianchuanReportUniPromotionDataGetV10PageSize(request.PageSize))
+			if request.DataPeriod != "" {
+				builder = builder.DataPeriod(models.QianchuanReportUniPromotionDataGetV10DataPeriod(request.DataPeriod))
+			}
+			response, httpResponse, sdkErr := builder.Execute()
 			if guardErr := guardPlanMetricResponse(response, httpResponse, sdkErr); guardErr != nil {
 				return nil, guardErr
 			}
@@ -169,13 +211,13 @@ func (adapter QianchuanReportAdapter) FetchPlanMetricPage(
 		},
 	)
 	if err != nil {
-		return domainreports.PlanMetricPage{}, err
+		return domainreports.QianchuanReportPage{}, err
 	}
-	rows := make([]domainreports.PlanMetricRow, 0, len(result.Data.Rows))
+	rows := make([]domainreports.QianchuanReportRow, 0, len(result.Data.Rows))
 	for _, item := range result.Data.Rows {
-		row, mapErr := mapPlanMetricRow(item, request.Metrics)
+		row, mapErr := mapQianchuanReportRow(item, request.Dimensions, request.Metrics)
 		if mapErr != nil {
-			return domainreports.PlanMetricPage{}, mapErr
+			return domainreports.QianchuanReportPage{}, mapErr
 		}
 		rows = append(rows, row)
 	}
@@ -184,11 +226,229 @@ func (adapter QianchuanReportAdapter) FetchPlanMetricPage(
 		result.Data.PageInfo.TotalNumber,
 	)
 	if err != nil {
-		return domainreports.PlanMetricPage{}, err
+		return domainreports.QianchuanReportPage{}, err
 	}
-	return domainreports.PlanMetricPage{
+	return domainreports.QianchuanReportPage{
 		Rows: rows, PageInfo: pageInfo, RequestID: stringValue(result.RequestId),
 	}, nil
+}
+
+func (adapter QianchuanReportAdapter) FetchPlanMetricPage(
+	ctx context.Context,
+	request portreports.PlanMetricPageRequest,
+) (domainreports.PlanMetricPage, error) {
+	page, err := adapter.FetchDataPage(ctx, portreports.DataPageRequest{
+		AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+		Topic: request.Topic, Dimensions: request.Dimensions, Metrics: request.Metrics,
+		StartTime: request.StartTime, EndTime: request.EndTime,
+		OrderField: request.OrderField, OrderType: request.OrderType,
+		Page: request.Page, PageSize: request.PageSize,
+	})
+	if err != nil {
+		return domainreports.PlanMetricPage{}, err
+	}
+	rows := make([]domainreports.PlanMetricRow, len(page.Rows))
+	for index, row := range page.Rows {
+		mapped, mapErr := planMetricRow(row, request.Metrics)
+		if mapErr != nil {
+			return domainreports.PlanMetricPage{}, mapErr
+		}
+		rows[index] = mapped
+	}
+	return domainreports.PlanMetricPage{
+		Rows: rows, PageInfo: page.PageInfo, RequestID: page.RequestID,
+	}, nil
+}
+
+func (adapter QianchuanReportAdapter) FetchAllPromotion(
+	ctx context.Context,
+	request portreports.AggregateRequest,
+) (domainreports.QianchuanAggregate, error) {
+	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	result, err := platformretry.Do(
+		ctx, readPolicy(adapter.Retry), ClassifyReadError,
+		func(ctx context.Context, _ int) (*models.QianchuanReportAllPromotionGetV10Response, error) {
+			builder := client.sdk.QianchuanReportAllPromotionGetV10Api().Get(ctx).
+				AccessToken(request.AccessToken).AdvertiserId(advertiserID).
+				StartTime(request.StartTime).EndTime(request.EndTime).Fields(request.Fields).
+				AdlabScene(models.QianchuanReportAllPromotionGetV10AdlabScene(request.AdlabScene)).
+				MarketingGoal(models.QianchuanReportAllPromotionGetV10MarketingGoal(request.MarketingGoal)).
+				OrderPlatform(models.QianchuanReportAllPromotionGetV10OrderPlatform(request.OrderPlatform))
+			if request.DataPeriod != "" {
+				builder = builder.DataPeriod(models.QianchuanReportAllPromotionGetV10DataPeriod(request.DataPeriod))
+			}
+			response, httpResponse, sdkErr := builder.Execute()
+			if guardErr := guardAllPromotionResponse(response, httpResponse, sdkErr); guardErr != nil {
+				return nil, guardErr
+			}
+			return response, nil
+		},
+	)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	values, err := modelValues(result.Data)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	return domainreports.QianchuanAggregate{Values: values, RequestID: stringValue(result.RequestId)}, nil
+}
+
+func (adapter QianchuanReportAdapter) FetchUniPromotion(
+	ctx context.Context,
+	request portreports.AggregateRequest,
+) (domainreports.QianchuanAggregate, error) {
+	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	result, err := platformretry.Do(
+		ctx, readPolicy(adapter.Retry), ClassifyReadError,
+		func(ctx context.Context, _ int) (*models.QianchuanReportUniPromotionGetV10Response, error) {
+			response, httpResponse, sdkErr := client.sdk.QianchuanReportUniPromotionGetV10Api().Get(ctx).
+				AccessToken(request.AccessToken).AdvertiserId(advertiserID).
+				StartDate(request.StartTime).EndDate(request.EndTime).Fields(request.Fields).
+				MarketingGoal(models.QianchuanReportUniPromotionGetV10MarketingGoal(request.MarketingGoal)).
+				OrderPlatform(models.QianchuanReportUniPromotionGetV10OrderPlatform(request.OrderPlatform)).Execute()
+			if guardErr := guardUniPromotionResponse(response, httpResponse, sdkErr); guardErr != nil {
+				return nil, guardErr
+			}
+			return response, nil
+		},
+	)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	values, err := modelValues(result.Data)
+	if err != nil {
+		return domainreports.QianchuanAggregate{}, err
+	}
+	return domainreports.QianchuanAggregate{Values: values, RequestID: stringValue(result.RequestId)}, nil
+}
+
+func (adapter QianchuanReportAdapter) FetchRoomDimensionPage(
+	ctx context.Context,
+	request portreports.DimensionPageRequest,
+) (domainreports.QianchuanDimensionPage, error) {
+	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	dimensionID, err := parsePositiveID(request.DimensionID, "room_id")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	page, err := positiveInt32(request.Page, "page")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	pageSize, err := positiveInt32(request.PageSize, "page_size")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	metrics := make([]*models.QianchuanReportUniPromotionDimensionDataRoomGetV10Metrics, len(request.Metrics))
+	for index, metric := range request.Metrics {
+		typed := models.QianchuanReportUniPromotionDimensionDataRoomGetV10Metrics(metric)
+		metrics[index] = typed.Ptr()
+	}
+	filtering := models.QianchuanReportUniPromotionDimensionDataRoomGetV10Filtering{}
+	if request.OrderPlatform != "" {
+		value := models.QianchuanReportUniPromotionDimensionDataRoomGetV10FilteringOrderPlatform(request.OrderPlatform)
+		filtering.OrderPlatform = value.Ptr()
+	}
+	if request.SmartBidType != "" {
+		value := models.QianchuanReportUniPromotionDimensionDataRoomGetV10FilteringSmartBidType(request.SmartBidType)
+		filtering.SmartBidType = value.Ptr()
+	}
+	result, err := platformretry.Do(
+		ctx, readPolicy(adapter.Retry), ClassifyReadError,
+		func(ctx context.Context, _ int) (*models.QianchuanReportUniPromotionDimensionDataRoomGetV10Response, error) {
+			response, httpResponse, sdkErr := client.sdk.QianchuanReportUniPromotionDimensionDataRoomGetV10Api().Get(ctx).
+				AccessToken(request.AccessToken).AdvertiserId(advertiserID).RoomId(dimensionID).
+				StartTime(request.StartTime).EndTime(request.EndTime).
+				Dimension(models.QianchuanReportUniPromotionDimensionDataRoomGetV10Dimension(request.Dimension)).
+				Metrics(metrics).OrderField(request.OrderField).
+				OrderType(models.QianchuanReportUniPromotionDimensionDataRoomGetV10OrderType(request.OrderType)).
+				Page(page).PageSize(pageSize).Filtering(filtering).Execute()
+			if guardErr := guardRoomDimensionResponse(response, httpResponse, sdkErr); guardErr != nil {
+				return nil, guardErr
+			}
+			return response, nil
+		},
+	)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	rows, err := modelRows(result.Data.List)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	info, err := mapReportPageInfo(request.Page, result.Data.PageInfo.Page, result.Data.PageInfo.TotalPage, result.Data.PageInfo.TotalNumber)
+	return domainreports.QianchuanDimensionPage{Rows: rows, PageInfo: info, RequestID: stringValue(result.RequestId)}, err
+}
+
+func (adapter QianchuanReportAdapter) FetchAuthorDimensionPage(
+	ctx context.Context,
+	request portreports.DimensionPageRequest,
+) (domainreports.QianchuanDimensionPage, error) {
+	client, advertiserID, err := adapter.client(request.AdvertiserID, request.AccessToken)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	dimensionID, err := parsePositiveID(request.DimensionID, "aweme_id")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	page, err := positiveInt32(request.Page, "page")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	pageSize, err := positiveInt32(request.PageSize, "page_size")
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	metrics := make([]*models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Metrics, len(request.Metrics))
+	for index, metric := range request.Metrics {
+		typed := models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Metrics(metric)
+		metrics[index] = typed.Ptr()
+	}
+	filtering := models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Filtering{}
+	if request.OrderPlatform != "" {
+		value := models.QianchuanReportUniPromotionDimensionDataAuthorGetV10FilteringOrderPlatform(request.OrderPlatform)
+		filtering.OrderPlatform = value.Ptr()
+	}
+	if request.SmartBidType != "" {
+		value := models.QianchuanReportUniPromotionDimensionDataAuthorGetV10FilteringSmartBidType(request.SmartBidType)
+		filtering.SmartBidType = value.Ptr()
+	}
+	result, err := platformretry.Do(
+		ctx, readPolicy(adapter.Retry), ClassifyReadError,
+		func(ctx context.Context, _ int) (*models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Response, error) {
+			response, httpResponse, sdkErr := client.sdk.QianchuanReportUniPromotionDimensionDataAuthorGetV10Api().Get(ctx).
+				AccessToken(request.AccessToken).AdvertiserId(advertiserID).AwemeId(dimensionID).
+				MarketingGoal(models.QianchuanReportUniPromotionDimensionDataAuthorGetV10MarketingGoal(request.MarketingGoal)).
+				Metrics(metrics).StartTime(request.StartTime).EndTime(request.EndTime).
+				Dimension(models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Dimension(request.Dimension)).
+				OrderType(models.QianchuanReportUniPromotionDimensionDataAuthorGetV10OrderType(request.OrderType)).
+				OrderField(request.OrderField).Filtering(filtering).Page(page).PageSize(pageSize).Execute()
+			if guardErr := guardAuthorDimensionResponse(response, httpResponse, sdkErr); guardErr != nil {
+				return nil, guardErr
+			}
+			return response, nil
+		},
+	)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	rows, err := modelRows(result.Data.List)
+	if err != nil {
+		return domainreports.QianchuanDimensionPage{}, err
+	}
+	info, err := mapReportPageInfo(request.Page, result.Data.PageInfo.Page, result.Data.PageInfo.TotalPage, result.Data.PageInfo.TotalNumber)
+	return domainreports.QianchuanDimensionPage{Rows: rows, PageInfo: info, RequestID: stringValue(result.RequestId)}, err
 }
 
 func (adapter QianchuanReportAdapter) FetchPlanMetadataPage(
@@ -279,30 +539,55 @@ func mapMaterialReportRow(
 	return domainreports.MaterialRow{MaterialID: materialID, Values: values}, nil
 }
 
-func mapPlanMetricRow(
+func mapQianchuanReportRow(
 	item *models.QianchuanReportUniPromotionDataGetV10ResponseDataRowsInner,
-	fields []string,
-) (domainreports.PlanMetricRow, error) {
+	dimensionFields []string,
+	metricFields []string,
+) (domainreports.QianchuanReportRow, error) {
 	if item == nil {
-		return domainreports.PlanMetricRow{}, errors.New("Qianchuan plan report contains a null row")
+		return domainreports.QianchuanReportRow{}, errors.New("Qianchuan report contains a null row")
 	}
-	idValue, ok := item.Dimensions["ad_id"]
-	if !ok {
-		return domainreports.PlanMetricRow{}, errors.New("Qianchuan plan report omitted ad_id")
+	dimensions := make(map[string]any, len(dimensionFields))
+	for _, field := range dimensionFields {
+		container, exists := item.Dimensions[field]
+		if !exists {
+			return domainreports.QianchuanReportRow{}, fmt.Errorf("Qianchuan report omitted required dimension %s", field)
+		}
+		value, exists := dynamicStringValue(container)
+		if !exists {
+			value, exists = dynamicNumericValue(container)
+		}
+		if !exists {
+			return domainreports.QianchuanReportRow{}, fmt.Errorf("Qianchuan report omitted required dimension value %s", field)
+		}
+		dimensions[field] = value
 	}
-	adID, err := dynamicID(idValue)
+	metrics := make(map[string]any, len(metricFields))
+	for _, field := range metricFields {
+		container, exists := item.Metrics[field]
+		if !exists {
+			return domainreports.QianchuanReportRow{}, fmt.Errorf("Qianchuan report omitted required metric %s", field)
+		}
+		value, exists := dynamicValue(container)
+		if !exists {
+			return domainreports.QianchuanReportRow{}, fmt.Errorf("Qianchuan report omitted required metric value %s", field)
+		}
+		metrics[field] = value
+	}
+	return domainreports.QianchuanReportRow{Dimensions: dimensions, Metrics: metrics}, nil
+}
+
+func planMetricRow(row domainreports.QianchuanReportRow, fields []string) (domainreports.PlanMetricRow, error) {
+	idContainer := map[string]interface{}{"ValueStr": row.Dimensions["ad_id"]}
+	adID, err := dynamicID(idContainer)
 	if err != nil {
 		return domainreports.PlanMetricRow{}, fmt.Errorf("Qianchuan plan report returned an invalid ad_id: %w", err)
 	}
 	metrics := make(map[string]domain.Decimal, len(fields))
 	for _, field := range fields {
-		container, exists := item.Metrics[field]
+		value, exists := row.Metrics[field]
 		if !exists {
 			return domainreports.PlanMetricRow{}, fmt.Errorf("Qianchuan plan report omitted required metric %s", field)
-		}
-		value, exists := dynamicValue(container)
-		if !exists {
-			return domainreports.PlanMetricRow{}, fmt.Errorf("Qianchuan plan report omitted required metric value %s", field)
 		}
 		parsed, parseErr := dynamicDecimal(value)
 		if parseErr != nil {
@@ -311,6 +596,35 @@ func mapPlanMetricRow(
 		metrics[field] = parsed
 	}
 	return domainreports.PlanMetricRow{AdID: adID, Metrics: metrics}, nil
+}
+
+func modelValues(value any) (map[string]any, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode Qianchuan report model: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	result := map[string]any{}
+	if err := decoder.Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode Qianchuan report model: %w", err)
+	}
+	return result, nil
+}
+
+func modelRows[T any](values []*T) ([]domainreports.QianchuanDimensionRow, error) {
+	rows := make([]domainreports.QianchuanDimensionRow, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			return nil, errors.New("Qianchuan dimension report contains a null row")
+		}
+		mapped, err := modelValues(value)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, domainreports.QianchuanDimensionRow{Values: mapped})
+	}
+	return rows, nil
 }
 
 func dynamicValue(container map[string]interface{}) (any, bool) {
@@ -443,6 +757,52 @@ func guardPlanSchemaResponse(
 
 func guardPlanMetricResponse(
 	response *models.QianchuanReportUniPromotionDataGetV10Response,
+	httpResponse *http.Response,
+	sdkErr error,
+) error {
+	if response == nil {
+		return GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+	}
+	hasData := response.Data != nil && response.Data.PageInfo != nil
+	return GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, hasData)
+}
+
+func guardAllPromotionResponse(
+	response *models.QianchuanReportAllPromotionGetV10Response,
+	httpResponse *http.Response,
+	sdkErr error,
+) error {
+	if response == nil {
+		return GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+	}
+	return GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil)
+}
+
+func guardUniPromotionResponse(
+	response *models.QianchuanReportUniPromotionGetV10Response,
+	httpResponse *http.Response,
+	sdkErr error,
+) error {
+	if response == nil {
+		return GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+	}
+	return GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil)
+}
+
+func guardRoomDimensionResponse(
+	response *models.QianchuanReportUniPromotionDimensionDataRoomGetV10Response,
+	httpResponse *http.Response,
+	sdkErr error,
+) error {
+	if response == nil {
+		return GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+	}
+	hasData := response.Data != nil && response.Data.PageInfo != nil
+	return GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, hasData)
+}
+
+func guardAuthorDimensionResponse(
+	response *models.QianchuanReportUniPromotionDimensionDataAuthorGetV10Response,
 	httpResponse *http.Response,
 	sdkErr error,
 ) error {

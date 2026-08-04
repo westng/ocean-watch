@@ -57,6 +57,13 @@ class SkillEvalContractTests(unittest.TestCase):
         self.assertEqual(cases["membership-responsible-account"]["expected"]["command"], "accounts list")
         self.assertEqual(cases["performance-account-spend"]["expected"]["command"], "accounts report")
         self.assertEqual(cases["negative-plan-roi"]["expected"]["command"], "qc-reports plans")
+        self.assertEqual(cases["qianchuan-overall-account-natural-language"]["expected"]["command"], "qc-reports account")
+        self.assertEqual(cases["qianchuan-uni-account-natural-language"]["expected"]["command"], "qc-reports uni-account")
+        self.assertEqual(cases["qianchuan-product-performance-natural-language"]["expected"]["command"], "qc-reports products")
+        self.assertEqual(cases["qianchuan-product-asset-natural-language"]["expected"]["command"], "qc-products search")
+        self.assertEqual(cases["qianchuan-room-performance-context"]["expected"]["command"], "qc-reports rooms")
+        self.assertEqual(cases["qianchuan-author-performance-natural-language"]["expected"]["command"], "qc-reports authors")
+        self.assertEqual(cases["qianchuan-report-schema-natural-language"]["expected"]["command"], "qc-reports schema")
         self.assertGreaterEqual(len(cases["membership-context-follow-up"]["turns"]), 3)
 
     def test_mandatory_presentation_is_checked_verbatim(self):

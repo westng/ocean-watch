@@ -225,6 +225,10 @@ func TestRunQianchuanReportRejectsInvalidArgumentsBeforeService(t *testing.T) {
 		{action: "plans", args: []string{"--advertiser-id", "1000000000000001", "--top", "-1"}},
 		{action: "materials", args: []string{"--advertiser-id", "1000000000000001", "--page-size", "101"}},
 		{action: "materials", args: []string{"--advertiser-id", "1000000000000001", "--material-id", "bad"}},
+		{action: "account", args: []string{"--advertiser-id", "1000000000000001", "--adlab-scene", "UNI_PROJECT", "--data-period", "ALL_DATA"}},
+		{action: "schema", args: []string{"--advertiser-id", "1000000000000001"}},
+		{action: "custom", args: []string{"--advertiser-id", "1000000000000001", "--data-topic", "TOPIC", "--dimension", "product_id"}},
+		{action: "rooms", args: []string{"--advertiser-id", "1000000000000001", "--room-id", "bad"}},
 	} {
 		stdout := new(bytes.Buffer)
 		if code := RunQianchuanReport(context.Background(), test.action, test.args, stub, stdout, nil); code != 2 {
@@ -239,6 +243,86 @@ func TestRunQianchuanReportRejectsInvalidArgumentsBeforeService(t *testing.T) {
 	}
 }
 
+func TestRunQianchuanUnifiedReportsMapSemanticActions(t *testing.T) {
+	service := &qianchuanUnifiedReportServiceSpy{}
+	advertiserID := "1000000000000001"
+	authAccountID := "9000000000000001"
+	tests := []struct {
+		action string
+		args   []string
+	}{
+		{action: "account", args: []string{
+			"--advertiser-id", advertiserID, "--auth-account-id", authAccountID,
+			"--start-date", "2026-08-01", "--end-date", "2026-08-02",
+			"--field", "stat_cost_for_roi2,total_pay_order_count_for_roi2",
+			"--adlab-scene", "OVERALL_PROJECT", "--data-period", "ALL_DATA",
+		}},
+		{action: "uni-account", args: []string{
+			"--advertiser-id", advertiserID, "--field", "stat_cost",
+		}},
+		{action: "schema", args: []string{
+			"--advertiser-id", advertiserID, "--data-topic", "SITE_PROMOTION_PRODUCT_PRODUCT,OVERALL_ROI_PRODUCT_PRODUCT",
+			"--data-period", "ALL_DATA",
+		}},
+		{action: "custom", args: []string{
+			"--advertiser-id", advertiserID, "--data-topic", "OVERALL_ROI_PRODUCT_PRODUCT",
+			"--dimension", "product_id", "--metric", "stat_cost", "--filter", "product_id=3000000000000001",
+			"--data-period", "ALL_DATA", "--order-type", "ASC", "--top", "0",
+		}},
+		{action: "products", args: []string{
+			"--advertiser-id", advertiserID, "--report-mode", "overall", "--data-period", "OVER_ALL_DATA",
+		}},
+		{action: "rooms", args: []string{
+			"--advertiser-id", advertiserID, "--room-id", "4000000000000001",
+			"--dimension", "TIME_GRANULARITY_HOURLY", "--metric", "stat_cost_for_roi2",
+			"--order-platform", "ALL", "--smart-bid-type", "SMART_BID_CUSTOM",
+		}},
+		{action: "authors", args: []string{
+			"--advertiser-id", advertiserID, "--aweme-id", "5000000000000001",
+			"--marketing-goal", "VIDEO_PROM_GOODS", "--metric", "stat_cost",
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.action, func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			if code := RunQianchuanReport(context.Background(), test.action, test.args, service, stdout, func() time.Time {
+				return time.Date(2026, 8, 4, 4, 0, 0, 0, time.UTC)
+			}); code != 0 {
+				t.Fatalf("%s exit = %d: %s", test.action, code, stdout.String())
+			}
+		})
+	}
+	if len(service.allQueries) != 1 || service.allQueries[0].AdlabScene != "OVERALL_PROJECT" ||
+		service.allQueries[0].DataPeriod != "ALL_DATA" || service.allQueries[0].AuthAccountID != authAccountID ||
+		!reflect.DeepEqual(service.allQueries[0].Fields, []string{"stat_cost_for_roi2", "total_pay_order_count_for_roi2"}) {
+		t.Fatalf("account action mapping changed: %#v", service.allQueries)
+	}
+	if len(service.uniQueries) != 1 || !reflect.DeepEqual(service.uniQueries[0].Fields, []string{"stat_cost"}) {
+		t.Fatalf("uni-account action mapping changed: %#v", service.uniQueries)
+	}
+	if len(service.schemaQueries) != 1 || service.schemaQueries[0].DataPeriod != "ALL_DATA" ||
+		!reflect.DeepEqual(service.schemaQueries[0].Topics, []string{
+			"SITE_PROMOTION_PRODUCT_PRODUCT", "OVERALL_ROI_PRODUCT_PRODUCT",
+		}) {
+		t.Fatalf("schema action mapping changed: %#v", service.schemaQueries)
+	}
+	if len(service.customQueries) != 2 || service.customQueries[0].DataTopic != "OVERALL_ROI_PRODUCT_PRODUCT" ||
+		service.customQueries[0].OrderType != "ASC" || service.customQueries[0].Top != 0 ||
+		!reflect.DeepEqual(service.customQueries[0].Filters, []applicationreports.QianchuanFilter{{
+			Field: "product_id", Operator: 7, Values: []string{"3000000000000001"},
+		}}) || service.customQueries[1].DataTopic != applicationreports.QianchuanOverallProductTopic ||
+		service.customQueries[1].DataPeriod != "OVER_ALL_DATA" {
+		t.Fatalf("custom/product action mapping changed: %#v", service.customQueries)
+	}
+	if len(service.roomQueries) != 1 || service.roomQueries[0].DimensionID != "4000000000000001" ||
+		service.roomQueries[0].Dimension != "TIME_GRANULARITY_HOURLY" ||
+		service.roomQueries[0].OrderPlatform != "ALL" || service.roomQueries[0].SmartBidType != "SMART_BID_CUSTOM" ||
+		len(service.authorQueries) != 1 || service.authorQueries[0].DimensionID != "5000000000000001" ||
+		service.authorQueries[0].MarketingGoal != "VIDEO_PROM_GOODS" {
+		t.Fatalf("room/author action mapping changed: room=%#v author=%#v", service.roomQueries, service.authorQueries)
+	}
+}
+
 func TestDefaultRouteKeepsQianchuanReportsOnPython(t *testing.T) {
 	for _, command := range []string{"qc-reports plans", "qc-reports materials"} {
 		runtime, ok := application.DefaultRouteManifest().RouteFor(command)
@@ -250,6 +334,64 @@ func TestDefaultRouteKeepsQianchuanReportsOnPython(t *testing.T) {
 
 type qianchuanReportServiceStub struct {
 	calls int
+}
+
+type qianchuanUnifiedReportServiceSpy struct {
+	qianchuanReportServiceStub
+	schemaQueries []applicationreports.QianchuanSchemaQuery
+	allQueries    []applicationreports.QianchuanAggregateQuery
+	uniQueries    []applicationreports.QianchuanAggregateQuery
+	customQueries []applicationreports.QianchuanCustomQuery
+	roomQueries   []applicationreports.QianchuanDimensionQuery
+	authorQueries []applicationreports.QianchuanDimensionQuery
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanSchema(
+	_ context.Context,
+	query applicationreports.QianchuanSchemaQuery,
+) (applicationreports.QianchuanSchemaResult, error) {
+	spy.schemaQueries = append(spy.schemaQueries, query)
+	return applicationreports.QianchuanSchemaResult{Mode: "schema"}, nil
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanAllPromotion(
+	_ context.Context,
+	query applicationreports.QianchuanAggregateQuery,
+) (applicationreports.QianchuanAggregateResult, error) {
+	spy.allQueries = append(spy.allQueries, query)
+	return applicationreports.QianchuanAggregateResult{Mode: "account"}, nil
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanUniPromotion(
+	_ context.Context,
+	query applicationreports.QianchuanAggregateQuery,
+) (applicationreports.QianchuanAggregateResult, error) {
+	spy.uniQueries = append(spy.uniQueries, query)
+	return applicationreports.QianchuanAggregateResult{Mode: "uni-account"}, nil
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanCustom(
+	_ context.Context,
+	query applicationreports.QianchuanCustomQuery,
+) (applicationreports.QianchuanCustomResult, error) {
+	spy.customQueries = append(spy.customQueries, query)
+	return applicationreports.QianchuanCustomResult{Mode: "custom"}, nil
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanRoom(
+	_ context.Context,
+	query applicationreports.QianchuanDimensionQuery,
+) (applicationreports.QianchuanDimensionResult, error) {
+	spy.roomQueries = append(spy.roomQueries, query)
+	return applicationreports.QianchuanDimensionResult{Mode: "rooms"}, nil
+}
+
+func (spy *qianchuanUnifiedReportServiceSpy) QianchuanAuthor(
+	_ context.Context,
+	query applicationreports.QianchuanDimensionQuery,
+) (applicationreports.QianchuanDimensionResult, error) {
+	spy.authorQueries = append(spy.authorQueries, query)
+	return applicationreports.QianchuanDimensionResult{Mode: "authors"}, nil
 }
 
 func (stub *qianchuanReportServiceStub) MaterialReport(
