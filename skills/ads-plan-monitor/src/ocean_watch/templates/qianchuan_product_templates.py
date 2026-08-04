@@ -7,7 +7,7 @@ from ocean_watch.core.data import is_missing
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 MAX_PRODUCTS = 30
 TEMPLATE_TYPE = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 MATERIAL_SOURCE_TYPE = "CREATOR_RUNTIME_QUERY"
@@ -24,7 +24,10 @@ DEFAULT_DELIVERY_SETTING = {
     "video_schedule_type": "SCHEDULE_FROM_NOW",
     "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
 }
-DEFAULT_PLAN_NAME_TEMPLATE = "{product_name}-{creator_name}-{datetime}"
+LEGACY_PLAN_NAME_TEMPLATE = "{product_name}-{creator_name}-{datetime}"
+DEFAULT_PLAN_NAME_TEMPLATE = (
+    "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+)
 PLAN_NAME_PLACEHOLDERS = {
     "product_name",
     "creator_name",
@@ -33,6 +36,9 @@ PLAN_NAME_PLACEHOLDERS = {
     "date",
     "time",
     "datetime",
+    "month_day",
+    "type",
+    "business",
 }
 
 
@@ -97,10 +103,18 @@ def ensure_config(config):
     if current_version < 5:
         default = normalized.get(DEFAULT_TEMPLATE_KEY)
         if isinstance(default, dict):
-            default.setdefault("plan_name_template", DEFAULT_PLAN_NAME_TEMPLATE)
+            default.setdefault("plan_name_template", LEGACY_PLAN_NAME_TEMPLATE)
         for template in (normalized.get(TEMPLATES_KEY) or {}).values():
             if isinstance(template, dict):
-                template.setdefault("plan_name_template", DEFAULT_PLAN_NAME_TEMPLATE)
+                template.setdefault("plan_name_template", LEGACY_PLAN_NAME_TEMPLATE)
+    if current_version < 6:
+        default = normalized.get(DEFAULT_TEMPLATE_KEY)
+        if isinstance(default, dict) and default.get("plan_name_template") in {
+            None,
+            "",
+            LEGACY_PLAN_NAME_TEMPLATE,
+        }:
+            default["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
     normalized[SCHEMA_VERSION_KEY] = SCHEMA_VERSION
     normalized.setdefault(DEFAULT_TEMPLATE_KEY, default_template())
     normalized.setdefault(TEMPLATES_KEY, {})

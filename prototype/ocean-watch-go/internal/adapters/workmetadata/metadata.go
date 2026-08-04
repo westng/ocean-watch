@@ -40,6 +40,7 @@ type metadataVideo struct {
 type metadataAuthor struct {
 	UID      any    `json:"uid"`
 	UniqueID string `json:"unique_id"`
+	Nickname string `json:"nickname"`
 }
 
 type metadataProduct struct {
@@ -132,7 +133,9 @@ func (resolver DouyinMetadataResolver) resolveMetadata(
 	if envelope.Code != 200 || !positiveMetadataID(itemID) {
 		return domain.ResolvedWorkLink{}, domain.NewWorkLinkError("invalid_metadata_response", "作品解析服务未返回有效作品 ID")
 	}
-	result := domain.ResolvedWorkLink{AwemeItemID: itemID}
+	result := domain.ResolvedWorkLink{
+		AwemeItemID: itemID, CreatorName: strings.TrimSpace(envelope.Data.Author.Nickname),
+	}
 	awemeID := metadataID(envelope.Data.Author.UID)
 	showID := strings.TrimSpace(envelope.Data.Author.UniqueID)
 	if positiveMetadataID(awemeID) && showID != "" {

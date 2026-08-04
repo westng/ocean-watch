@@ -16,7 +16,7 @@ func TestDouyinMetadataResolverUsesOnlyPublicLinkAndReturnsHints(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		received = request.Clone(request.Context())
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(writer, `{"code":200,"data":{"video":{"video_info_id":"6000000000000001"},"author":{"uid":"4000000000000001","unique_id":"visible-1"},"product":{"product_info_id":"5000000000000001","product_info_name":"fixture"}}}`)
+		_, _ = io.WriteString(writer, `{"code":200,"data":{"video":{"video_info_id":"6000000000000001"},"author":{"uid":"4000000000000001","unique_id":"visible-1","nickname":"第三方达人"},"product":{"product_info_id":"5000000000000001","product_info_name":"fixture"}}}`)
 	}))
 	defer server.Close()
 	resolver := DouyinMetadataResolver{Endpoint: server.URL + "/metadata?version=1", Client: server.Client()}
@@ -26,7 +26,7 @@ func TestDouyinMetadataResolverUsesOnlyPublicLinkAndReturnsHints(t *testing.T) {
 	}
 	if result.AwemeItemID != "6000000000000001" || result.OwnerHint == nil ||
 		result.OwnerHint.AwemeID != "4000000000000001" || result.ProductHint == nil ||
-		result.ProductHint.ProductID != "5000000000000001" {
+		result.ProductHint.ProductID != "5000000000000001" || result.CreatorName != "第三方达人" {
 		t.Fatalf("metadata hints changed: %#v", result)
 	}
 	if received == nil || received.Method != http.MethodGet ||

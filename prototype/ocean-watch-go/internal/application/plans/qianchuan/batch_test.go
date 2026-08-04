@@ -45,21 +45,38 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 		ProductName:      "测试商品",
 		PlanNameTemplate: "{creator_name}_{douyin_id}_{aweme_id}_{product_name}_{date}_{time}_{datetime}",
 	}}
-	if got, err := service.planName(request, creator); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品_20260804_123045_20260804123045" {
+	group := batchGroup{creator: creator, works: []VerifiedWork{{CreatorName: "达人甲"}}}
+	if got, err := service.planName(request, group); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品_20260804_123045_20260804123045" {
 		t.Fatalf("custom plan name rendered as %q", got)
 	}
 	request.PlanNameTemplate = ""
-	if got, err := service.planName(request, creator); err != nil || got != "测试商品-达人甲-20260804123045" {
-		t.Fatalf("legacy-compatible default plan name rendered as %q", got)
+	request.PlanType, request.Business = "随手po", "刘研"
+	if got, err := service.planName(request, group); err != nil || got != "8.4-达人甲-测试商品-随手po-刘研" {
+		t.Fatalf("default plan name rendered as %q", got)
+	}
+	request.PlanType = ""
+	if got, err := service.planName(request, group); err != nil || got != "8.4-达人甲-测试商品-刘研" {
+		t.Fatalf("missing runtime plan type rendered as %q: %v", got, err)
+	}
+	request.PlanType, request.Business = "随手po", ""
+	if got, err := service.planName(request, group); err != nil || got != "8.4-达人甲-测试商品-随手po" {
+		t.Fatalf("missing runtime business rendered as %q: %v", got, err)
+	}
+	request.PlanNameTemplate = "{product_name}-{creator_name}-{datetime}"
+	if got, err := service.planName(request, group); err != nil || got != "测试商品-达人甲-20260804123045" {
+		t.Fatalf("legacy plan name rendered as %q", got)
 	}
 	request.PlanNameTemplate = "{creator_name}"
 	creator.Name = strings.Repeat("达", 60)
-	if got, err := service.planName(request, creator); err != nil || got != strings.Repeat("达", 50) {
+	group.creator = creator
+	group.works[0].CreatorName = creator.Name
+	if got, err := service.planName(request, group); err != nil || got != strings.Repeat("达", 50) {
 		t.Fatalf("weighted plan-name limit changed: %q", got)
 	}
 	request.PlanNameTemplate = "{douyin_id}"
 	creator.VisibleID = ""
-	if _, err := service.planName(request, creator); err == nil {
+	group.creator = creator
+	if _, err := service.planName(request, group); err == nil {
 		t.Fatal("empty rendered plan name was accepted")
 	}
 }
@@ -650,7 +667,7 @@ func batchVerifiedWorks(count int) []VerifiedWork {
 		itemID := batchWorkID(index)
 		result = append(result, VerifiedWork{
 			InputIndex: index - 1, InputURL: "https://www.douyin.com/video/" + itemID,
-			AwemeItemID: itemID,
+			AwemeItemID: itemID, CreatorName: "fixture-creator",
 			Creator: domainqianchuan.AuthorizedCreator{
 				AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
 			},

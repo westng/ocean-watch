@@ -242,7 +242,7 @@ ocean-watch qc-templates create-live
 ocean-watch qc-templates migrate-live
 ```
 
-向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime` 占位符，渲染结果按官方限制截为 100 加权字符。旧模板升级后使用 `{product_name}-{creator_name}-{datetime}`，保持原有计划命名效果。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符，渲染结果按官方限制截为 100 加权字符。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`；`month_day` 输出如 `8.4`，类型和商务在每次可能创建计划时填写，不写入模板。旧业务模板继续使用原计划名称形式。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
 
 直播模板从独立的 `default_qianchuan_live_template` 或已有直播模板复制，绑定广告主、直播账号名称和数值 `aweme_id`。默认设置为保守出价、预算 5000、长期投放和智能选材。直播模板不保存商品、作品或手工素材，使用 `plans create-qianchuan --live-template TEMPLATE_ID` 创建；该模式不接受计划名称。
 
@@ -351,14 +351,16 @@ ocean-watch plans create-qianchuan \
 ```bash
 ocean-watch plans batch-qianchuan-works \
   --plan-template TEMPLATE_ID \
-  --work-url DOUYIN_WORK_URL_1 \
+  --work-url $'DOUYIN_WORK_URL_1\tPLAN_TYPE\tBUSINESS_OWNER' \
   --work-url DOUYIN_WORK_URL_2 \
   --concurrency 8
 ```
 
+每个 `--work-url` 表示一行素材，可传纯链接、Markdown 链接或含链接的完整抖音口令。Tab 分列时，最后两列分别作为该行的类型与商务；若只有一个附加列，则作为类型。行内没有类型或商务时，计划名称不拼接对应字段。`--plan-type`、`--business` 仍可为未分列的全部输入提供统一值。
+
 可选解析服务通过 `setup work-metadata --endpoint URL --home-config` 写入本机配置，仓库不提供真实地址。配置后，千川作品链路只发送公开抖音链接并读取作品 ID、抖音号、数值 UID 和商品 ID；不传广告主、Token 或模板数据。返回非空商品 ID 且不在模板商品集合时直接跳过，不得新建或追加；匹配或空值仍由官方接口复核。未配置或使用 `--no-link-metadata-api` 时走安全兜底。命令默认使用 8 并发（上限 10）执行必要的官方素材校验。首次官方校验成功后，会在 `$CODEX_HOME/ads-plan-monitor/state/cache/` 保存 30 天的作品达人查询提示。缓存过期或失效时自动回退到全量官方扫描。`performance` 会分别展示链接解析、凭据准备、素材校验和计划对账耗时，并通过 `link_metadata.configured/enabled` 标识本次是否启用本机服务。
 
-命令跟随抖音短链并提取作品 ID，通过官方接口批量确认授权达人和模板商品匹配，再按数值 `aweme_id` 分组。达人没有商品全域计划时按模板新建；已有计划（包括暂停）时只调用素材追加接口，预算、ROI、状态和名称保持不变。计划素材已存在、链接无效、达人未授权或商品不匹配时跳过，并在整批结束后统一反馈。完成结果的主表固定为 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`，跳过和失败详情只在表外展示。默认 dry-run，真实写入增加 `--submit`；只有显式传入 `--out` 才写文件。
+命令跟随抖音短链并提取作品 ID，通过官方接口批量确认授权达人和模板商品匹配，再按数值 `aweme_id` 分组。达人没有商品全域计划时按模板新建；名称日期使用不补零的短日期 `月.日`，达人名称取本机第三方解析接口的 `nickname`，产品名称取投放模板，类型与商务仅在对应行存在时拼接，例如 `8.4-达人名称-产品名称-随手po-刘研` 或 `8.4-达人名称-产品名称`。需要达人名称的新计划若没有解析到 `nickname` 会停止创建，不会回退成其他昵称；同一达人多条素材的类型、商务或第三方达人名称不一致时也会在预检阻断，避免合并成错误计划。已有计划（包括暂停）时只调用素材追加接口，预算、ROI、状态和名称保持不变。计划素材已存在、链接无效、达人未授权或商品不匹配时跳过，并在整批结束后统一反馈。完成结果的主表固定为 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`，跳过和失败详情只在表外展示。默认 dry-run，真实写入增加 `--submit`；只有显式传入 `--out` 才写文件。
 
 按作品链接删除计划自提素材：
 

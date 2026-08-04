@@ -156,7 +156,8 @@ Accept: application/json
 | `data.author.uid` | 与 `unique_id` 同时提供时启用加速，纯数字字符串 | 官方查询使用的数值 `aweme_id` 提示 |
 | `data.product.product_info_id` | 可选，纯数字字符串 | 与模板全部商品 ID 比对；非空且均不匹配时立即跳过 |
 | `data.product.product_info_name` | 可选 | 诊断提示，不参与投放判断 |
-| `nickname`、图片、标题、视频和音频 URL | 可选 | 不用于计划创建，也不持久化 |
+| `data.author.nickname` | 名称形式含 `creator_name` 时新建计划必填 | 仅用于本次千川新计划名称中的达人名称，不写入模板或长期缓存 |
+| 图片、标题、视频和音频 URL | 可选 | 不用于计划创建，也不持久化 |
 
 响应体上限为 1 MiB，服务端重定向会被拒绝。商品 ID 命中或为空不能证明作品可投，仍需通过千川官方授权关系、作品归属和商品过滤接口；只有商品 ID 明确不匹配时才执行前置跳过。解析服务未配置、响应异常或单次使用 `--no-link-metadata-api` 时，插件回退到受限抖音短链跳转和完整官方查询。
 
@@ -246,7 +247,7 @@ ocean-watch qc-templates list
 ocean-watch qc-templates create
 ```
 
-模板绑定一个千川广告主、产品名称和 1–30 个商品 ID，模板名称由用户填写。`plan_name_template` 定义创建新商品全域计划时的名称形式，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime` 占位符；渲染结果最多 100 加权字符。Schema v4 升级到 v5 时保留原模板 ID 和显示名称，并补入默认形式 `{product_name}-{creator_name}-{datetime}`，因此旧模板的计划命名行为不变。
+模板绑定一个千川广告主、产品名称和 1–30 个商品 ID，模板名称由用户填写。`plan_name_template` 定义创建新商品全域计划时的名称形式，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符；`month_day` 按 `8.4` 形式输出且不补零，渲染结果最多 100 加权字符。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`，其中类型和商务不固化在模板内，而是从每行素材输入的可选 Tab 分列读取；没有的字段会连同相邻分隔符一起省略。`--plan-type`、`--business` 仅作为未分列输入的整批回退值。只向已有计划追加素材时不会改已有计划名称。Schema v4 升级时旧业务模板补入 `{product_name}-{creator_name}-{datetime}`；Schema v5 升级到 v6 时只更新默认骨架，已有业务模板的计划命名行为不变。
 
 默认投放参数：
 

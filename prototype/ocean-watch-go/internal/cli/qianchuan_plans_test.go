@@ -32,6 +32,22 @@ func TestParseQianchuanCreateReadsPayloadFromStdin(t *testing.T) {
 	}
 }
 
+func TestParseQianchuanBatchReadsRuntimePlanNameFields(t *testing.T) {
+	options, command, err := parseQianchuanBatchOptions([]string{
+		"--plan-template", " qcpt-test ",
+		"--work-url", " https://www.douyin.com/video/6000000000000001 ",
+		"--plan-type", " 随手po ",
+		"--business", " 刘研 ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.planType != "随手po" || options.business != "刘研" ||
+		command.PlanType != "随手po" || command.Business != "刘研" {
+		t.Fatalf("runtime plan-name fields changed: options=%#v command=%#v", options, command)
+	}
+}
+
 func TestRunnerRoutesQianchuanPlanActionsWithoutFallbackOrMarketing(t *testing.T) {
 	manifest := qianchuanPlanShadowManifest(t, "plans create-qianchuan")
 	qianchuan := &qianchuanPlanCommandServiceStub{createResult: applicationqianchuan.CreateCommandResult{

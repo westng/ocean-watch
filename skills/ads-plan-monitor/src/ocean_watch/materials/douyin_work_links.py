@@ -137,6 +137,7 @@ class DouyinWorkMetadataResolver:
         aweme_item_id = str((video or {}).get("video_info_id") or "")
         aweme_id = str((author or {}).get("uid") or "")
         aweme_show_id = str((author or {}).get("unique_id") or "").strip()
+        creator_name = str((author or {}).get("nickname") or "").strip()
         if code != 200 or not aweme_item_id.isdigit():
             raise WorkLinkError(
                 "invalid_metadata_response",
@@ -161,6 +162,7 @@ class DouyinWorkMetadataResolver:
             }
         return {
             "aweme_item_id": aweme_item_id,
+            "creator_name_hint": creator_name or None,
             "owner_hint": owner_hint,
             "product_hint": product_hint,
         }
@@ -178,6 +180,7 @@ class DouyinWorkLinkResolver:
         resolved_url = input_url
         owner_hint = None
         product_hint = None
+        creator_name_hint = None
         hint_warning = None
         if self.metadata_resolver is not None:
             try:
@@ -191,6 +194,7 @@ class DouyinWorkLinkResolver:
                 aweme_item_id = metadata_item_id
                 owner_hint = metadata.get("owner_hint")
                 product_hint = metadata.get("product_hint")
+                creator_name_hint = metadata.get("creator_name_hint")
                 resolved_url = canonical_work_url(aweme_item_id)
             except Exception as error:
                 hint_warning = {
@@ -236,6 +240,8 @@ class DouyinWorkLinkResolver:
             result["owner_hint"] = owner_hint
         if product_hint:
             result["product_hint"] = product_hint
+        if creator_name_hint:
+            result["creator_name_hint"] = creator_name_hint
         if hint_warning:
             result["hint_warning"] = hint_warning
         return result

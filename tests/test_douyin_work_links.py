@@ -153,7 +153,11 @@ class DouyinWorkLinkTests(unittest.TestCase):
         payload = json.dumps({
             "code": 200,
             "data": {
-                "author": {"unique_id": "creator-one", "uid": "9001"},
+                "author": {
+                    "unique_id": "creator-one",
+                    "uid": "9001",
+                    "nickname": "达人甲",
+                },
                 "product": {
                     "product_info_id": "1001",
                     "product_info_name": "Example Product",
@@ -170,6 +174,7 @@ class DouyinWorkLinkTests(unittest.TestCase):
 
         self.assertEqual(result, {
             "aweme_item_id": "7000000000000000001",
+            "creator_name_hint": "达人甲",
             "owner_hint": {
                 "aweme_id": "9001",
                 "aweme_show_id": "creator-one",

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	sharedplans "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/plans"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
@@ -36,6 +37,8 @@ type BatchRequest struct {
 	TemplateName     string
 	ProductName      string
 	PlanNameTemplate string
+	PlanType         string
+	Business         string
 	TemplatePayload  json.RawMessage
 	IncludePayloads  bool
 	Works            []VerifiedWork
@@ -302,7 +305,7 @@ func (service BatchService) executeNewGroup(
 	capability domainplans.WriteCapability,
 ) (BatchGroupResult, error) {
 	first, remaining := splitVerifiedWorks(group.works, BatchMaterialLimit)
-	planName, err := service.planName(request, group.creator)
+	planName, err := service.planName(request, group)
 	if err != nil {
 		result.Status, result.Error = "failed", err.Error()
 		return result, err
@@ -490,6 +493,8 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 	request.TemplateID = strings.TrimSpace(request.TemplateID)
 	request.TemplateName = strings.TrimSpace(request.TemplateName)
 	request.ProductName = strings.TrimSpace(request.ProductName)
+	request.PlanType = strings.TrimSpace(request.PlanType)
+	request.Business = strings.TrimSpace(request.Business)
 	if !validPositiveID(request.AdvertiserID) {
 		return normalizedBatchRequest{}, errors.New("advertiser_id must be a positive decimal ID")
 	}
@@ -522,6 +527,9 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 		work.Creator.AwemeID = strings.TrimSpace(work.Creator.AwemeID)
 		work.Creator.VisibleID = strings.TrimSpace(work.Creator.VisibleID)
 		work.Creator.Name = strings.TrimSpace(work.Creator.Name)
+		work.CreatorName = strings.TrimSpace(work.CreatorName)
+		work.PlanType = strings.TrimSpace(work.PlanType)
+		work.Business = strings.TrimSpace(work.Business)
 		work.Material.ImageMode = strings.TrimSpace(work.Material.ImageMode)
 		if !validPositiveID(work.AwemeItemID) || !validPositiveID(work.Creator.AwemeID) {
 			return normalizedBatchRequest{}, errors.New("verified Qianchuan work contains an invalid identity")
@@ -597,16 +605,31 @@ func (request normalizedBatchRequest) emptyResult(mode string) BatchResult {
 }
 
 func newBatchGroupResult(group batchGroup, productIDs []string) BatchGroupResult {
+	creatorName := group.creator.Name
+	for _, work := range group.works {
+		if strings.TrimSpace(work.CreatorName) != "" {
+			creatorName = strings.TrimSpace(work.CreatorName)
+			break
+		}
+	}
 	return BatchGroupResult{
 		AwemeID: group.creator.AwemeID, DouyinID: group.creator.VisibleID,
-		CreatorName: group.creator.Name, ProductIDs: append([]string(nil), productIDs...),
+		CreatorName: creatorName, ProductIDs: append([]string(nil), productIDs...),
 		InputItemIDs: verifiedWorkIDs(group.works), CompletedItemIDs: []string{},
 		AlreadyPresent: []string{}, Writes: []BatchWrite{}, Status: "ready",
 	}
 }
 
-func (service BatchService) planName(request normalizedBatchRequest, creator domainqianchuan.AuthorizedCreator) (string, error) {
-	label := creator.Name
+func (service BatchService) planName(request normalizedBatchRequest, group batchGroup) (string, error) {
+	fields, err := batchGroupPlanNameFields(group.works, request.PlanType, request.Business)
+	if err != nil {
+		return "", err
+	}
+	creator := group.creator
+	label := fields.creatorName
+	if label == "" {
+		label = creator.Name
+	}
 	if label == "" {
 		label = creator.VisibleID
 	}
@@ -625,10 +648,21 @@ func (service BatchService) planName(request normalizedBatchRequest, creator dom
 		"date":         now.Format("20060102"),
 		"time":         now.Format("150405"),
 		"datetime":     now.Format("20060102150405"),
+		"month_day":    fmt.Sprintf("%d.%d", int(now.Month()), now.Day()),
+		"type":         fields.planType,
+		"business":     fields.business,
 	}
 	pattern := strings.TrimSpace(request.PlanNameTemplate)
 	if pattern == "" {
-		pattern = "{product_name}-{creator_name}-{datetime}"
+		pattern = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+	}
+	if strings.Contains(pattern, "{creator_name}") && fields.creatorName == "" {
+		return "", errors.New("第三方解析接口未返回达人名称，无法创建千川计划")
+	}
+	for _, key := range []string{"type", "business"} {
+		if values[key] == "" {
+			pattern = removeOptionalPlanNamePlaceholder(pattern, key)
+		}
 	}
 	for key, value := range values {
 		pattern = strings.ReplaceAll(pattern, "{"+key+"}", value)
@@ -638,6 +672,74 @@ func (service BatchService) planName(request normalizedBatchRequest, creator dom
 		return "", errors.New("Qianchuan rendered plan name is empty")
 	}
 	return name, nil
+}
+
+type batchPlanNameFields struct {
+	creatorName string
+	planType    string
+	business    string
+}
+
+func batchGroupPlanNameFields(works []VerifiedWork, planType, business string) (batchPlanNameFields, error) {
+	fields := batchPlanNameFields{}
+	for index, work := range works {
+		workType := strings.TrimSpace(work.PlanType)
+		if workType == "" {
+			workType = strings.TrimSpace(planType)
+		}
+		workBusiness := strings.TrimSpace(work.Business)
+		if workBusiness == "" {
+			workBusiness = strings.TrimSpace(business)
+		}
+		if index == 0 {
+			fields.planType = workType
+		} else if fields.planType != workType {
+			return batchPlanNameFields{}, errors.New("同一达人素材的类型不一致，无法合并到同一个千川计划")
+		}
+		if index == 0 {
+			fields.business = workBusiness
+		} else if fields.business != workBusiness {
+			return batchPlanNameFields{}, errors.New("同一达人素材的商务不一致，无法合并到同一个千川计划")
+		}
+		creatorName := strings.TrimSpace(work.CreatorName)
+		if creatorName == "" {
+			continue
+		}
+		if fields.creatorName == "" {
+			fields.creatorName = creatorName
+		} else if fields.creatorName != creatorName {
+			return batchPlanNameFields{}, errors.New("同一达人素材的第三方达人名称不一致")
+		}
+	}
+	return fields, nil
+}
+
+func removeOptionalPlanNamePlaceholder(pattern, key string) string {
+	token := "{" + key + "}"
+	for strings.Contains(pattern, token) {
+		byteIndex := strings.Index(pattern, token)
+		runeIndex := utf8.RuneCountInString(pattern[:byteIndex])
+		runes := []rune(pattern)
+		tokenLength := len([]rune(token))
+		start := runeIndex
+		for start > 0 && isPlanNameSeparator(runes[start-1]) {
+			start--
+		}
+		if start < runeIndex && start > 0 {
+			pattern = string(append(runes[:start], runes[runeIndex+tokenLength:]...))
+			continue
+		}
+		end := runeIndex + tokenLength
+		for end < len(runes) && isPlanNameSeparator(runes[end]) {
+			end++
+		}
+		pattern = string(append(runes[:runeIndex], runes[end:]...))
+	}
+	return pattern
+}
+
+func isPlanNameSeparator(value rune) bool {
+	return strings.ContainsRune("-_/|· ", value)
 }
 
 func buildBatchCreatePayload(

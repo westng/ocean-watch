@@ -35,6 +35,7 @@ def material(
         "input_index": int(item_id),
         "aweme_item_id": str(item_id),
         "aweme_id": str(aweme_id),
+        "creator_name_hint": f"Creator {aweme_id}",
         "creator": {
             "aweme_id": str(aweme_id),
             "aweme_show_id": f"show-{aweme_id}",
@@ -64,7 +65,7 @@ class FakeExecutor:
 
 
 class QianchuanPlanNameTemplateTests(unittest.TestCase):
-    def test_default_plan_name_template_preserves_legacy_format(self):
+    def test_default_plan_name_template_uses_runtime_type_and_business(self):
         name = batch.build_plan_name(
             template(),
             {
@@ -72,6 +73,76 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
                 "aweme_show_id": "show-9001",
                 "aweme_name": "Creator 9001",
             },
+            plan_type="随手po",
+            business="刘研",
+            now=dt.datetime(2026, 8, 4, 12, 30, 45),
+        )
+
+        self.assertEqual(name, "8.4-Creator 9001-Test Product-随手po-刘研")
+
+    def test_default_plan_name_template_omits_missing_optional_fields(self):
+        self.assertEqual(
+            batch.build_plan_name(
+                template(),
+                {"aweme_id": "9001", "aweme_name": "官方昵称"},
+                creator_name="第三方昵称",
+                now=dt.datetime(2026, 8, 4, 12, 30, 45),
+            ),
+            "8.4-第三方昵称-Test Product",
+        )
+        self.assertEqual(
+            batch.build_plan_name(
+                template(),
+                {"aweme_id": "9001", "aweme_name": "达人甲"},
+                plan_type="随手po",
+                now=dt.datetime(2026, 8, 4, 12, 30, 45),
+            ),
+            "8.4-达人甲-Test Product-随手po",
+        )
+
+    def test_work_entry_parser_accepts_supported_user_formats(self):
+        markdown = batch.parse_work_entry(
+            "[https://v.douyin.com/bad/:code](https://v.douyin.com/abc/)\t真人口播营销\t刘岛"
+        )
+        command = batch.parse_work_entry(
+            "4.87 口令 https://v.douyin.com/xyz/ 复制打开\t9386\t暖身,口播\t刘研"
+        )
+        bare = batch.parse_work_entry("https://v.douyin.com/only/")
+
+        self.assertEqual(markdown, {
+            "work_url": "https://v.douyin.com/abc/",
+            "plan_type": "真人口播营销",
+            "business": "刘岛",
+        })
+        self.assertEqual(
+            command["work_url"],
+            "4.87 口令 https://v.douyin.com/xyz/ 复制打开",
+        )
+        self.assertEqual(command["plan_type"], "暖身,口播")
+        self.assertEqual(command["business"], "刘研")
+        self.assertEqual(bare, {
+            "work_url": "https://v.douyin.com/only/",
+            "plan_type": "",
+            "business": "",
+        })
+
+    def test_group_plan_name_fields_rejects_conflicting_rows(self):
+        rows = [
+            {**material("101"), "plan_type": "随手po", "business": "刘岛"},
+            {**material("102"), "plan_type": "人设", "business": "刘岛"},
+        ]
+        with self.assertRaisesRegex(ValueError, "类型"):
+            batch.group_plan_name_fields(rows)
+
+    def test_legacy_plan_name_template_does_not_require_runtime_fields(self):
+        selected = template()
+        selected["plan_name_template"] = (
+            qianchuan_product_templates.LEGACY_PLAN_NAME_TEMPLATE
+        )
+
+        name = batch.build_plan_name(
+            selected,
+            {"aweme_id": "9001", "aweme_name": "Creator 9001"},
             now=dt.datetime(2026, 8, 4, 12, 30, 45),
         )
 
@@ -466,6 +537,8 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
             FakeExecutor(),
             concurrency=8,
             submit=False,
+            plan_type="随手po",
+            business="刘研",
             now=dt.datetime(2026, 7, 15, 12, 30, 45),
         )
 
@@ -489,6 +562,8 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
             executor,
             concurrency=2,
             submit=True,
+            plan_type="随手po",
+            business="刘研",
             now=dt.datetime(2026, 7, 15, 12, 30, 45),
         )
         self.assertEqual(results[0]["status"], "created")
@@ -504,7 +579,25 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
             [row["aweme_item_id"] for row in creative["video_material"]],
             [101, 102],
         )
-        self.assertTrue(payload["name"].endswith("20260715123045"))
+        self.assertEqual(
+            payload["name"],
+            "7.15-Creator 9001-Test Product-随手po-刘研",
+        )
+
+    def test_new_creator_requires_third_party_creator_name(self):
+        row = material("101")
+        row.pop("creator_name_hint")
+        results, _ = batch.execute_plan_actions(
+            template(),
+            [row],
+            FakeGateway(),
+            FakeExecutor(),
+            concurrency=2,
+            submit=False,
+        )
+
+        self.assertEqual(results[0]["status"], "failed")
+        self.assertIn("第三方解析接口未返回达人名称", results[0]["message"])
 
     def test_one_creator_failure_does_not_stop_other_creator(self):
         gateway = FakeGateway(plans={

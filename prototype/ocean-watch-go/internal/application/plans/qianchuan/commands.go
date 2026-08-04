@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 )
 
 const DefaultBatchConcurrency = 8
+
+var qianchuanMarkdownLinkPattern = regexp.MustCompile(`(?i)\]\((https://[^)[:space:]]+)\)`)
+
+type batchWorkEntry struct {
+	URL      string
+	PlanType string
+	Business string
+}
 
 type CommandConfigReader interface {
 	Read(context.Context) (map[string]any, error)
@@ -88,6 +97,8 @@ type BatchWorksCommand struct {
 	AuthAccountID     string
 	NoLinkMetadataAPI bool
 	IncludePayloads   bool
+	PlanType          string
+	Business          string
 	Submit            bool
 }
 
@@ -193,6 +204,7 @@ func (service CommandService) BatchWorks(
 	if len(command.WorkURLs) == 0 {
 		return BatchCommandResult{}, errors.New("at least one work URL is required")
 	}
+	entries := parseBatchWorkEntries(command.WorkURLs, command.PlanType, command.Business)
 	config, err := service.Config.Read(ctx)
 	if err != nil {
 		return BatchCommandResult{}, err
@@ -226,7 +238,7 @@ func (service CommandService) BatchWorks(
 		return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
 	}
 	links, err := linkResolver.Resolve(ctx, applicationworkmetadata.ResolveRequest{
-		URLs: append([]string(nil), command.WorkURLs...), Concurrency: concurrency,
+		URLs: batchWorkEntryURLs(entries), Concurrency: concurrency,
 	})
 	if err != nil {
 		return BatchCommandResult{}, err
@@ -241,7 +253,8 @@ func (service CommandService) BatchWorks(
 		Submit: command.Submit, TemplateID: exported.TemplateID, TemplateName: exported.DisplayName,
 		ProductName: exported.ProductName, TemplatePayload: exported.Payload,
 		PlanNameTemplate: exported.PlanNameTemplate,
-		IncludePayloads:  command.IncludePayloads, Skipped: skipped,
+		PlanType:         strings.TrimSpace(command.PlanType), Business: strings.TrimSpace(command.Business),
+		IncludePayloads: command.IncludePayloads, Skipped: skipped,
 	}
 	if len(links.Resolved) == 0 {
 		result, executeErr := service.Batch.Execute(ctx, baseRequest)
@@ -282,7 +295,7 @@ func (service CommandService) BatchWorks(
 		cachePerformance.LoadedFromLinkMetadata = len(linkHints)
 		verification, verifyErr := service.Verifier.Verify(lockedContext, WorkVerificationRequest{
 			AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
-			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints),
+			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints, entries),
 		})
 		if verifyErr != nil {
 			return verifyErr
@@ -556,7 +569,11 @@ func anySliceLength(value any) int {
 	return len(values)
 }
 
-func qianchuanWorkInputs(values []domain.ResolvedWorkLink, hints map[string]OwnerHint) []WorkInput {
+func qianchuanWorkInputs(
+	values []domain.ResolvedWorkLink,
+	hints map[string]OwnerHint,
+	entries []batchWorkEntry,
+) []WorkInput {
 	result := make([]WorkInput, 0, len(values))
 	for _, value := range values {
 		var hint *OwnerHint
@@ -566,10 +583,56 @@ func qianchuanWorkInputs(values []domain.ResolvedWorkLink, hints map[string]Owne
 		}
 		result = append(result, WorkInput{
 			InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
-			OwnerHint: hint, ProductIDHint: resolvedProductHint(value),
+			CreatorName: strings.TrimSpace(value.CreatorName),
+			PlanType:    batchWorkEntryAt(entries, value.InputIndex).PlanType,
+			Business:    batchWorkEntryAt(entries, value.InputIndex).Business,
+			OwnerHint:   hint, ProductIDHint: resolvedProductHint(value),
 		})
 	}
 	return result
+}
+
+func parseBatchWorkEntries(values []string, planType, business string) []batchWorkEntry {
+	result := make([]batchWorkEntry, 0, len(values))
+	planType, business = strings.TrimSpace(planType), strings.TrimSpace(business)
+	for _, value := range values {
+		columns := strings.Split(value, "\t")
+		for index := range columns {
+			columns[index] = strings.TrimSpace(columns[index])
+		}
+		entry := batchWorkEntry{URL: columns[0], PlanType: planType, Business: business}
+		if match := qianchuanMarkdownLinkPattern.FindStringSubmatch(entry.URL); len(match) == 2 {
+			entry.URL = match[1]
+		}
+		if len(columns) == 2 && columns[1] != "" {
+			entry.PlanType = columns[1]
+		}
+		if len(columns) >= 3 {
+			if columns[len(columns)-2] != "" {
+				entry.PlanType = columns[len(columns)-2]
+			}
+			if columns[len(columns)-1] != "" {
+				entry.Business = columns[len(columns)-1]
+			}
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
+func batchWorkEntryURLs(entries []batchWorkEntry) []string {
+	result := make([]string, len(entries))
+	for index, entry := range entries {
+		result[index] = entry.URL
+	}
+	return result
+}
+
+func batchWorkEntryAt(entries []batchWorkEntry, index int) batchWorkEntry {
+	if index < 0 || index >= len(entries) {
+		return batchWorkEntry{}
+	}
+	return entries[index]
 }
 
 func resolvedProductHint(value domain.ResolvedWorkLink) string {

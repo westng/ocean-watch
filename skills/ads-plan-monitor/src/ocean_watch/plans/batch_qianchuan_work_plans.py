@@ -2,6 +2,7 @@
 import argparse
 import datetime as dt
 import json
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -38,6 +39,8 @@ VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
 DEFAULT_QIANCHUAN_CONCURRENCY = 8
 BATCH_LOCK_TIMEOUT_SECONDS = 600
 BATCH_REQUEST_LIMIT = 512
+MARKDOWN_LINK_PATTERN = re.compile(r"\]\((https://[^)\s]+)\)", re.IGNORECASE)
+OPTIONAL_PLAN_NAME_SEPARATORS = "-_/|· "
 BATCH_PRESENTATION_COLUMNS = (
     ("ad_id", "计划ID"),
     ("creator_name", "达人昵称"),
@@ -54,6 +57,14 @@ def build_parser():
     parser.add_argument("--config")
     parser.add_argument("--plan-template", required=True)
     parser.add_argument("--work-url", action="append", default=[])
+    parser.add_argument(
+        "--plan-type",
+        help="Plan type used when the template plan name contains {type}.",
+    )
+    parser.add_argument(
+        "--business",
+        help="Business owner used when the template plan name contains {business}.",
+    )
     parser.add_argument(
         "--concurrency",
         type=int,
@@ -111,11 +122,71 @@ def weighted_truncate(value, maximum):
     return "".join(result)
 
 
-def build_plan_name(template, creator, now=None):
+def parse_work_entry(value, *, plan_type=None, business=None):
+    columns = [column.strip() for column in str(value or "").split("\t")]
+    link_text = columns[0] if columns else ""
+    markdown_match = MARKDOWN_LINK_PATTERN.search(link_text)
+    if markdown_match:
+        link_text = markdown_match.group(1)
+    entry_type = ""
+    entry_business = ""
+    if len(columns) == 2:
+        entry_type = columns[1]
+    elif len(columns) >= 3:
+        entry_type = columns[-2]
+        entry_business = columns[-1]
+    return {
+        "work_url": link_text,
+        "plan_type": entry_type or str(plan_type or "").strip(),
+        "business": entry_business or str(business or "").strip(),
+    }
+
+
+def attach_work_entry_fields(link_result, entries):
+    for collection in ("resolved", "skipped"):
+        for row in link_result[collection]:
+            index = row.get("input_index")
+            if not isinstance(index, int) or index < 0 or index >= len(entries):
+                continue
+            entry = entries[index]
+            if entry["plan_type"]:
+                row["plan_type"] = entry["plan_type"]
+            if entry["business"]:
+                row["business"] = entry["business"]
+    return link_result
+
+
+def remove_optional_placeholder(pattern, key):
+    token = "{" + key + "}"
+    while token in pattern:
+        index = pattern.index(token)
+        start = index
+        while start > 0 and pattern[start - 1] in OPTIONAL_PLAN_NAME_SEPARATORS:
+            start -= 1
+        if start < index and start > 0:
+            pattern = pattern[:start] + pattern[index + len(token):]
+            continue
+        end = index + len(token)
+        while end < len(pattern) and pattern[end] in OPTIONAL_PLAN_NAME_SEPARATORS:
+            end += 1
+        pattern = pattern[:index] + pattern[end:]
+    return pattern
+
+
+def build_plan_name(
+    template,
+    creator,
+    *,
+    creator_name=None,
+    plan_type=None,
+    business=None,
+    now=None,
+):
     now = now or dt.datetime.now()
     bindings = template["bindings"]
     creator_label = (
-        creator.get("aweme_name")
+        str(creator_name or "").strip()
+        or creator.get("aweme_name")
         or creator.get("aweme_show_id")
         or creator["aweme_id"]
     )
@@ -127,11 +198,17 @@ def build_plan_name(template, creator, now=None):
         "date": now.strftime("%Y%m%d"),
         "time": now.strftime("%H%M%S"),
         "datetime": now.strftime("%Y%m%d%H%M%S"),
+        "month_day": f"{now.month}.{now.day}",
+        "type": str(plan_type or "").strip(),
+        "business": str(business or "").strip(),
     }
     pattern = qianchuan_product_templates.validate_plan_name_template(
         template.get("plan_name_template")
         or qianchuan_product_templates.DEFAULT_PLAN_NAME_TEMPLATE
     )
+    for key in ("type", "business"):
+        if not values[key]:
+            pattern = remove_optional_placeholder(pattern, key)
     for key, value in values.items():
         pattern = pattern.replace("{" + key + "}", str(value))
     name = weighted_truncate(pattern, 100)
@@ -145,6 +222,32 @@ def group_by_creator(material_rows):
     for row in material_rows:
         groups.setdefault(row["aweme_id"], []).append(row)
     return groups
+
+
+def group_plan_name_fields(rows, *, plan_type=None, business=None):
+    field_values = {}
+    for field, label, fallback in (
+        ("plan_type", "类型", plan_type),
+        ("business", "商务", business),
+    ):
+        values = {
+            str(row.get(field) or fallback or "").strip()
+            for row in rows
+        }
+        if len(values) != 1:
+            raise ValueError(
+                f"同一达人素材的{label}不一致，无法合并到同一个千川计划"
+            )
+        field_values[field] = values.pop()
+    creator_names = {
+        str(row.get("creator_name_hint") or "").strip()
+        for row in rows
+        if str(row.get("creator_name_hint") or "").strip()
+    }
+    if len(creator_names) > 1:
+        raise ValueError("同一达人素材的第三方达人名称不一致")
+    field_values["creator_name"] = next(iter(creator_names), "")
+    return field_values
 
 
 def matched_product_ids(rows):
@@ -233,10 +336,18 @@ def compact_response(response):
 
 def base_group_result(aweme_id, rows, existing_plan=None):
     creator = rows[0]["creator"]
+    creator_name = next(
+        (
+            str(row.get("creator_name_hint") or "").strip()
+            for row in rows
+            if str(row.get("creator_name_hint") or "").strip()
+        ),
+        creator.get("aweme_name"),
+    )
     return {
         "aweme_id": aweme_id,
         "douyin_id": creator.get("aweme_show_id"),
-        "creator_name": creator.get("aweme_name"),
+        "creator_name": creator_name,
         "ad_id": existing_plan.get("ad_id") if existing_plan else None,
         "plan_name": existing_plan.get("name") if existing_plan else None,
         "plan_status": existing_plan.get("status") if existing_plan else None,
@@ -369,6 +480,8 @@ def execute_new_plan_group(
     *,
     submit,
     include_payloads,
+    plan_type=None,
+    business=None,
     now=None,
 ):
     advertiser_id = template["bindings"]["advertiser_id"]
@@ -376,9 +489,27 @@ def execute_new_plan_group(
     result = base_group_result(aweme_id, rows)
     result["product_ids"] = list(template["bindings"]["product_ids"])
     first_chunk, remaining = rows[:MAX_MATERIALS_PER_WRITE], rows[MAX_MATERIALS_PER_WRITE:]
+    name_fields = group_plan_name_fields(
+        rows,
+        plan_type=plan_type,
+        business=business,
+    )
+    plan_name_template = (
+        template.get("plan_name_template")
+        or qianchuan_product_templates.DEFAULT_PLAN_NAME_TEMPLATE
+    )
+    if "{creator_name}" in plan_name_template and not name_fields["creator_name"]:
+        raise ValueError("第三方解析接口未返回达人名称，无法创建千川计划")
     payload = qianchuan_product_templates.payload_from_template(
         template,
-        name=build_plan_name(template, rows[0]["creator"], now=now),
+        name=build_plan_name(
+            template,
+            rows[0]["creator"],
+            creator_name=name_fields["creator_name"],
+            plan_type=name_fields["plan_type"],
+            business=name_fields["business"],
+            now=now,
+        ),
     )
     payload["aweme_id"] = int(aweme_id)
     payload["multi_product_creative_list"] = product_creatives(
@@ -452,6 +583,8 @@ def execute_plan_actions(
     concurrency,
     submit,
     include_payloads=False,
+    plan_type=None,
+    business=None,
     now=None,
 ):
     advertiser_id = template["bindings"]["advertiser_id"]
@@ -496,6 +629,8 @@ def execute_plan_actions(
             rows,
             submit=submit,
             include_payloads=include_payloads,
+            plan_type=plan_type,
+            business=business,
             now=now,
         )
 
@@ -712,11 +847,20 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
                 metadata_endpoint,
             )
         )
+    entries = [
+        parse_work_entry(
+            value,
+            plan_type=getattr(args, "plan_type", None),
+            business=getattr(args, "business", None),
+        )
+        for value in args.work_url
+    ]
     link_result = resolve_work_links(
-        args.work_url,
+        [entry["work_url"] for entry in entries],
         resolver=link_resolver,
         concurrency=concurrency,
     )
+    link_result = attach_work_entry_fields(link_result, entries)
     link_result = filter_link_product_hints(
         link_result,
         template["bindings"]["product_ids"],
@@ -833,6 +977,8 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
             concurrency=concurrency,
             submit=args.submit,
             include_payloads=args.include_payloads,
+            plan_type=getattr(args, "plan_type", None),
+            business=getattr(args, "business", None),
             now=now,
         )
     plans_finished_at = time.monotonic()

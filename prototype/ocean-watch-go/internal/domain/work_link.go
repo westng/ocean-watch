@@ -8,6 +8,7 @@ type ResolvedWorkLink struct {
 	ResolvedURL  string           `json:"resolved_url"`
 	CanonicalURL string           `json:"canonical_url"`
 	AwemeItemID  string           `json:"aweme_item_id"`
+	CreatorName  string           `json:"creator_name_hint,omitempty"`
 	OwnerHint    *WorkOwnerHint   `json:"owner_hint,omitempty"`
 	ProductHint  *WorkProductHint `json:"product_hint,omitempty"`
 	HintWarning  *WorkHintWarning `json:"hint_warning,omitempty"`

@@ -1,6 +1,6 @@
 schema_version: 1
 source: skills/ads-plan-monitor/src/ocean_watch/cli/main.py
-source_commit: 5a94797fb5385b0e2463d5cc5ef4ea73f63e292c
+source_commit: 00191c7b5a2a4bb783fbcbdec5c0e933b1440001
 command_count: 82
 global_help:
   argv:
@@ -1538,27 +1538,32 @@ commands:
     exit_code: 0
     stdout: "usage: ocean-watch plans batch-qianchuan-works [-h] [--config CONFIG]\n                                     \
       \          --plan-template PLAN_TEMPLATE\n                                               [--work-url WORK_URL]\n   \
-      \                                            [--concurrency CONCURRENCY]\n                                         \
-      \      [--auth-account-id AUTH_ACCOUNT_ID]\n                                               [--no-link-metadata-api]\n\
-      \                                               [--submit] [--include-payloads]\n                                  \
-      \             [--out OUT]\n\nCreate or append Qianchuan product plans from Douyin work links.\n\noptions:\n  -h, --help\
-      \            show this help message and exit\n  --config CONFIG\n  --plan-template PLAN_TEMPLATE\n  --work-url WORK_URL\n\
-      \  --concurrency CONCURRENCY\n  --auth-account-id AUTH_ACCOUNT_ID\n  --no-link-metadata-api\n                      \
-      \  Disable the configured public Douyin work metadata\n                        hint service.\n  --submit\n  --include-payloads\n\
-      \  --out OUT\n"
+      \                                            [--plan-type PLAN_TYPE]\n                                             \
+      \  [--business BUSINESS]\n                                               [--concurrency CONCURRENCY]\n             \
+      \                                  [--auth-account-id AUTH_ACCOUNT_ID]\n                                           \
+      \    [--no-link-metadata-api]\n                                               [--submit] [--include-payloads]\n    \
+      \                                           [--out OUT]\n\nCreate or append Qianchuan product plans from Douyin work\
+      \ links.\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG\n  --plan-template\
+      \ PLAN_TEMPLATE\n  --work-url WORK_URL\n  --plan-type PLAN_TYPE\n                        Plan type used when the template\
+      \ plan name contains\n                        {type}.\n  --business BUSINESS   Business owner used when the template\
+      \ plan name\n                        contains {business}.\n  --concurrency CONCURRENCY\n  --auth-account-id AUTH_ACCOUNT_ID\n\
+      \  --no-link-metadata-api\n                        Disable the configured public Douyin work metadata\n            \
+      \            hint service.\n  --submit\n  --include-payloads\n  --out OUT\n"
     stderr: ''
     parameter_lines:
     - '                                               --plan-template PLAN_TEMPLATE'
     - '  --config CONFIG'
     - '  --plan-template PLAN_TEMPLATE'
     - '  --work-url WORK_URL'
+    - '  --plan-type PLAN_TYPE'
+    - '  --business BUSINESS   Business owner used when the template plan name'
     - '  --concurrency CONCURRENCY'
     - '  --auth-account-id AUTH_ACCOUNT_ID'
     - '  --no-link-metadata-api'
     - '  --submit'
     - '  --include-payloads'
     - '  --out OUT'
-    stdout_sha256: 490a3a900dfd7055bf09109946ed0df0a7da6c3f279d7f0ca8d414a7fd6887b0
+    stdout_sha256: 0f797bc0df8d575eefea568d8ec037694a54d72d6314ace7725c9be38465ee76
     stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 - domain: plans
   action: remove-qianchuan-work

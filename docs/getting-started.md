@@ -165,10 +165,10 @@ ocean-watch qc-materials creator-videos \
 
 ocean-watch plans batch-qianchuan-works \
   --plan-template TEMPLATE_ID \
-  --work-url DOUYIN_WORK_URL
+  --work-url $'DOUYIN_WORK_URL\tPLAN_TYPE\tBUSINESS_OWNER'
 ```
 
-这些计划命令默认 dry-run。确认预览中的广告主、模板、商品、素材、预算和 ROI 后，才在同一命令末尾增加 `--submit`。批量营销达人任务先使用 `--preflight`，确认断点和阻断项后再改为 `--submit`。
+默认千川商品模板使用 `月.日-达人名称-产品名称-类型-商务`。每个 `--work-url` 可直接携带一整行数据：链接、Markdown 链接或完整抖音口令后用 Tab 分隔可选的类型与商务；没有的字段不进入计划名称。达人名称取本机第三方解析接口，产品名称取投放模板。已有计划只追加素材，不修改计划名称。这些计划命令默认 dry-run。确认预览中的广告主、模板、商品、素材、预算和 ROI 后，才在同一命令末尾增加 `--submit`。批量营销达人任务先使用 `--preflight`，确认断点和阻断项后再改为 `--submit`。
 
 ## 7. 查询报表
 

@@ -78,6 +78,8 @@ type qianchuanBatchOptions struct {
 	authAccountID     string
 	noLinkMetadataAPI bool
 	includePayloads   bool
+	planType          string
+	business          string
 	submit            bool
 	out               string
 }
@@ -171,6 +173,8 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	flags.StringVar(&options.configPath, "config", "", "")
 	flags.StringVar(&options.planTemplate, "plan-template", "", "")
 	flags.Var(&options.workURLs, "work-url", "")
+	flags.StringVar(&options.planType, "plan-type", "", "")
+	flags.StringVar(&options.business, "business", "", "")
 	flags.IntVar(&options.concurrency, "concurrency", applicationqianchuan.DefaultBatchConcurrency, "")
 	flags.StringVar(&options.authAccountID, "auth-account-id", "", "")
 	flags.BoolVar(&options.noLinkMetadataAPI, "no-link-metadata-api", false, "")
@@ -197,6 +201,7 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 		PlanTemplate: options.planTemplate, WorkURLs: append([]string(nil), options.workURLs...),
 		Concurrency: options.concurrency, AuthAccountID: options.authAccountID,
 		NoLinkMetadataAPI: options.noLinkMetadataAPI, IncludePayloads: options.includePayloads,
+		PlanType: options.planType, Business: options.business,
 		Submit: options.submit,
 	}, nil
 }
@@ -658,6 +663,8 @@ func (options *qianchuanBatchOptions) trim() {
 	options.configPath = strings.TrimSpace(options.configPath)
 	options.planTemplate = strings.TrimSpace(options.planTemplate)
 	options.authAccountID = strings.TrimSpace(options.authAccountID)
+	options.planType = strings.TrimSpace(options.planType)
+	options.business = strings.TrimSpace(options.business)
 	options.out = strings.TrimSpace(options.out)
 	for index := range options.workURLs {
 		options.workURLs[index] = strings.TrimSpace(options.workURLs[index])

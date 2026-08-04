@@ -31,7 +31,7 @@ func TestValidateCurrentTemplateFixture(t *testing.T) {
 	if qianchuan["selected_template_kind"] != nil || qianchuan["valid"] != true {
 		t.Fatalf("unexpected Qianchuan validation: %#v", qianchuan)
 	}
-	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 5, "live": 1}) {
+	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 6, "live": 1}) {
 		t.Fatalf("unexpected Qianchuan schema versions: %#v", qianchuan)
 	}
 	if !reflect.DeepEqual(config, before) {
@@ -197,7 +197,7 @@ func TestUserNamesSurviveMarketingV5AndQianchuanV4Migration(t *testing.T) {
 	}
 	migratedTemplate := mapOrEmpty(migratedProduct[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
 	if !changed || migratedTemplate["display_name"] != "用户旧千川模板" ||
-		migratedTemplate["plan_name_template"] != qianchuanProductDefaultPlanName {
+		migratedTemplate["plan_name_template"] != qianchuanProductLegacyPlanName {
 		t.Fatalf("Qianchuan v4 migration changed user name or behavior: %#v", migratedTemplate)
 	}
 }

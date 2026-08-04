@@ -31,6 +31,20 @@ func TestQianchuanCommandBoundaries(t *testing.T) {
 	t.Run("unknown create preserves reconciliation result without replay", testCreateCommandUnknownResult)
 }
 
+func TestParseBatchWorkEntries(t *testing.T) {
+	entries := parseBatchWorkEntries([]string{
+		"[https://v.douyin.com/bad/:code](https://v.douyin.com/abc/)\t真人口播营销\t刘岛",
+		"4.87 口令 https://v.douyin.com/xyz/ 复制打开\t9386\t暖身,口播\t刘研",
+		"https://v.douyin.com/only/",
+	}, "", "")
+	if len(entries) != 3 || entries[0].URL != "https://v.douyin.com/abc/" ||
+		entries[0].PlanType != "真人口播营销" || entries[0].Business != "刘岛" ||
+		entries[1].PlanType != "暖身,口播" || entries[1].Business != "刘研" ||
+		entries[2].PlanType != "" || entries[2].Business != "" {
+		t.Fatalf("batch work entry parsing changed: %#v", entries)
+	}
+}
+
 func testCreateCommandValidationError(t *testing.T) {
 	service := CommandService{Create: CreateExecutor{}}
 	result, err := service.CreatePlan(context.Background(), CreatePlanCommand{
@@ -69,7 +83,7 @@ func testBatchCommandReadScope(t *testing.T) {
 	links := &commandLinkResolver{result: applicationworkmetadata.ResolveResult{
 		Resolved: []domain.ResolvedWorkLink{{
 			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
-			AwemeItemID: "6000000000000001",
+			AwemeItemID: "6000000000000001", CreatorName: "第三方达人",
 		}},
 	}}
 	service := CommandService{

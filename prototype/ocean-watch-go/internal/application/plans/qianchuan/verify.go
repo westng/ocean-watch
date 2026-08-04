@@ -20,6 +20,9 @@ type WorkInput struct {
 	InputIndex    int        `json:"input_index"`
 	InputURL      string     `json:"input_url,omitempty"`
 	AwemeItemID   string     `json:"aweme_item_id,omitempty"`
+	CreatorName   string     `json:"creator_name_hint,omitempty"`
+	PlanType      string     `json:"plan_type,omitempty"`
+	Business      string     `json:"business,omitempty"`
 	OwnerHint     *OwnerHint `json:"owner_hint,omitempty"`
 	ProductIDHint string     `json:"product_id_hint,omitempty"`
 }
@@ -28,6 +31,9 @@ type VerifiedWork struct {
 	InputIndex        int                               `json:"input_index"`
 	InputURL          string                            `json:"input_url,omitempty"`
 	AwemeItemID       string                            `json:"aweme_item_id"`
+	CreatorName       string                            `json:"creator_name_hint,omitempty"`
+	PlanType          string                            `json:"plan_type,omitempty"`
+	Business          string                            `json:"business,omitempty"`
 	Creator           domainqianchuan.AuthorizedCreator `json:"creator"`
 	Material          domainqianchuan.CreatorVideo      `json:"material"`
 	MatchedProductIDs []string                          `json:"matched_product_ids"`
@@ -324,6 +330,7 @@ func (verifier WorkVerifier) Verify(
 		}
 		result.Matched = append(result.Matched, VerifiedWork{
 			InputIndex: work.InputIndex, InputURL: work.InputURL, AwemeItemID: work.AwemeItemID,
+			CreatorName: work.CreatorName, PlanType: work.PlanType, Business: work.Business,
 			Creator: creatorsByID[owner.Creator.AwemeID], Material: matches[work.AwemeItemID],
 			MatchedProductIDs: orderedProducts,
 		})
@@ -436,6 +443,9 @@ func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork) {
 	for index, value := range values {
 		value.InputURL = strings.TrimSpace(value.InputURL)
 		value.AwemeItemID = strings.TrimSpace(value.AwemeItemID)
+		value.CreatorName = strings.TrimSpace(value.CreatorName)
+		value.PlanType = strings.TrimSpace(value.PlanType)
+		value.Business = strings.TrimSpace(value.Business)
 		value.ProductIDHint = strings.TrimSpace(value.ProductIDHint)
 		if value.InputIndex < 0 {
 			value.InputIndex = index

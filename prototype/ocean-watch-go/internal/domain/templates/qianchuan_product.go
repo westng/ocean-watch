@@ -8,14 +8,15 @@ import (
 )
 
 const (
-	qianchuanProductSchemaVersion    = 5
+	qianchuanProductSchemaVersion    = 6
 	qianchuanProductSchemaVersionKey = "qianchuan_product_template_schema_version"
 	qianchuanProductDefaultKey       = "default_qianchuan_product_template"
 	qianchuanProductTemplatesKey     = "qianchuan_product_templates"
 	qianchuanProductLegacyActiveKey  = "active_qianchuan_product_template"
 	qianchuanProductTemplateType     = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 	qianchuanProductMaterialSource   = "CREATOR_RUNTIME_QUERY"
-	qianchuanProductDefaultPlanName  = "{product_name}-{creator_name}-{datetime}"
+	qianchuanProductLegacyPlanName   = "{product_name}-{creator_name}-{datetime}"
+	qianchuanProductDefaultPlanName  = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
 )
 
 var qianchuanProductIDSeparator = regexp.MustCompile(`[/,，\s]+`)
@@ -95,12 +96,20 @@ func ensureQianchuanProductConfig(config map[string]any) (map[string]any, error)
 	if version < 5 {
 		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
 			if !pythonTruthy(value["plan_name_template"]) {
-				value["plan_name_template"] = qianchuanProductDefaultPlanName
+				value["plan_name_template"] = qianchuanProductLegacyPlanName
 			}
 		}
 		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
 			if template, ok := value.(map[string]any); ok && !pythonTruthy(template["plan_name_template"]) {
-				template["plan_name_template"] = qianchuanProductDefaultPlanName
+				template["plan_name_template"] = qianchuanProductLegacyPlanName
+			}
+		}
+	}
+	if version < 6 {
+		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
+			planName := strings.TrimSpace(stringValue(value["plan_name_template"]))
+			if planName == "" || planName == qianchuanProductLegacyPlanName {
+				value["plan_name_template"] = qianchuanProductDefaultPlanName
 			}
 		}
 	}
@@ -229,6 +238,7 @@ func validateQianchuanPlanNameTemplate(value any) (string, error) {
 	allowed := map[string]bool{
 		"product_name": true, "creator_name": true, "aweme_id": true,
 		"douyin_id": true, "date": true, "time": true, "datetime": true,
+		"month_day": true, "type": true, "business": true,
 	}
 	unknown := []string{}
 	seenUnknown := map[string]bool{}
