@@ -29,6 +29,7 @@ def template(product_ids="1001/1002"):
     return product_templates.build_business_template(
         advertiser_id="1234567890123456",
         product_name="示例商品",
+        product_short_name="示例",
         product_ids=product_ids,
         template_id="qcpt_test",
         template_name="测试千川模板",

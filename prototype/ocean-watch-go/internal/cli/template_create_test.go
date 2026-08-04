@@ -51,7 +51,7 @@ func TestQianchuanTemplateWizardCancellationIsWriteFree(t *testing.T) {
 	code := RunQianchuanTemplatesInteractive(
 		context.Background(), "create", nil, store, authorizationReaderStub{},
 		"/synthetic/config.json",
-		strings.NewReader("0\n2000000000000101\n测试商品\n8000000000000101\n用户模板\n\nn\n"), stdout,
+		strings.NewReader("0\n2000000000000101\n测试商品全称\n测试商品\n8000000000000101\n用户模板\n\nn\n"), stdout,
 	)
 	if code != 0 {
 		t.Fatalf("got exit %d: %s", code, stdout.String())
@@ -79,7 +79,7 @@ func TestQianchuanTemplateWizardConfirmationUsesOneCAS(t *testing.T) {
 	code := RunQianchuanTemplatesInteractive(
 		context.Background(), "create", nil, store, authorizationReaderStub{},
 		"/synthetic/config.json",
-		strings.NewReader("0\n2000000000000101\n测试商品\n8000000000000101\n用户模板\n\ny\n"), stdout,
+		strings.NewReader("0\n2000000000000101\n测试商品全称\n测试商品\n8000000000000101\n用户模板\n\ny\n"), stdout,
 	)
 	if code != 0 {
 		t.Fatalf("got exit %d: %s", code, stdout.String())
@@ -89,6 +89,17 @@ func TestQianchuanTemplateWizardConfirmationUsesOneCAS(t *testing.T) {
 	}
 	if store.written == nil || store.written["future"] != "preserved" {
 		t.Fatalf("confirmed wizard lost unknown config fields: %#v", store.written)
+	}
+	templates := store.written["qianchuan_product_templates"].(map[string]any)
+	if len(templates) != 1 {
+		t.Fatalf("confirmed wizard wrote unexpected templates: %#v", templates)
+	}
+	var bindings map[string]any
+	for _, value := range templates {
+		bindings = value.(map[string]any)["bindings"].(map[string]any)
+	}
+	if bindings["product_name"] != "测试商品全称" || bindings["product_short_name"] != "测试商品" {
+		t.Fatalf("confirmed wizard did not preserve product names: %#v", bindings)
 	}
 }
 
@@ -101,7 +112,7 @@ func TestQianchuanTemplateWizardConflictDoesNotRetryOrOverwrite(t *testing.T) {
 	code := RunQianchuanTemplatesInteractive(
 		context.Background(), "create", nil, store, authorizationReaderStub{},
 		"/synthetic/config.json",
-		strings.NewReader("0\n2000000000000101\n测试商品\n8000000000000101\n用户模板\n\ny\n"), stdout,
+		strings.NewReader("0\n2000000000000101\n测试商品全称\n测试商品\n8000000000000101\n用户模板\n\ny\n"), stdout,
 	)
 	if code != 2 {
 		t.Fatalf("got exit %d: %s", code, stdout.String())
@@ -124,7 +135,7 @@ func TestQianchuanTemplateWizardRejectsAdvertiserOutsideAuthorizationIndex(t *te
 	code := RunQianchuanTemplatesInteractive(
 		context.Background(), "create", nil, store, authorizations,
 		"/synthetic/config.json",
-		strings.NewReader("0\n2999999999999999\n2000000000000102\n测试商品\n8000000000000101\n用户模板\n\nn\n"), stdout,
+		strings.NewReader("0\n2999999999999999\n2000000000000102\n测试商品全称\n测试商品\n8000000000000101\n用户模板\n\nn\n"), stdout,
 	)
 	if code != 0 {
 		t.Fatalf("got exit %d: %s", code, stdout.String())

@@ -19,6 +19,7 @@ type QianchuanPlanPayload struct {
 	Kind             QianchuanTemplateKind
 	AdvertiserID     string
 	ProductName      string
+	ProductShortName string
 	PlanNameTemplate string
 	CreatorName      string
 	ProductIDs       []string
@@ -88,7 +89,9 @@ func exportQianchuanProductPayload(
 	return QianchuanPlanPayload{
 		TemplateID: stringValue(template["template_id"]), DisplayName: stringValue(template["display_name"]),
 		Kind: QianchuanTemplateProduct, AdvertiserID: advertiserID,
-		ProductName: stringValue(bindings["product_name"]), ProductIDs: append([]string(nil), productIDs...),
+		ProductName:      stringValue(bindings["product_name"]),
+		ProductShortName: stringValue(bindings["product_short_name"]),
+		ProductIDs:       append([]string(nil), productIDs...),
 		PlanNameTemplate: stringValue(template["plan_name_template"]),
 		Active:           template["status"] == "active", Payload: raw,
 	}, nil

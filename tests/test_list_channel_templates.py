@@ -20,6 +20,7 @@ def all_channel_config():
         "2345678901234567",
         "example drink",
         ["8234567890123456780", "8234567890123456781"],
+        product_short_name="drink",
         template_id="qcpt_example",
         template_name="示例千川模板",
     )
@@ -79,6 +80,8 @@ class ListChannelTemplatesTests(unittest.TestCase):
         self.assertEqual(qianchuan["template_type"], "商品全域")
         self.assertEqual(qianchuan["daily_budget"], 5000)
         self.assertEqual(qianchuan["roi_goal"], 1.7)
+        self.assertEqual(qianchuan["product_name"], "example drink")
+        self.assertEqual(qianchuan["product_short_name"], "drink")
         live = result["channels"]["qianchuan"]["templates"][1]
         self.assertEqual(live["channel"], "qianchuan")
         self.assertEqual(live["template_type"], "直播全域")

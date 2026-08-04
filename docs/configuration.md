@@ -60,7 +60,7 @@ ocean-watch auth sync-accounts \
 | `plan_template_schema_version` | 营销计划模板版本，当前为 `6` |
 | `default_plan_template` | 创建模板的默认骨架，不可投放 |
 | `plan_templates` | 广告主绑定的真实业务模板 |
-| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `7` |
+| `qianchuan_product_template_schema_version` | 千川商品模板版本，当前为 `8` |
 | `default_qianchuan_product_template` | 千川商品全域默认骨架，不可投放 |
 | `qianchuan_product_templates` | 千川广告主和商品绑定的业务模板 |
 | `qianchuan_live_template_schema_version` | 千川直播模板版本，当前为 `1` |
@@ -247,7 +247,7 @@ ocean-watch qc-templates list
 ocean-watch qc-templates create
 ```
 
-模板绑定一个千川广告主、产品名称和 1–30 个商品 ID，模板名称由用户填写。`plan_name_template` 定义创建新商品全域计划时的名称形式，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符；`month_day` 按 `8.4` 形式输出且不补零，渲染结果会先清除 Emoji、Unicode 符号和控制字符、归一化空白，再限制为最多 100 加权字符；清洗后为空会在读取凭据前阻断。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`，其中类型和商务不固化在模板内，而是从每行素材输入的可选 Tab 分列读取；没有的字段会连同相邻分隔符一起省略。`--plan-type`、`--business` 仅作为未分列输入的整批回退值。只向已有计划追加素材时不会改已有计划名称。Schema v4 升级时旧业务模板补入 `{product_name}-{creator_name}-{datetime}`；Schema v5 升级到 v6 时更新默认骨架；Schema v7 会将缺少命名形式或仍使用这一旧默认形式的业务模板迁移为当前五段命名，显式自定义形式保持不变。
+模板绑定一个千川广告主、商品全称、用于计划命名的商品简称和 1–30 个商品 ID，模板名称由用户填写。全称保存在 `bindings.product_name`，简称保存在 `bindings.product_short_name`，模板列表和预览会同时返回两者。`plan_name_template` 定义创建新商品全域计划时的名称形式，支持 `product_name`、`product_short_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符；`{product_name}` 始终表示商品全称，`{product_short_name}` 表示商品简称。`month_day` 按 `8.4` 形式输出且不补零，渲染结果会先清除 Emoji、Unicode 符号和控制字符、归一化空白，再限制为最多 100 加权字符；清洗后为空会在读取凭据前阻断。默认骨架使用 `{month_day}-{creator_name}-{product_short_name}-{type}-{business}`，其中类型和商务不固化在模板内，而是从每行素材输入的可选 Tab 分列读取；没有的字段会连同相邻分隔符一起省略。`--plan-type`、`--business` 仅作为未分列输入的整批回退值。只向已有计划追加素材时不会改已有计划名称。Schema v8 会用旧模板原有的商品全称回填简称，并将上一版默认五段形式切换到简称占位符，所以首次迁移后的实际计划名称不变；显式使用 `{product_name}` 等自定义形式保持不变。
 
 默认投放参数：
 

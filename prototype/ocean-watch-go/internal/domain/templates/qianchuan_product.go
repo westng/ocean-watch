@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	qianchuanProductSchemaVersion    = 7
+	qianchuanProductSchemaVersion    = 8
 	qianchuanProductSchemaVersionKey = "qianchuan_product_template_schema_version"
 	qianchuanProductDefaultKey       = "default_qianchuan_product_template"
 	qianchuanProductTemplatesKey     = "qianchuan_product_templates"
@@ -16,7 +16,8 @@ const (
 	qianchuanProductTemplateType     = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 	qianchuanProductMaterialSource   = "CREATOR_RUNTIME_QUERY"
 	qianchuanProductLegacyPlanName   = "{product_name}-{creator_name}-{datetime}"
-	qianchuanProductDefaultPlanName  = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+	qianchuanProductPreviousPlanName = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+	qianchuanProductDefaultPlanName  = "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 )
 
 var qianchuanProductIDSeparator = regexp.MustCompile(`[/,，\s]+`)
@@ -39,10 +40,11 @@ func defaultQianchuanProductTemplate() map[string]any {
 		"template_type":   qianchuanProductTemplateType,
 		"business_usable": false,
 		"bindings": map[string]any{
-			"channel":       "qianchuan",
-			"advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
-			"product_name":  "REPLACE_WITH_PRODUCT_NAME",
-			"product_ids":   []any{},
+			"channel":            "qianchuan",
+			"advertiser_id":      "REPLACE_WITH_ADVERTISER_ID",
+			"product_name":       "REPLACE_WITH_PRODUCT_NAME",
+			"product_short_name": "REPLACE_WITH_PRODUCT_SHORT_NAME",
+			"product_ids":        []any{},
 		},
 		"delivery_setting": map[string]any{
 			"smart_bid_type":       "SMART_BID_CUSTOM",
@@ -133,6 +135,28 @@ func ensureQianchuanProductConfig(config map[string]any) (map[string]any, error)
 		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
 			if template, ok := value.(map[string]any); ok {
 				if usesLegacyQianchuanPlanName(template["plan_name_template"]) {
+					template["plan_name_template"] = qianchuanProductPreviousPlanName
+				}
+			}
+		}
+	}
+	if version < 8 {
+		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
+			bindings := mapOrEmpty(value["bindings"])
+			if _, exists := bindings["product_short_name"]; !exists {
+				bindings["product_short_name"] = "REPLACE_WITH_PRODUCT_SHORT_NAME"
+			}
+			if value["plan_name_template"] == qianchuanProductPreviousPlanName {
+				value["plan_name_template"] = qianchuanProductDefaultPlanName
+			}
+		}
+		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
+			if template, ok := value.(map[string]any); ok {
+				bindings := mapOrEmpty(template["bindings"])
+				if _, exists := bindings["product_short_name"]; !exists {
+					bindings["product_short_name"] = bindings["product_name"]
+				}
+				if template["plan_name_template"] == qianchuanProductPreviousPlanName {
 					template["plan_name_template"] = qianchuanProductDefaultPlanName
 				}
 			}
@@ -261,7 +285,7 @@ func validateQianchuanPlanNameTemplate(value any) (string, error) {
 		return "", err
 	}
 	allowed := map[string]bool{
-		"product_name": true, "creator_name": true, "aweme_id": true,
+		"product_name": true, "product_short_name": true, "creator_name": true, "aweme_id": true,
 		"douyin_id": true, "date": true, "time": true, "datetime": true,
 		"month_day": true, "type": true, "business": true,
 	}
@@ -303,6 +327,10 @@ func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	productShortName, err := requiredText(bindings["product_short_name"], "product_short_name")
+	if err != nil {
+		return nil, err
+	}
 	productIDs, err := normalizeQianchuanProductIDs(bindings["product_ids"])
 	if err != nil {
 		return nil, err
@@ -337,10 +365,11 @@ func validateQianchuanProductTemplate(value any) (map[string]any, error) {
 		"template_type": qianchuanProductTemplateType,
 		"status":        status,
 		"bindings": map[string]any{
-			"channel":       "qianchuan",
-			"advertiser_id": advertiserID,
-			"product_name":  productName,
-			"product_ids":   productIDs,
+			"channel":            "qianchuan",
+			"advertiser_id":      advertiserID,
+			"product_name":       productName,
+			"product_short_name": productShortName,
+			"product_ids":        productIDs,
 		},
 		"delivery_setting":   delivery,
 		"plan_name_template": planNameTemplate,
@@ -424,12 +453,13 @@ func resolveQianchuanProductTemplate(config map[string]any, selector string) (ma
 }
 
 type QianchuanProductBinding struct {
-	TemplateID   string
-	DisplayName  string
-	AdvertiserID string
-	ProductName  string
-	ProductIDs   []string
-	Active       bool
+	TemplateID       string
+	DisplayName      string
+	AdvertiserID     string
+	ProductName      string
+	ProductShortName string
+	ProductIDs       []string
+	Active           bool
 }
 
 func ResolveQianchuanProductBinding(config map[string]any, selector string) (QianchuanProductBinding, error) {
@@ -441,7 +471,8 @@ func ResolveQianchuanProductBinding(config map[string]any, selector string) (Qia
 	return QianchuanProductBinding{
 		TemplateID: stringValue(template["template_id"]), DisplayName: stringValue(template["display_name"]),
 		AdvertiserID: stringValue(bindings["advertiser_id"]), ProductName: stringValue(bindings["product_name"]),
-		ProductIDs: stringList(listOrEmpty(bindings["product_ids"])), Active: template["status"] == "active",
+		ProductShortName: stringValue(bindings["product_short_name"]),
+		ProductIDs:       stringList(listOrEmpty(bindings["product_ids"])), Active: template["status"] == "active",
 	}, nil
 }
 

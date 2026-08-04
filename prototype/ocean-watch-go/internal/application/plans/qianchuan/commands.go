@@ -49,11 +49,12 @@ type CreatePlanCommand struct {
 }
 
 type CreateTemplateSummary struct {
-	TemplateID   string `json:"template_id"`
-	Name         string `json:"name"`
-	ProductName  string `json:"product_name,omitempty"`
-	CreatorName  string `json:"creator_name,omitempty"`
-	TemplateType string `json:"template_type"`
+	TemplateID       string `json:"template_id"`
+	Name             string `json:"name"`
+	ProductName      string `json:"product_name,omitempty"`
+	ProductShortName string `json:"product_short_name,omitempty"`
+	CreatorName      string `json:"creator_name,omitempty"`
+	TemplateType     string `json:"template_type"`
 }
 
 type CreatePreflight struct {
@@ -251,7 +252,8 @@ func (service CommandService) BatchWorks(
 	baseRequest := BatchRequest{
 		AdvertiserID: exported.AdvertiserID, AuthAccountID: strings.TrimSpace(command.AuthAccountID),
 		Submit: command.Submit, TemplateID: exported.TemplateID, TemplateName: exported.DisplayName,
-		ProductName: exported.ProductName, TemplatePayload: exported.Payload,
+		ProductName: exported.ProductName, ProductShortName: exported.ProductShortName,
+		TemplatePayload:  exported.Payload,
 		PlanNameTemplate: exported.PlanNameTemplate,
 		PlanType:         strings.TrimSpace(command.PlanType), Business: strings.TrimSpace(command.Business),
 		IncludePayloads: command.IncludePayloads, Skipped: skipped,
@@ -441,7 +443,8 @@ func (service CommandService) createPayload(
 	}
 	summary := &CreateTemplateSummary{
 		TemplateID: exported.TemplateID, Name: exported.DisplayName,
-		ProductName: exported.ProductName, CreatorName: exported.CreatorName,
+		ProductName: exported.ProductName, ProductShortName: exported.ProductShortName,
+		CreatorName: exported.CreatorName,
 	}
 	blocking := []string{}
 	if kind == domaintemplates.QianchuanTemplateProduct {

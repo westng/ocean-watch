@@ -37,6 +37,7 @@ type BatchRequest struct {
 	TemplateID       string
 	TemplateName     string
 	ProductName      string
+	ProductShortName string
 	PlanNameTemplate string
 	PlanType         string
 	Business         string
@@ -494,6 +495,10 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 	request.TemplateID = strings.TrimSpace(request.TemplateID)
 	request.TemplateName = strings.TrimSpace(request.TemplateName)
 	request.ProductName = strings.TrimSpace(request.ProductName)
+	request.ProductShortName = strings.TrimSpace(request.ProductShortName)
+	if request.ProductShortName == "" {
+		request.ProductShortName = request.ProductName
+	}
 	request.PlanType = strings.TrimSpace(request.PlanType)
 	request.Business = strings.TrimSpace(request.Business)
 	if !validPositiveID(request.AdvertiserID) {
@@ -642,20 +647,21 @@ func (service BatchService) planName(request normalizedBatchRequest, group batch
 		now = service.Now()
 	}
 	values := map[string]string{
-		"product_name": request.ProductName,
-		"creator_name": label,
-		"aweme_id":     creator.AwemeID,
-		"douyin_id":    creator.VisibleID,
-		"date":         now.Format("20060102"),
-		"time":         now.Format("150405"),
-		"datetime":     now.Format("20060102150405"),
-		"month_day":    fmt.Sprintf("%d.%d", int(now.Month()), now.Day()),
-		"type":         fields.planType,
-		"business":     fields.business,
+		"product_name":       request.ProductName,
+		"product_short_name": request.ProductShortName,
+		"creator_name":       label,
+		"aweme_id":           creator.AwemeID,
+		"douyin_id":          creator.VisibleID,
+		"date":               now.Format("20060102"),
+		"time":               now.Format("150405"),
+		"datetime":           now.Format("20060102150405"),
+		"month_day":          fmt.Sprintf("%d.%d", int(now.Month()), now.Day()),
+		"type":               fields.planType,
+		"business":           fields.business,
 	}
 	pattern := strings.TrimSpace(request.PlanNameTemplate)
 	if pattern == "" {
-		pattern = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+		pattern = "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 	}
 	if strings.Contains(pattern, "{creator_name}") && fields.creatorName == "" {
 		return "", errors.New("第三方解析接口未返回达人名称，无法创建千川计划")

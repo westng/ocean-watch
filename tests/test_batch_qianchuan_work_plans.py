@@ -16,7 +16,8 @@ from ocean_watch.templates import qianchuan_product_templates
 def template():
     return qianchuan_product_templates.build_business_template(
         advertiser_id="1234567890123456",
-        product_name="Test Product",
+        product_name="Test Product Full Name",
+        product_short_name="Test Product",
         product_ids="1001",
         template_id="qcpt_test",
         template_name="测试千川模板",
@@ -146,7 +147,10 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
             now=dt.datetime(2026, 8, 4, 12, 30, 45),
         )
 
-        self.assertEqual(name, "Test Product-Creator 9001-20260804123045")
+        self.assertEqual(
+            name,
+            "Test Product Full Name-Creator 9001-20260804123045",
+        )
 
     def test_custom_plan_name_template_renders_supported_placeholders(self):
         selected = template()
@@ -166,7 +170,7 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
 
         self.assertEqual(
             name,
-            "达人甲_show-9001_9001_Test Product_20260804_123045_20260804123045",
+            "达人甲_show-9001_9001_Test Product Full Name_20260804_123045_20260804123045",
         )
 
     def test_rendered_plan_name_uses_weighted_character_limit(self):
@@ -183,7 +187,7 @@ class QianchuanPlanNameTemplateTests(unittest.TestCase):
 
     def test_rendered_plan_name_removes_emoji_before_weighted_truncation(self):
         selected = template()
-        selected["bindings"]["product_name"] = "奶酪✨产品"
+        selected["bindings"]["product_short_name"] = "奶酪✨产品"
 
         name = batch.build_plan_name(
             selected,

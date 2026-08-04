@@ -422,6 +422,7 @@ def load_payload_source(args, config):
                 "template_id": template["template_id"],
                 "name": template["display_name"],
                 "product_name": template["bindings"]["product_name"],
+                "product_short_name": template["bindings"]["product_short_name"],
                 "template_type": qianchuan_product_templates.TEMPLATE_TYPE,
             },
         )

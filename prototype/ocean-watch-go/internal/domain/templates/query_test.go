@@ -146,7 +146,7 @@ func templateTestConfig(t *testing.T) map[string]any {
       "overrides": {}
     }
   },
-  "qianchuan_product_template_schema_version": 7,
+  "qianchuan_product_template_schema_version": 8,
   "default_qianchuan_product_template": {
     "template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN",
     "business_usable": false,
@@ -154,9 +154,10 @@ func templateTestConfig(t *testing.T) map[string]any {
       "channel": "qianchuan",
       "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
       "product_name": "REPLACE_WITH_PRODUCT_NAME",
+      "product_short_name": "REPLACE_WITH_PRODUCT_SHORT_NAME",
       "product_ids": []
     },
-    "plan_name_template": "{month_day}-{creator_name}-{product_name}-{type}-{business}",
+    "plan_name_template": "{month_day}-{creator_name}-{product_short_name}-{type}-{business}",
     "delivery_setting": {
       "smart_bid_type": "SMART_BID_CUSTOM",
       "roi2_goal": 1.7,
@@ -177,6 +178,7 @@ func templateTestConfig(t *testing.T) map[string]any {
         "channel": "qianchuan",
         "advertiser_id": "2000000000000001",
         "product_name": "示例商品",
+        "product_short_name": "示例",
         "product_ids": ["8000000000000001", "8000000000000002"]
       },
       "plan_name_template": "{product_name}-{creator_name}-{datetime}",

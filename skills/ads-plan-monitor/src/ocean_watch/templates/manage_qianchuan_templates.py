@@ -36,7 +36,7 @@ def select_source(config, input_fn, output_fn):
     for index, row in enumerate(rows, start=1):
         output_fn(
             f"  {index}. {row['name']}（广告主 {row['advertiser_id']}，"
-            f"产品 {row['product_name']}，"
+            f"产品 {row['product_name']} / {row['product_short_name']}，"
             f"商品 {row['product_count']} 个）"
         )
     while True:
@@ -63,11 +63,13 @@ def create_template(
     template_id=None,
     template_name=None,
     plan_name_template=None,
+    product_short_name=None,
 ):
     config = product_templates.ensure_config(config)
     template = product_templates.build_business_template(
         advertiser_id=advertiser_id,
         product_name=product_name,
+        product_short_name=product_short_name,
         product_ids=product_ids,
         source=source,
         template_id=template_id,
@@ -108,6 +110,14 @@ def run_create_wizard(
         else None,
         required=True,
     )
+    product_short_name = prompt_value(
+        input_fn,
+        "商品简称（用于计划名称）",
+        bindings.get("product_short_name")
+        if not str(bindings.get("product_short_name") or "").startswith("REPLACE_WITH")
+        else None,
+        required=True,
+    )
     inherited_ids = "/".join(bindings.get("product_ids") or [])
     product_ids = prompt_value(
         input_fn,
@@ -131,6 +141,7 @@ def run_create_wizard(
     candidate = product_templates.build_business_template(
         advertiser_id=advertiser_id,
         product_name=product_name,
+        product_short_name=product_short_name,
         product_ids=product_ids,
         source=source,
         active=True,
@@ -154,6 +165,7 @@ def run_create_wizard(
         config,
         advertiser_id=advertiser_id,
         product_name=product_name,
+        product_short_name=product_short_name,
         product_ids=product_ids,
         source=source,
         template_id=candidate["template_id"],

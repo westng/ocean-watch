@@ -1,5 +1,7 @@
 package templates
 
+import "strings"
+
 type QianchuanProductCreateSource struct {
 	ID       string
 	Template map[string]any
@@ -10,6 +12,7 @@ type QianchuanProductCreateInput struct {
 	TemplateName     string
 	AdvertiserID     string
 	ProductName      string
+	ProductShortName string
 	ProductIDs       any
 	PlanNameTemplate string
 }
@@ -60,6 +63,14 @@ func BuildQianchuanProductTemplate(
 	if err != nil {
 		return nil, err
 	}
+	productShortName := strings.TrimSpace(input.ProductShortName)
+	if productShortName == "" {
+		productShortName = productName
+	}
+	productShortName, err = requiredText(productShortName, "product_short_name")
+	if err != nil {
+		return nil, err
+	}
 	productIDs, err := normalizeQianchuanProductIDs(input.ProductIDs)
 	if err != nil {
 		return nil, err
@@ -100,10 +111,11 @@ func BuildQianchuanProductTemplate(
 		"template_type": qianchuanProductTemplateType,
 		"status":        "active",
 		"bindings": map[string]any{
-			"channel":       "qianchuan",
-			"advertiser_id": advertiserID,
-			"product_name":  productName,
-			"product_ids":   productIDs,
+			"channel":            "qianchuan",
+			"advertiser_id":      advertiserID,
+			"product_name":       productName,
+			"product_short_name": productShortName,
+			"product_ids":        productIDs,
 		},
 		"delivery_setting":   delivery,
 		"plan_name_template": planNameTemplate,

@@ -42,11 +42,12 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 		AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "达人甲",
 	}
 	request := normalizedBatchRequest{BatchRequest: BatchRequest{
-		ProductName:      "测试商品",
+		ProductName:      "测试商品官方全称",
+		ProductShortName: "测试商品",
 		PlanNameTemplate: "{creator_name}_{douyin_id}_{aweme_id}_{product_name}_{date}_{time}_{datetime}",
 	}}
 	group := batchGroup{creator: creator, works: []VerifiedWork{{CreatorName: "达人甲"}}}
-	if got, err := service.planName(request, group); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品_20260804_123045_20260804123045" {
+	if got, err := service.planName(request, group); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品官方全称_20260804_123045_20260804123045" {
 		t.Fatalf("custom plan name rendered as %q", got)
 	}
 	request.PlanNameTemplate = ""
@@ -63,7 +64,7 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 		t.Fatalf("missing runtime business rendered as %q: %v", got, err)
 	}
 	request.PlanNameTemplate = "{product_name}-{creator_name}-{datetime}"
-	if got, err := service.planName(request, group); err != nil || got != "测试商品-达人甲-20260804123045" {
+	if got, err := service.planName(request, group); err != nil || got != "测试商品官方全称-达人甲-20260804123045" {
 		t.Fatalf("legacy plan name rendered as %q", got)
 	}
 	request.PlanNameTemplate = "{creator_name}"

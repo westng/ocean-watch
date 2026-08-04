@@ -31,7 +31,7 @@ func TestValidateCurrentTemplateFixture(t *testing.T) {
 	if qianchuan["selected_template_kind"] != nil || qianchuan["valid"] != true {
 		t.Fatalf("unexpected Qianchuan validation: %#v", qianchuan)
 	}
-	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 7, "live": 1}) {
+	if !reflect.DeepEqual(qianchuan["schema_versions"], map[string]any{"product": 8, "live": 1}) {
 		t.Fatalf("unexpected Qianchuan schema versions: %#v", qianchuan)
 	}
 	if !reflect.DeepEqual(config, before) {
@@ -214,7 +214,50 @@ func TestQianchuanV6MigrationPreservesCustomPlanName(t *testing.T) {
 	}
 	migratedTemplate := mapOrEmpty(migrated[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
 	if !changed || migratedTemplate["plan_name_template"] != "{creator_name}_{product_name}_{date}" {
-		t.Fatalf("custom Qianchuan plan name changed during v7 migration: %#v", migratedTemplate)
+		t.Fatalf("custom Qianchuan plan name changed during migration: %#v", migratedTemplate)
+	}
+}
+
+func TestQianchuanV7MigrationAddsShortNameWithoutChangingCustomFullNamePattern(t *testing.T) {
+	config := templateTestConfig(t)
+	config[qianchuanProductSchemaVersionKey] = 7
+	template := mapOrEmpty(config[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	bindings := mapOrEmpty(template["bindings"])
+	bindings["product_name"] = "血橙纤维饮官方商品全称"
+	delete(bindings, "product_short_name")
+	template["plan_name_template"] = "{creator_name}-{product_name}"
+
+	migrated, _, changed, err := MigrateQianchuanProduct(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migratedTemplate := mapOrEmpty(migrated[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	migratedBindings := mapOrEmpty(migratedTemplate["bindings"])
+	if !changed || migrated[qianchuanProductSchemaVersionKey] != 8 ||
+		migratedBindings["product_short_name"] != "血橙纤维饮官方商品全称" ||
+		migratedTemplate["plan_name_template"] != "{creator_name}-{product_name}" {
+		t.Fatalf("v7 custom full-name pattern changed during v8 migration: %#v", migratedTemplate)
+	}
+}
+
+func TestQianchuanV7DefaultPatternMigratesToShortNameWithoutRenderingChange(t *testing.T) {
+	config := templateTestConfig(t)
+	config[qianchuanProductSchemaVersionKey] = 7
+	template := mapOrEmpty(config[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	bindings := mapOrEmpty(template["bindings"])
+	bindings["product_name"] = "血橙纤维饮官方商品全称"
+	delete(bindings, "product_short_name")
+	template["plan_name_template"] = qianchuanProductPreviousPlanName
+
+	migrated, _, changed, err := MigrateQianchuanProduct(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	migratedTemplate := mapOrEmpty(migrated[qianchuanProductTemplatesKey])["qcpt_example"].(map[string]any)
+	migratedBindings := mapOrEmpty(migratedTemplate["bindings"])
+	if !changed || migratedTemplate["plan_name_template"] != qianchuanProductDefaultPlanName ||
+		migratedBindings["product_short_name"] != "血橙纤维饮官方商品全称" {
+		t.Fatalf("v7 default plan-name behavior changed during v8 migration: %#v", migratedTemplate)
 	}
 }
 
@@ -225,6 +268,6 @@ func TestQianchuanV6MigrationDoesNotMaskInvalidPlanNameType(t *testing.T) {
 	template["plan_name_template"] = []any{}
 
 	if _, _, _, err := MigrateQianchuanProduct(config); err == nil || err.Error() != "plan_name_template is required" {
-		t.Fatalf("invalid Qianchuan plan name type was masked during v7 migration: %v", err)
+		t.Fatalf("invalid Qianchuan plan name type was masked during migration: %v", err)
 	}
 }

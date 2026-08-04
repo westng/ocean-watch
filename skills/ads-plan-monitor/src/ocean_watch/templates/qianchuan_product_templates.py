@@ -8,7 +8,7 @@ from ocean_watch.core.data import is_missing
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.templates import business_template_names
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 MAX_PRODUCTS = 30
 TEMPLATE_TYPE = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 MATERIAL_SOURCE_TYPE = "CREATOR_RUNTIME_QUERY"
@@ -26,11 +26,15 @@ DEFAULT_DELIVERY_SETTING = {
     "deep_external_action": "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI",
 }
 LEGACY_PLAN_NAME_TEMPLATE = "{product_name}-{creator_name}-{datetime}"
-DEFAULT_PLAN_NAME_TEMPLATE = (
+PREVIOUS_DEFAULT_PLAN_NAME_TEMPLATE = (
     "{month_day}-{creator_name}-{product_name}-{type}-{business}"
+)
+DEFAULT_PLAN_NAME_TEMPLATE = (
+    "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 )
 PLAN_NAME_PLACEHOLDERS = {
     "product_name",
+    "product_short_name",
     "creator_name",
     "aweme_id",
     "douyin_id",
@@ -59,6 +63,7 @@ def default_template():
             "channel": "qianchuan",
             "advertiser_id": "REPLACE_WITH_ADVERTISER_ID",
             "product_name": "REPLACE_WITH_PRODUCT_NAME",
+            "product_short_name": "REPLACE_WITH_PRODUCT_SHORT_NAME",
             "product_ids": [],
         },
         "delivery_setting": copy.deepcopy(DEFAULT_DELIVERY_SETTING),
@@ -133,6 +138,25 @@ def ensure_config(config):
                 continue
             plan_name_template = template.get("plan_name_template")
             if uses_legacy_plan_name_template(plan_name_template):
+                template["plan_name_template"] = PREVIOUS_DEFAULT_PLAN_NAME_TEMPLATE
+    if current_version < 8:
+        default = normalized.get(DEFAULT_TEMPLATE_KEY)
+        if isinstance(default, dict):
+            bindings = default.get("bindings")
+            if isinstance(bindings, dict):
+                bindings.setdefault(
+                    "product_short_name",
+                    "REPLACE_WITH_PRODUCT_SHORT_NAME",
+                )
+            if default.get("plan_name_template") == PREVIOUS_DEFAULT_PLAN_NAME_TEMPLATE:
+                default["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
+        for template in (normalized.get(TEMPLATES_KEY) or {}).values():
+            if not isinstance(template, dict):
+                continue
+            bindings = template.get("bindings")
+            if isinstance(bindings, dict):
+                bindings.setdefault("product_short_name", bindings.get("product_name"))
+            if template.get("plan_name_template") == PREVIOUS_DEFAULT_PLAN_NAME_TEMPLATE:
                 template["plan_name_template"] = DEFAULT_PLAN_NAME_TEMPLATE
     normalized[SCHEMA_VERSION_KEY] = SCHEMA_VERSION
     normalized.setdefault(DEFAULT_TEMPLATE_KEY, default_template())
@@ -291,9 +315,14 @@ def build_business_template(
     active=True,
     template_name=None,
     plan_name_template=None,
+    product_short_name=None,
 ):
     advertiser_id = normalize_positive_id(advertiser_id, "advertiser_id")
     product_name = required_text(product_name, "product_name")
+    product_short_name = required_text(
+        product_short_name or product_name,
+        "product_short_name",
+    )
     product_ids = normalize_product_ids(product_ids)
     source = source or default_template()
     delivery = validate_delivery_setting(
@@ -315,6 +344,7 @@ def build_business_template(
             "channel": "qianchuan",
             "advertiser_id": advertiser_id,
             "product_name": product_name,
+            "product_short_name": product_short_name,
             "product_ids": product_ids,
         },
         "delivery_setting": delivery,
@@ -340,6 +370,10 @@ def validate_default_template(template):
         raise ConfigurationError("Qianchuan product default template must not bind an advertiser")
     if not is_missing(bindings.get("product_name")):
         raise ConfigurationError("Qianchuan product default template must not bind a product name")
+    if not is_missing(bindings.get("product_short_name")):
+        raise ConfigurationError(
+            "Qianchuan product default template must not bind a product short name"
+        )
     if bindings.get("product_ids") not in (None, []):
         raise ConfigurationError("Qianchuan product default template must not bind products")
     validate_delivery_setting(template.get("delivery_setting"))
@@ -366,9 +400,11 @@ def validate_business_template(template):
     bindings = template.get("bindings") or {}
     if bindings.get("channel") != "qianchuan":
         raise ConfigurationError("Qianchuan product template channel must be qianchuan")
+    required_text(bindings.get("product_short_name"), "product_short_name")
     normalized = build_business_template(
         advertiser_id=bindings.get("advertiser_id"),
         product_name=bindings.get("product_name"),
+        product_short_name=bindings.get("product_short_name"),
         product_ids=bindings.get("product_ids"),
         source=template,
         template_id=required_text(template.get("template_id"), "template_id"),
@@ -409,6 +445,7 @@ def list_templates(config):
             "status": template["status"],
             "advertiser_id": bindings["advertiser_id"],
             "product_name": bindings["product_name"],
+            "product_short_name": bindings["product_short_name"],
             "product_ids": bindings["product_ids"],
             "product_count": len(bindings["product_ids"]),
             "material_source_type": MATERIAL_SOURCE_TYPE,

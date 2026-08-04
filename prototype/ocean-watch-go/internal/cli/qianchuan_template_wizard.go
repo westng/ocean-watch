@@ -31,11 +31,12 @@ func runQianchuanProductTemplateWizard(
 		bindings := mapValue(source.Template["bindings"])
 		_, _ = fmt.Fprintf(
 			reader.output,
-			"  %d. %s（广告主 %s，产品 %s，商品 %d 个）\n",
+			"  %d. %s（广告主 %s，产品 %s / %s，商品 %d 个）\n",
 			index+1,
 			textValue(source.Template["display_name"]),
 			textValue(bindings["advertiser_id"]),
 			textValue(bindings["product_name"]),
+			textValue(bindings["product_short_name"]),
 			len(listValue(bindings["product_ids"])),
 		)
 	}
@@ -56,6 +57,11 @@ func runQianchuanProductTemplateWizard(
 		productNameDefault = nil
 	}
 	productName, err := reader.value("产品名称", productNameDefault, true)
+	if err != nil {
+		return err
+	}
+	productShortNameDefault := withoutPlaceholder(bindings["product_short_name"])
+	productShortName, err := reader.value("商品简称（用于计划名称）", productShortNameDefault, true)
 	if err != nil {
 		return err
 	}
@@ -85,7 +91,8 @@ func runQianchuanProductTemplateWizard(
 		domaintemplates.QianchuanProductCreateInput{
 			TemplateID: templateID, TemplateName: templateName,
 			AdvertiserID: advertiserID, ProductName: productName,
-			ProductIDs: productIDs, PlanNameTemplate: planNameTemplate,
+			ProductShortName: productShortName,
+			ProductIDs:       productIDs, PlanNameTemplate: planNameTemplate,
 		},
 	)
 	if err != nil {

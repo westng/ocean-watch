@@ -16,7 +16,8 @@ func TestBuildQianchuanProductTemplateIsPureAndDeduplicatesProducts(t *testing.T
 		TemplateID:       "qcpt_123456789abc",
 		TemplateName:     "用户千川模板甲",
 		AdvertiserID:     "2000000000000101",
-		ProductName:      "千川商品甲",
+		ProductName:      "千川商品甲官方全称",
+		ProductShortName: "千川商品甲",
 		ProductIDs:       "8000000000000101/8000000000000102/8000000000000101",
 		PlanNameTemplate: "{creator_name}-{product_name}-{date}",
 	})
@@ -34,6 +35,10 @@ func TestBuildQianchuanProductTemplateIsPureAndDeduplicatesProducts(t *testing.T
 	if candidate["display_name"] != "用户千川模板甲" ||
 		candidate["plan_name_template"] != "{creator_name}-{product_name}-{date}" {
 		t.Fatalf("custom template and plan names were not preserved: %#v", candidate)
+	}
+	bindings := candidate["bindings"].(map[string]any)
+	if bindings["product_name"] != "千川商品甲官方全称" || bindings["product_short_name"] != "千川商品甲" {
+		t.Fatalf("product names were not preserved independently: %#v", bindings)
 	}
 	updated, err := ApplyQianchuanProductTemplate(normalized, candidate)
 	if err != nil {

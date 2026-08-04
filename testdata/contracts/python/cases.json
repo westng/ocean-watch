@@ -327,7 +327,7 @@
       "id": "qc-templates-create-cancel",
       "argv": ["qc-templates", "create", "--config", "{{workspace}}/config.json"],
       "fixture": "template-wizards",
-      "stdin": "0\n2000000000000101\n千川商品甲\n8000000000000101/8000000000000102\nn\n",
+      "stdin": "0\n2000000000000101\n千川商品甲官方全称\n千川商品甲\n8000000000000101/8000000000000102\n千川商品模板甲\n\nn\n",
       "normalizers": ["qianchuan-template-ids"],
       "network_policy": "forbidden"
     },
@@ -335,7 +335,7 @@
       "id": "qc-templates-create-submit",
       "argv": ["qc-templates", "create", "--config", "{{workspace}}/config.json"],
       "fixture": "template-wizards",
-      "stdin": "0\n2000000000000102\n千川商品乙\n8000000000000103/8000000000000104/8000000000000103\ny\n",
+      "stdin": "0\n2000000000000102\n千川商品乙官方全称\n千川商品乙\n8000000000000103/8000000000000104/8000000000000103\n千川商品模板乙\n\ny\n",
       "normalizers": ["qianchuan-template-ids"],
       "network_policy": "forbidden"
     },
@@ -359,7 +359,7 @@
       "id": "templates-create-route-qianchuan-product-cancel",
       "argv": ["templates", "create", "--config", "{{workspace}}/config.json"],
       "fixture": "template-wizards",
-      "stdin": "1\n0\n0\n2000000000000105\n路由商品\n8000000000000105\nn\n",
+      "stdin": "1\n0\n0\n2000000000000105\n路由商品官方全称\n路由商品\n8000000000000105\n路由千川商品模板\n\nn\n",
       "normalizers": ["qianchuan-template-ids"],
       "network_policy": "forbidden"
     },

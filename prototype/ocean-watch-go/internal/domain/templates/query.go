@@ -166,6 +166,7 @@ func compactQianchuanProductTemplate(template map[string]any) map[string]any {
 		"status":                  template["status"],
 		"advertiser_id":           bindings["advertiser_id"],
 		"product_name":            bindings["product_name"],
+		"product_short_name":      bindings["product_short_name"],
 		"product_ids":             clone(productIDs),
 		"product_count":           len(productIDs),
 		"template_type":           "商品全域",

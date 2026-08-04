@@ -294,6 +294,9 @@ func validateQianchuanProductDefault(value any) error {
 	if !isMissing(bindings["product_name"]) {
 		return configurationError("Qianchuan product default template must not bind a product name", nil)
 	}
+	if !isMissing(bindings["product_short_name"]) {
+		return configurationError("Qianchuan product default template must not bind a product short name", nil)
+	}
 	if ids := bindings["product_ids"]; ids != nil && !reflect.DeepEqual(ids, []any{}) {
 		return configurationError("Qianchuan product default template must not bind products", nil)
 	}
@@ -771,7 +774,9 @@ func ListQianchuanProduct(config map[string]any) (map[string]any, error) {
 		rows = append(rows, map[string]any{
 			"template_id": template["template_id"], "name": template["display_name"], "status": template["status"],
 			"advertiser_id": bindings["advertiser_id"], "product_name": bindings["product_name"],
-			"product_ids": clone(ids), "product_count": len(ids), "material_source_type": qianchuanProductMaterialSource,
+			"product_short_name": bindings["product_short_name"],
+			"product_ids":        clone(ids), "product_count": len(ids), "material_source_type": qianchuanProductMaterialSource,
+			"plan_name_template": template["plan_name_template"],
 		})
 	}
 	return map[string]any{

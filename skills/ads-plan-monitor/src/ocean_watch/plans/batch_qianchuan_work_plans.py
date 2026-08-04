@@ -192,6 +192,7 @@ def build_plan_name(
     )
     values = {
         "product_name": bindings["product_name"],
+        "product_short_name": bindings["product_short_name"],
         "creator_name": creator_label,
         "aweme_id": creator["aweme_id"],
         "douyin_id": creator.get("aweme_show_id") or "",

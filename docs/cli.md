@@ -242,7 +242,7 @@ ocean-watch qc-templates create-live
 ocean-watch qc-templates migrate-live
 ```
 
-向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户填写模板名称和创建新计划时使用的计划名称形式，并绑定广告主、产品和 1–30 个商品 ID。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符。渲染结果会先清除 Emoji、Unicode 符号和控制字符、归一化空白，再按官方限制截为 100 加权字符；清洗后为空会阻断。默认骨架使用 `{month_day}-{creator_name}-{product_name}-{type}-{business}`；`month_day` 输出如 `8.4`，类型和商务在每次可能创建计划时填写，不写入模板。Schema v7 会把缺失命名形式或仍使用旧默认形式的业务模板迁移到当前骨架，显式自定义形式保持不变。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
+向导从不可投放的默认骨架或已有千川商品模板复制创建，要求用户分别填写商品全称、用于计划名称的商品简称、模板名称和创建新计划时使用的计划名称形式，并绑定广告主及 1–30 个商品 ID。全称保存为 `bindings.product_name`，简称保存为 `bindings.product_short_name`；模板列表与预览同时显示两者。计划名称形式保存为 `plan_name_template`，支持 `product_name`、`product_short_name`、`creator_name`、`aweme_id`、`douyin_id`、`date`、`time`、`datetime`、`month_day`、`type`、`business` 占位符，其中 `{product_name}` 始终表示全称，`{product_short_name}` 表示简称。渲染结果会先清除 Emoji、Unicode 符号和控制字符、归一化空白，再按官方限制截为 100 加权字符；清洗后为空会阻断。默认骨架使用 `{month_day}-{creator_name}-{product_short_name}-{type}-{business}`；`month_day` 输出如 `8.4`，类型和商务在每次可能创建计划时填写，不写入模板。Schema v8 会为旧模板用原商品全称回填简称，并将上一版默认五段形式切换到简称占位符，因此首次迁移后的渲染结果不变；显式自定义形式保持不变。模板只保存投放参数和商品归属，不保存达人、视频、图片或渠道信息。
 
 直播模板从独立的 `default_qianchuan_live_template` 或已有直播模板复制，绑定广告主、直播账号名称和数值 `aweme_id`。默认设置为保守出价、预算 5000、长期投放和智能选材。直播模板不保存商品、作品或手工素材，使用 `plans create-qianchuan --live-template TEMPLATE_ID` 创建；该模式不接受计划名称。
 

@@ -215,7 +215,7 @@ func orderedQianchuanTemplate(candidate map[string]any, live bool) orderedObject
 	return orderedMap(candidate, keys, func(key string, item any) any {
 		switch key {
 		case "bindings":
-			bindingKeys := []string{"channel", "advertiser_id", "product_name", "product_ids"}
+			bindingKeys := []string{"channel", "advertiser_id", "product_name", "product_short_name", "product_ids"}
 			if live {
 				bindingKeys = []string{"channel", "advertiser_id", "creator_name", "aweme_id"}
 			}

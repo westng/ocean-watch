@@ -75,6 +75,7 @@ def compact_qianchuan_template(template):
         "status": template["status"],
         "advertiser_id": bindings["advertiser_id"],
         "product_name": bindings["product_name"],
+        "product_short_name": bindings["product_short_name"],
         "product_ids": bindings["product_ids"],
         "product_count": len(bindings["product_ids"]),
         "template_type": "商品全域",
