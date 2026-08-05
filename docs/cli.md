@@ -452,8 +452,11 @@ ocean-watch qc-reports uni-account \
 ocean-watch qc-reports schema \
   --advertiser-id ADVERTISER_ID \
   --data-topic SITE_PROMOTION_PRODUCT_PRODUCT
+ocean-watch qc-reports schema \
+  --advertiser-id ADVERTISER_ID
 ocean-watch qc-reports custom \
   --advertiser-id ADVERTISER_ID \
+  --advertiser-id OTHER_ADVERTISER_ID \
   --data-topic DATA_TOPIC \
   --dimension DIMENSION --metric METRIC
 ocean-watch qc-reports products \
@@ -471,7 +474,7 @@ ocean-watch qc-reports authors \
 
 `qc-reports account` 调用 `/v1.0/qianchuan/report/all_promotion/get/`，用于指定广告主包含乘方的整体账户数据，默认 `adlab_scene=OVERALL_PROJECT`；`--data-period` 只允许用于该场景。`qc-reports uni-account` 调用 `/v1.0/qianchuan/report/uni_promotion/get/`，用于明确限制为全域的单广告主账户聚合。用户说“我负责的/我常用的账户表现”时仍使用 `accounts report` 查询账户集合，不能用这两个单广告主命令替代。
 
-`qc-reports schema` 可在一次请求中传入多个 `--data-topic`，返回官方可用维度和指标。`qc-reports custom` 使用明确的主题、维度和指标执行自定义查询；商品快捷入口按 `--report-mode uni|overall` 分别选择 `SITE_PROMOTION_PRODUCT_PRODUCT` 或 `OVERALL_ROI_PRODUCT_PRODUCT`。`--filter` 可重复传入 `field=value1,value2` 或官方 JSON 过滤对象。商品名称、可投状态或商品 ID 发现仍使用 `qc-products list/search`，不能与商品效果报表混用。
+`qc-reports schema` 可在一次请求中传入多个 `--data-topic`，返回官方可用维度和指标；不传 `--data-topic` 时查询插件内置的常用千川数据主题列表。`qc-reports custom` 使用明确的主题、维度和指标执行自定义查询；`--advertiser-id` 可重复或逗号分隔以查询多账户，结果按相同维度值汇总可加指标，并保留每账户明细和失败项；也可用 `--managed-accounts` 查询本地启用的负责千川账户。商品快捷入口按 `--report-mode uni|overall` 分别选择 `SITE_PROMOTION_PRODUCT_PRODUCT` 或 `OVERALL_ROI_PRODUCT_PRODUCT`。`--filter` 可重复传入 `field=value1,value2` 或官方 JSON 过滤对象。商品名称、可投状态或商品 ID 发现仍使用 `qc-products list/search`，不能与商品效果报表混用。
 
 直播间和达人报表分别调用 `/dimension_data/room/get/` 与 `/dimension_data/author/get/`。直播间需要精确数值 `room_id`，达人需要精确数值 `aweme_id`；只有用户要求小时视图时才使用 `TIME_GRANULARITY_HOURLY`。两者支持 `--order-platform` 与 `--smart-bid-type` 筛选。所有分页报表会遍历完整官方分页，`--top` 只限制展示，不改变汇总或请求完整性；临时限流、服务超时和可确认的传输超时只重试当前只读请求。
 

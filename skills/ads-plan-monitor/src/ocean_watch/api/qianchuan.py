@@ -39,12 +39,17 @@ class QianchuanClientFactory:
         advertiser_id,
         *,
         request_limit=None,
+        track_request_count=False,
         client_class=OceanEngineClient,
     ):
         self.advertiser_id = str(advertiser_id).strip()
         qianchuan_advertiser_lock_path(state_root, self.advertiser_id)
         self.throttle = qianchuan_request_throttle(state_root, self.advertiser_id)
-        self.budget = RequestBudget(request_limit) if request_limit is not None else None
+        self.budget = (
+            RequestBudget(request_limit)
+            if track_request_count or request_limit is not None
+            else None
+        )
         self.client_class = client_class
 
     def client(self, base_url, access_token):

@@ -22,7 +22,6 @@ from ocean_watch.plans.qianchuan_plan_gateway import (
 )
 
 MAX_MATERIALS_PER_DELETE = 100
-REMOVE_REQUEST_LIMIT = 512
 CUSTOM_MATERIAL = "CUSTOM"
 DELETED_STATUS = "DELETED"
 MULTI_BINDING_DELETE_NOTICE = (
@@ -297,8 +296,16 @@ def execute(args, *, link_resolver=None, client=None, lock_factory=ProcessLock):
             [],
             [],
         )
+        output["performance"] = {
+            "request_budget": {
+                "limit": None,
+                "used": 0,
+                "remaining": None,
+            },
+        }
         return output, 0
 
+    client_factory = None
     if client is None:
         config_path = config_paths.resolve_config_path(args.config)
         raw_config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -314,11 +321,12 @@ def execute(args, *, link_resolver=None, client=None, lock_factory=ProcessLock):
             advertiser_id=advertiser_id,
             auth_account_id=args.auth_account_id,
         )
-        client = QianchuanClientFactory(
+        client_factory = QianchuanClientFactory(
             authorization_store.state_root(),
             advertiser_id,
-            request_limit=REMOVE_REQUEST_LIMIT,
-        ).client(
+            track_request_count=True,
+        )
+        client = client_factory.client(
             get_path(runtime, "api.base_url"),
             get_path(runtime, "api.access_token"),
         )
@@ -367,6 +375,17 @@ def execute(args, *, link_resolver=None, client=None, lock_factory=ProcessLock):
         results,
         batches,
     )
+    output["performance"] = {
+        "request_budget": (
+            client_factory.budget_snapshot()
+            if client_factory is not None
+            else {
+                "limit": None,
+                "used": 0,
+                "remaining": None,
+            }
+        ),
+    }
     failed = any(row["status"] == "failed" for row in results)
     return output, 1 if failed else 0
 

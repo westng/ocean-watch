@@ -828,9 +828,9 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         self.assertEqual(
             result["performance"]["request_budget"],
             {
-                "limit": batch.BATCH_REQUEST_LIMIT,
+                "limit": None,
                 "used": 0,
-                "remaining": batch.BATCH_REQUEST_LIMIT,
+                "remaining": None,
             },
         )
         cache = result["performance"]["owner_hint_cache"]
@@ -845,7 +845,7 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         )
         ensure_token.assert_not_called()
 
-    def test_empty_batch_exposes_full_unused_request_budget(self):
+    def test_empty_batch_exposes_unused_unbounded_request_counter(self):
         config = qianchuan_product_templates.ensure_config({})
         config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
         with tempfile.TemporaryDirectory() as directory:
@@ -876,9 +876,9 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         self.assertEqual(
             result["performance"]["request_budget"],
             {
-                "limit": batch.BATCH_REQUEST_LIMIT,
+                "limit": None,
                 "used": 0,
-                "remaining": batch.BATCH_REQUEST_LIMIT,
+                "remaining": None,
             },
         )
 

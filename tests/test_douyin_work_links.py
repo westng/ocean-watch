@@ -187,6 +187,27 @@ class DouyinWorkLinkTests(unittest.TestCase):
             },
         })
 
+    def test_metadata_api_keeps_numeric_owner_hint_without_visible_id(self):
+        payload = json.dumps({
+            "code": 200,
+            "data": {
+                "author": {"uid": "9001", "nickname": "达人甲"},
+                "video": {"video_info_id": "7000000000000000001"},
+            },
+        }).encode()
+        resolver = douyin_work_links.DouyinWorkMetadataResolver(
+            "https://edge.example.test/api",
+            opener=FakeOpener("unused", payload=payload),
+        )
+
+        result = resolver.resolve("https://v.douyin.com/abc123/")
+
+        self.assertEqual(result["owner_hint"], {
+            "aweme_id": "9001",
+            "aweme_show_id": None,
+            "source": "configured_metadata_api",
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

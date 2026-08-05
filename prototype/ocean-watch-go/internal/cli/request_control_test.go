@@ -12,14 +12,17 @@ import (
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/platform/requestcontrol"
 )
 
-func TestEveryCommandHasBoundedRequestBudgetProfile(t *testing.T) {
+func TestEveryCommandHasRequestBudgetProfile(t *testing.T) {
 	for _, command := range contracts.Commands {
-		limit, err := commandRequestLimit(command)
+		profile, err := commandRequestBudgetProfile(command)
 		if err != nil {
 			t.Fatalf("%s has no request budget: %v", command.Name(), err)
 		}
-		if limit < 0 || limit > mutationCommandRequestLimit {
-			t.Fatalf("%s request budget is invalid: %d", command.Name(), limit)
+		if profile.unbounded {
+			continue
+		}
+		if profile.limit < 0 || profile.limit > mutationCommandRequestLimit {
+			t.Fatalf("%s request budget is invalid: %d", command.Name(), profile.limit)
 		}
 	}
 }
@@ -34,23 +37,46 @@ func TestLocalCommandFamiliesHaveZeroNetworkBudget(t *testing.T) {
 		if !ok {
 			t.Fatalf("fixture command is missing: %s", name)
 		}
-		limit, err := commandRequestLimit(command)
-		if err != nil || limit != 0 {
-			t.Fatalf("%s network budget = %d, %v; want 0", name, limit, err)
+		profile, err := commandRequestBudgetProfile(command)
+		if err != nil || profile.unbounded || profile.limit != 0 {
+			t.Fatalf("%s network budget = %#v, %v; want bounded 0", name, profile, err)
 		}
 	}
 }
 
-func TestQianchuanBatchCommandsHaveHardRequestBudget(t *testing.T) {
+func TestQianchuanBatchCommandsHaveUnboundedRequestCounter(t *testing.T) {
 	for _, name := range []string{"plans batch-qianchuan-works", "plans remove-qianchuan-work"} {
 		command, ok := commandByName(name)
 		if !ok {
 			t.Fatalf("fixture command is missing: %s", name)
 		}
-		limit, err := commandRequestLimit(command)
-		if err != nil || limit != qianchuanBatchRequestLimit {
-			t.Fatalf("%s network budget = %d, %v; want %d", name, limit, err, qianchuanBatchRequestLimit)
+		profile, err := commandRequestBudgetProfile(command)
+		if err != nil || !profile.unbounded {
+			t.Fatalf("%s request profile = %#v, %v; want unbounded", name, profile, err)
 		}
+	}
+}
+
+func TestQianchuanBatchProfileCountsPastFormerLimit(t *testing.T) {
+	command, ok := commandByName("plans batch-qianchuan-works")
+	if !ok {
+		t.Fatal("fixture command is missing")
+	}
+	profile, err := commandRequestBudgetProfile(command)
+	if err != nil || !profile.unbounded {
+		t.Fatalf("unexpected request profile: %#v, %v", profile, err)
+	}
+	ctx, budget, _, err := requestcontrol.PrepareUnboundedCommandContext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 600 {
+		if err := requestcontrol.ReserveAttempt(ctx); err != nil {
+			t.Fatalf("batch request counter rejected an attempt: %v", err)
+		}
+	}
+	if snapshot := budget.Snapshot(); snapshot != (requestcontrol.BudgetSnapshot{Used: 600, Unbounded: true}) {
+		t.Fatalf("unexpected batch request snapshot: %#v", snapshot)
 	}
 }
 

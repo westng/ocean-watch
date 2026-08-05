@@ -38,7 +38,6 @@ MAX_MATERIALS_PER_WRITE = 100
 VIDEO_IMAGE_MODES = {"VIDEO_LARGE", "VIDEO_VERTICAL"}
 DEFAULT_QIANCHUAN_CONCURRENCY = 8
 BATCH_LOCK_TIMEOUT_SECONDS = 600
-BATCH_REQUEST_LIMIT = 512
 MARKDOWN_LINK_PATTERN = re.compile(r"\]\((https://[^)\s]+)\)", re.IGNORECASE)
 OPTIONAL_PLAN_NAME_SEPARATORS = "-_/|· "
 BATCH_PRESENTATION_COLUMNS = (
@@ -891,9 +890,9 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
                 "enabled": metadata_enabled,
             },
             "request_budget": {
-                "limit": BATCH_REQUEST_LIMIT,
+                "limit": None,
                 "used": 0,
-                "remaining": BATCH_REQUEST_LIMIT,
+                "remaining": None,
             },
         }
         return result, 0
@@ -924,7 +923,7 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
             client_factory = QianchuanClientFactory(
                 authorization_store.state_root(),
                 advertiser_id,
-                request_limit=BATCH_REQUEST_LIMIT,
+                track_request_count=True,
             )
             api_client = client_factory.client(
                 get_path(runtime, "api.base_url"),
@@ -1025,9 +1024,9 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
             client_factory.budget_snapshot()
             if client_factory is not None
             else {
-                "limit": BATCH_REQUEST_LIMIT,
+                "limit": None,
                 "used": 0,
-                "remaining": BATCH_REQUEST_LIMIT,
+                "remaining": None,
             }
         ),
     }

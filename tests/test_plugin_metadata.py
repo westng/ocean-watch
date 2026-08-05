@@ -141,6 +141,23 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertIn("SITE_PROMOTION_PRODUCT_PRODUCT", routing)
         self.assertIn("OVERALL_ROI_PRODUCT_PRODUCT", routing)
         self.assertIn("`qc-products list/search`", content)
+        for topic in (
+            "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO",
+            "SITE_PROMOTION_PRODUCT_POST_DATA_IMAGE",
+            "SITE_PROMOTION_PRODUCT_POST_DATA_TITLE",
+            "SITE_PROMOTION_PRODUCT_POST_DATA_OTHER",
+            "OVERALL_ROI_PRODUCT_MATERIAL",
+        ):
+            self.assertIn(topic, content)
+            self.assertIn(topic, routing)
+        self.assertIn("素材维度数据", content)
+        self.assertIn("Do not route ordinary 全域素材维度", routing)
+        self.assertIn("material_create_time_v2", routing)
+        self.assertIn("数据主题列表", content)
+        self.assertIn("default common Qianchuan topic list", routing)
+        self.assertIn("--managed-accounts", content)
+        self.assertIn("Multi-account custom aggregation", routing)
+        self.assertIn("One account failure must not discard", routing)
 
     def test_qianchuan_batch_keeps_fixed_completion_table_contract(self):
         content = (

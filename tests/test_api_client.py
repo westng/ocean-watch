@@ -321,6 +321,17 @@ class OceanEngineClientTests(unittest.TestCase):
         self.assertEqual(outcomes.count("rejected"), 57)
         self.assertEqual(budget.snapshot(), {"limit": 7, "used": 7, "remaining": 0})
 
+    def test_unbounded_request_budget_counts_without_rejecting(self):
+        budget = client.RequestBudget(None)
+
+        for _ in range(600):
+            budget.reserve()
+
+        self.assertEqual(
+            budget.snapshot(),
+            {"limit": None, "used": 600, "remaining": None},
+        )
+
     def test_qianchuan_factory_clients_share_throttle_and_budget(self):
         with tempfile.TemporaryDirectory() as directory:
             factory = QianchuanClientFactory(directory, "1234567890123456", request_limit=2)
@@ -333,6 +344,25 @@ class OceanEngineClientTests(unittest.TestCase):
         second.request_budget.reserve()
         with self.assertRaises(ApiError):
             first.request_budget.reserve()
+
+    def test_qianchuan_factory_tracks_unbounded_request_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            factory = QianchuanClientFactory(
+                directory,
+                "1234567890123456",
+                track_request_count=True,
+            )
+            first = factory.client("https://api.oceanengine.com/open_api", "token")
+            second = factory.client("https://ad.oceanengine.com/open_api", "token")
+
+        for index in range(600):
+            (first if index % 2 == 0 else second).request_budget.reserve()
+
+        self.assertIs(first.request_budget, second.request_budget)
+        self.assertEqual(
+            factory.budget_snapshot(),
+            {"limit": None, "used": 600, "remaining": None},
+        )
 
     def test_shared_state_accepts_go_json_and_waits_for_cooldown(self):
         clock = FakeClock()

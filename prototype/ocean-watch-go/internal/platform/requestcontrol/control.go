@@ -95,6 +95,7 @@ func Authorization(ctx context.Context) (AuthorizationScope, bool) {
 type Budget struct {
 	limit       int64
 	initialized bool
+	unbounded   bool
 	used        atomic.Int64
 }
 
@@ -102,6 +103,7 @@ type BudgetSnapshot struct {
 	Limit     int64 `json:"limit"`
 	Used      int64 `json:"used"`
 	Remaining int64 `json:"remaining"`
+	Unbounded bool  `json:"unbounded,omitempty"`
 }
 
 type BudgetExceededError struct {
@@ -119,6 +121,10 @@ func NewBudget(limit int64) (*Budget, error) {
 		return nil, errors.New("command request budget must be non-negative")
 	}
 	return &Budget{limit: limit, initialized: true}, nil
+}
+
+func NewUnboundedBudget() *Budget {
+	return &Budget{initialized: true, unbounded: true}
 }
 
 func WithBudget(ctx context.Context, budget *Budget) (context.Context, error) {
@@ -143,6 +149,10 @@ func (budget *Budget) Reserve() error {
 	if budget == nil || !budget.initialized || budget.limit < 0 {
 		return ErrRequestBudgetMissing
 	}
+	if budget.unbounded {
+		budget.used.Add(1)
+		return nil
+	}
 	for {
 		used := budget.used.Load()
 		if used >= budget.limit {
@@ -154,11 +164,18 @@ func (budget *Budget) Reserve() error {
 	}
 }
 
+func (budget *Budget) IsUnbounded() bool {
+	return budget != nil && budget.initialized && budget.unbounded
+}
+
 func (budget *Budget) Snapshot() BudgetSnapshot {
 	if budget == nil {
 		return BudgetSnapshot{}
 	}
 	used := budget.used.Load()
+	if budget.unbounded {
+		return BudgetSnapshot{Used: used, Unbounded: true}
+	}
 	remaining := budget.limit - used
 	if remaining < 0 {
 		remaining = 0
@@ -227,6 +244,33 @@ func PrepareCommandContext(
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		ctx, err = WithBudget(ctx, budget)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	metrics, ok := MetricsFrom(ctx)
+	if !ok {
+		metrics = &Metrics{}
+		var err error
+		ctx, err = WithMetrics(ctx, metrics)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return ctx, budget, metrics, nil
+}
+
+func PrepareUnboundedCommandContext(
+	ctx context.Context,
+) (context.Context, *Budget, *Metrics, error) {
+	if ctx == nil {
+		return nil, nil, nil, errors.New("command context is required")
+	}
+	budget, ok := BudgetFrom(ctx)
+	if !ok || !budget.IsUnbounded() {
+		budget = NewUnboundedBudget()
+		var err error
 		ctx, err = WithBudget(ctx, budget)
 		if err != nil {
 			return nil, nil, nil, err

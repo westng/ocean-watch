@@ -1,5 +1,8 @@
 import argparse
+import io
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from ocean_watch.core.errors import ApiError
@@ -134,6 +137,221 @@ class QianchuanUnifiedReportTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0][1]["data_period"], "ALL_DATA")
         self.assertEqual(result["data_period"], "ALL_DATA")
+
+    def test_schema_cli_defaults_to_data_topic_list(self):
+        runtime = {"api": {"base_url": "https://api.oceanengine.com/open_api", "access_token": "secret"}}
+        client = FakeClient([{
+            "code": 0,
+            "request_id": "schema",
+            "data": {"custom_config_datas": []},
+        }])
+        factory = mock.Mock()
+        factory.return_value.client.return_value = client
+
+        with mock.patch.object(reports.config_paths, "resolve_config_path", return_value="config.json"), \
+             mock.patch.object(reports.token_manager, "ensure_access_token", return_value=runtime), \
+             mock.patch.object(reports, "QianchuanClientFactory", factory), \
+             mock.patch.object(reports, "write_json"):
+            code = reports.main([
+                "schema", "--advertiser-id", "1000000000000001",
+            ])
+
+        self.assertEqual(code, 0)
+        requested_topics = client.calls[0][1]["data_topics"]
+        self.assertIn("SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO", requested_topics)
+        self.assertIn("OVERALL_ROI_PRODUCT_MATERIAL", requested_topics)
+
+    def test_schema_multi_account_keeps_failed_accounts_in_scope_order(self):
+        captured = {}
+
+        def fake_query(_config_path, account, topics, data_period):
+            self.assertEqual(topics, ["SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO"])
+            self.assertIsNone(data_period)
+            if account["advertiser_id"].endswith("2"):
+                raise ApiError("failed", {"code": "40103", "message": "token invalid"})
+            return {
+                "mode": "qianchuan_unified_report_schema",
+                "endpoint": reports.CONFIG_PATH,
+                "advertiser_id": account["advertiser_id"],
+                "data_topics": topics,
+                "data_period": data_period,
+                "schemas": [{"data_topic": "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO"}],
+                "request_ids": ["schema-one"],
+            }
+
+        with mock.patch.object(reports.config_paths, "resolve_config_path", return_value="config.json"), \
+             mock.patch.object(reports, "query_schema_account", side_effect=fake_query), \
+             mock.patch.object(reports, "write_json", side_effect=lambda value, _out=None: captured.setdefault("result", value)):
+            code = reports.main([
+                "schema",
+                "--advertiser-id", "1000000000000001",
+                "--advertiser-id", "1000000000000002",
+                "--data-topic", "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO",
+            ])
+
+        result = captured["result"]
+        self.assertEqual(code, 1)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["advertiser_ids"], ["1000000000000001", "1000000000000002"])
+        self.assertEqual([account["query_status"] for account in result["accounts"]], ["ok", "failed"])
+        self.assertEqual(result["accounts"][1]["advertiser_id"], "1000000000000002")
+
+    def test_schema_managed_accounts_reads_enabled_qianchuan_scope(self):
+        captured = {}
+
+        def fake_query(_config_path, account, _topics, _data_period):
+            return {
+                "mode": "qianchuan_unified_report_schema",
+                "endpoint": reports.CONFIG_PATH,
+                "advertiser_id": account["advertiser_id"],
+                "data_topics": [],
+                "data_period": None,
+                "schemas": [],
+                "request_ids": [],
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text(
+                """
+                {
+                  "managed_accounts": {
+                    "qianchuan": [
+                      {"advertiser_id": "1000000000000001", "name": "enabled", "enabled": true},
+                      {"advertiser_id": "1000000000000002", "name": "disabled", "enabled": false}
+                    ]
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            with mock.patch.object(reports.config_paths, "resolve_config_path", return_value=config_path), \
+                 mock.patch.object(reports, "query_schema_account", side_effect=fake_query), \
+                 mock.patch.object(reports, "write_json", side_effect=lambda value, _out=None: captured.setdefault("result", value)):
+                code = reports.main(["schema", "--managed-accounts"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(captured["result"]["advertiser_id"], "1000000000000001")
+
+    def test_custom_rejects_multiple_data_topics(self):
+        with mock.patch("sys.stderr", new_callable=io.StringIO), \
+             self.assertRaises(SystemExit) as raised:
+            reports.main([
+                "custom",
+                "--advertiser-id", "1000000000000001",
+                "--data-topic", "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO,SITE_PROMOTION_PRODUCT_POST_DATA_IMAGE",
+                "--dimension", "material_id",
+                "--metric", "stat_cost_for_roi2",
+            ])
+
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_custom_cli_aggregates_multiple_advertisers_by_dimensions(self):
+        account_rows = [
+            {
+                "mode": "qianchuan_unified_report",
+                "endpoint": reports.DATA_PATH,
+                "advertiser_id": "1000000000000001",
+                "displayed_count": 1,
+                "total_row_count": 1,
+                "page_count": 1,
+                "request_ids": ["one"],
+                "rows": [],
+                "all_rows": [{
+                    "dimensions": {},
+                    "metrics": {},
+                    "flat": {"material_id": "m1", "stat_cost_for_roi2": "10.25", "product_cpc_for_roi2": "2.1"},
+                }],
+            },
+            {
+                "mode": "qianchuan_unified_report",
+                "endpoint": reports.DATA_PATH,
+                "advertiser_id": "1000000000000002",
+                "displayed_count": 1,
+                "total_row_count": 1,
+                "page_count": 1,
+                "request_ids": ["two"],
+                "rows": [],
+                "all_rows": [{
+                    "dimensions": {},
+                    "metrics": {},
+                    "flat": {"material_id": "m1", "stat_cost_for_roi2": "2.75", "product_cpc_for_roi2": "2.5"},
+                }],
+            },
+        ]
+        captured = {}
+
+        def fake_query(_config_path, account, *_args, **_kwargs):
+            return account_rows[0] if account["advertiser_id"].endswith("1") else account_rows[1]
+
+        with mock.patch.object(reports.config_paths, "resolve_config_path", return_value="config.json"), \
+             mock.patch.object(reports, "query_custom_account", side_effect=fake_query), \
+             mock.patch.object(reports, "write_json", side_effect=lambda value, _out=None: captured.setdefault("result", value)):
+            code = reports.main([
+                "custom",
+                "--advertiser-id", "1000000000000001,1000000000000002",
+                "--data-topic", "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO",
+                "--dimension", "material_id",
+                "--metric", "stat_cost_for_roi2",
+                "--metric", "product_cpc_for_roi2",
+                "--order-field", "stat_cost_for_roi2",
+                "--top", "0",
+            ])
+
+        result = captured["result"]
+        self.assertEqual(code, 0)
+        self.assertEqual(result["mode"], "qianchuan_unified_report_multi_account")
+        self.assertEqual(result["rows"][0]["flat"]["material_id"], "m1")
+        self.assertEqual(result["rows"][0]["flat"]["stat_cost_for_roi2"], 13)
+        self.assertIsNone(result["rows"][0]["flat"]["product_cpc_for_roi2"])
+        self.assertIn("product_cpc_for_roi2", result["aggregation"]["non_additive_metrics"])
+        self.assertEqual(result["aggregation"]["sort_field"], "stat_cost_for_roi2")
+        self.assertNotIn("all_rows", result["account_results"][0])
+
+    def test_unknown_metrics_are_not_summed_across_accounts(self):
+        self.assertFalse(reports.metric_is_additive("custom_unit_metric"))
+
+    def test_custom_multi_account_keeps_successful_results_when_one_account_fails(self):
+        captured = {}
+
+        def fake_query(_config_path, account, *_args, **_kwargs):
+            if account["advertiser_id"].endswith("2"):
+                raise ApiError("failed", {"code": "40103", "message": "token invalid"})
+            return {
+                "mode": "qianchuan_unified_report",
+                "endpoint": reports.DATA_PATH,
+                "advertiser_id": account["advertiser_id"],
+                "displayed_count": 1,
+                "total_row_count": 1,
+                "page_count": 1,
+                "request_ids": ["one"],
+                "rows": [],
+                "all_rows": [{
+                    "dimensions": {},
+                    "metrics": {},
+                    "flat": {"material_id": "m1", "stat_cost_for_roi2": "10"},
+                }],
+            }
+
+        with mock.patch.object(reports.config_paths, "resolve_config_path", return_value="config.json"), \
+             mock.patch.object(reports, "query_custom_account", side_effect=fake_query), \
+             mock.patch.object(reports, "write_json", side_effect=lambda value, _out=None: captured.setdefault("result", value)):
+            code = reports.main([
+                "custom",
+                "--advertiser-id", "1000000000000001",
+                "--advertiser-id", "1000000000000002",
+                "--data-topic", "SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO",
+                "--dimension", "material_id",
+                "--metric", "stat_cost_for_roi2",
+            ])
+
+        result = captured["result"]
+        self.assertEqual(code, 1)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["summary"]["successful_account_count"], 1)
+        self.assertEqual(result["summary"]["failed_account_count"], 1)
+        self.assertEqual(result["rows"][0]["flat"]["stat_cost_for_roi2"], 10)
+        self.assertEqual(result["accounts"][1]["query_status"], "failed")
 
     def test_dimension_filters_are_sent_and_transport_timeout_retries(self):
         client = RaisingClient([

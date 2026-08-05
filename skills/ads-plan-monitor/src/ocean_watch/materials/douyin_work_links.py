@@ -144,10 +144,10 @@ class DouyinWorkMetadataResolver:
                 "作品解析服务未返回有效作品 ID",
             )
         owner_hint = None
-        if aweme_id.isdigit() and aweme_show_id:
+        if aweme_id.isdigit():
             owner_hint = {
                 "aweme_id": aweme_id,
-                "aweme_show_id": aweme_show_id,
+                "aweme_show_id": aweme_show_id or None,
                 "source": "configured_metadata_api",
             }
         product_id = str((product or {}).get("product_info_id") or "").strip()

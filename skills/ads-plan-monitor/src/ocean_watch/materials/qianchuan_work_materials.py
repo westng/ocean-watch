@@ -118,21 +118,20 @@ def normalize_owner_hints(owner_hints, work_by_id):
 
 
 def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
-    show_ids = sorted({
-        hint["aweme_show_id"]
+    aweme_ids = sorted({
+        hint["aweme_id"]
         for hint in hints.values()
-        if hint.get("aweme_show_id")
     })
-    resolved_by_show_id = {}
+    resolved_by_aweme_id = {}
     failures = []
 
-    def query(show_id):
+    def query(aweme_id):
         for attempt in range(len(RATE_LIMIT_RETRY_DELAYS) + 1):
             try:
-                return show_id, resolve_authorized_aweme(
+                return aweme_id, resolve_authorized_aweme(
                     client,
                     advertiser_id,
-                    show_id,
+                    aweme_id,
                 )
             except Exception as error:
                 if (
@@ -142,26 +141,26 @@ def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
                     raise
                 time.sleep(RATE_LIMIT_RETRY_DELAYS[attempt])
 
-    with ThreadPoolExecutor(max_workers=min(concurrency, max(1, len(show_ids)))) as pool:
-        futures = {pool.submit(query, show_id): show_id for show_id in show_ids}
+    with ThreadPoolExecutor(max_workers=min(concurrency, max(1, len(aweme_ids)))) as pool:
+        futures = {pool.submit(query, aweme_id): aweme_id for aweme_id in aweme_ids}
         for future in as_completed(futures):
-            show_id = futures[future]
+            aweme_id = futures[future]
             try:
                 _, creator = future.result()
-                resolved_by_show_id[show_id] = creator
+                resolved_by_aweme_id[aweme_id] = creator
             except Exception:
-                failures.append(show_id)
+                failures.append(aweme_id)
 
     creators_by_item = {}
     for item_id, hint in hints.items():
-        creator = resolved_by_show_id.get(hint.get("aweme_show_id"))
+        creator = resolved_by_aweme_id.get(hint["aweme_id"])
         if (
             creator
             and creator.get("aweme_id") == hint["aweme_id"]
             and creator_is_usable(creator)
         ):
             creators_by_item[item_id] = creator
-    return creators_by_item, failures, len(show_ids)
+    return creators_by_item, failures, len(aweme_ids)
 
 
 def resolve_work_materials(

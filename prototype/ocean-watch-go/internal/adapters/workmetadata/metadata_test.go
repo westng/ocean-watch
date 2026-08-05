@@ -36,6 +36,26 @@ func TestDouyinMetadataResolverUsesOnlyPublicLinkAndReturnsHints(t *testing.T) {
 	}
 }
 
+func TestDouyinMetadataResolverKeepsNumericHintWithoutVisibleID(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(writer, `{"code":200,"data":{"video":{"video_info_id":"6000000000000001"},"author":{"uid":"4000000000000001","nickname":"第三方达人"}}}`)
+	}))
+	defer server.Close()
+
+	result, err := (DouyinMetadataResolver{Endpoint: server.URL, Client: server.Client()}).Resolve(
+		context.Background(),
+		"https://v.douyin.com/public-link",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.OwnerHint == nil || result.OwnerHint.AwemeID != "4000000000000001" ||
+		result.OwnerHint.AwemeShowID != "" {
+		t.Fatalf("numeric-only metadata hint was discarded: %#v", result)
+	}
+}
+
 func TestDouyinMetadataResolverFallsBackWithoutExposingEndpoint(t *testing.T) {
 	endpointSecret := "private-endpoint-marker"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {

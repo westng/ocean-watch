@@ -139,6 +139,10 @@ class RemoveQianchuanWorkMaterialTests(unittest.TestCase):
         self.assertEqual(lock_state["entered"], 1)
         self.assertFalse(lock_state["held"])
         self.assertFalse(any(method == "POST" for method, _, _ in client.calls))
+        self.assertEqual(
+            result["performance"]["request_budget"],
+            {"limit": None, "used": 0, "remaining": None},
+        )
 
     def test_submit_deletes_custom_material_and_verifies_status(self):
         client = FakeClient([material(101, 8001), material(102, 8002)])

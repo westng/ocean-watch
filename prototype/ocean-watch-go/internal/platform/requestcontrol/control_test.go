@@ -40,6 +40,18 @@ func TestBudgetIsAtomicAndFailsClosed(t *testing.T) {
 	}
 }
 
+func TestUnboundedBudgetCountsBeyondFormerBatchLimit(t *testing.T) {
+	budget := NewUnboundedBudget()
+	for range 600 {
+		if err := budget.Reserve(); err != nil {
+			t.Fatalf("unbounded request counter rejected an attempt: %v", err)
+		}
+	}
+	if snapshot := budget.Snapshot(); snapshot != (BudgetSnapshot{Used: 600, Unbounded: true}) {
+		t.Fatalf("unexpected unbounded request snapshot: %#v", snapshot)
+	}
+}
+
 func TestZeroBudgetBlocksNetworkAttempts(t *testing.T) {
 	budget, err := NewBudget(0)
 	if err != nil {
@@ -191,5 +203,46 @@ func TestPrepareCommandContextPreservesInjectedBudget(t *testing.T) {
 	}
 	if metrics.Snapshot().Attempts != 1 {
 		t.Fatalf("attempt metrics counted rejected traffic: %#v", metrics.Snapshot())
+	}
+}
+
+func TestPrepareUnboundedCommandContextTracksWithoutRejecting(t *testing.T) {
+	ctx, budget, metrics, err := PrepareUnboundedCommandContext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 600 {
+		if err := ReserveAttempt(ctx); err != nil {
+			t.Fatalf("unbounded command context rejected an attempt: %v", err)
+		}
+	}
+	if snapshot := budget.Snapshot(); snapshot != (BudgetSnapshot{Used: 600, Unbounded: true}) {
+		t.Fatalf("unexpected unbounded command budget: %#v", snapshot)
+	}
+	if snapshot := metrics.Snapshot(); snapshot.Attempts != 600 {
+		t.Fatalf("unexpected unbounded command metrics: %#v", snapshot)
+	}
+}
+
+func TestPrepareUnboundedCommandContextReplacesInjectedHardLimit(t *testing.T) {
+	bounded, err := NewBudget(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := WithBudget(context.Background(), bounded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, prepared, _, err := PrepareUnboundedCommandContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared == bounded || !prepared.IsUnbounded() {
+		t.Fatal("unbounded command preserved an injected hard request limit")
+	}
+	for range 600 {
+		if err := ReserveAttempt(ctx); err != nil {
+			t.Fatalf("replacement request counter rejected an attempt: %v", err)
+		}
 	}
 }

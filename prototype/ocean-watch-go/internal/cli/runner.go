@@ -86,12 +86,18 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 	if runtime == application.RuntimePython || invocation.Help {
 		return runner.Fallback.Run(ctx, fullArguments, stdout, stderr)
 	}
-	requestLimit, err := commandRequestLimit(invocation.Command)
+	requestProfile, err := commandRequestBudgetProfile(invocation.Command)
 	if err != nil {
 		WriteDomainError(stdout, domain.NewError("request_control_error", err.Error(), 1, nil))
 		return 1
 	}
-	ctx, requestBudget, requestMetrics, err := requestcontrol.PrepareCommandContext(ctx, requestLimit)
+	var requestBudget *requestcontrol.Budget
+	var requestMetrics *requestcontrol.Metrics
+	if requestProfile.unbounded {
+		ctx, requestBudget, requestMetrics, err = requestcontrol.PrepareUnboundedCommandContext(ctx)
+	} else {
+		ctx, requestBudget, requestMetrics, err = requestcontrol.PrepareCommandContext(ctx, requestProfile.limit)
+	}
 	if err != nil {
 		WriteDomainError(stdout, domain.NewError("request_control_error", err.Error(), 1, nil))
 		return 1

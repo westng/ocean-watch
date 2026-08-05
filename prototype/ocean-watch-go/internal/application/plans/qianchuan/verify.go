@@ -124,10 +124,10 @@ func (verifier WorkVerifier) Verify(
 	suppliedHints := normalizedOwnerHints(works)
 	result.OwnerHintSummary.Supplied = len(suppliedHints)
 	eligibleHints := map[string]OwnerHint{}
-	showIDOrder, itemIDsByShowID := ownerHintShowIDGroups(works, suppliedHints)
-	for _, showID := range showIDOrder {
+	awemeIDOrder, itemIDsByAwemeID := ownerHintAwemeIDGroups(works, suppliedHints)
+	for _, awemeID := range awemeIDOrder {
 		result.OwnerHintSummary.AuthorizedHintQueryCount++
-		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(ctx, request, showID, maxPages)
+		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(ctx, request, awemeID, maxPages)
 		if fetchErr != nil {
 			result.OwnerHintSummary.AuthorizedHintFailureCount++
 			continue
@@ -138,7 +138,7 @@ func (verifier WorkVerifier) Verify(
 			}
 			continue
 		}
-		for _, itemID := range itemIDsByShowID[showID] {
+		for _, itemID := range itemIDsByAwemeID[awemeID] {
 			hint := suppliedHints[itemID]
 			if hint.AwemeID != creator.AwemeID {
 				continue
@@ -376,17 +376,17 @@ func (verifier WorkVerifier) listAuthorizedCreators(
 func (verifier WorkVerifier) resolveAuthorizedHint(
 	ctx context.Context,
 	request WorkVerificationRequest,
-	showID string,
+	awemeID string,
 	maxPages int,
 ) (domainqianchuan.AuthorizedCreator, bool, int, error) {
-	showID = strings.TrimSpace(showID)
-	if showID == "" {
+	awemeID = strings.TrimSpace(awemeID)
+	if !validPositiveID(awemeID) {
 		return domainqianchuan.AuthorizedCreator{}, false, 0, nil
 	}
 	for page := 1; page <= maxPages; page++ {
 		result, err := verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
 			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-			SearchKeyword: showID, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
+			SearchKeyword: awemeID, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
 			Page: page, PageSize: 100,
 		})
 		if err != nil {
@@ -397,7 +397,7 @@ func (verifier WorkVerifier) resolveAuthorizedHint(
 		}
 		matches := map[string]domainqianchuan.AuthorizedCreator{}
 		for _, creator := range result.Rows {
-			if strings.TrimSpace(creator.VisibleID) == showID && validPositiveID(strings.TrimSpace(creator.AwemeID)) {
+			if strings.TrimSpace(creator.AwemeID) == awemeID {
 				matches[creator.AwemeID] = creator
 			}
 		}
@@ -486,7 +486,7 @@ func normalizedOwnerHints(works []WorkInput) map[string]OwnerHint {
 	return result
 }
 
-func ownerHintShowIDGroups(
+func ownerHintAwemeIDGroups(
 	works []WorkInput,
 	hints map[string]OwnerHint,
 ) ([]string, map[string][]string) {
@@ -494,13 +494,13 @@ func ownerHintShowIDGroups(
 	items := map[string][]string{}
 	for _, work := range works {
 		hint, exists := hints[work.AwemeItemID]
-		if !exists || hint.AwemeShowID == "" {
+		if !exists {
 			continue
 		}
-		if _, seen := items[hint.AwemeShowID]; !seen {
-			order = append(order, hint.AwemeShowID)
+		if _, seen := items[hint.AwemeID]; !seen {
+			order = append(order, hint.AwemeID)
 		}
-		items[hint.AwemeShowID] = append(items[hint.AwemeShowID], work.AwemeItemID)
+		items[hint.AwemeID] = append(items[hint.AwemeID], work.AwemeItemID)
 	}
 	return order, items
 }

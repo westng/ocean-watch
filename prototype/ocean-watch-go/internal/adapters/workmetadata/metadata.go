@@ -138,7 +138,7 @@ func (resolver DouyinMetadataResolver) resolveMetadata(
 	}
 	awemeID := metadataID(envelope.Data.Author.UID)
 	showID := strings.TrimSpace(envelope.Data.Author.UniqueID)
-	if positiveMetadataID(awemeID) && showID != "" {
+	if positiveMetadataID(awemeID) {
 		result.OwnerHint = &domain.WorkOwnerHint{AwemeID: awemeID, AwemeShowID: showID}
 	}
 	productID := metadataID(envelope.Data.Product.ProductInfoID)

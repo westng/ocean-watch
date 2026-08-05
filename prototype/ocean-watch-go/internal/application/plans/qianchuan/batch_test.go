@@ -184,7 +184,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 	t.Run("verified hint avoids broad scan", func(t *testing.T) {
 		reader := &hintVerificationReader{
 			targetedCreator: domainqianchuan.AuthorizedCreator{
-				AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
+				AwemeID: batchCreatorID, VisibleID: "renamed-visible-id", Name: "fixture-creator",
 			},
 			actualCreatorID: batchCreatorID,
 		}
@@ -207,6 +207,29 @@ func testBatchOwnerHintVerification(t *testing.T) {
 			!reflect.DeepEqual(reader.productCreatorIDs, []string{batchCreatorID}) {
 			t.Fatalf("verified hint used unexpected creator queries: ownership=%v product=%v",
 				reader.ownershipCreatorIDs, reader.productCreatorIDs)
+		}
+	})
+
+	t.Run("numeric only hint avoids broad scan", func(t *testing.T) {
+		reader := &hintVerificationReader{
+			targetedCreator: domainqianchuan.AuthorizedCreator{
+				AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
+			},
+			actualCreatorID: batchCreatorID,
+		}
+		result, err := (WorkVerifier{Reader: reader}).Verify(context.Background(), WorkVerificationRequest{
+			AdvertiserID: batchAdvertiserID, AccessToken: batchToken, ProductIDs: []string{batchProductID},
+			Works: []WorkInput{{
+				InputIndex: 0, AwemeItemID: workID,
+				OwnerHint: &OwnerHint{AwemeID: batchCreatorID},
+			}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reader.targetedCalls != 1 || reader.broadCalls != 0 || len(result.Matched) != 1 ||
+			result.OwnerHintSummary.Eligible != 1 || result.OwnerHintSummary.BroadScanWorkCount != 0 {
+			t.Fatalf("numeric-only hint crossed the broad-scan boundary: reader=%#v result=%#v", reader, result)
 		}
 	})
 
@@ -408,7 +431,7 @@ func (reader *hintVerificationReader) FetchAuthorizedCreators(
 	rows := []domainqianchuan.AuthorizedCreator{}
 	if request.SearchKeyword != "" {
 		reader.targetedCalls++
-		if request.SearchKeyword != reader.targetedCreator.VisibleID {
+		if request.SearchKeyword != reader.targetedCreator.AwemeID {
 			return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected targeted creator query")
 		}
 		rows = append(rows, reader.targetedCreator)

@@ -13,46 +13,54 @@ const (
 	paginatedReadRequestLimit   int64 = 4096
 	creatorReadRequestLimit     int64 = 16384
 	mutationCommandRequestLimit int64 = 65536
-	qianchuanBatchRequestLimit  int64 = 512
 )
 
-func commandRequestLimit(command contracts.Command) (int64, error) {
+type requestBudgetProfile struct {
+	limit     int64
+	unbounded bool
+}
+
+func boundedRequestBudget(limit int64) requestBudgetProfile {
+	return requestBudgetProfile{limit: limit}
+}
+
+func commandRequestBudgetProfile(command contracts.Command) (requestBudgetProfile, error) {
 	switch command.Domain {
 	case "setup", "runs", "templates", "qc-templates", "mcp":
-		return localCommandRequestLimit, nil
+		return boundedRequestBudget(localCommandRequestLimit), nil
 	case "accounts":
 		if command.Action == "report" {
-			return accountReportRequestLimit, nil
+			return boundedRequestBudget(accountReportRequestLimit), nil
 		}
-		return localCommandRequestLimit, nil
+		return boundedRequestBudget(localCommandRequestLimit), nil
 	case "auth":
 		switch command.Action {
 		case "authorize", "sync-accounts":
-			return paginatedReadRequestLimit, nil
+			return boundedRequestBudget(paginatedReadRequestLimit), nil
 		case "refresh":
-			return tokenCommandRequestLimit, nil
+			return boundedRequestBudget(tokenCommandRequestLimit), nil
 		case "set-app", "status", "migrate", "mappings":
-			return localCommandRequestLimit, nil
+			return boundedRequestBudget(localCommandRequestLimit), nil
 		}
 	case "materials", "qc-products", "reports", "qc-reports", "discover":
-		return paginatedReadRequestLimit, nil
+		return boundedRequestBudget(paginatedReadRequestLimit), nil
 	case "qc-materials":
 		if command.Action == "creator-videos" {
-			return creatorReadRequestLimit, nil
+			return boundedRequestBudget(creatorReadRequestLimit), nil
 		}
-		return paginatedReadRequestLimit, nil
+		return boundedRequestBudget(paginatedReadRequestLimit), nil
 	case "qc-plans":
 		switch command.Action {
 		case "update-status", "update-budget", "update-roi":
-			return mutationCommandRequestLimit, nil
+			return boundedRequestBudget(mutationCommandRequestLimit), nil
 		default:
-			return paginatedReadRequestLimit, nil
+			return boundedRequestBudget(paginatedReadRequestLimit), nil
 		}
 	case "plans":
 		if command.Action == "batch-qianchuan-works" || command.Action == "remove-qianchuan-work" {
-			return qianchuanBatchRequestLimit, nil
+			return requestBudgetProfile{unbounded: true}, nil
 		}
-		return mutationCommandRequestLimit, nil
+		return boundedRequestBudget(mutationCommandRequestLimit), nil
 	}
-	return 0, fmt.Errorf("request budget profile is missing for command %s", command.Name())
+	return requestBudgetProfile{}, fmt.Errorf("request budget profile is missing for command %s", command.Name())
 }

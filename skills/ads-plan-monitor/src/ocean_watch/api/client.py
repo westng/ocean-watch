@@ -26,15 +26,15 @@ DEFAULT_MAX_RETRY_AFTER_SECONDS = 30.0
 
 class RequestBudget:
     def __init__(self, limit):
-        self.limit = int(limit)
-        if self.limit < 1:
+        self.limit = None if limit is None else int(limit)
+        if self.limit is not None and self.limit < 1:
             raise ValueError("request budget limit must be positive")
         self.lock = threading.Lock()
         self.used = 0
 
     def reserve(self):
         with self.lock:
-            if self.used >= self.limit:
+            if self.limit is not None and self.used >= self.limit:
                 raise ApiError(
                     "Ocean Engine API request budget exhausted",
                     {"code": "request_budget_exceeded", "limit": self.limit},
@@ -46,7 +46,9 @@ class RequestBudget:
             return {
                 "limit": self.limit,
                 "used": self.used,
-                "remaining": self.limit - self.used,
+                "remaining": (
+                    None if self.limit is None else self.limit - self.used
+                ),
             }
 
 
