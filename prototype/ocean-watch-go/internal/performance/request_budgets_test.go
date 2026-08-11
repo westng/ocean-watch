@@ -38,7 +38,7 @@ func TestRequestBudgets(t *testing.T) {
 	t.Run("accounts list uses zero network attempts", testAccountsListUsesZeroNetworkAttempts)
 	t.Run("two account report never lists plans", testTwoAccountReportNeverListsPlans)
 	t.Run("failed page retries only itself", testFailedPageRetriesOnlyItself)
-	t.Run("55 link authorization scan", testFiftyFiveLinkAuthorizationScan)
+	t.Run("55 link targeted authorization", testFiftyFiveLinkAuthorizationScan)
 }
 
 type batchVerificationBudgetReader struct {
@@ -80,8 +80,8 @@ func (reader *batchVerificationBudgetReader) FetchAuthorizedCreators(
 	request portqianchuan.AuthorizedCreatorPageRequest,
 ) (domainqianchuan.AuthorizedCreatorPage, error) {
 	reader.authorizedCalls++
-	if request.SearchKeyword != "" || request.Page != 1 || request.PageSize != 100 {
-		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("55-link fixture escaped one broad creator scan")
+	if request.SearchKeyword != "4000000000000001" || request.Page != 1 || request.PageSize != 100 {
+		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("55-link fixture escaped one targeted creator query")
 	}
 	return domainqianchuan.AuthorizedCreatorPage{
 		Rows: []domainqianchuan.AuthorizedCreator{{
@@ -125,6 +125,9 @@ func testFiftyFiveLinkAuthorizationScan(t *testing.T) {
 			InputIndex:  index - 1,
 			InputURL:    "https://www.douyin.com/video/" + itemID,
 			AwemeItemID: itemID,
+			OwnerHint: &applicationqianchuanplans.OwnerHint{
+				AwemeID: "4000000000000001",
+			},
 		})
 	}
 	result, err := (applicationqianchuanplans.WorkVerifier{Reader: reader}).Verify(
@@ -139,8 +142,9 @@ func testFiftyFiveLinkAuthorizationScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AuthorizedCreatorScanCount != 1 || reader.authorizedCalls != 1 {
-		t.Fatalf("55-link broad creator scans = result:%d reader:%d, want 1",
+	if result.AuthorizedCreatorScanCount != 0 || result.AuthorizedCreatorPageCount != 0 ||
+		result.OwnerHintSummary.BroadScanWorkCount != 0 || reader.authorizedCalls != 1 {
+		t.Fatalf("55-link creator scans = result:%d reader:%d, want zero broad scans and one targeted query",
 			result.AuthorizedCreatorScanCount, reader.authorizedCalls)
 	}
 	if !reflect.DeepEqual(reader.ownershipBatchSizes, []int{50, 5}) ||

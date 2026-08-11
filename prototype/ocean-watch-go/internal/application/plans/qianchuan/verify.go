@@ -3,11 +3,9 @@ package qianchuan
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	domainqianchuan "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain/qianchuan"
-	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/platform/pagination"
 	portqianchuan "github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/ports/qianchuan"
 )
 
@@ -124,18 +122,27 @@ func (verifier WorkVerifier) Verify(
 	suppliedHints := normalizedOwnerHints(works)
 	result.OwnerHintSummary.Supplied = len(suppliedHints)
 	eligibleHints := map[string]OwnerHint{}
+	authorizationFailedIDs := map[string]bool{}
+	unavailableCreatorIDs := map[string]bool{}
 	awemeIDOrder, itemIDsByAwemeID := ownerHintAwemeIDGroups(works, suppliedHints)
 	for _, awemeID := range awemeIDOrder {
 		result.OwnerHintSummary.AuthorizedHintQueryCount++
 		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(ctx, request, awemeID, maxPages)
 		if fetchErr != nil {
 			result.OwnerHintSummary.AuthorizedHintFailureCount++
+			authorizationFailedIDs[awemeID] = true
+			result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
+				AwemeID: awemeID, Message: fetchErr.Error(),
+			})
 			continue
 		}
-		if !found || !creatorUsable(creator) {
-			if found && !creatorUsable(creator) {
-				result.DisabledCreators = appendCreatorUnique(result.DisabledCreators, creator)
-			}
+		if !found {
+			unavailableCreatorIDs[awemeID] = true
+			continue
+		}
+		if !creatorUsable(creator) {
+			unavailableCreatorIDs[awemeID] = true
+			result.DisabledCreators = appendCreatorUnique(result.DisabledCreators, creator)
 			continue
 		}
 		for _, itemID := range itemIDsByAwemeID[awemeID] {
@@ -149,7 +156,7 @@ func (verifier WorkVerifier) Verify(
 	}
 	result.OwnerHintSummary.Eligible = len(eligibleHints)
 
-	ownershipFailed := false
+	ownershipFailedIDs := map[string]bool{}
 	targetedByCreator := workIDsByHintedCreator(works, eligibleHints)
 	for _, creatorID := range creatorOrder {
 		itemIDs := targetedByCreator[creatorID]
@@ -162,7 +169,7 @@ func (verifier WorkVerifier) Verify(
 			result.OwnerHintSummary.OfficialVideoQueryCount++
 			videos, fetchErr := verifier.queryWorks(ctx, request, creator.AwemeID, "", batch)
 			if fetchErr != nil {
-				ownershipFailed = true
+				ownershipFailedIDs[creator.AwemeID] = true
 				result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
 					AwemeID: creator.AwemeID, Message: fetchErr.Error(),
 				})
@@ -182,48 +189,6 @@ func (verifier WorkVerifier) Verify(
 	}
 	result.OwnerHintSummary.Verified = len(verifiedHintIDs)
 	result.OwnerHintSummary.Stale = len(suppliedHints) - len(verifiedHintIDs)
-	broadWorkIDs := make([]string, 0, len(works)-len(verifiedHintIDs))
-	for _, work := range works {
-		if _, verified := verifiedHintIDs[work.AwemeItemID]; !verified {
-			broadWorkIDs = append(broadWorkIDs, work.AwemeItemID)
-		}
-	}
-	result.OwnerHintSummary.BroadScanWorkCount = len(broadWorkIDs)
-	if len(broadWorkIDs) != 0 {
-		creators, pages, fetchErr := verifier.listAuthorizedCreators(ctx, request, maxPages)
-		if fetchErr != nil {
-			return WorkVerificationResult{}, fetchErr
-		}
-		result.AuthorizedCreatorScanCount = 1
-		result.AuthorizedCreatorPageCount = pages
-		usable := make([]domainqianchuan.AuthorizedCreator, 0, len(creators))
-		for _, creator := range creators {
-			if creatorUsable(creator) {
-				usable = append(usable, creator)
-				creatorsByID, creatorOrder = addCreator(creatorsByID, creatorOrder, creator)
-				continue
-			}
-			result.DisabledCreators = appendCreatorUnique(result.DisabledCreators, creator)
-		}
-		for _, creator := range usable {
-			creatorWorkIDs := broadWorkIDsForCreator(broadWorkIDs, creator.AwemeID, eligibleHints)
-			for _, batch := range stringBatches(creatorWorkIDs, WorkQueryBatchSize) {
-				result.OwnershipQueryCount++
-				result.OwnerHintSummary.OfficialVideoQueryCount++
-				videos, queryErr := verifier.queryWorks(ctx, request, creator.AwemeID, "", batch)
-				if queryErr != nil {
-					ownershipFailed = true
-					result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
-						AwemeID: creator.AwemeID, Message: queryErr.Error(),
-					})
-					continue
-				}
-				if err := collectVerifiedOwners(owners, creator, batch, videos); err != nil {
-					return WorkVerificationResult{}, err
-				}
-			}
-		}
-	}
 	for _, creatorID := range creatorOrder {
 		result.Creators = append(result.Creators, creatorsByID[creatorID])
 	}
@@ -237,9 +202,14 @@ func (verifier WorkVerifier) Verify(
 				resolved[work.AwemeItemID] = owner
 			}
 		case 0:
-			reason, message := "not_found_under_authorized_creators", "作品未在当前广告主可投的授权达人中找到"
-			if ownershipFailed {
-				reason, message = "creator_query_incomplete", "达人作品查询不完整，未将作品视为未授权"
+			hint, hasHint := suppliedHints[work.AwemeItemID]
+			reason, message := "missing_creator_uid", "未获得可用于官方定向校验的数字达人 UID"
+			if hasHint && (authorizationFailedIDs[hint.AwemeID] || ownershipFailedIDs[hint.AwemeID]) {
+				reason, message = "creator_query_incomplete", "达人授权或作品定向查询不完整，未将作品视为未授权"
+			} else if hasHint && unavailableCreatorIDs[hint.AwemeID] {
+				reason, message = "creator_unavailable", "指定达人未授权或当前不可用于商品全域推广"
+			} else if hasHint {
+				reason, message = "creator_work_mismatch", "作品与指定达人不匹配"
 			}
 			result.Skipped = append(result.Skipped, skippedFromWork(work, reason, message, nil))
 		default:
@@ -341,36 +311,6 @@ func (verifier WorkVerifier) Verify(
 type verifiedOwner struct {
 	Creator  domainqianchuan.AuthorizedCreator
 	Material domainqianchuan.CreatorVideo
-}
-
-func (verifier WorkVerifier) listAuthorizedCreators(
-	ctx context.Context,
-	request WorkVerificationRequest,
-	maxPages int,
-) ([]domainqianchuan.AuthorizedCreator, int, error) {
-	pageCount := 0
-	rows, err := pagination.CollectPages(ctx, pagination.PageOptions[domainqianchuan.AuthorizedCreator]{
-		MaxPages: maxPages,
-		Key:      func(row domainqianchuan.AuthorizedCreator) string { return row.AwemeID },
-		Fetch: func(ctx context.Context, page int) (pagination.Page[domainqianchuan.AuthorizedCreator], error) {
-			pageCount++
-			result, fetchErr := verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
-				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-				MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE", Page: page, PageSize: 100,
-			})
-			if fetchErr != nil {
-				return pagination.Page[domainqianchuan.AuthorizedCreator]{}, fetchErr
-			}
-			return pagination.Page[domainqianchuan.AuthorizedCreator]{
-				Number: result.PageInfo.Page, TotalPages: result.PageInfo.TotalPages,
-				TotalNumber: result.PageInfo.TotalNumber, Rows: result.Rows,
-			}, nil
-		},
-	})
-	if err != nil {
-		return nil, pageCount, fmt.Errorf("scan Qianchuan authorized creators: %w", err)
-	}
-	return rows, pageCount, nil
 }
 
 func (verifier WorkVerifier) resolveAuthorizedHint(
@@ -511,17 +451,6 @@ func workIDsByHintedCreator(works []WorkInput, hints map[string]OwnerHint) map[s
 		if hint, exists := hints[work.AwemeItemID]; exists {
 			result[hint.AwemeID] = append(result[hint.AwemeID], work.AwemeItemID)
 		}
-	}
-	return result
-}
-
-func broadWorkIDsForCreator(workIDs []string, creatorID string, hints map[string]OwnerHint) []string {
-	result := make([]string, 0, len(workIDs))
-	for _, itemID := range workIDs {
-		if hint, exists := hints[itemID]; exists && hint.AwemeID == creatorID {
-			continue
-		}
-		result = append(result, itemID)
 	}
 	return result
 }

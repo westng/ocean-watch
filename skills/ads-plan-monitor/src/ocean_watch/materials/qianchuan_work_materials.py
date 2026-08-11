@@ -2,11 +2,8 @@ import copy
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ocean_watch.core.errors import ApiError
-from ocean_watch.materials.qianchuan_creator_accounts import (
-    list_authorized_awemes,
-    resolve_authorized_aweme,
-)
+from ocean_watch.core.errors import ConfigurationError
+from ocean_watch.materials.qianchuan_creator_accounts import resolve_authorized_aweme
 from ocean_watch.materials.query_qianchuan_creator_videos import (
     compact_video,
     fetch_creator_videos,
@@ -51,6 +48,15 @@ def compact_query_error(error, *, aweme_id, product_id=None):
 def is_rate_limit_error(error):
     details = getattr(error, "details", {}) or {}
     return str(details.get("code") or "") == RATE_LIMIT_CODE
+
+
+def is_creator_unavailable_error(error):
+    details = getattr(error, "details", {}) or {}
+    return (
+        str(getattr(error, "message", ""))
+        == "No exact authorized Qianchuan creator matched douyin_id"
+        and details.get("truncated") is not True
+    )
 
 
 def run_video_queries(
@@ -123,7 +129,8 @@ def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
         for hint in hints.values()
     })
     resolved_by_aweme_id = {}
-    failures = []
+    unavailable_aweme_ids = set()
+    query_failures = []
 
     def query(aweme_id):
         for attempt in range(len(RATE_LIMIT_RETRY_DELAYS) + 1):
@@ -148,19 +155,42 @@ def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
             try:
                 _, creator = future.result()
                 resolved_by_aweme_id[aweme_id] = creator
-            except Exception:
-                failures.append(aweme_id)
+            except ConfigurationError as error:
+                if is_creator_unavailable_error(error):
+                    unavailable_aweme_ids.add(aweme_id)
+                else:
+                    query_failures.append(compact_query_error(
+                        error,
+                        aweme_id=aweme_id,
+                    ))
+            except Exception as error:
+                query_failures.append(compact_query_error(
+                    error,
+                    aweme_id=aweme_id,
+                ))
 
     creators_by_item = {}
+    disabled_creators = []
     for item_id, hint in hints.items():
         creator = resolved_by_aweme_id.get(hint["aweme_id"])
+        if creator and not creator_is_usable(creator):
+            disabled_creators.append(creator)
+            unavailable_aweme_ids.add(hint["aweme_id"])
+            continue
         if (
             creator
             and creator.get("aweme_id") == hint["aweme_id"]
-            and creator_is_usable(creator)
         ):
             creators_by_item[item_id] = creator
-    return creators_by_item, failures, len(aweme_ids)
+    return {
+        "creators_by_item": creators_by_item,
+        "disabled_creators": {
+            creator["aweme_id"]: creator for creator in disabled_creators
+        }.values(),
+        "unavailable_aweme_ids": unavailable_aweme_ids,
+        "query_failures": query_failures,
+        "query_count": len(aweme_ids),
+    }
 
 
 def resolve_work_materials(
@@ -171,7 +201,6 @@ def resolve_work_materials(
     work_rows,
     *,
     concurrency=4,
-    max_creator_pages=100,
     owner_hints=None,
 ):
     product_ids = [str(value) for value in product_ids]
@@ -186,14 +215,15 @@ def resolve_work_materials(
         }
 
     supplied_hints = normalize_owner_hints(owner_hints, work_by_id)
-    hinted_creators, hint_auth_failures, hint_auth_query_count = (
-        resolve_authorized_hint_creators(
-            authorized_client,
-            advertiser_id,
-            supplied_hints,
-            concurrency,
-        )
+    hint_authorization = resolve_authorized_hint_creators(
+        authorized_client,
+        advertiser_id,
+        supplied_hints,
+        concurrency,
     )
+    hinted_creators = hint_authorization["creators_by_item"]
+    hint_auth_failures = hint_authorization["query_failures"]
+    hint_auth_query_count = hint_authorization["query_count"]
     eligible_hints = {
         item_id: creator["aweme_id"]
         for item_id, creator in hinted_creators.items()
@@ -236,55 +266,14 @@ def resolve_work_materials(
         for item_id, aweme_id in eligible_hints.items()
         if aweme_id in (owners_by_item.get(item_id) or {})
     }
-    broad_item_ids = [item_id for item_id in work_ids if item_id not in verified_hint_ids]
-    creator_result = {"creators": [], "page_count": 0, "truncated": False}
-    broad_creators = []
-    disabled_creators = []
-    if broad_item_ids:
-        creator_result = list_authorized_awemes(
-            authorized_client,
-            advertiser_id,
-            max_pages=max_creator_pages,
-        )
-        if creator_result["truncated"]:
-            raise ApiError(
-                "Qianchuan authorized creator query was truncated",
-                {
-                    "advertiser_id": str(advertiser_id),
-                    "page_count": creator_result["page_count"],
-                },
-            )
-        broad_creators = [
-            creator for creator in creator_result["creators"]
-            if creator_is_usable(creator)
-        ]
-        disabled_creators = [
-            creator for creator in creator_result["creators"]
-            if not creator_is_usable(creator)
-        ]
-    creators_by_id.update({
-        creator["aweme_id"]: creator for creator in broad_creators
-    })
     creators = list(creators_by_id.values())
-    broad_tasks = []
-    for creator in broad_creators:
-        creator_item_ids = [
-            item_id
-            for item_id in broad_item_ids
-            if eligible_hints.get(item_id) != creator["aweme_id"]
-        ]
-        broad_tasks.extend(
-            {"creator": creator, "item_ids": item_chunk}
-            for item_chunk in chunks(creator_item_ids, MAX_ITEM_IDS_PER_QUERY)
-        )
-    broad_results, broad_failures = run_video_queries(
-        video_client,
-        advertiser_id,
-        broad_tasks,
-        concurrency,
-    )
-    collect_owners(broad_results)
-    ownership_failures = [*hinted_failures, *broad_failures]
+    disabled_creators = list(hint_authorization["disabled_creators"])
+    failed_authorization_ids = {
+        row["aweme_id"] for row in hint_auth_failures
+    }
+    failed_ownership_ids = {
+        row["aweme_id"] for row in hinted_failures
+    }
 
     skipped = []
     resolved_owners = {}
@@ -293,20 +282,30 @@ def resolve_work_materials(
         if len(owners) == 1:
             resolved_owners[item_id] = next(iter(owners.values()))
             continue
-        reason = "ambiguous_creator" if len(owners) > 1 else (
-            "creator_query_incomplete"
-            if ownership_failures
-            else "not_found_under_authorized_creators"
-        )
+        hinted_aweme_id = (supplied_hints.get(item_id) or {}).get("aweme_id")
+        if len(owners) > 1:
+            reason = "ambiguous_creator"
+            message = "作品匹配到多个授权达人"
+        elif not hinted_aweme_id:
+            reason = "missing_creator_uid"
+            message = "未获得可用于官方定向校验的数字达人 UID"
+        elif hinted_aweme_id in failed_authorization_ids:
+            reason = "creator_query_incomplete"
+            message = "达人授权定向查询失败，未将作品视为未授权"
+        elif hinted_aweme_id in hint_authorization["unavailable_aweme_ids"]:
+            reason = "creator_unavailable"
+            message = "指定达人未授权或当前不可用于商品全域推广"
+        elif hinted_aweme_id in failed_ownership_ids:
+            reason = "creator_query_incomplete"
+            message = "达人作品定向查询不完整，未将作品视为未授权"
+        else:
+            reason = "creator_work_mismatch"
+            message = "作品与指定达人不匹配"
         skipped.append({
             **work,
             "status": "skipped",
             "reason": reason,
-            "message": (
-                "作品匹配到多个授权达人"
-                if len(owners) > 1
-                else "作品未在当前广告主可投的授权达人中找到"
-            ),
+            "message": message,
             "candidate_aweme_ids": sorted(owners),
         })
 
@@ -396,7 +395,8 @@ def resolve_work_materials(
     }
     impacting_failures = []
     if "creator_query_incomplete" in incomplete_reasons:
-        impacting_failures.extend(ownership_failures)
+        impacting_failures.extend(hint_auth_failures)
+        impacting_failures.extend(hinted_failures)
     if "product_query_incomplete" in incomplete_reasons:
         incomplete_creators = {
             row.get("aweme_id") for row in skipped
@@ -425,15 +425,15 @@ def resolve_work_materials(
             "eligible": len(eligible_hints),
             "verified": len(verified_hint_ids),
             "stale": len(supplied_hints) - len(verified_hint_ids),
-            "broad_scan_work_count": len(broad_item_ids),
+            "broad_scan_work_count": 0,
             "authorized_hint_query_count": hint_auth_query_count,
             "authorized_hint_failure_count": len(hint_auth_failures),
-            "official_video_query_count": len(hinted_tasks) + len(broad_tasks),
+            "official_video_query_count": len(hinted_tasks),
             "product_video_query_count": len(product_tasks),
         },
         "authorized_creator_query": {
-            "mode": "broad_scan" if broad_item_ids else "targeted_hint",
-            "page_count": creator_result["page_count"],
-            "truncated": creator_result["truncated"],
+            "mode": "targeted_only",
+            "page_count": 0,
+            "truncated": False,
         },
     }

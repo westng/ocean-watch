@@ -143,6 +143,9 @@ func testBatchCommandReadScope(t *testing.T) {
 		Resolved: []domain.ResolvedWorkLink{{
 			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
 			AwemeItemID: "6000000000000001", CreatorName: "第三方达人",
+			OwnerHint: &domain.WorkOwnerHint{
+				AwemeID: batchCreatorID, AwemeShowID: batchVisibleID,
+			},
 		}},
 	}}
 	service := CommandService{

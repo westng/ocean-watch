@@ -27,9 +27,9 @@ const (
 )
 
 func TestBatchWorkIdempotencyAndPresentation(t *testing.T) {
-	t.Run("verification scans creators once and batches works by fifty", testBatchVerificationLimits)
+	t.Run("verification targets one creator and batches works by fifty", testBatchVerificationLimits)
 	t.Run("product hints prevent template-product query amplification", testBatchProductHintQueryLimits)
-	t.Run("owner hints use targeted verification with one broad fallback", testBatchOwnerHintVerification)
+	t.Run("owner hints require targeted verification without broad fallback", testBatchOwnerHintVerification)
 	t.Run("multiple creator plans are filtered by verified work products", testBatchPlanProductDisambiguation)
 	t.Run("unknown append reconciles and rerun writes nothing", testBatchAppendIdempotency)
 }
@@ -106,6 +106,7 @@ func testBatchProductHintQueryLimits(t *testing.T) {
 			InputIndex:    index,
 			InputURL:      fmt.Sprintf("https://www.douyin.com/video/%s", batchWorkID(index+1)),
 			AwemeItemID:   batchWorkID(index + 1),
+			OwnerHint:     &OwnerHint{AwemeID: batchCreatorID},
 			ProductIDHint: productIDs[index%len(productIDs)],
 		}
 	}
@@ -140,7 +141,7 @@ func testBatchVerificationLimits(t *testing.T) {
 	for index := 1; index <= 55; index++ {
 		inputs = append(inputs, WorkInput{
 			InputIndex: index - 1, InputURL: fmt.Sprintf("https://www.douyin.com/video/%s", batchWorkID(index)),
-			AwemeItemID: batchWorkID(index),
+			AwemeItemID: batchWorkID(index), OwnerHint: &OwnerHint{AwemeID: batchCreatorID},
 		})
 	}
 	inputs = append(inputs,
@@ -155,9 +156,10 @@ func testBatchVerificationLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.AuthorizedCreatorScanCount != 1 || reader.authorizedCalls != 1 ||
+	if result.AuthorizedCreatorScanCount != 0 || result.AuthorizedCreatorPageCount != 0 ||
+		reader.authorizedCalls != 1 || reader.broadCalls != 0 ||
 		result.OwnershipQueryCount != 2 || result.ProductQueryCount != 2 {
-		t.Fatalf("verification call budget changed: result=%#v authorized_calls=%d", result, reader.authorizedCalls)
+		t.Fatalf("verification call budget changed: result=%#v reader=%#v", result, reader)
 	}
 	if !reflect.DeepEqual(reader.ownershipBatchSizes, []int{50, 5}) ||
 		!reflect.DeepEqual(reader.productBatchSizes, []int{50, 4}) {
@@ -172,7 +174,7 @@ func testBatchVerificationLimits(t *testing.T) {
 	}
 	wantReasons := map[string]int{
 		"invalid_work_id": 1, "duplicate_input": 1,
-		"not_found_under_authorized_creators": 1, "product_mismatch": 1,
+		"creator_work_mismatch": 1, "product_mismatch": 1,
 	}
 	if !reflect.DeepEqual(reasons, wantReasons) {
 		t.Fatalf("verification skip reasons changed: got=%v want=%v", reasons, wantReasons)
@@ -233,7 +235,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		}
 	})
 
-	t.Run("stale hint falls back once without requerying hinted creator", func(t *testing.T) {
+	t.Run("stale hint skips without scanning another creator", func(t *testing.T) {
 		actualCreatorID := "4000000000000002"
 		reader := &hintVerificationReader{
 			targetedCreator: domainqianchuan.AuthorizedCreator{
@@ -251,15 +253,31 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if reader.targetedCalls != 1 || reader.broadCalls != 1 || len(result.Matched) != 1 ||
-			result.AuthorizedCreatorScanCount != 1 || result.OwnerHintSummary.Verified != 0 ||
-			result.OwnerHintSummary.Stale != 1 || result.OwnerHintSummary.BroadScanWorkCount != 1 {
-			t.Fatalf("stale hint did not use exactly one broad fallback: reader=%#v result=%#v", reader, result)
+		if reader.targetedCalls != 1 || reader.broadCalls != 0 || len(result.Matched) != 0 ||
+			result.AuthorizedCreatorScanCount != 0 || result.OwnerHintSummary.Verified != 0 ||
+			result.OwnerHintSummary.Stale != 1 || result.OwnerHintSummary.BroadScanWorkCount != 0 ||
+			len(result.Skipped) != 1 || result.Skipped[0].Reason != "creator_work_mismatch" {
+			t.Fatalf("stale hint escaped the targeted-only boundary: reader=%#v result=%#v", reader, result)
 		}
-		if !reflect.DeepEqual(reader.ownershipCreatorIDs, []string{batchCreatorID, actualCreatorID}) ||
-			!reflect.DeepEqual(reader.productCreatorIDs, []string{actualCreatorID}) {
-			t.Fatalf("stale hint repeated or escaped creator verification: ownership=%v product=%v",
+		if !reflect.DeepEqual(reader.ownershipCreatorIDs, []string{batchCreatorID}) ||
+			len(reader.productCreatorIDs) != 0 {
+			t.Fatalf("stale hint escaped creator verification: ownership=%v product=%v",
 				reader.ownershipCreatorIDs, reader.productCreatorIDs)
+		}
+	})
+
+	t.Run("missing hint skips without official requests", func(t *testing.T) {
+		reader := &hintVerificationReader{}
+		result, err := (WorkVerifier{Reader: reader}).Verify(context.Background(), WorkVerificationRequest{
+			AdvertiserID: batchAdvertiserID, AccessToken: batchToken, ProductIDs: []string{batchProductID},
+			Works: []WorkInput{{InputIndex: 0, AwemeItemID: workID}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reader.targetedCalls != 0 || reader.broadCalls != 0 || len(result.Matched) != 0 ||
+			len(result.Skipped) != 1 || result.Skipped[0].Reason != "missing_creator_uid" {
+			t.Fatalf("missing hint performed an official request: reader=%#v result=%#v", reader, result)
 		}
 	})
 }
@@ -393,6 +411,7 @@ func assertBatchPresentation(t *testing.T, presentation domain.Presentation, wor
 
 type batchVerificationReader struct {
 	authorizedCalls     int
+	broadCalls          int
 	unauthorizedID      string
 	mismatchID          string
 	ownershipBatchSizes []int
@@ -489,17 +508,22 @@ func (*batchVerificationReader) FetchPlanMaterials(context.Context, portqianchua
 }
 
 func (reader *batchVerificationReader) FetchAuthorizedCreators(
-	context.Context,
-	portqianchuan.AuthorizedCreatorPageRequest,
+	_ context.Context,
+	request portqianchuan.AuthorizedCreatorPageRequest,
 ) (domainqianchuan.AuthorizedCreatorPage, error) {
 	reader.authorizedCalls++
-	disabled := true
+	if request.SearchKeyword == "" {
+		reader.broadCalls++
+		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected broad creator query")
+	}
+	if request.SearchKeyword != batchCreatorID {
+		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected targeted creator")
+	}
 	return domainqianchuan.AuthorizedCreatorPage{
 		Rows: []domainqianchuan.AuthorizedCreator{
 			{AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator"},
-			{AwemeID: "4000000000000002", VisibleID: "disabled", Name: "disabled", ProductPromotionDisabled: &disabled},
 		},
-		PageInfo: domainqianchuan.PageInfo{Page: 1, TotalPages: 1, TotalNumber: 2},
+		PageInfo: domainqianchuan.PageInfo{Page: 1, TotalPages: 1, TotalNumber: 1},
 	}, nil
 }
 

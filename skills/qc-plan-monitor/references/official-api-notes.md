@@ -106,7 +106,7 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 ## Work Links And Plan Reconciliation
 
 - Douyin share links use the official `v.douyin.com` → `www.iesdouyin.com` → `www.douyin.com/video/{aweme_item_id}` redirect chain. There is no Qianchuan short-link resolver; only follow allow-listed `douyin.com` and `iesdouyin.com` redirects and parse the numeric work ID.
-- `search_key_words` is optional on `/v1.0/qianchuan/uni_aweme/authorized/get/`, so a batch may list all product all-domain creators once.
+- `search_key_words` is optional on `/v1.0/qianchuan/uni_aweme/authorized/get/`, but batch plan creation must always supply the numeric creator UID from metadata or the 30-day owner cache. It never uses the optional-field form to list every authorized creator. A missing, unavailable, or stale UID skips only that work; an official targeted-query error is reported as incomplete rather than misclassified as unauthorized.
 - `/v1.0/qianchuan/file/video/aweme/get/` accepts up to 50 `filtering.aweme_item_ids` and an optional `filtering.product_id`. Resolve creator ownership first, then verify each template product.
 - `/v1.0/qianchuan/uni_promotion/list/` uses `marketing_goal=VIDEO_PROM_GOODS`, `filtering.status=ALL`, and `adlab_scene=UNI_PROJECT`. `ALL` includes paused plans and excludes deleted plans.
 - Plan-list `start_time` and `end_time` are required data-period fields and do not filter plan creation time; creation dates have separate optional fields. Batch work-link reconciliation queries the current local day (`00:00:00` through `23:59:59`) because it only decides whether to create a plan or append materials, and traverses every declared page for that day.
