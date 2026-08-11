@@ -443,16 +443,26 @@ func pageFromPointers[T any](
 	page, totalPages, totalNumber *int64,
 	rows []T,
 ) (pagination.Page[T], error) {
-	if page == nil || totalPages == nil || totalNumber == nil ||
-		*page < 0 || *totalPages < 0 || *totalNumber < 0 ||
-		*page > int64(^uint(0)>>1) || *totalPages > int64(^uint(0)>>1) || *totalNumber > int64(^uint(0)>>1) {
+	maxInt := int64(^uint(0) >> 1)
+	if totalPages == nil || *totalPages < 0 || *totalPages > maxInt {
+		return pagination.Page[T]{}, errors.New("response contains malformed page_info")
+	}
+	if *totalPages == 0 && expected == 1 && len(rows) == 0 {
+		if page != nil && (*page < 0 || *page > maxInt || *page != 0 && *page != 1) {
+			return pagination.Page[T]{}, errors.New("response contains malformed page_info")
+		}
+		if totalNumber != nil && *totalNumber != 0 {
+			return pagination.Page[T]{}, errors.New("response contains malformed page_info")
+		}
+		return pagination.Page[T]{Number: expected, TotalPages: 0, TotalNumber: 0, Rows: rows}, nil
+	}
+	if page == nil || totalNumber == nil ||
+		*page < 0 || *totalNumber < 0 ||
+		*page > maxInt || *totalNumber > maxInt {
 		return pagination.Page[T]{}, errors.New("response contains malformed page_info")
 	}
 	result := pagination.Page[T]{
 		Number: int(*page), TotalPages: int(*totalPages), TotalNumber: int(*totalNumber), Rows: rows,
-	}
-	if result.Number == 0 && result.TotalPages == 0 && result.TotalNumber == 0 && expected == 1 {
-		return result, nil
 	}
 	return result, nil
 }

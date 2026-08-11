@@ -332,7 +332,7 @@ def role_expansion_page_info(data, rows, role, requested_page):
             )
 
     if total_pages == 0:
-        if rows or total_number != 0:
+        if rows or (has_total_number and total_number != 0):
             raise RuntimeError(
                 f"Malformed pagination metadata while expanding advertiser role {role}"
             )
@@ -896,6 +896,14 @@ def main(argv=None):
         "next_action": token_next_action(config),
         "oauth_authorized_account_count": len(get_path(config, "api.oauth_authorized_accounts", []) or []),
         "authorized_advertiser_count": len(get_path(config, "api.authorized_advertiser_ids", []) or []),
+        "authorized_advertiser_ids": [
+            str(value)
+            for value in get_path(config, "api.authorized_advertiser_ids", []) or []
+        ],
+        "last_authorized_account_sync_at": get_path(
+            config,
+            "api.last_authorized_account_sync_at",
+        ),
         "advertiser_id_authorized": advertiser_is_authorized(
             get_path(config, "account.advertiser_id"),
             get_path(config, "api.authorized_advertiser_ids", []),

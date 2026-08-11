@@ -108,6 +108,18 @@ class PluginMetadataTests(unittest.TestCase):
                 self.assertIn("must not resolve credentials, refresh a Token", content)
                 self.assertIn("Do not reconstruct it from `accounts` or `summary`", content)
 
+    def test_marketing_advertiser_refresh_uses_semantic_intent(self):
+        content = (
+            REPO_ROOT / "skills" / "ads-plan-monitor" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("authorized-advertiser freshness as a semantic intent", content)
+        self.assertIn("not by exact wording or keyword matching", content)
+        self.assertIn("intended outcome, the full utterance, and conversation context", content)
+        self.assertIn("never an exact or exhaustive trigger list", content)
+        self.assertIn("colloquial language, paraphrases, omissions, and misspellings", content)
+        self.assertIn("during the current turn", content)
+        self.assertIn("auth sync-accounts --channel marketing", content)
+
     def test_qianchuan_account_report_uses_advertiser_dimension_endpoint(self):
         content = (
             REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"

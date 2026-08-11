@@ -1,6 +1,6 @@
 ---
 name: ads-plan-monitor
-description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation and updates, performance reports, run history, and strategy. Use for 巨量营销初始化、营销授权或刷新 token、查询或管理用户常用的、负责的、管理的、日常投放范围内的账户（包括口语、简称、错别字和上下文追问）、跨渠道查询负责账户消耗、创建/校验/删除营销投放模板、查询上传或达人素材、创建或调整营销计划、查询素材/项目消耗排行、查看执行记录、汇总报表, and 投放策略分析 through official APIs.
+description: Dedicated 巨量营销 plan monitoring skill for first-run setup, local Marketing OAuth, authorized-advertiser discovery and freshness, responsible-account lists across Marketing and Qianchuan, advertiser-bound templates, material discovery, plan creation and updates, performance reports, run history, and strategy. Use whenever the user's intended outcome is to make the local Marketing authorization reflect the official account access currently held by that authorized user, including newly granted, removed, stale, or missing advertiser coverage, regardless of wording; also use for 巨量营销初始化、营销授权或刷新 token、查询或管理用户日常投放范围内的账户、跨渠道查询消耗、营销模板、素材、计划、报表和投放策略 through official APIs.
 ---
 
 # Ads Plan Monitor
@@ -50,6 +50,7 @@ Core routes:
 | Marketing OAuth | `auth authorize --channel marketing` |
 | Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status | `auth status --channel marketing` |
+| Refresh current authorized user's advertisers | `auth sync-accounts --channel marketing` |
 | Advertiser authorization mapping | `auth mappings --channel marketing` |
 | List all channel templates | `templates list` |
 | Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
@@ -139,6 +140,18 @@ Treat `accounts report` top-level `presentation` as the mandatory performance re
 Manage records with `accounts add/list/remove/enable/disable`. Real account names and IDs belong only in the user's ignored project or home config, never in tracked Skill files, examples, tests, or templates.
 
 Marketing OAuth state is `AD.<nonce>`. Require an exact state and channel match before exchanging or storing tokens.
+
+Interpret authorized-advertiser freshness as a semantic intent, not by exact wording or keyword matching. Determine it from the user's intended outcome, the full utterance, and conversation context: the user wants this authorized user's local Marketing advertiser coverage or mappings to match what the official platform currently grants. This includes additions, removals, stale snapshots, missing coverage, and contextual follow-ups even when the user does not name OAuth, synchronization, advertiser IDs, or a command. Handle colloquial language, paraphrases, omissions, and misspellings naturally. Any examples are illustrative only, never an exact or exhaustive trigger list, and never ask the user to restate the request using canonical words.
+
+For this semantic intent, run the following during the current turn:
+
+```bash
+ocean-watch auth sync-accounts --channel marketing
+```
+
+This command reuses a still-valid access token or refreshes it when required, then queries the official authorization subjects, expands every supported role, verifies the complete advertiser set, and atomically replaces only that authorization's OAuth snapshot. It does not change `managed_accounts`. If more than one Marketing authorization exists, or a pending authorization must be recovered, first use redacted status/mapping output to select the exact `authorization_id`, then pass `--authorization-id ID`; never guess or merge different users' authorizations. Use `--rebind-existing` only when the user explicitly asks to move conflicting advertiser mappings to that authorization.
+
+After a successful refresh, report `last_authorized_account_sync_at`, `authorized_advertiser_count`, the returned string-valued `authorized_advertiser_ids`, pending/partial discovery status, and the result of `auth mappings --channel marketing` for the refreshed authorization. Do not substitute `accounts list`: responsible accounts and the OAuth advertiser snapshot are separate data sources. If official pagination or verification is incomplete, report the failure and preserve the previous snapshot rather than claiming that no advertisers exist.
 
 If the selected channel has no app credentials, `auth authorize` opens one local setup page that collects App ID and Secret together, stores them in the OS credential backend, then redirects to official OAuth. Do not split these fields into separate Codex prompts. `auth set-app` opens the same form only for an explicit app replacement.
 

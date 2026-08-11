@@ -563,21 +563,25 @@ class QianchuanAuthorizationTests(unittest.TestCase):
         self.assertEqual(request.call_args_list[0].args[2]["permission"], ["QC_AWEME"])
 
     def test_empty_role_expansion_accepts_official_zero_page_contract(self):
-        for response_page in (0, 1):
+        for page_info in (
+            {"total_page": 0},
+            {"page": 0, "page_size": 100, "total_page": 0},
+            {
+                "page": 1,
+                "page_size": 100,
+                "total_number": 0,
+                "total_page": 0,
+            },
+        ):
             response = {
                 "code": 0,
                 "data": {
                     "list": [],
-                    "page_info": {
-                        "page": response_page,
-                        "page_size": 100,
-                        "total_number": 0,
-                        "total_page": 0,
-                    },
+                    "page_info": page_info,
                 },
             }
             account = {"account_role": "CUSTOMER_OPERATOR", "account_id": 101}
-            with self.subTest(page=response_page), mock.patch.object(
+            with self.subTest(page_info=page_info), mock.patch.object(
                 token_manager,
                 "get_api_json",
                 return_value=response,
@@ -601,10 +605,6 @@ class QianchuanAuthorizationTests(unittest.TestCase):
             {
                 "list": [],
                 "page_info": {"total_number": 1, "total_page": 0},
-            },
-            {
-                "list": [],
-                "page_info": {"total_page": 0},
             },
         ]
         for data in invalid_data:

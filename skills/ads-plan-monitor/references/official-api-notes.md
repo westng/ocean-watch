@@ -35,6 +35,9 @@ The OAuth advertiser endpoint returns authorization subjects, not only direct ad
 - Traverse every declared role-expansion page. When the response supplies `page` or
   `total_number`, require the page number and totals to remain consistent and reject missing or
   duplicate advertiser IDs instead of saving a partial authorization snapshot.
+- An empty first page with `total_page: 0` is a complete official empty-page contract even when
+  `page` or `total_number` is omitted. If those fields are present, accept only `page` 0 or 1 and
+  `total_number: 0`; reject any rows or non-zero total instead of replacing the previous snapshot.
 - Deduplicate candidates, then validate them through advertiser info in chunks of 50.
 
 Required headers:

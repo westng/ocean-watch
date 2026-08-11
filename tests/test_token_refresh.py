@@ -293,6 +293,46 @@ class TokenRefreshTests(unittest.TestCase):
         )
         self.assertFalse(result["has_access_token"])
 
+    def test_sync_accounts_outputs_fresh_advertiser_ids_as_strings(self):
+        config = self.expiring_config()
+        config["api"]["access_token_expires_at"] = "2999-01-01T00:00:00+00:00"
+        config["api"]["authorized_advertiser_ids"] = [9007199254740993, "42"]
+        config["api"]["last_authorized_account_sync_at"] = "2026-08-11T01:02:03+00:00"
+        config["_authorization"] = {
+            "channel": "marketing",
+            "authorization_id": "authorization-1",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            output = StringIO()
+            with mock.patch.object(token_manager, "load_config", return_value=config), \
+                    mock.patch.object(token_manager, "ensure_access_token", return_value=config), \
+                    mock.patch.object(
+                        token_manager,
+                        "sync_authorized_accounts",
+                        return_value=(config, {}),
+                    ) as sync, mock.patch.object(
+                        authorization_store,
+                        "status",
+                        return_value={},
+                    ), redirect_stdout(output):
+                exit_code = token_manager.main([
+                    "--config",
+                    str(config_path),
+                    "--channel",
+                    "marketing",
+                    "--sync-accounts",
+                ])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["authorized_advertiser_ids"], ["9007199254740993", "42"])
+        self.assertEqual(
+            result["last_authorized_account_sync_at"],
+            "2026-08-11T01:02:03+00:00",
+        )
+        sync.assert_called_once()
+
     def test_authorized_advertiser_ids_ignore_json_number_type(self):
         self.assertTrue(token_manager.advertiser_is_authorized(123456, ["123456"]))
         self.assertTrue(token_manager.advertiser_is_authorized("123456", [123456]))
@@ -348,6 +388,19 @@ class TokenRefreshTests(unittest.TestCase):
         params = request.call_args.args[2]
         self.assertEqual(params["cc_account_id"], 101)
         self.assertEqual(params["account_source"], "AD")
+
+    def test_marketing_empty_role_expansion_accepts_omitted_zero_page_fields(self):
+        config = self.expiring_config()
+        account = {"account_role": "CUSTOMER_ADMIN", "account_id": 101}
+        response = {
+            "code": 0,
+            "data": {"list": [], "page_info": {"total_page": 0}},
+        }
+        with mock.patch.object(token_manager, "get_api_json", return_value=response):
+            identifiers, result = token_manager.fetch_role_advertiser_ids(config, account)
+        self.assertEqual(identifiers, [])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["pages"], 1)
 
     def test_ebp_role_expands_advertiser_accounts(self):
         config = self.expiring_config()

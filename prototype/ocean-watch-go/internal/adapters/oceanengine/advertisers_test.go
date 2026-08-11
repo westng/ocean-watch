@@ -167,6 +167,53 @@ func TestAdvertiserDiscoveryUsesAgentAndShopProfiles(t *testing.T) {
 	}
 }
 
+func TestAdvertiserDiscoveryAcceptsOfficialEmptyZeroPageMetadata(t *testing.T) {
+	transport := &discoveryTransport{perRoute: map[string]int{}}
+	transport.respond = func(request *http.Request, _ int) (int, string) {
+		switch request.URL.Path {
+		case "/open_api/oauth2/advertiser/get/":
+			return 200, `{"code":0,"data":{"list":[{"account_id":9002,"account_type":"CUSTOMER_ADMIN","is_valid":true}]}}`
+		case "/open_api/2/customer_center/advertiser/list/":
+			return 200, `{"code":0,"data":{"list":[],"page_info":{"total_page":0}}}`
+		default:
+			return 404, `{}`
+		}
+	}
+	factory, err := NewClientFactory(FactoryOptions{
+		TransportFactory: func(HostProfile) http.RoundTripper { return transport },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := (AdvertiserDiscoveryAdapter{Factory: factory}).Discover(
+		testRequestContext(t, "marketing"), "marketing", "fixture-access",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.AdvertiserIDs) != 0 || len(snapshot.Accounts) != 1 {
+		t.Fatalf("unexpected empty snapshot: %#v", snapshot)
+	}
+}
+
+func TestAdvertiserDiscoveryRejectsContradictoryZeroPageMetadata(t *testing.T) {
+	totalPages := int64(0)
+	for _, test := range []struct {
+		name        string
+		totalNumber *int64
+		rows        []string
+	}{
+		{name: "non-empty-rows", rows: []string{"2001"}},
+		{name: "non-zero-total", totalNumber: func() *int64 { value := int64(1); return &value }()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := pageFromPointers(1, nil, &totalPages, test.totalNumber, test.rows); err == nil {
+				t.Fatal("contradictory zero-page metadata was accepted")
+			}
+		})
+	}
+}
+
 func TestAdvertiserDiscoveryFailsClosedOnDuplicateOrIncompleteVerification(t *testing.T) {
 	for _, test := range []struct {
 		name       string
