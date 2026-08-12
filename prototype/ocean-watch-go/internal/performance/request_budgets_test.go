@@ -80,7 +80,7 @@ func (reader *batchVerificationBudgetReader) FetchAuthorizedCreators(
 	request portqianchuan.AuthorizedCreatorPageRequest,
 ) (domainqianchuan.AuthorizedCreatorPage, error) {
 	reader.authorizedCalls++
-	if request.SearchKeyword != "4000000000000001" || request.Page != 1 || request.PageSize != 100 {
+	if request.SearchKeyword != "fixture-visible" || request.Page != 1 || request.PageSize != 100 {
 		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("55-link fixture escaped one targeted creator query")
 	}
 	return domainqianchuan.AuthorizedCreatorPage{
@@ -126,7 +126,7 @@ func testFiftyFiveLinkAuthorizationScan(t *testing.T) {
 			InputURL:    "https://www.douyin.com/video/" + itemID,
 			AwemeItemID: itemID,
 			OwnerHint: &applicationqianchuanplans.OwnerHint{
-				AwemeID: "4000000000000001",
+				AwemeID: "4000000000000001", AwemeShowID: "fixture-visible",
 			},
 		})
 	}
