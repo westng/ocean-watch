@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -36,21 +36,16 @@ jobs:
             echo "Release must use the current origin/main commit." >&2
             exit 1
           fi
-      - name: Prepare next patch release
-        id: prepare
+      - name: Validate prepared release
+        id: release
         shell: bash
         run: |
           latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
-          release_date="$(date -u +%Y-%m-%d)"
-          cachebuster="$(date -u +%Y%m%d%H%M%S)"
-          python scripts/version_tag.py prepare \
+          python scripts/version_tag.py release-check \
             --latest-tag "${latest_tag}" \
-            --date "${release_date}" \
-            --cachebuster "${cachebuster}" \
-            > "${RUNNER_TEMP}/prepared-release.json"
+            > "${RUNNER_TEMP}/release-candidate.json"
           version_tag="$(python -c 'import json, sys; print(json.load(sys.stdin)["tag"])' \
-            < "${RUNNER_TEMP}/prepared-release.json")"
-          python scripts/version_tag.py check --tag "${version_tag}"
+            < "${RUNNER_TEMP}/release-candidate.json")"
           echo "version_tag=${version_tag}" >> "${GITHUB_OUTPUT}"
       - name: Run release quality gate
         run: |
@@ -61,37 +56,28 @@ jobs:
       - name: Generate release notes
         shell: bash
         env:
-          VERSION_TAG: ${{ steps.prepare.outputs.version_tag }}
+          VERSION_TAG: ${{ steps.release.outputs.version_tag }}
         run: |
           python scripts/version_tag.py notes \
             --tag "${VERSION_TAG}" \
             --out "${RUNNER_TEMP}/release-notes.md"
-      - name: Commit prepared release to main
-        id: commit-release
+      - name: Verify immutable release source
         shell: bash
-        env:
-          VERSION_TAG: ${{ steps.prepare.outputs.version_tag }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            CHANGELOG.md \
-            pyproject.toml \
-            skills/ads-plan-monitor/src/ocean_watch/__init__.py \
-            .codex-plugin/plugin.json
-          if git diff --cached --quiet; then
-            release_sha="$(git rev-parse HEAD)"
-          else
-            git commit -m "release: prepare ${VERSION_TAG}"
-            git push origin HEAD:main
-            release_sha="$(git rev-parse HEAD)"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "Release validation modified the checked-out source." >&2
+            exit 1
           fi
-          echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "${current_main}" != "${GITHUB_SHA}" ]]; then
+            echo "origin/main advanced while this release was running." >&2
+            exit 1
+          fi
       - name: Publish immutable version Tag
         shell: bash
         env:
-          VERSION_TAG: ${{ steps.prepare.outputs.version_tag }}
-          RELEASE_SHA: ${{ steps.commit-release.outputs.release_sha }}
+          VERSION_TAG: ${{ steps.release.outputs.version_tag }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set +e
           git ls-remote --exit-code --tags origin "refs/tags/${VERSION_TAG}" > /dev/null
@@ -101,7 +87,10 @@ jobs:
             0)
               ;;
             2)
-              git push origin "${RELEASE_SHA}:refs/tags/${VERSION_TAG}"
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+                -f "ref=refs/tags/${VERSION_TAG}" \
+                -f "sha=${RELEASE_SHA}" \
+                > /dev/null
               ;;
             *)
               echo "Unable to determine the remote Tag state." >&2
@@ -116,8 +105,8 @@ jobs:
       - name: Create or verify immutable GitHub Release
         shell: bash
         env:
-          VERSION_TAG: ${{ steps.prepare.outputs.version_tag }}
-          RELEASE_SHA: ${{ steps.commit-release.outputs.release_sha }}
+          VERSION_TAG: ${{ steps.release.outputs.version_tag }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           if ! gh release view "${VERSION_TAG}" \
             --json tagName,name,isDraft,isPrerelease,body \

@@ -21,10 +21,11 @@ codex plugin add ocean-watch@ocean-watch
 ## 发布前置条件
 
 - 当前 `pyproject.toml`、`ocean_watch.__version__` 和 `.codex-plugin/plugin.json` 的基础版本一致。
-- `CHANGELOG.md` 的 `## 未发布` 中存在至少一条实质内容；没有内容时不会发布空版本。
+- 发布准备前，`CHANGELOG.md` 的 `## 未发布` 中存在至少一条实质内容；没有内容时不生成新版本。
+- 发布准备已作为普通可审查提交进入 `main`：版本恰好是线上最新正式版的下一个 patch，`## 未发布` 已清空，并存在对应日期版本段。
 - 发布工作流从当前 `origin/main` 手动触发。
-- `main` 的 CI 已通过，发布工作流会在生成版本文件后再次运行质量门禁。
-- 线上最新正式 Release Tag 使用 `vMAJOR.MINOR.PATCH`；工作流自动递增 patch。
+- `main` 的 CI 已通过，发布工作流会对同一只读提交再次运行质量门禁。
+- 线上最新正式 Release Tag 使用 `vMAJOR.MINOR.PATCH`；工作流只校验已准备版本，不自动递增或修改版本。
 - 目标 Tag 不存在，或已经指向本次发布提交。
 - 同名 Release 不存在，或标题、状态和 Changelog notes 与本次结果完全一致。
 
@@ -43,6 +44,9 @@ codex plugin add ocean-watch@ocean-watch
 ## 不可变与幂等
 
 - 工作流不使用 `--clobber`，不覆盖既有 Tag 或 Release。
+- 工作流不修改版本文件、不创建提交、不回推 `main`；Tag 始终直接指向触发工作流的 `GITHUB_SHA`。
+- checkout 不持久化 Git 写凭据，工作流只通过 GitHub API 创建精确的 Tag 引用；流程中不存在 `git push`。
+- 质量门运行期间如 `main` 前进或检出目录产生变更，工作流在创建 Tag 前失败。
 - 已存在 Tag 必须解析到本次 `GITHUB_SHA`，否则立即失败。
 - 已存在 Release 必须具有相同 Tag、标题、非 draft/非 prerelease 状态和 Changelog notes。
 - 修复已发布版本必须提升 patch 版本并发布新 Tag，不能修改历史 Release。
@@ -52,7 +56,6 @@ codex plugin add ocean-watch@ocean-watch
 ```bash
 python3 -m pip install -e ".[dev]"
 python3 scripts/version_tag.py check
-python3 scripts/version_tag.py tag
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ruff check skills/ads-plan-monitor/src scripts tests
 bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
@@ -63,15 +66,31 @@ python3 skills/qc-plan-monitor/run.py --version
 git diff --check
 ```
 
-`scripts/version_tag.py check` 在日常开发阶段只检查版本元数据一致性。Release 工作流调用 `prepare`，根据线上最新正式 Release 自动生成下一个 patch 版本，再使用 `--tag vX.Y.Z` 检查日期版本段和空的 `未发布` 段落。
+`scripts/version_tag.py check` 在日常开发阶段只检查版本元数据一致性。正式发版前，维护者在本地执行一次发布准备：
+
+```bash
+latest_tag="$(gh api repos/westng/ocean-watch/releases/latest --jq '.tag_name')"
+release_date="$(date -u +%Y-%m-%d)"
+cachebuster="$(date -u +%Y%m%d%H%M%S)"
+python3 scripts/version_tag.py prepare \
+  --latest-tag "${latest_tag}" \
+  --date "${release_date}" \
+  --cachebuster "${cachebuster}"
+python3 scripts/version_tag.py release-check --latest-tag "${latest_tag}"
+git diff -- CHANGELOG.md pyproject.toml \
+  skills/ads-plan-monitor/src/ocean_watch/__init__.py \
+  .codex-plugin/plugin.json
+```
+
+`prepare` 根据线上最新正式版生成下一个 patch、归档 `未发布` 并同步四处版本元数据。维护者必须审查、测试、提交并推送这些变更；Release 工作流只调用 `release-check`，不运行 `prepare`。
 
 ## 维护者发版
 
 1. 将所有待发布行为准确记录在 `CHANGELOG.md` 的 `## 未发布` 中并推送到 `main`。
-2. 等待 `main` CI 通过。
-3. 从 `main` 手动触发 GitHub Actions 的 **Release** 工作流，无需填写参数。
-4. 工作流自动读取线上最新正式 Release、递增 patch、归档 Changelog、同步项目/Python package/Plugin 版本、生成发布提交并推送回 `main`。
-5. 质量门禁通过后，工作流为该发布提交创建 Tag 和 GitHub Release；核对结果后再用该 Tag 注册或更新 Marketplace。
+2. 读取线上最新正式 Release，在本地运行上面的 `prepare` 和 `release-check`，逐项审查四个版本文件的差异。
+3. 运行质量门，将发布准备作为普通提交推送到 `main`，等待该提交的 CI 通过。
+4. 从这个 `main` 提交手动触发 GitHub Actions 的 **Release** 工作流，无需填写参数。
+5. 工作流只读校验版本、Changelog、工作树和 `main` 提交身份，再为该提交创建 Tag 和 GitHub Release；它不会产生新的 `main` 提交。核对结果后再用该 Tag 注册或更新 Marketplace。
 
 ```bash
 gh workflow run tag.yml --repo westng/ocean-watch --ref main

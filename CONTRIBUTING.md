@@ -61,7 +61,7 @@ CI 还会在 Windows、macOS 和 Linux 的 Python `3.10`、`3.12` 环境中验�
 
 ## 发布
 
-项目直接以 Git 仓库作为 Codex Marketplace 来源，只创建 `vMAJOR.MINOR.PATCH` Tag，不创建 GitHub Release 页面或上传 Release 资产。维护者先同步 `pyproject.toml`、`ocean_watch.__version__` 和 Plugin 基础版本，将 `未发布` 内容整理到对应版本的 Changelog 标题，并确认 `main` 的 CI 成功。然后在 GitHub Actions 手动运行 `Publish Tag` 工作流并选择 `main`，由工作流重新运行质量门并创建版本 Tag。
+项目直接以 Git Tag 作为 Codex Marketplace 源码快照，并为同一提交创建 GitHub Release 页面；当前不上传 Release 资产。维护者先在本地运行 `scripts/version_tag.py prepare`，审查版本与 Changelog 变更，并将这份普通发布准备提交推送到 `main`。确认 `main` CI 成功后，再手动运行 GitHub Actions 的 `Release` 工作流。该工作流只读校验当前提交、重新运行质量门、创建版本 Tag 和 GitHub Release，不修改文件、不生成机器人提交，也不回推 `main`。
 
 不要在版本不一致、Changelog 未收口或 CI 失败时强行创建 Tag。完整检查清单和命令见[发布指南](docs/releasing.md)。
 

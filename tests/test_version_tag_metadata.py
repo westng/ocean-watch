@@ -210,6 +210,72 @@ class VersionTagMetadataTests(unittest.TestCase):
             )
             self.assertEqual(version_tag.project_version(root), "1.0.0")
 
+    def test_release_candidate_requires_prepared_next_patch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release_fixture(root)
+            version_tag.prepare_release(
+                root,
+                latest_tag="v1.0.0",
+                release_date="2026-07-29",
+                cachebuster="prepared",
+            )
+            before = {
+                path: (root / path).read_bytes()
+                for path in (
+                    "CHANGELOG.md",
+                    "pyproject.toml",
+                    "skills/ads-plan-monitor/src/ocean_watch/__init__.py",
+                    ".codex-plugin/plugin.json",
+                )
+            }
+
+            result = version_tag.validate_release_candidate(root, "v1.0.0")
+
+            self.assertEqual(result["tag"], "v1.0.1")
+            self.assertFalse(result["already_released"])
+            self.assertEqual(before, {path: (root / path).read_bytes() for path in before})
+
+    def test_release_candidate_allows_idempotent_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release_fixture(root, pending=False)
+
+            result = version_tag.validate_release_candidate(root, "v1.0.0")
+
+            self.assertEqual(result["tag"], "v1.0.0")
+            self.assertTrue(result["already_released"])
+
+    def test_release_candidate_rejects_unprepared_or_skipped_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release_fixture(root)
+            with self.assertRaisesRegex(version_tag.VersionTagError, "未发布段落"):
+                version_tag.validate_release_candidate(root, "v1.0.0")
+
+            version_tag.prepare_release(
+                root,
+                latest_tag="v1.0.0",
+                release_date="2026-07-29",
+                cachebuster="prepared",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "ocean-watch"\nversion = "1.0.2"\n',
+                encoding="utf-8",
+            )
+            (root / "skills/ads-plan-monitor/src/ocean_watch/__init__.py").write_text(
+                '__version__ = "1.0.2"\n',
+                encoding="utf-8",
+            )
+            plugin = json.loads((root / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+            plugin["version"] = "1.0.2+codex.prepared"
+            (root / ".codex-plugin/plugin.json").write_text(
+                json.dumps(plugin) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(version_tag.VersionTagError, "next patch"):
+                version_tag.validate_release_candidate(root, "v1.0.0")
+
     def test_release_workflow_publishes_an_immutable_changelog_release(self):
         workflow = (ROOT / ".github/workflows/tag.yml").read_text(encoding="utf-8")
         parsed = yaml.load(workflow, Loader=yaml.BaseLoader)
@@ -217,14 +283,21 @@ class VersionTagMetadataTests(unittest.TestCase):
         self.assertIn("name: Release", workflow)
         self.assertIn(parsed["on"]["workflow_dispatch"], (None, ""))
         self.assertNotIn("\n  push:\n", workflow)
-        self.assertIn("scripts/version_tag.py prepare", workflow)
+        self.assertIn("scripts/version_tag.py release-check", workflow)
         self.assertIn("releases/latest", workflow)
-        self.assertIn("scripts/version_tag.py check --tag", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
-        self.assertIn("git push origin HEAD:main", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push origin HEAD:main", workflow)
+        self.assertNotIn("github-actions[bot]", workflow)
+        self.assertIn("Verify immutable release source", workflow)
+        self.assertIn('git status --porcelain', workflow)
+        self.assertIn('git/ref/heads/main', workflow)
         self.assertIn('refs/tags/${VERSION_TAG}^{commit}', workflow)
         self.assertIn("Publish immutable version Tag", workflow)
-        self.assertIn('git push origin "${RELEASE_SHA}:refs/tags/${VERSION_TAG}"', workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertIn('repos/${GITHUB_REPOSITORY}/git/refs', workflow)
+        self.assertIn('-f "ref=refs/tags/${VERSION_TAG}"', workflow)
+        self.assertIn('-f "sha=${RELEASE_SHA}"', workflow)
         self.assertNotIn("scripts/release/build_candidate.py", workflow)
         self.assertIn("scripts/version_tag.py notes", workflow)
         self.assertIn('gh release create "${VERSION_TAG}"', workflow)
@@ -239,8 +312,8 @@ class VersionTagMetadataTests(unittest.TestCase):
         self.assertEqual(workflow.count("contents: write"), 1)
         self.assertEqual(set(parsed["jobs"]), {"release"})
         self.assertEqual(parsed["jobs"]["release"]["permissions"]["contents"], "write")
-        self.assertIn("persist-credentials: true", workflow)
-        self.assertNotIn("persist-credentials: false", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertNotIn("persist-credentials: true", workflow)
 
 
 if __name__ == "__main__":

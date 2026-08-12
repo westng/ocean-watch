@@ -222,6 +222,27 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
     }
 
 
+def validate_release_candidate(root, latest_tag):
+    root = Path(root)
+    latest_version = tag_version(latest_tag)
+    versions = validate_versions(root)
+    current_version = versions["project"]
+    expected_version = next_patch_version(latest_version)
+    if current_version not in {latest_version, expected_version}:
+        raise VersionTagError(
+            f"release version {current_version} must equal latest release {latest_tag} "
+            f"or its next patch {expected_version}"
+        )
+    version_tag = f"v{current_version}"
+    validate_versions(root, tag=version_tag)
+    return {
+        **versions,
+        "tag": version_tag,
+        "latest_tag": latest_tag,
+        "already_released": current_version == latest_version,
+    }
+
+
 def validate_versions(root, tag=None):
     root = Path(root)
     versions = {
@@ -277,6 +298,12 @@ def build_parser():
     prepare.add_argument("--date", required=True)
     prepare.add_argument("--cachebuster", required=True)
 
+    release_check = commands.add_parser(
+        "release-check",
+        help="Validate a read-only release candidate against the latest release.",
+    )
+    release_check.add_argument("--latest-tag", required=True)
+
     return parser
 
 
@@ -301,6 +328,8 @@ def main(argv=None):
                 release_date=args.date,
                 cachebuster=args.cachebuster,
             )
+        elif args.command == "release-check":
+            result = validate_release_candidate(root, latest_tag=args.latest_tag)
         else:
             raise AssertionError("unreachable")
     except VersionTagError as error:
