@@ -10,7 +10,7 @@
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/westng/ocean-watch/tags"><img src="https://img.shields.io/github/v/tag/westng/ocean-watch?sort=semver" alt="Git Tag"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
@@ -29,7 +29,7 @@ Daily users do not need to memorize commands, parameters, or Skill names. Descri
 
 ## Install
 
-Requires Codex CLI `0.144.1+` and Python `3.9+`:
+Requires Codex CLI `0.144.1+` and Python `3.10+`:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
@@ -137,7 +137,7 @@ Everyday users should express delivery goals in natural language without learnin
 - App secrets, access tokens, refresh tokens, and authorization codes never belong in Git configuration.
 - Credentials use Keychain on macOS, DPAPI on Windows, and Secret Service on Linux.
 - User configuration and state live under `$CODEX_HOME/ads-plan-monitor/`.
-- Official business traffic is restricted to approved Ocean Engine HTTPS hosts. The optional local Qianchuan metadata service receives public Douyin links only.
+- Official business traffic is restricted to approved Ocean Engine HTTPS hosts. A read-only F2 CLI in the current Python interpreter resolves public Qianchuan work metadata and maps it to stable author, product, and video fields without downloading media or creating its database; product hints may reject an obvious mismatch early but never replace official Qianchuan authorization, ownership, or product validation.
 - Reports, caches, logs, job files, and journals are not open-source repository content.
 
 See [Security](SECURITY.md) and [Configuration](docs/configuration.md).
@@ -214,7 +214,7 @@ python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI validates the production runtime with Python `3.12` on Windows, macOS, and Linux, runs Python `3.9` compatibility checks on Linux, and tests both Go modules on Linux. Daily CI does not build candidates, consume native candidates on five platforms, or produce G5 Gate evidence.
+CI validates the production runtime with Python `3.12` on Windows, macOS, and Linux, runs Python `3.10` compatibility checks on Linux, and tests both Go modules on Linux. Daily CI does not build candidates, consume native candidates on five platforms, or produce G5 Gate evidence.
 
 ## License
 

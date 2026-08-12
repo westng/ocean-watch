@@ -6,7 +6,6 @@ import (
 	"flag"
 	"io"
 
-	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/application/onboarding"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain/configuration"
@@ -29,14 +28,6 @@ type validateOptions struct {
 	configPath   string
 	mode         string
 	planTemplate string
-}
-
-type workMetadataOptions struct {
-	configPath string
-	homeConfig bool
-	endpoint   string
-	clear      bool
-	out        string
 }
 
 func parseDoctorOptions(args []string) (doctorOptions, error) {
@@ -92,74 +83,6 @@ func parseValidateOptions(args []string) (validateOptions, error) {
 		return validateOptions{}, errors.New("--mode must be query, create-preview, create-submit, or all")
 	}
 	return options, nil
-}
-
-func parseWorkMetadataOptions(args []string) (workMetadataOptions, error) {
-	options := workMetadataOptions{}
-	flags := flag.NewFlagSet("setup work-metadata", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	flags.StringVar(&options.configPath, "config", "", "")
-	flags.BoolVar(&options.homeConfig, "home-config", false, "")
-	flags.StringVar(&options.endpoint, "endpoint", "", "")
-	flags.BoolVar(&options.clear, "clear", false, "")
-	flags.StringVar(&options.out, "out", "", "")
-	if err := flags.Parse(args); err != nil {
-		return workMetadataOptions{}, err
-	}
-	if len(flags.Args()) != 0 {
-		return workMetadataOptions{}, errors.New("unexpected positional setup arguments")
-	}
-	if options.configPath != "" && options.homeConfig {
-		return workMetadataOptions{}, errors.New("--config and --home-config cannot be used together")
-	}
-	if options.endpoint != "" && options.clear {
-		return workMetadataOptions{}, errors.New("argument --clear: not allowed with argument --endpoint")
-	}
-	return options, nil
-}
-
-func RunWorkMetadata(
-	ctx context.Context,
-	args []string,
-	service application.WorkMetadata,
-	configExists bool,
-	stdout io.Writer,
-) int {
-	options, err := parseWorkMetadataOptions(args)
-	if err != nil {
-		WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
-		return 2
-	}
-	if !configExists {
-		configPath := service.RequestedPath
-		if configPath == "" {
-			configPath = service.Path
-		}
-		WriteDomainError(stdout, domain.NewError(
-			"configuration_error",
-			"local config does not exist; run setup init before configuring integrations",
-			2,
-			map[string]any{"config": configPath},
-		))
-		return 2
-	}
-	var result application.WorkMetadataStatus
-	if options.endpoint != "" {
-		result, err = service.Set(ctx, options.endpoint)
-	} else if options.clear {
-		result, err = service.Clear(ctx)
-	} else {
-		result, err = service.Status(ctx)
-	}
-	if err != nil {
-		WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
-		return 2
-	}
-	if err := WriteJSONDestination(stdout, result, options.out); err != nil {
-		WriteDomainError(stdout, domain.WrapError("configuration_error", "failed to write output", 2, err))
-		return 2
-	}
-	return 0
 }
 
 func RunDoctor(

@@ -10,7 +10,7 @@
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/westng/ocean-watch/tags"><img src="https://img.shields.io/github/v/tag/westng/ocean-watch?sort=semver" alt="Git Tag"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9 or newer"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 
@@ -27,9 +27,92 @@
 
 如果你只是日常使用，不需要记命令、参数或 Skill 名称。安装后直接在 Codex 中描述目标即可；Codex 会选择正确渠道、补问缺少的信息，并在写入计划前展示预览。
 
+## 当前运行时架构
+
+截至 2026-08-12，仓库处于“双运行时、单生产路径”的迁移阶段。下图中实线表示当前生产调用，虚线表示隔离 Shadow、候选构建或验证关系：
+
+```mermaid
+flowchart TB
+    User["用户自然语言"] --> Codex["Codex 意图理解与交互确认"]
+
+    subgraph Plugin["Codex Plugin：ocean-watch"]
+        direction TB
+        Marketing["ads-plan-monitor Skill<br/>巨量营销意图与展示规则"]
+        Qianchuan["qc-plan-monitor Skill<br/>巨量千川意图与展示规则"]
+        Entry["统一入口<br/>skills/*/run.py"]
+        Contract["稳定 CLI + JSON / Presentation 合同"]
+        Policy["运行时策略<br/>当前 enabled=false"]
+        Marketing --> Entry
+        Qianchuan --> Entry
+        Entry --> Policy
+    end
+
+    Codex --> Marketing
+    Codex --> Qianchuan
+
+    subgraph Production["当前生产路径"]
+        direction TB
+        Python["Python ocean_watch CLI"]
+        UseCases["OAuth / Accounts / Templates / Materials<br/>Plans / Reports / Runs / Discovery"]
+        Control["Token / 分页 / 重试 / 限流<br/>Dry-run / 写入对账 / 输出合同"]
+        Python --> UseCases --> Control
+    end
+
+    Policy -->|"全部生产命令"| Python
+    Python --> Contract
+
+    subgraph Shadow["隔离 Go Shadow 候选"]
+        direction TB
+        Bootstrap["native runtime-bootstrap<br/>平台、签名、摘要与版本校验"]
+        GoCLI["Go CLI + Immutable Route Manifest"]
+        Application["Application Use Cases"]
+        Domain["Domain Models + Ports"]
+        Adapters["Adapters<br/>官方 Go SDK / Filesystem / Credentials"]
+        Platform["Platform<br/>分页 / 重试 / 请求预算 / 限流"]
+        Bootstrap --> GoCLI --> Application
+        Application --> Domain
+        Adapters -.->|"实现 Ports"| Domain
+        Adapters --> Platform
+    end
+
+    Policy -.->|"候选构建后才可能启用"| Bootstrap
+    GoCLI -.->|"遵守同一合同"| Contract
+
+    State["共享非敏感状态<br/>$CODEX_HOME/ads-plan-monitor"]
+    Secrets["操作系统凭据后端<br/>App Secret / Access Token / Refresh Token"]
+    Official["巨量引擎官方 API"]
+    Optional["可选官方 MCP<br/>配置与能力诊断"]
+    F2["只读 F2 CLI<br/>公开抖音作品元数据"]
+
+    Control --> State
+    Control --> Secrets
+    Control --> Official
+    Python -.->|"仅配置 / 能力诊断"| Optional
+    UseCases --> F2
+    Adapters --> State
+    Adapters --> Secrets
+    Platform --> Official
+
+    Contracts["contracts/ + scripts/acceptance<br/>命令、Presentation、迁移与 Gate 证据"]
+    Contracts -.-> Contract
+    Contracts -.-> GoCLI
+    Contracts -.-> Bootstrap
+```
+
+| 范围 | 当前状态 |
+| --- | --- |
+| 用户安装与生产命令 | 两个 Skill 的 `run.py` 仍统一进入 `skills/ads-plan-monitor/src/ocean_watch/` 中的 Python 运行时 |
+| 生产路由策略 | `.codex-plugin/runtime-policy.json` 保持 `enabled: false`；已安装用户不会自动切换到 Go |
+| Go SDK 候选 | `prototype/ocean-watch-go/` 已包含官方 SDK Adapter、模块化业务实现和合同测试，当前仅作为隔离 Shadow 候选 |
+| 原生启动候选 | `prototype/runtime-bootstrap/` 负责候选资产的签名、平台、摘要和版本校验，尚未进入生产安装路径 |
+| 已知迁移缺口 | `auth set-app/authorize/status/refresh/sync-accounts/mappings` 与 `qc-materials inspect-work` 尚未接入 Go CLI handler |
+| 上线条件 | 真实 canary、五平台原生消费、候选身份绑定、独立签字与 G1–G5 Gate 尚未全部通过 |
+
+P1–P5 的主要自动化范围已经在隔离候选中落地，但“Go 组件已实现”“Go handler 已接入”和“生产路由已启用”是三个独立状态。候选代码、本地测试或普通 CI 通过都不代表用户已经运行 Go。当前边界见[架构说明](docs/architecture.md)，逐命令状态见[Go SDK 迁移矩阵](docs/go-sdk-migration-matrix.md)，阶段完成度、阻断项与验收定义见[机器契约](contracts/README.md)。
+
 ## 安装
 
-需要 Codex CLI `0.144.1+` 和 Python `3.9+`：
+需要 Codex CLI `0.144.1+` 和 Python `3.10+`：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
@@ -147,7 +230,7 @@ codex plugin add ocean-watch@ocean-watch
 - App Secret、Access Token、Refresh Token 和授权码不写入 Git 配置。
 - macOS 使用 Keychain，Windows 使用 DPAPI，Linux 使用 Secret Service。
 - 用户配置和状态位于 `$CODEX_HOME/ads-plan-monitor/`。
-- 官方业务请求只允许巨量官方 HTTPS 主机；可选千川作品解析服务只接收公开抖音链接。
+- 官方业务请求只允许巨量官方 HTTPS 主机。千川作品公开元数据由同一 Python 解释器中的只读 F2 CLI 解析，并映射为稳定的达人、商品和视频字段；F2 不下载素材、不创建数据库，商品提示仅用于前置排除，不能替代千川官方授权、归属和商品校验。
 - 报表、缓存、日志、任务清单和执行 journal 不属于开源仓库内容。
 
 详见[安全说明](SECURITY.md)和[配置与授权](docs/configuration.md)。
@@ -169,35 +252,6 @@ source .venv/bin/activate              # Windows: .venv\Scripts\activate
 python3 -m pip install -e ".[dev]"
 ocean-watch --help
 ```
-
-## 当前运行时架构
-
-截至 2026-07-28，仓库处于“双运行时、单生产路径”的迁移阶段：
-
-```mermaid
-flowchart LR
-    User["用户自然语言"] --> Skills["Marketing / Qianchuan Skills"]
-    Skills --> Contract["稳定 CLI 与 Presentation 合同"]
-    Contract --> Policy["签名路由策略"]
-    Policy -->|"当前生产"| Python["Python 兼容运行时"]
-    Policy -.->|"隔离 Shadow"| Go["Go 模块化单体"]
-    Go --> App["Application"]
-    App --> Domain["Domain + Ports"]
-    Domain --> Adapters["官方 SDK / State / Credential Adapters"]
-    Python --> Shared["共享状态与凭据合同"]
-    Adapters --> Shared
-```
-
-| 范围 | 当前状态 |
-| --- | --- |
-| 用户安装与生产命令 | 两个 Skill 的 `run.py` 仍统一进入 `skills/ads-plan-monitor/src/ocean_watch/` 中的 Python 运行时 |
-| 生产路由策略 | `.codex-plugin/runtime-policy.json` 保持 `enabled: false`；已安装用户不会自动切换到 Go |
-| Go SDK 候选 | `prototype/ocean-watch-go/` 已包含官方 SDK Adapter、模块化业务实现和合同测试，当前仅作为隔离 Shadow 候选 |
-| 原生启动候选 | `prototype/runtime-bootstrap/` 负责候选资产的签名、平台、摘要和版本校验，尚未进入生产安装路径 |
-| 已知迁移缺口 | `auth set-app/authorize/status/refresh/sync-accounts/mappings` 与 `qc-materials inspect-work` 尚未接入 Go CLI handler |
-| 上线条件 | 真实 canary、五平台原生消费、候选身份绑定、独立签字与 G1–G5 Gate 尚未全部通过 |
-
-P1–P5 的主要自动化范围已经在隔离候选中落地，但“Go 组件已实现”“Go handler 已接入”和“生产路由已启用”是三个独立状态。候选代码、本地测试或普通 CI 通过都不代表用户已经运行 Go。当前边界见[架构说明](docs/architecture.md)，逐命令状态见[Go SDK 迁移矩阵](docs/go-sdk-migration-matrix.md)，阶段完成度、阻断项与验收定义见[机器契约](contracts/README.md)。
 
 ## 文档
 
@@ -225,7 +279,7 @@ python3 scripts/version_tag.py check
 git diff --check
 ```
 
-CI 使用 Python `3.12` 在 Windows、macOS 和 Linux 验证现行运行时，使用 Python `3.9` 在 Linux 执行兼容性检查，并在 Linux 测试两个 Go module。日常 CI 不构建候选、不执行五平台 native candidate 消费，也不产生 G5 Gate 证据。
+CI 使用 Python `3.12` 在 Windows、macOS 和 Linux 验证现行运行时，使用 Python `3.10` 在 Linux 执行兼容性检查，并在 Linux 测试两个 Go module。日常 CI 不构建候选、不执行五平台 native candidate 消费，也不产生 G5 Gate 证据。
 
 ## License
 

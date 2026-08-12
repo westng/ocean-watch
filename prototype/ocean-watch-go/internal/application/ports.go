@@ -7,6 +7,8 @@ import (
 	"github.com/westng/ocean-watch/prototype/ocean-watch-go/internal/domain"
 )
 
+type ConfigUpdater = func(map[string]any) (result any, changed bool, err error)
+
 type AccountStore interface {
 	Read(context.Context) (domain.AccountBook, error)
 	Update(context.Context, func(*domain.AccountBook) error) (any, error)

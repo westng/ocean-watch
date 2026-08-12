@@ -188,7 +188,7 @@ class AcceptanceDocumentationTests(unittest.TestCase):
         self.assertEqual(workflow_names, {"ci.yml", "tag.yml"})
         self.assertIn("branches: [main]", ci)
         self.assertIn('python-version: "3.12"', ci)
-        self.assertIn('python-version: "3.9"', ci)
+        self.assertIn('python-version: "3.10"', ci)
         self.assertIn("ubuntu-latest", ci)
         self.assertIn("windows-latest", ci)
         self.assertIn("macos-latest", ci)

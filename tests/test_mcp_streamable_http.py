@@ -1,6 +1,5 @@
 import io
 import json
-import socket
 import unittest
 import urllib.error
 from unittest import mock
@@ -141,7 +140,7 @@ class StreamableHttpMcpClientTests(unittest.TestCase):
         self.assertEqual(payload["params"]["name"], "report_tool")
 
     def test_stateless_initialize_sends_notification_before_marking_initialized(self):
-        notification_failure = urllib.error.URLError(socket.timeout("timed out"))
+        notification_failure = urllib.error.URLError(TimeoutError("timed out"))
         opener = SequentialOpener([
             FakeResponse({
                 "jsonrpc": "2.0",
@@ -433,7 +432,7 @@ class StreamableHttpMcpClientTests(unittest.TestCase):
 
     def test_timeout_transport_error_has_retry_details_without_token(self):
         opener = SequentialOpener([
-            urllib.error.URLError(socket.timeout("never-print-me timed out")),
+            urllib.error.URLError(TimeoutError("never-print-me timed out")),
         ])
         client = mcp_streamable_http.StreamableHttpMcpClient(
             "https://open.oceanengine.com/qianchuan/mcp",

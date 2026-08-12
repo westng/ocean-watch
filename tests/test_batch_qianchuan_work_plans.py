@@ -315,29 +315,23 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         self.assertEqual(result["skipped"][0]["reason"], "link_metadata_product_mismatch")
         self.assertEqual(result["skipped"][0]["hinted_product_id"], "2002")
 
-    def test_empty_link_product_hint_continues_to_official_validation(self):
-        row = {"input_index": 0, "aweme_item_id": "101"}
+    def test_empty_or_matching_product_hint_continues(self):
+        rows = [
+            {"input_index": 0, "aweme_item_id": "101"},
+            {
+                "input_index": 1,
+                "aweme_item_id": "102",
+                "product_hint": {"product_id": "1001"},
+            },
+        ]
         result = batch.filter_link_product_hints(
-            {"resolved": [row], "skipped": []},
+            {"resolved": rows, "skipped": []},
             ["1001"],
         )
-        self.assertEqual(result["resolved"], [row])
-
-    def test_link_product_hint_matching_any_template_product_continues(self):
-        row = {
-            "input_index": 0,
-            "aweme_item_id": "101",
-            "product_hint": {"product_id": "2002"},
-        }
-        result = batch.filter_link_product_hints(
-            {"resolved": [row], "skipped": []},
-            ["1001", "2002"],
-        )
-
-        self.assertEqual(result["resolved"], [row])
+        self.assertEqual(result["resolved"], rows)
         self.assertEqual(result["skipped"], [])
 
-    def test_product_mismatch_stops_before_credentials_and_material_queries(self):
+    def test_empty_link_batch_reports_f2_as_metadata_provider(self):
         config = qianchuan_product_templates.ensure_config({})
         config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
         with tempfile.TemporaryDirectory() as directory:
@@ -352,127 +346,24 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
                 submit=False,
                 include_payloads=False,
                 out=None,
-                no_link_metadata_api=False,
             )
-            link_result = {
-                "resolved": [{
-                    "input_index": 0,
-                    "input_url": args.work_url[0],
-                    "aweme_item_id": "101",
-                    "product_hint": {"product_id": "2002"},
-                }],
-                "skipped": [],
-            }
             with mock.patch.object(
                 batch,
                 "resolve_work_links",
-                return_value=link_result,
-            ), mock.patch.object(
-                batch.token_manager,
-                "ensure_access_token",
-            ) as ensure_token, mock.patch.object(
-                batch,
-                "resolve_work_materials",
-            ) as resolve_materials:
+                return_value={"resolved": [], "skipped": []},
+            ) as resolve_links:
                 result, exit_code = batch.execute(args)
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(result["counts"]["matched_links"], 0)
-        self.assertEqual(result["counts"]["skipped_links"], 1)
-        self.assertEqual(
-            result["skipped"][0]["reason"],
-            "link_metadata_product_mismatch",
-        )
-        ensure_token.assert_not_called()
-        resolve_materials.assert_not_called()
         self.assertEqual(result["performance"]["link_metadata"], {
-            "configured": False,
-            "enabled": False,
-        })
-
-    def test_local_metadata_endpoint_enables_resolver_without_exposing_default(self):
-        config = qianchuan_product_templates.ensure_config({})
-        config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
-        config["integrations"] = {
-            "qianchuan_work_metadata": {
-                "endpoint": "https://metadata.example.test/api",
-            },
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            config_path = Path(directory) / "config.json"
-            config_path.write_text(json.dumps(config), encoding="utf-8")
-            args = SimpleNamespace(
-                config=str(config_path),
-                plan_template="qcpt_test",
-                work_url=["https://v.douyin.com/test/"],
-                concurrency=2,
-                auth_account_id=None,
-                submit=False,
-                include_payloads=False,
-                out=None,
-                no_link_metadata_api=False,
-            )
-            with mock.patch.object(
-                batch,
-                "DouyinWorkMetadataResolver",
-            ) as metadata_resolver, mock.patch.object(
-                batch,
-                "DouyinWorkLinkResolver",
-            ) as link_resolver, mock.patch.object(
-                batch,
-                "resolve_work_links",
-                return_value={"resolved": [], "skipped": []},
-            ):
-                result, exit_code = batch.execute(args)
-
-        self.assertEqual(exit_code, 0)
-        metadata_resolver.assert_called_once_with(
-            "https://metadata.example.test/api"
-        )
-        link_resolver.assert_called_once_with(
-            metadata_resolver=metadata_resolver.return_value
-        )
-        self.assertEqual(result["performance"]["link_metadata"], {
-            "configured": True,
+            "provider": "f2_cli",
             "enabled": True,
         })
-
-    def test_disable_flag_ignores_invalid_local_metadata_endpoint(self):
-        config = qianchuan_product_templates.ensure_config({})
-        config[qianchuan_product_templates.TEMPLATES_KEY] = {"qcpt_test": template()}
-        config["integrations"] = {
-            "qianchuan_work_metadata": {"endpoint": "http://invalid.test/api"},
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            config_path = Path(directory) / "config.json"
-            config_path.write_text(json.dumps(config), encoding="utf-8")
-            args = SimpleNamespace(
-                config=str(config_path),
-                plan_template="qcpt_test",
-                work_url=["https://v.douyin.com/test/"],
-                concurrency=2,
-                auth_account_id=None,
-                submit=False,
-                include_payloads=False,
-                out=None,
-                no_link_metadata_api=True,
-            )
-            with mock.patch.object(
-                batch,
-                "resolve_work_links",
-                return_value={"resolved": [], "skipped": []},
-            ), mock.patch.object(
-                batch,
-                "DouyinWorkMetadataResolver",
-            ) as metadata_resolver:
-                result, exit_code = batch.execute(args)
-
-        self.assertEqual(exit_code, 0)
-        metadata_resolver.assert_not_called()
-        self.assertEqual(result["performance"]["link_metadata"], {
-            "configured": True,
-            "enabled": False,
-        })
+        self.assertEqual(
+            resolve_links.call_args.kwargs["metadata_resolver"].__class__.__name__,
+            "F2WorkMetadataCliResolver",
+        )
 
     def test_paused_plan_only_appends_material_difference(self):
         gateway = FakeGateway(
@@ -628,7 +519,7 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
         )
 
         self.assertEqual(results[0]["status"], "failed")
-        self.assertIn("第三方解析接口未返回达人名称", results[0]["message"])
+        self.assertIn("F2 未返回达人名称", results[0]["message"])
 
     def test_one_creator_failure_does_not_stop_other_creator(self):
         gateway = FakeGateway(plans={
@@ -859,7 +750,6 @@ class BatchQianchuanWorkPlanTests(unittest.TestCase):
                 auth_account_id=None,
                 submit=False,
                 include_payloads=False,
-                no_link_metadata_api=False,
                 out=None,
             )
             with mock.patch.object(

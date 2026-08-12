@@ -30,6 +30,14 @@ class EnvironmentCheckTests(unittest.TestCase):
         self.assertTrue(result["required"])
         self.assertTrue(result["executable"])
 
+    def test_f2_runtime_requires_pinned_version(self):
+        ready = environment_check.check_f2_runtime(lambda _name: "0.0.1.7")
+        blocked = environment_check.check_f2_runtime(lambda _name: "0.0.1.6")
+
+        self.assertEqual(ready["status"], "ready")
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertTrue(blocked["required"])
+
     def test_codex_version_parser_accepts_cli_output(self):
         self.assertEqual(
             environment_check.parse_codex_version("codex-cli 0.144.4"),

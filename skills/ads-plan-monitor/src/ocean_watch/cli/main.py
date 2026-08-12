@@ -19,10 +19,7 @@ from ocean_watch.discovery import (
     query_promotions,
     resolve_city_ids,
 )
-from ocean_watch.integrations import (
-    configure_official_mcp,
-    qianchuan_work_metadata,
-)
+from ocean_watch.integrations import configure_official_mcp
 from ocean_watch.materials import (
     inspect_qianchuan_work,
     query_creator_materials,
@@ -69,11 +66,6 @@ COMMANDS = {
     ("setup", "doctor"): (environment_check.main, (), "Check local runtime requirements"),
     ("setup", "init"): (first_run.main, (), "Initialize local configuration"),
     ("setup", "validate"): (validate_config.main, (), "Validate configuration readiness"),
-    ("setup", "work-metadata"): (
-        qianchuan_work_metadata.main,
-        (),
-        "Configure optional local Qianchuan work metadata",
-    ),
     ("auth", "set-app"): (oauth_local_authorize.main, ("--configure-app-only",), "Store app credentials"),
     ("auth", "authorize"): (oauth_local_authorize.main, (), "Run local OAuth authorization"),
     ("auth", "status"): (token_manager.main, ("--status",), "Show redacted token status"),

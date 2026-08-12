@@ -54,7 +54,6 @@ ocean-watch auth sync-accounts \
 | `channels.<channel>` | 非敏感 API、OAuth 地址和回调配置 |
 | `account.channel` | 当前业务账户渠道 |
 | `account.advertiser_id` | 当前广告主 |
-| `integrations.qianchuan_work_metadata.endpoint` | 可选千川作品解析服务，仅允许保存在本机配置 |
 | `managed_account_schema_version` | 用户负责账户簿版本，当前为 `1` |
 | `managed_accounts.<channel>` | 该渠道下用户主动维护的负责账户列表 |
 | `plan_template_schema_version` | 营销计划模板版本，当前为 `6` |
@@ -73,93 +72,13 @@ ocean-watch auth sync-accounts \
 
 `managed_accounts` 只保存非敏感的账户名称、广告主 ID、启用状态，以及可选的 OAuth 授权主体 `auth_account_id`。唯一键是 `channel + advertiser_id`，所以相同数字 ID 可以在营销和千川分别存在。同一广告主同时出现在多个 OAuth 授权时，用 `--auth-account-id` 固定选择；账户变更会在进程锁内重新读取并原子写入，避免并发命令丢失更新。授权账户同步不得新增、删除或覆盖负责账户记录。
 
-## 千川作品解析服务
+## 千川作品解析提示链
 
-该服务用于加速千川作品链接预检，是可选能力，默认未配置。真实地址属于本机配置，不写入开源仓库、Plugin 清单、Skill、示例或命令输出。安装态配置：
+作品链接预检先在官方抖音域名范围内解析作品 ID，再由当前 Ocean Watch Python 解释器启动一次只读 F2 CLI 批量解析公开作品元数据。F2 固定为 `0.0.1.7`，作为项目正式依赖安装，不使用额外虚拟环境；它把原始作品信息映射成稳定的 `code/message/data.author|product|video` 结构，包括作品 ID、达人 UID、可见抖音号、昵称以及 `anchor_info.extra` 中首个商品的 ID、名称和图片。F2 不调用下载模式、不下载素材、不创建数据库。
 
-```bash
-ocean-watch setup work-metadata \
-  --endpoint https://YOUR_PRIVATE_HOST/PATH \
-  --home-config
-```
+F2 不自动读取浏览器 Cookie。未设置 `OCEAN_WATCH_F2_DOUYIN_COOKIE` 时使用 F2 自身生成的访客 `ttwid`；如本机显式设置了该环境变量，则只在子进程内使用，Cookie 不进入命令参数、配置、日志或输出。F2 在临时目录运行，stdout 仅允许一份 JSON，stderr 被调用方丢弃。批量查询在单个 F2 CLI 内共享只读 HTTP 连接池，使用 8 秒单作品硬超时，首轮失败项仅重试一次，并在 20 秒元数据阶段总截止时间内保留已完成结果；输出包含首轮、重试、最慢作品、超时数和总耗时。访客初始化失败、依赖或固定版本不可用、超时、网络异常、响应异常或身份不完整都只产生压缩后的单作品提示，然后继续使用 30 天缓存；仍无完整身份时快速跳过该作品，不恢复全量授权达人扫描。
 
-开发仓库可显式指定被 Git 忽略的配置文件：
-
-```bash
-ocean-watch setup work-metadata \
-  --endpoint https://YOUR_PRIVATE_HOST/PATH \
-  --config config/ads-plan-monitor/config.json
-```
-
-查看状态不会打印地址，清除配置分别使用：
-
-```bash
-ocean-watch setup work-metadata --home-config
-ocean-watch setup work-metadata --clear --home-config
-```
-
-本机 JSON 结构如下，开源示例只保留空字符串：
-
-```json
-{
-  "integrations": {
-    "qianchuan_work_metadata": {
-      "endpoint": "https://YOUR_PRIVATE_HOST/PATH"
-    }
-  }
-}
-```
-
-端点必须是无用户名、密码和片段的 HTTPS URL。插件以 `GET` 请求调用，并在端点已有查询参数之后追加一个 URL 编码的 `url` 参数：
-
-```text
-GET <本机配置的 endpoint>?url=<公开抖音作品链接>
-Accept: application/json
-```
-
-### 数据返回接口
-
-解析服务应返回以下 JSON。字段可以包含更多业务数据，但插件只使用表格中标出的字段：
-
-```json
-{
-  "code": 200,
-  "message": "数据获取成功",
-  "data": {
-    "author": {
-      "nickname": "达人昵称",
-      "unique_id": "公开抖音号",
-      "uid": "数值UID",
-      "avatar": "https://PUBLIC_IMAGE_URL"
-    },
-    "product": {
-      "product_info_id": "商品ID",
-      "product_info_img": "https://PUBLIC_IMAGE_URL",
-      "product_info_name": "商品名称"
-    },
-    "video": {
-      "video_info_cover": "https://PUBLIC_IMAGE_URL",
-      "video_info_id": "作品ID",
-      "video_info_title": "作品标题",
-      "video_info_url": "https://PUBLIC_VIDEO_URL",
-      "play_url": "https://PUBLIC_AUDIO_URL"
-    }
-  }
-}
-```
-
-| 响应字段 | 要求 | 插件用途 |
-| --- | --- | --- |
-| `code` | 必须为数字 `200` | 判断解析成功 |
-| `data.video.video_info_id` | 必填，纯数字字符串 | 作品 `aweme_item_id` |
-| `data.author.unique_id` | 与 `uid` 同时提供时启用加速 | 定向查询官方授权达人 |
-| `data.author.uid` | 与 `unique_id` 同时提供时启用加速，纯数字字符串 | 官方查询使用的数值 `aweme_id` 提示 |
-| `data.product.product_info_id` | 可选，纯数字字符串 | 与模板全部商品 ID 比对；非空且均不匹配时立即跳过 |
-| `data.product.product_info_name` | 可选 | 诊断提示，不参与投放判断 |
-| `data.author.nickname` | 名称形式含 `creator_name` 时新建计划必填 | 仅用于本次千川新计划名称中的达人名称，不写入模板或长期缓存 |
-| 图片、标题、视频和音频 URL | 可选 | 不用于计划创建，也不持久化 |
-
-响应体上限为 1 MiB，服务端重定向会被拒绝。商品 ID 命中或为空不能证明作品可投，仍需通过千川官方授权关系、作品归属和商品过滤接口；只有商品 ID 明确不匹配时才执行前置跳过。解析服务未配置、响应异常或单次使用 `--no-link-metadata-api` 时，插件回退到受限抖音短链跳转和完整官方查询。
+F2 商品 ID 只用于在官方请求前快速排除明确不匹配的模板；空商品提示继续官方校验，匹配提示也不能替代校验。创建计划前仍需通过千川官方授权关系、作品归属和模板商品过滤接口完成定向复核。
 
 ## 计划模板
 

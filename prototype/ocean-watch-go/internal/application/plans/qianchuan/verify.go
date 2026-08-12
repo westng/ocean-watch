@@ -15,14 +15,13 @@ const (
 )
 
 type WorkInput struct {
-	InputIndex    int        `json:"input_index"`
-	InputURL      string     `json:"input_url,omitempty"`
-	AwemeItemID   string     `json:"aweme_item_id,omitempty"`
-	CreatorName   string     `json:"creator_name_hint,omitempty"`
-	PlanType      string     `json:"plan_type,omitempty"`
-	Business      string     `json:"business,omitempty"`
-	OwnerHint     *OwnerHint `json:"owner_hint,omitempty"`
-	ProductIDHint string     `json:"product_id_hint,omitempty"`
+	InputIndex  int        `json:"input_index"`
+	InputURL    string     `json:"input_url,omitempty"`
+	AwemeItemID string     `json:"aweme_item_id,omitempty"`
+	CreatorName string     `json:"creator_name_hint,omitempty"`
+	PlanType    string     `json:"plan_type,omitempty"`
+	Business    string     `json:"business,omitempty"`
+	OwnerHint   *OwnerHint `json:"owner_hint,omitempty"`
 }
 
 type VerifiedWork struct {
@@ -38,14 +37,12 @@ type VerifiedWork struct {
 }
 
 type SkippedWork struct {
-	InputIndex         int      `json:"input_index"`
-	InputURL           string   `json:"input_url,omitempty"`
-	AwemeItemID        string   `json:"aweme_item_id,omitempty"`
-	Reason             string   `json:"reason"`
-	Message            string   `json:"message"`
-	CandidateAwemeIDs  []string `json:"candidate_aweme_ids,omitempty"`
-	HintedProductID    string   `json:"hinted_product_id,omitempty"`
-	TemplateProductIDs []string `json:"template_product_ids,omitempty"`
+	InputIndex        int      `json:"input_index"`
+	InputURL          string   `json:"input_url,omitempty"`
+	AwemeItemID       string   `json:"aweme_item_id,omitempty"`
+	Reason            string   `json:"reason"`
+	Message           string   `json:"message"`
+	CandidateAwemeIDs []string `json:"candidate_aweme_ids,omitempty"`
 }
 
 type WorkQueryFailure struct {
@@ -256,9 +253,8 @@ func (verifier WorkVerifier) Verify(
 		if len(creatorWorks) == 0 {
 			continue
 		}
-		idsByProduct := workIDsByProductHint(creatorWorks, productIDs)
 		for _, productID := range productIDs {
-			for _, batch := range stringBatches(idsByProduct[productID], WorkQueryBatchSize) {
+			for _, batch := range stringBatches(workInputIDs(creatorWorks), WorkQueryBatchSize) {
 				result.ProductQueryCount++
 				videos, fetchErr := verifier.queryWorks(
 					ctx, request, creator.AwemeID, productID, batch,
@@ -410,7 +406,6 @@ func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork) {
 		value.CreatorName = strings.TrimSpace(value.CreatorName)
 		value.PlanType = strings.TrimSpace(value.PlanType)
 		value.Business = strings.TrimSpace(value.Business)
-		value.ProductIDHint = strings.TrimSpace(value.ProductIDHint)
 		if value.InputIndex < 0 {
 			value.InputIndex = index
 		}
@@ -552,21 +547,6 @@ func workInputIDs(works []WorkInput) []string {
 	result := make([]string, len(works))
 	for index, work := range works {
 		result[index] = work.AwemeItemID
-	}
-	return result
-}
-
-func workIDsByProductHint(works []WorkInput, productIDs []string) map[string][]string {
-	result := make(map[string][]string, len(productIDs))
-	allowed := stringSetFrom(productIDs)
-	for _, work := range works {
-		if _, valid := allowed[work.ProductIDHint]; work.ProductIDHint != "" && valid {
-			result[work.ProductIDHint] = append(result[work.ProductIDHint], work.AwemeItemID)
-			continue
-		}
-		for _, productID := range productIDs {
-			result[productID] = append(result[productID], work.AwemeItemID)
-		}
 	}
 	return result
 }

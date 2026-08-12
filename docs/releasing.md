@@ -35,7 +35,7 @@ codex plugin add ocean-watch@ocean-watch
 `.github/workflows/ci.yml` 只在 `main` push 和 pull request 上运行：
 
 - Python 3.12 在 Linux、Windows 和 macOS 执行完整质量与回归测试。
-- Python 3.9 在 Linux 执行生产包、CLI、首次运行和核心兼容测试。
+- Python 3.10 在 Linux 执行生产包、CLI、首次运行和核心兼容测试。
 - Linux 顺序测试并 vet 两个 Go module。
 
 日常 CI 不构建非正式候选、不执行五平台 native candidate 消费，也不上传 P0/G5 evidence artifact。这些工作不属于当前 Python Plugin 的每次提交门禁。

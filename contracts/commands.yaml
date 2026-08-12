@@ -1,7 +1,7 @@
 schema_version: 1
 source: skills/ads-plan-monitor/src/ocean_watch/cli/main.py
-source_commit: 8a7b75d87a4bde41ca28a8fe05efd96042ca7210
-command_count: 82
+source_commit: f564bf2ec64b8523b63ac96c6910659c99638802
+command_count: 81
 global_help:
   argv:
   - --help
@@ -90,30 +90,6 @@ commands:
     - '  --mode {query,create-preview,create-submit,all}'
     - '  --plan-template PLAN_TEMPLATE'
     stdout_sha256: eb2c33b8b4e691f04c1ffa6f824c006d8a13819e0b8d4fe76d1a6a7ebf33fe89
-    stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-- domain: setup
-  action: work-metadata
-  command: setup work-metadata
-  description: Configure optional local Qianchuan work metadata
-  dispatch_prefix: []
-  help:
-    argv:
-    - setup
-    - work-metadata
-    - --help
-    exit_code: 0
-    stdout: "usage: ocean-watch setup work-metadata [-h] [--config CONFIG] [--home-config]\n                             \
-      \          [--endpoint ENDPOINT | --clear]\n                                       [--out OUT]\n\nConfigure the optional\
-      \ local Qianchuan work metadata endpoint.\n\noptions:\n  -h, --help           show this help message and exit\n  --config\
-      \ CONFIG\n  --home-config\n  --endpoint ENDPOINT\n  --clear\n  --out OUT\n"
-    stderr: ''
-    parameter_lines:
-    - '  --config CONFIG'
-    - '  --home-config'
-    - '  --endpoint ENDPOINT'
-    - '  --clear'
-    - '  --out OUT'
-    stdout_sha256: aced9c9a87c55b88f939ba508ac134b09685e20ab67430f832425905d1eb5fc5
     stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 - domain: auth
   action: set-app
@@ -1541,14 +1517,12 @@ commands:
       \                                            [--plan-type PLAN_TYPE]\n                                             \
       \  [--business BUSINESS]\n                                               [--concurrency CONCURRENCY]\n             \
       \                                  [--auth-account-id AUTH_ACCOUNT_ID]\n                                           \
-      \    [--no-link-metadata-api]\n                                               [--submit] [--include-payloads]\n    \
-      \                                           [--out OUT]\n\nCreate or append Qianchuan product plans from Douyin work\
-      \ links.\n\noptions:\n  -h, --help            show this help message and exit\n  --config CONFIG\n  --plan-template\
-      \ PLAN_TEMPLATE\n  --work-url WORK_URL\n  --plan-type PLAN_TYPE\n                        Plan type used when the template\
-      \ plan name contains\n                        {type}.\n  --business BUSINESS   Business owner used when the template\
-      \ plan name\n                        contains {business}.\n  --concurrency CONCURRENCY\n  --auth-account-id AUTH_ACCOUNT_ID\n\
-      \  --no-link-metadata-api\n                        Disable the configured public Douyin work metadata\n            \
-      \            hint service.\n  --submit\n  --include-payloads\n  --out OUT\n"
+      \    [--submit] [--include-payloads]\n                                               [--out OUT]\n\nCreate or append\
+      \ Qianchuan product plans from Douyin work links.\n\noptions:\n  -h, --help            show this help message and exit\n\
+      \  --config CONFIG\n  --plan-template PLAN_TEMPLATE\n  --work-url WORK_URL\n  --plan-type PLAN_TYPE\n              \
+      \          Plan type used when the template plan name contains\n                        {type}.\n  --business BUSINESS\
+      \   Business owner used when the template plan name\n                        contains {business}.\n  --concurrency CONCURRENCY\n\
+      \  --auth-account-id AUTH_ACCOUNT_ID\n  --submit\n  --include-payloads\n  --out OUT\n"
     stderr: ''
     parameter_lines:
     - '                                               --plan-template PLAN_TEMPLATE'
@@ -1559,11 +1533,10 @@ commands:
     - '  --business BUSINESS   Business owner used when the template plan name'
     - '  --concurrency CONCURRENCY'
     - '  --auth-account-id AUTH_ACCOUNT_ID'
-    - '  --no-link-metadata-api'
     - '  --submit'
     - '  --include-payloads'
     - '  --out OUT'
-    stdout_sha256: 0f797bc0df8d575eefea568d8ec037694a54d72d6314ace7725c9be38465ee76
+    stdout_sha256: e78c0cefab400028e209f9c1887987f794d7910659836a9b35c2ebd8d2245e9a
     stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 - domain: plans
   action: remove-qianchuan-work

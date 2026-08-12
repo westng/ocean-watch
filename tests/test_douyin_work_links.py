@@ -1,4 +1,3 @@
-import json
 import unittest
 
 from ocean_watch.materials import douyin_work_links
@@ -39,8 +38,8 @@ class FakeMetadataResolver:
         self.error = error
         self.calls = []
 
-    def resolve(self, value):
-        self.calls.append(value)
+    def resolve_many(self, work_ids, *, concurrency):
+        self.calls.append((work_ids, concurrency))
         if self.error:
             raise self.error
         return self.result
@@ -68,6 +67,25 @@ class DouyinWorkLinkTests(unittest.TestCase):
         result = resolver.resolve("https://v.douyin.com/abc123/")
         self.assertEqual(result["aweme_item_id"], "7000000000000000001")
         self.assertEqual(len(opener.calls), 1)
+
+    def test_short_link_ignores_trailing_command_noise(self):
+        noisy_links = [
+            "https://v.douyin.com/abc123/:3pm",
+            "https://v.douyin.com/abc123/05/24",
+            "https://v.douyin.com/abc123/C@u.SY:4pm",
+        ]
+        for noisy_link in noisy_links:
+            with self.subTest(noisy_link=noisy_link):
+                opener = FakeOpener(
+                    "https://www.douyin.com/video/7000000000000000001"
+                )
+                resolver = douyin_work_links.DouyinWorkLinkResolver(opener=opener)
+
+                result = resolver.resolve(noisy_link)
+
+                self.assertEqual(result["aweme_item_id"], "7000000000000000001")
+                self.assertEqual(result["input_url"], "https://v.douyin.com/abc123/")
+                self.assertEqual(opener.calls[0][0], "https://v.douyin.com/abc123/")
 
     def test_non_douyin_host_is_rejected(self):
         resolver = douyin_work_links.DouyinWorkLinkResolver(opener=FakeOpener("unused"))
@@ -104,109 +122,64 @@ class DouyinWorkLinkTests(unittest.TestCase):
         self.assertEqual(len(result["resolved"]), 1)
         self.assertEqual(result["skipped"][0]["reason"], "duplicate_input")
 
-    def test_metadata_hint_avoids_short_link_redirect(self):
-        opener = FakeOpener("unused")
+    def test_f2_runs_once_and_fills_complete_identity(self):
         metadata = FakeMetadataResolver({
-            "aweme_item_id": "7000000000000000001",
-            "owner_hint": {
-                "aweme_id": "9001",
-                "aweme_show_id": "creator-one",
-                "source": "configured_metadata_api",
+            "results": {
+                "7000000000000000001": {
+                    "aweme_item_id": "7000000000000000001",
+                    "creator_name_hint": "达人甲",
+                    "owner_hint": {
+                        "aweme_id": "9001",
+                        "aweme_show_id": "creator-one",
+                        "source": "f2_cli",
+                    },
+                    "product_hint": {
+                        "product_id": "1001",
+                        "product_name": "商品甲",
+                        "source": "f2_cli",
+                    },
+                    "metadata": {
+                        "code": 200,
+                        "message": "数据获取成功",
+                        "data": {"author": {}, "product": {}, "video": {}},
+                    },
+                },
             },
-            "product_hint": {
-                "product_id": "1001",
-                "product_name": "Example Product",
-                "source": "configured_metadata_api",
-            },
+            "errors": {},
         })
-        resolver = douyin_work_links.DouyinWorkLinkResolver(
-            opener=opener,
+
+        result = douyin_work_links.resolve_work_links(
+            [
+                "https://www.douyin.com/video/7000000000000000001",
+                "https://www.douyin.com/video/7000000000000000001?from=share",
+            ],
+            resolver=douyin_work_links.DouyinWorkLinkResolver(opener=FakeOpener("unused")),
+            concurrency=2,
             metadata_resolver=metadata,
         )
 
-        result = resolver.resolve("https://v.douyin.com/abc123/")
+        self.assertEqual(metadata.calls, [(["7000000000000000001"], 2)])
+        self.assertEqual(result["resolved"][0]["owner_hint"]["source"], "f2_cli")
+        self.assertEqual(result["resolved"][0]["creator_name_hint"], "达人甲")
+        self.assertEqual(result["resolved"][0]["product_hint"]["product_id"], "1001")
+        self.assertEqual(result["resolved"][0]["metadata"]["code"], 200)
 
-        self.assertEqual(result["aweme_item_id"], "7000000000000000001")
-        self.assertEqual(result["owner_hint"]["aweme_show_id"], "creator-one")
-        self.assertEqual(result["product_hint"]["product_id"], "1001")
-        self.assertEqual(opener.calls, [])
-
-    def test_metadata_failure_falls_back_to_safe_redirect(self):
-        opener = FakeOpener(
-            "https://www.douyin.com/video/7000000000000000001"
-        )
+    def test_f2_failure_is_compact_and_keeps_resolved_work(self):
         metadata = FakeMetadataResolver(
-            error=douyin_work_links.WorkLinkError("metadata_failed", "unavailable")
+            error=RuntimeError("cookie=secret https://private.example.test")
         )
-        resolver = douyin_work_links.DouyinWorkLinkResolver(
-            opener=opener,
+
+        result = douyin_work_links.resolve_work_links(
+            ["https://www.douyin.com/video/7000000000000000001"],
+            resolver=douyin_work_links.DouyinWorkLinkResolver(opener=FakeOpener("unused")),
             metadata_resolver=metadata,
         )
 
-        result = resolver.resolve("https://v.douyin.com/abc123/")
-
-        self.assertEqual(result["aweme_item_id"], "7000000000000000001")
-        self.assertEqual(result["hint_warning"]["code"], "metadata_failed")
-        self.assertEqual(len(opener.calls), 1)
-
-    def test_metadata_api_extracts_only_validated_identity_hint(self):
-        payload = json.dumps({
-            "code": 200,
-            "data": {
-                "author": {
-                    "unique_id": "creator-one",
-                    "uid": "9001",
-                    "nickname": "达人甲",
-                },
-                "product": {
-                    "product_info_id": "1001",
-                    "product_info_name": "Example Product",
-                },
-                "video": {"video_info_id": "7000000000000000001"},
-            },
-        }).encode()
-        resolver = douyin_work_links.DouyinWorkMetadataResolver(
-            "https://edge.example.test/api",
-            opener=FakeOpener("unused", payload=payload),
-        )
-
-        result = resolver.resolve("https://v.douyin.com/abc123/")
-
-        self.assertEqual(result, {
-            "aweme_item_id": "7000000000000000001",
-            "creator_name_hint": "达人甲",
-            "owner_hint": {
-                "aweme_id": "9001",
-                "aweme_show_id": "creator-one",
-                "source": "configured_metadata_api",
-            },
-            "product_hint": {
-                "product_id": "1001",
-                "product_name": "Example Product",
-                "source": "configured_metadata_api",
-            },
-        })
-
-    def test_metadata_api_keeps_numeric_owner_hint_without_visible_id(self):
-        payload = json.dumps({
-            "code": 200,
-            "data": {
-                "author": {"uid": "9001", "nickname": "达人甲"},
-                "video": {"video_info_id": "7000000000000000001"},
-            },
-        }).encode()
-        resolver = douyin_work_links.DouyinWorkMetadataResolver(
-            "https://edge.example.test/api",
-            opener=FakeOpener("unused", payload=payload),
-        )
-
-        result = resolver.resolve("https://v.douyin.com/abc123/")
-
-        self.assertEqual(result["owner_hint"], {
-            "aweme_id": "9001",
-            "aweme_show_id": None,
-            "source": "configured_metadata_api",
-        })
+        self.assertEqual(len(result["resolved"]), 1)
+        warning = result["resolved"][0]["hint_warning"]
+        self.assertEqual(warning["code"], "f2_metadata_query_failed")
+        self.assertNotIn("secret", str(warning))
+        self.assertNotIn("private.example.test", str(warning))
 
 
 if __name__ == "__main__":

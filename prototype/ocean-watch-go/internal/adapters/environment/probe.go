@@ -20,10 +20,10 @@ import (
 
 var codexVersionPattern = regexp.MustCompile(`(?:^|[^0-9])(\d+)\.(\d+)\.(\d+)(?:[^0-9]|$)`)
 
-var minimumPython = python.Version{Major: 3, Minor: 9}
+var minimumPython = python.Version{Major: 3, Minor: 10}
 var minimumCodex = python.Version{Major: 0, Minor: 144, Patch: 1}
 
-const minimumPythonText = "3.9"
+const minimumPythonText = "3.10"
 
 type CredentialBackend interface {
 	BackendName() string
@@ -47,8 +47,8 @@ func (probe Probe) Python(ctx context.Context) onboarding.Check {
 	result := onboarding.Check{
 		"id": "python", "required": true,
 		"status": "blocked", "minimum_version": minimumPythonText,
-		"message":     "Python 3.9 or newer is required.",
-		"remediation": "Install Python 3.9 or newer, then start a new Codex task.",
+		"message":     "Python 3.10 or newer is required.",
+		"remediation": "Install Python 3.10 or newer, then start a new Codex task.",
 	}
 	if runtimeInfo.Executable != "" {
 		result["version"] = runtimeInfo.Version.String()

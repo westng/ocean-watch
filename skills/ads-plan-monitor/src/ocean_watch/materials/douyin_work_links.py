@@ -1,4 +1,3 @@
-import json
 import re
 import urllib.parse
 import urllib.request
@@ -8,9 +7,9 @@ DEFAULT_TIMEOUT = 15
 DEFAULT_CONCURRENCY = 4
 MAX_CONCURRENCY = 10
 MAX_REDIRECTS = 5
-MAX_METADATA_RESPONSE_BYTES = 1024 * 1024
 WORK_PATH_PATTERN = re.compile(r"(?:^|/)video/(\d+)(?:/|$)")
 URL_PATTERN = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+SHORT_LINK_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 TRUSTED_DOUYIN_DOMAINS = ("douyin.com", "iesdouyin.com")
 
 
@@ -46,6 +45,11 @@ def normalize_input_url(value):
         raise WorkLinkError("invalid_url", "作品链接端口无效") from error
     if port not in {None, 443}:
         raise WorkLinkError("untrusted_port", "作品链接使用了不允许的端口")
+    if parsed.hostname.lower() == "v.douyin.com":
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if not path_parts or not SHORT_LINK_CODE_PATTERN.fullmatch(path_parts[0]):
+            raise WorkLinkError("invalid_url", "抖音短链分享码无效")
+        parsed = parsed._replace(path=f"/{path_parts[0]}/", query="", fragment="")
     return urllib.parse.urlunsplit(parsed)
 
 
@@ -75,132 +79,15 @@ class SafeDouyinRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 
 
-class NoMetadataRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
-        return None
-
-
-class DouyinWorkMetadataResolver:
-    def __init__(self, endpoint, opener=None, timeout=DEFAULT_TIMEOUT):
-        self.endpoint = str(endpoint)
-        self.opener = opener or urllib.request.build_opener(NoMetadataRedirectHandler())
-        self.timeout = timeout
-
-    def resolve(self, input_url):
-        parsed = urllib.parse.urlsplit(self.endpoint)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.fragment
-        ):
-            raise WorkLinkError(
-                "invalid_metadata_endpoint",
-                "作品解析服务必须使用无凭据的 HTTPS 地址",
-            )
-        query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        query.append(("url", input_url))
-        request_url = urllib.parse.urlunsplit(parsed._replace(
-            query=urllib.parse.urlencode(query),
-        ))
-        request = urllib.request.Request(
-            request_url,
-            headers={"Accept": "application/json", "User-Agent": "ocean-watch/0.9"},
-            method="GET",
-        )
-        try:
-            with self.opener.open(request, timeout=self.timeout) as response:
-                payload = response.read(MAX_METADATA_RESPONSE_BYTES + 1)
-        except Exception as error:
-            raise WorkLinkError(
-                "metadata_query_failed",
-                f"作品解析服务请求失败: {error}",
-            ) from error
-        if len(payload) > MAX_METADATA_RESPONSE_BYTES:
-            raise WorkLinkError(
-                "metadata_response_too_large",
-                "作品解析服务响应超过大小限制",
-            )
-        try:
-            result = json.loads(payload.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise WorkLinkError(
-                "invalid_metadata_response",
-                "作品解析服务返回了无效 JSON",
-            ) from error
-        code = result.get("code") if isinstance(result, dict) else None
-        data = result.get("data") if isinstance(result, dict) else None
-        author = data.get("author") if isinstance(data, dict) else None
-        product = data.get("product") if isinstance(data, dict) else None
-        video = data.get("video") if isinstance(data, dict) else None
-        aweme_item_id = str((video or {}).get("video_info_id") or "")
-        aweme_id = str((author or {}).get("uid") or "")
-        aweme_show_id = str((author or {}).get("unique_id") or "").strip()
-        creator_name = str((author or {}).get("nickname") or "").strip()
-        if code != 200 or not aweme_item_id.isdigit():
-            raise WorkLinkError(
-                "invalid_metadata_response",
-                "作品解析服务未返回有效作品 ID",
-            )
-        owner_hint = None
-        if aweme_id.isdigit():
-            owner_hint = {
-                "aweme_id": aweme_id,
-                "aweme_show_id": aweme_show_id or None,
-                "source": "configured_metadata_api",
-            }
-        product_id = str((product or {}).get("product_info_id") or "").strip()
-        product_hint = None
-        if product_id.isdigit():
-            product_hint = {
-                "product_id": product_id,
-                "product_name": str(
-                    (product or {}).get("product_info_name") or ""
-                ).strip() or None,
-                "source": "configured_metadata_api",
-            }
-        return {
-            "aweme_item_id": aweme_item_id,
-            "creator_name_hint": creator_name or None,
-            "owner_hint": owner_hint,
-            "product_hint": product_hint,
-        }
-
-
 class DouyinWorkLinkResolver:
-    def __init__(self, opener=None, timeout=DEFAULT_TIMEOUT, metadata_resolver=None):
+    def __init__(self, opener=None, timeout=DEFAULT_TIMEOUT):
         self.opener = opener or urllib.request.build_opener(SafeDouyinRedirectHandler())
         self.timeout = timeout
-        self.metadata_resolver = metadata_resolver
 
     def resolve(self, value):
         input_url = normalize_input_url(value)
         aweme_item_id = work_id_from_url(input_url)
         resolved_url = input_url
-        owner_hint = None
-        product_hint = None
-        creator_name_hint = None
-        hint_warning = None
-        if self.metadata_resolver is not None:
-            try:
-                metadata = self.metadata_resolver.resolve(input_url)
-                metadata_item_id = metadata["aweme_item_id"]
-                if aweme_item_id is not None and metadata_item_id != aweme_item_id:
-                    raise WorkLinkError(
-                        "metadata_work_mismatch",
-                        "作品解析服务返回的作品 ID 与输入链接不一致",
-                    )
-                aweme_item_id = metadata_item_id
-                owner_hint = metadata.get("owner_hint")
-                product_hint = metadata.get("product_hint")
-                creator_name_hint = metadata.get("creator_name_hint")
-                resolved_url = canonical_work_url(aweme_item_id)
-            except Exception as error:
-                hint_warning = {
-                    "code": getattr(error, "code", "metadata_query_failed"),
-                    "message": str(error),
-                }
         if aweme_item_id is None:
             request = urllib.request.Request(
                 input_url,
@@ -236,18 +123,16 @@ class DouyinWorkLinkResolver:
             "canonical_url": canonical_work_url(aweme_item_id),
             "aweme_item_id": aweme_item_id,
         }
-        if owner_hint:
-            result["owner_hint"] = owner_hint
-        if product_hint:
-            result["product_hint"] = product_hint
-        if creator_name_hint:
-            result["creator_name_hint"] = creator_name_hint
-        if hint_warning:
-            result["hint_warning"] = hint_warning
         return result
 
 
-def resolve_work_links(values, *, resolver=None, concurrency=DEFAULT_CONCURRENCY):
+def resolve_work_links(
+    values,
+    *,
+    resolver=None,
+    concurrency=DEFAULT_CONCURRENCY,
+    metadata_resolver=None,
+):
     concurrency = int(concurrency)
     if concurrency < 1 or concurrency > MAX_CONCURRENCY:
         raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
@@ -275,6 +160,83 @@ def resolve_work_links(values, *, resolver=None, concurrency=DEFAULT_CONCURRENCY
                     "message": str(error),
                 }
 
+    metadata_ids = list(dict.fromkeys(
+        row["aweme_item_id"]
+        for row in resolved_by_index.values()
+        if row.get("aweme_item_id")
+    ))
+    metadata_performance = {}
+    metadata_error = None
+    if metadata_ids and metadata_resolver is not None:
+        try:
+            metadata_result = metadata_resolver.resolve_many(
+                metadata_ids,
+                concurrency=concurrency,
+            )
+        except Exception as error:
+            error_code = getattr(error, "code", "f2_metadata_query_failed")
+            metadata_error = {
+                "code": error_code,
+                "message": (
+                    str(error)
+                    if error_code == "f2_runtime_unavailable"
+                    else "F2 未返回可用的公开作品元数据"
+                ),
+            }
+            metadata_result = {
+                "results": {},
+                "errors": {
+                    work_id: {
+                        "code": getattr(error, "code", "f2_metadata_query_failed"),
+                        "message": "F2 未返回可用的公开作品元数据",
+                    }
+                    for work_id in metadata_ids
+                },
+            }
+        metadata_performance = metadata_result.get("performance") or {}
+        metadata_results = metadata_result.get("results") or {}
+        metadata_errors = metadata_result.get("errors") or {}
+        for row in resolved_by_index.values():
+            work_id = row.get("aweme_item_id")
+            metadata = metadata_results.get(work_id)
+            metadata_owner = metadata.get("owner_hint") if isinstance(metadata, dict) else None
+            creator_id = str((metadata_owner or {}).get("aweme_id") or "")
+            visible_id = str(
+                (metadata_owner or {}).get("aweme_show_id") or ""
+            ).strip()
+            if (
+                isinstance(metadata, dict)
+                and str(metadata.get("aweme_item_id") or "") == work_id
+                and creator_id.isdigit()
+                and visible_id
+            ):
+                row["owner_hint"] = {
+                    "aweme_id": creator_id,
+                    "aweme_show_id": visible_id,
+                    "source": "f2_cli",
+                }
+                if metadata.get("creator_name_hint"):
+                    row["creator_name_hint"] = metadata["creator_name_hint"]
+                if isinstance(metadata.get("metadata"), dict):
+                    row["metadata"] = metadata["metadata"]
+                product_hint = metadata.get("product_hint")
+                if isinstance(product_hint, dict) and str(
+                    product_hint.get("product_id") or ""
+                ).isdigit():
+                    row["product_hint"] = {
+                        "product_id": str(product_hint["product_id"]),
+                        "product_name": str(
+                            product_hint.get("product_name") or ""
+                        ).strip() or None,
+                        "source": "f2_cli",
+                    }
+            elif work_id in metadata_errors or metadata is not None:
+                compact_error = metadata_errors.get(work_id) or {}
+                row["hint_warning"] = {
+                    "code": compact_error.get("code") or "f2_metadata_query_failed",
+                    "message": "F2 未返回可用的公开作品元数据",
+                }
+
     resolved = []
     skipped = []
     seen_item_ids = set()
@@ -293,4 +255,9 @@ def resolve_work_links(values, *, resolver=None, concurrency=DEFAULT_CONCURRENCY
         else:
             seen_item_ids.add(item_id)
             resolved.append(row)
-    return {"resolved": resolved, "skipped": skipped}
+    return {
+        "resolved": resolved,
+        "skipped": skipped,
+        "metadata_performance": metadata_performance,
+        "metadata_error": metadata_error,
+    }

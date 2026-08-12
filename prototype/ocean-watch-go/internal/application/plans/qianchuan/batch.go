@@ -664,7 +664,7 @@ func (service BatchService) planName(request normalizedBatchRequest, group batch
 		pattern = "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 	}
 	if strings.Contains(pattern, "{creator_name}") && fields.creatorName == "" {
-		return "", errors.New("第三方解析接口未返回达人名称，无法创建千川计划")
+		return "", errors.New("F2 未返回达人名称，无法创建千川计划")
 	}
 	for _, key := range []string{"type", "business"} {
 		if values[key] == "" {
@@ -715,7 +715,7 @@ func batchGroupPlanNameFields(works []VerifiedWork, planType, business string) (
 		if fields.creatorName == "" {
 			fields.creatorName = creatorName
 		} else if fields.creatorName != creatorName {
-			return batchPlanNameFields{}, errors.New("同一达人素材的第三方达人名称不一致")
+			return batchPlanNameFields{}, errors.New("同一达人素材的 F2 达人名称不一致")
 		}
 	}
 	return fields, nil

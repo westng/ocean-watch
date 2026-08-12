@@ -8,7 +8,7 @@
 
 | 范围 | 当前事实 |
 | --- | --- |
-| 用户安装态 | Plugin 仍要求 Python 3.9+；两个 Skill 的 `run.py` 继续是稳定入口 |
+| 用户安装态 | Plugin 仍要求 Python 3.10+；两个 Skill 的 `run.py` 继续是稳定入口 |
 | 生产命令路由 | `.codex-plugin/runtime-policy.json` 保持 `enabled: false`，全部命令走 Python |
 | Go 候选 | `prototype/ocean-watch-go` 已实现模块化单体、官方 SDK Adapter、合同运行器及 P1–P4 大部分 Shadow 业务路径 |
 | 本地开发路由 | Go 候选的默认 manifest 只启用已接入的本地命令；网络和写入路径通过测试专用 manifest 做 Shadow 验证 |
@@ -54,7 +54,7 @@ flowchart LR
     App --> Ports["Ports"]
     Ports --> SDK["Ocean Engine SDK adapters"]
     Ports --> FS["Filesystem and credential adapters"]
-    Ports --> Meta["Work metadata adapter"]
+    Ports --> Link["Douyin link resolver"]
     CLI --> Routes["Immutable route manifest"]
     Routes --> Go["Go handler"]
     Routes --> Fallback["Python fallback"]

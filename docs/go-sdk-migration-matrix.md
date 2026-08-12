@@ -21,7 +21,7 @@
 
 截至 2026-08-04，P1–P4 的大部分命令已达到 `Shadow`，但生产策略仍禁用，`ProductionRouteManifest` 将全部命令固定为 Python。Go 候选的默认开发 manifest 只启用已接入的本地命令；网络和写命令的 Shadow 由测试专用 manifest 显式开启。本机自动化通过不等于 Gate 已签字，也不代表生产 launcher 已切流。
 
-2026-08-04 的当前盘点为：`COMMANDS` 共 `82` 个 CLI action，全部由第 2 节覆盖；原有 `51` 条官方路径加入乘方账户、直播间维度和达人维度 3 条新路径后，共 `54` 条唯一官方 OpenAPI path。全域账户、Schema 和自定义数据路径原本已在基线中，本次扩展其命令用途。固定 SDK 中对应生成 Service、HTTP 方法和 host profile均通过 Adapter 测试核验，并由 `contracts/commands.yaml` 与 `contracts/sdk-baseline.yaml` 固化。命令或 endpoint 发生增删时必须重新生成机器清单，并以重新评审后的清单作为分母。
+2026-08-12 的当前盘点为：`COMMANDS` 共 `81` 个 CLI action，全部由第 2 节覆盖；原有 `51` 条官方路径加入乘方账户、直播间维度和达人维度 3 条新路径后，共 `54` 条唯一官方 OpenAPI path。全域账户、Schema 和自定义数据路径原本已在基线中，本次扩展其命令用途。固定 SDK 中对应生成 Service、HTTP 方法和 host profile均通过 Adapter 测试核验，并由 `contracts/commands.yaml` 与 `contracts/sdk-baseline.yaml` 固化。命令或 endpoint 发生增删时必须重新生成机器清单，并以重新评审后的清单作为分母。
 
 ### 当前实现说明
 
@@ -37,7 +37,6 @@
 | 环境检查 | `setup doctor` | `onboarding.Doctor` | P1 | JSON、平台和依赖检查兼容 | AC-101, AC-102 | Shadow |
 | 初始化 | `setup init` | `onboarding.Initialize` + `filesystem.ConfigStore` | P1 | create-if-missing、原子写、Schema 不变 | AC-106, AC-107 | Shadow |
 | 配置校验 | `setup validate` | `onboarding.Validate` | P1 | 不访问网络、错误码兼容 | AC-102, AC-106 | Shadow |
-| 作品解析配置 | `setup work-metadata` | `workmetadata.Configure` | P1 | endpoint 不回显、显式 clear | AC-109 | Shadow |
 | 应用配置 | `auth set-app` | `auth.ConfigureApp` + `CredentialStore` | P2 | Secret 只进安全后端 | AC-107, AC-109 | Not started |
 | 本地 OAuth | `auth authorize` | `auth.Authorize` + OAuth SDK Adapter | P2 | state 校验、pending sync、失败可续 | AC-108, AC-110 | Not started |
 | Token 状态 | `auth status` | `auth.Status` | P2 | 只返回脱敏状态 | AC-109 | Not started |
@@ -57,7 +56,7 @@
 | 达人视频查询 | `materials creator` | `materials.MarketingCreatorVideos` | P3 | 授权与主页事实分离 | AC-112, AC-114 | Shadow |
 | 图片查询 | `materials images` | `materials.MarketingImages` | P3 | endpoint 模式和分页兼容 | AC-112, AC-114 | Shadow |
 | 商品查询 | `materials products` | `materials.MarketingProducts` | P3 | DPA 字段与筛选兼容 | AC-112, AC-114 | Shadow |
-| 千川作品检查 | `qc-materials inspect-work` | `materials.InspectPublicWork` + Work Metadata Adapter | P1 | 私有 endpoint 不回显；官方事实不由外部结果替代 | AC-109, AC-114 | Not started |
+| 千川作品检查 | `qc-materials inspect-work` | Python `F2WorkMetadataCliResolver`（Go handler 待实现） | P1 | F2 Cookie、stderr 与原始异常不回显；官方事实不由 F2 结果替代 | AC-109, AC-114 | Not started |
 | 千川授权达人 | `qc-materials authorized-creators` | `materials.ListQianchuanCreators` | P3 | 精确账号匹配、完整分页 | AC-112, AC-114 | Shadow |
 | 千川达人视频 | `qc-materials creator-videos` | `materials.QueryQianchuanCreatorVideos` | P3 | 每商品官方过滤、cursor 分页、去重 | AC-112, AC-114 | Shadow |
 | 千川商品 | `qc-products list`、`qc-products search` | `materials.QueryQianchuanProducts` | P3 | 完整分页、展示限制不影响汇总 | AC-112, AC-114 | Shadow |

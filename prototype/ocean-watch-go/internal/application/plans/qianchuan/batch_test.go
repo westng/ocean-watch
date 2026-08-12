@@ -28,7 +28,6 @@ const (
 
 func TestBatchWorkIdempotencyAndPresentation(t *testing.T) {
 	t.Run("verification targets one creator and batches works by fifty", testBatchVerificationLimits)
-	t.Run("product hints prevent template-product query amplification", testBatchProductHintQueryLimits)
 	t.Run("owner hints require targeted verification without broad fallback", testBatchOwnerHintVerification)
 	t.Run("multiple creator plans are filtered by verified work products", testBatchPlanProductDisambiguation)
 	t.Run("unknown append reconciles and rerun writes nothing", testBatchAppendIdempotency)
@@ -91,44 +90,6 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 	group.creator = creator
 	if _, err := service.planName(request, group); err == nil {
 		t.Fatal("empty rendered plan name was accepted")
-	}
-}
-
-func testBatchProductHintQueryLimits(t *testing.T) {
-	reader := &batchVerificationReader{}
-	productIDs := make([]string, 30)
-	for index := range productIDs {
-		productIDs[index] = fmt.Sprintf("500000000000%04d", index+1)
-	}
-	inputs := make([]WorkInput, 55)
-	for index := range inputs {
-		inputs[index] = WorkInput{
-			InputIndex:    index,
-			InputURL:      fmt.Sprintf("https://www.douyin.com/video/%s", batchWorkID(index+1)),
-			AwemeItemID:   batchWorkID(index + 1),
-			OwnerHint:     &OwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
-			ProductIDHint: productIDs[index%len(productIDs)],
-		}
-	}
-	result, err := (WorkVerifier{Reader: reader}).Verify(context.Background(), WorkVerificationRequest{
-		AdvertiserID: batchAdvertiserID,
-		AccessToken:  batchToken,
-		ProductIDs:   productIDs,
-		Works:        inputs,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Matched) != 55 || result.ProductQueryCount != 30 ||
-		len(reader.productBatchSizes) != 30 {
-		t.Fatalf("product hints did not bound product queries: result=%#v batches=%v", result, reader.productBatchSizes)
-	}
-	queriedWorks := 0
-	for _, size := range reader.productBatchSizes {
-		queriedWorks += size
-	}
-	if queriedWorks != 55 {
-		t.Fatalf("product verification work references = %d, want 55", queriedWorks)
 	}
 }
 

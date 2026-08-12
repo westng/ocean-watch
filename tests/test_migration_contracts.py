@@ -36,7 +36,7 @@ class MigrationContractTests(unittest.TestCase):
         expected = [f"{domain} {action}" for domain, action in cli.COMMANDS]
         actual = [row["command"] for row in manifest["commands"]]
 
-        self.assertEqual(manifest["command_count"], 82)
+        self.assertEqual(manifest["command_count"], 81)
         self.assertEqual(actual, expected)
         for row in manifest["commands"]:
             help_result = row["help"]

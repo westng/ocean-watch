@@ -25,7 +25,6 @@ func TestQianchuanCommandBoundaries(t *testing.T) {
 	t.Run("single template dry-run uses no token or writer", testCreateCommandDryRunBoundary)
 	t.Run("single plan validation error has no partial result", testCreateCommandValidationError)
 	t.Run("batch dry-run uses one scoped token and preserves presentation", testBatchCommandReadScope)
-	t.Run("metadata product mismatch stops before credentials", testBatchMetadataProductBoundary)
 	t.Run("metadata owner hint overrides cache and cache failure only warns", testBatchOwnerHintCacheBoundary)
 	t.Run("delete requires both confirmations before links or credentials", testRemoveCommandDoubleConfirmation)
 	t.Run("unknown create preserves reconciliation result without replay", testCreateCommandUnknownResult)
@@ -142,7 +141,7 @@ func testBatchCommandReadScope(t *testing.T) {
 	links := &commandLinkResolver{result: applicationworkmetadata.ResolveResult{
 		Resolved: []domain.ResolvedWorkLink{{
 			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
-			AwemeItemID: "6000000000000001", CreatorName: "第三方达人",
+			AwemeItemID: "6000000000000001", CreatorName: "F2 达人",
 			OwnerHint: &domain.WorkOwnerHint{
 				AwemeID: batchCreatorID, AwemeShowID: batchVisibleID,
 			},
@@ -201,76 +200,6 @@ func testBatchCommandReadScope(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), `"payload"`) {
 		t.Fatalf("batch payload appeared without explicit opt-in: %s", encoded)
-	}
-}
-
-func testBatchMetadataProductBoundary(t *testing.T) {
-	for _, test := range []struct {
-		name               string
-		endpoint           string
-		disabled           bool
-		wantMetadataCalls  int
-		wantMetadataEnable bool
-	}{
-		{name: "enabled metadata", endpoint: "https://metadata.example.test/private-path", wantMetadataCalls: 1, wantMetadataEnable: true},
-		{name: "disabled invalid metadata", endpoint: "http://invalid.example.test/private-path", disabled: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			config := commandProductConfig()
-			config["integrations"] = map[string]any{
-				"qianchuan_work_metadata": map[string]any{"endpoint": test.endpoint},
-			}
-			defaultLinks := &commandLinkResolver{}
-			metadataLinks := &commandLinkResolver{result: applicationworkmetadata.ResolveResult{
-				Resolved: []domain.ResolvedWorkLink{{
-					InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
-					AwemeItemID: "6000000000000001",
-					ProductHint: &domain.WorkProductHint{ProductID: "5000000000000099"},
-				}},
-			}}
-			if test.disabled {
-				defaultLinks = metadataLinks
-				metadataLinks = &commandLinkResolver{}
-			}
-			tokens := &commandTokenProvider{}
-			metadataFactoryCalls := 0
-			service := CommandService{
-				Config: commandConfigReader{config: config}, Links: defaultLinks, Tokens: tokens,
-				MetadataLinks: func(endpoint string) (WorkLinkResolver, error) {
-					metadataFactoryCalls++
-					if endpoint != test.endpoint {
-						t.Fatalf("metadata endpoint changed: %q", endpoint)
-					}
-					return metadataLinks, nil
-				},
-				Batch: BatchService{},
-			}
-			result, err := service.BatchWorks(context.Background(), BatchWorksCommand{
-				PlanTemplate: "qcpt_command", WorkURLs: []string{"https://v.douyin.com/fixture"},
-				NoLinkMetadataAPI: test.disabled,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tokens.calls != 0 || metadataFactoryCalls != test.wantMetadataCalls ||
-				result.Performance.LinkMetadata.Configured != true ||
-				result.Performance.LinkMetadata.Enabled != test.wantMetadataEnable {
-				t.Fatalf("metadata product mismatch crossed credential/config boundary: tokens=%d factory=%d performance=%#v",
-					tokens.calls, metadataFactoryCalls, result.Performance)
-			}
-			if len(result.Skipped) != 1 || result.Skipped[0].Reason != "link_metadata_product_mismatch" ||
-				result.Skipped[0].HintedProductID != "5000000000000099" ||
-				!strings.HasPrefix(result.Presentation.RenderedMarkdown, "| 计划ID | 达人昵称 | 商品ID | 素材ID | 素材标题 |") {
-				t.Fatalf("metadata product mismatch output changed: %#v", result)
-			}
-			encoded, err := json.Marshal(result)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(encoded), "private-path") || strings.Contains(string(encoded), "metadata.example.test") {
-				t.Fatalf("metadata endpoint leaked in output: %s", encoded)
-			}
-		})
 	}
 }
 

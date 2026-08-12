@@ -71,17 +71,16 @@ type qianchuanCreateOptions struct {
 }
 
 type qianchuanBatchOptions struct {
-	configPath        string
-	planTemplate      string
-	workURLs          repeatedValues
-	concurrency       int
-	authAccountID     string
-	noLinkMetadataAPI bool
-	includePayloads   bool
-	planType          string
-	business          string
-	submit            bool
-	out               string
+	configPath      string
+	planTemplate    string
+	workURLs        repeatedValues
+	concurrency     int
+	authAccountID   string
+	includePayloads bool
+	planType        string
+	business        string
+	submit          bool
+	out             string
 }
 
 type qianchuanRemoveOptions struct {
@@ -177,7 +176,6 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	flags.StringVar(&options.business, "business", "", "")
 	flags.IntVar(&options.concurrency, "concurrency", applicationqianchuan.DefaultBatchConcurrency, "")
 	flags.StringVar(&options.authAccountID, "auth-account-id", "", "")
-	flags.BoolVar(&options.noLinkMetadataAPI, "no-link-metadata-api", false, "")
 	flags.BoolVar(&options.submit, "submit", false, "")
 	flags.BoolVar(&options.includePayloads, "include-payloads", false, "")
 	flags.StringVar(&options.out, "out", "", "")
@@ -200,8 +198,8 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	return options, applicationqianchuan.BatchWorksCommand{
 		PlanTemplate: options.planTemplate, WorkURLs: append([]string(nil), options.workURLs...),
 		Concurrency: options.concurrency, AuthAccountID: options.authAccountID,
-		NoLinkMetadataAPI: options.noLinkMetadataAPI, IncludePayloads: options.includePayloads,
-		PlanType: options.planType, Business: options.business,
+		IncludePayloads: options.includePayloads,
+		PlanType:        options.planType, Business: options.business,
 		Submit: options.submit,
 	}, nil
 }
@@ -491,15 +489,6 @@ func (runner Runner) qianchuanCommandService(
 	service.Tokens = components.tokens
 	if service.Links == nil {
 		service.Links = applicationworkmetadata.Resolver{Links: adapterworkmetadata.DouyinRedirectResolver{Client: runtime.HTTPClient}}
-	}
-	service.MetadataLinks = func(endpoint string) (applicationqianchuan.WorkLinkResolver, error) {
-		if _, err := domain.ValidateWorkMetadataEndpoint(endpoint); err != nil {
-			return nil, err
-		}
-		return applicationworkmetadata.Resolver{Links: adapterworkmetadata.DouyinMetadataResolver{
-			Endpoint: endpoint, Client: runtime.HTTPClient,
-			Fallback: adapterworkmetadata.DouyinRedirectResolver{Client: runtime.HTTPClient},
-		}}, nil
 	}
 	service.OwnerHints = runtime.OwnerHints
 	if service.OwnerHints == nil {

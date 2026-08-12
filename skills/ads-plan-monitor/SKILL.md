@@ -85,7 +85,7 @@ Never use browser-admin automation. Use official APIs and the bundled CLI.
 
 ## First-Use Environment Check
 
-Before the first Python command on a new computer, detect a supported interpreter with ordinary system commands. On macOS/Linux, try `python3 --version` and then `python --version`. On Windows, try `py -3 --version`, `python --version`, and `python3 --version`. Require Python `3.9+`; if none is available, stop and tell the user to install Python and reopen Codex. Do not claim that the Plugin can install Python automatically.
+Before the first Python command on a new computer, detect a supported interpreter with ordinary system commands. On macOS/Linux, try `python3 --version` and then `python --version`. On Windows, try `py -3 --version`, `python --version`, and `python3 --version`. Require Python `3.10+`; if none is available, stop and tell the user to install Python and reopen Codex. Do not claim that the Plugin can install Python automatically.
 
 After finding Python, run `setup doctor` before setup or authorization. It checks the Python version, Windows/macOS/Linux support, Codex CLI availability, secure credential backend, and whether the configured loopback callback port can be bound. Resolve every `blocking_check` before OAuth or business commands; warnings may be reported without blocking ordinary Plugin use. `setup init` includes the same environment report for first-run guidance.
 

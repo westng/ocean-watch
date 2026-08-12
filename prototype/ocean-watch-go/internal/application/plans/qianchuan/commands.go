@@ -35,8 +35,6 @@ type WorkLinkResolver interface {
 	Resolve(context.Context, applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error)
 }
 
-type WorkLinkResolverFactory func(string) (WorkLinkResolver, error)
-
 type CreatePlanCommand struct {
 	ConfigPath    string
 	Payload       json.RawMessage
@@ -92,15 +90,14 @@ type CreateCommandResult struct {
 }
 
 type BatchWorksCommand struct {
-	PlanTemplate      string
-	WorkURLs          []string
-	Concurrency       int
-	AuthAccountID     string
-	NoLinkMetadataAPI bool
-	IncludePayloads   bool
-	PlanType          string
-	Business          string
-	Submit            bool
+	PlanTemplate    string
+	WorkURLs        []string
+	Concurrency     int
+	AuthAccountID   string
+	IncludePayloads bool
+	PlanType        string
+	Business        string
+	Submit          bool
 }
 
 type OwnerHintCachePerformance struct {
@@ -113,8 +110,8 @@ type OwnerHintCachePerformance struct {
 }
 
 type LinkMetadataPerformance struct {
-	Configured bool `json:"configured"`
-	Enabled    bool `json:"enabled"`
+	Provider string `json:"provider"`
+	Enabled  bool   `json:"enabled"`
 }
 
 type BatchPerformance struct {
@@ -143,17 +140,16 @@ type RemoveWorksCommand struct {
 }
 
 type CommandService struct {
-	Config        CommandConfigReader
-	Tokens        authapplication.TokenProvider
-	Links         WorkLinkResolver
-	MetadataLinks WorkLinkResolverFactory
-	OwnerHints    OwnerHintCache
-	Verifier      WorkVerifier
-	Create        CreateExecutor
-	Batch         BatchService
-	Remove        RemoveExecutor
-	Locks         sharedplans.AdvertiserLocker
-	Now           func() time.Time
+	Config     CommandConfigReader
+	Tokens     authapplication.TokenProvider
+	Links      WorkLinkResolver
+	OwnerHints OwnerHintCache
+	Verifier   WorkVerifier
+	Create     CreateExecutor
+	Batch      BatchService
+	Remove     RemoveExecutor
+	Locks      sharedplans.AdvertiserLocker
+	Now        func() time.Time
 }
 
 func (service CommandService) CreatePlan(
@@ -219,22 +215,8 @@ func (service CommandService) BatchWorks(
 	if !exported.Active {
 		return BatchCommandResult{}, errors.New("Qianchuan product template is not active")
 	}
-	metadata := LinkMetadataPerformance{Configured: domain.WorkMetadataConfigured(config)}
-	metadataEndpoint := ""
-	if !command.NoLinkMetadataAPI {
-		metadataEndpoint, err = domain.WorkMetadataEndpoint(config)
-		if err != nil {
-			return BatchCommandResult{}, err
-		}
-		metadata.Enabled = metadataEndpoint != ""
-	}
+	metadata := LinkMetadataPerformance{Provider: "f2_cli", Enabled: true}
 	linkResolver := service.Links
-	if metadata.Enabled && service.MetadataLinks != nil {
-		linkResolver, err = service.MetadataLinks(metadataEndpoint)
-		if err != nil {
-			return BatchCommandResult{}, err
-		}
-	}
 	if linkResolver == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
 	}
@@ -245,9 +227,7 @@ func (service CommandService) BatchWorks(
 		return BatchCommandResult{}, err
 	}
 	linksFinished := service.now()
-	resolved, productSkipped := filterLinkProductHints(links.Resolved, exported.ProductIDs)
-	links.Resolved = resolved
-	skipped := append(qianchuanSkippedLinks(links.Skipped), productSkipped...)
+	skipped := qianchuanSkippedLinks(links.Skipped)
 	cachePerformance := OwnerHintCachePerformance{}
 	baseRequest := BatchRequest{
 		AdvertiserID: exported.AdvertiserID, AuthAccountID: strings.TrimSpace(command.AuthAccountID),
@@ -589,7 +569,7 @@ func qianchuanWorkInputs(
 			CreatorName: strings.TrimSpace(value.CreatorName),
 			PlanType:    batchWorkEntryAt(entries, value.InputIndex).PlanType,
 			Business:    batchWorkEntryAt(entries, value.InputIndex).Business,
-			OwnerHint:   hint, ProductIDHint: resolvedProductHint(value),
+			OwnerHint:   hint,
 		})
 	}
 	return result
@@ -636,40 +616,6 @@ func batchWorkEntryAt(entries []batchWorkEntry, index int) batchWorkEntry {
 		return batchWorkEntry{}
 	}
 	return entries[index]
-}
-
-func resolvedProductHint(value domain.ResolvedWorkLink) string {
-	if value.ProductHint == nil {
-		return ""
-	}
-	return strings.TrimSpace(value.ProductHint.ProductID)
-}
-
-func filterLinkProductHints(
-	values []domain.ResolvedWorkLink,
-	productIDs []string,
-) ([]domain.ResolvedWorkLink, []SkippedWork) {
-	allowed := stringSetFrom(productIDs)
-	resolved := make([]domain.ResolvedWorkLink, 0, len(values))
-	skipped := []SkippedWork{}
-	for _, value := range values {
-		hintedProductID := ""
-		if value.ProductHint != nil {
-			hintedProductID = strings.TrimSpace(value.ProductHint.ProductID)
-		}
-		if hintedProductID != "" {
-			if _, exists := allowed[hintedProductID]; !exists {
-				skipped = append(skipped, SkippedWork{
-					InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
-					Reason: "link_metadata_product_mismatch", Message: "作品绑定商品与投放模板商品不匹配",
-					HintedProductID: hintedProductID, TemplateProductIDs: append([]string(nil), productIDs...),
-				})
-				continue
-			}
-		}
-		resolved = append(resolved, value)
-	}
-	return resolved, skipped
 }
 
 func resolvedWorkIDs(values []domain.ResolvedWorkLink) []string {

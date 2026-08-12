@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import importlib.metadata
 import ipaddress
 import json
 import platform
@@ -15,7 +16,8 @@ import ocean_watch.auth.credential_store as credential_store
 import ocean_watch.core.config_paths as config_paths
 from ocean_watch.core.output import write_json
 
-MINIMUM_PYTHON = (3, 9)
+MINIMUM_PYTHON = (3, 10)
+REQUIRED_F2_VERSION = "0.0.1.7"
 MINIMUM_CODEX_CLI = (0, 144, 1)
 SUPPORTED_SYSTEMS = {"Darwin", "Linux", "Windows"}
 CODEX_VERSION_PATTERN = re.compile(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)")
@@ -41,7 +43,34 @@ def check_python():
             if ready
             else f"Python {version_text(minimum)} or newer is required."
         ),
-        "remediation": None if ready else "Install Python 3.9 or newer, then start a new Codex task.",
+        "remediation": None if ready else "Install Python 3.10 or newer, then start a new Codex task.",
+    }
+
+
+def check_f2_runtime(version_factory=None):
+    version_factory = version_factory or importlib.metadata.version
+    try:
+        version = str(version_factory("f2") or "").strip()
+    except importlib.metadata.PackageNotFoundError:
+        version = None
+    ready = version == REQUIRED_F2_VERSION
+    return {
+        "id": "f2_runtime",
+        "required": True,
+        "status": "ready" if ready else "blocked",
+        "version": version,
+        "required_version": REQUIRED_F2_VERSION,
+        "executable": sys.executable,
+        "message": (
+            "Pinned F2 runtime is available."
+            if ready
+            else f"F2 {REQUIRED_F2_VERSION} is required in the current Python runtime."
+        ),
+        "remediation": (
+            None
+            if ready
+            else "Install the project dependencies into this Python runtime, then rerun setup doctor."
+        ),
     }
 
 
@@ -251,6 +280,7 @@ def environment_report(config_path=None, channel="marketing", redirect_uri=None)
     callback_uri = redirect_uri or default_redirect_uri(config_path, selected_channel)
     checks = [
         check_python(),
+        *([check_f2_runtime()] if selected_channel == "qianchuan" else []),
         check_platform(),
         check_codex_cli(),
         check_credential_backend(),

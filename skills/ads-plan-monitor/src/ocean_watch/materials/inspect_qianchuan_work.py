@@ -5,14 +5,12 @@ from ocean_watch.core import config_paths, config_store
 from ocean_watch.core.errors import ConfigurationError
 from ocean_watch.core.output import write_json
 from ocean_watch.core.validation import positive_integer
-from ocean_watch.integrations import qianchuan_work_metadata
 from ocean_watch.materials.douyin_work_links import (
     DEFAULT_CONCURRENCY,
     MAX_CONCURRENCY,
-    DouyinWorkLinkResolver,
-    DouyinWorkMetadataResolver,
     resolve_work_links,
 )
+from ocean_watch.materials.f2_work_metadata import F2WorkMetadataCliResolver
 
 
 def inspect(config, work_urls, *, concurrency=DEFAULT_CONCURRENCY):
@@ -21,30 +19,15 @@ def inspect(config, work_urls, *, concurrency=DEFAULT_CONCURRENCY):
         "concurrency",
         maximum=MAX_CONCURRENCY,
     )
-    endpoint = qianchuan_work_metadata.endpoint_from_config(config)
-    metadata_resolver = DouyinWorkMetadataResolver(endpoint) if endpoint else None
     result = resolve_work_links(
         work_urls,
-        resolver=DouyinWorkLinkResolver(metadata_resolver=metadata_resolver),
         concurrency=concurrency,
+        metadata_resolver=F2WorkMetadataCliResolver(),
     )
-    if endpoint:
-        for row in [*result["resolved"], *result["skipped"]]:
-            warning = row.get("hint_warning")
-            if isinstance(warning, dict) and isinstance(warning.get("message"), str):
-                warning["message"] = warning["message"].replace(
-                    endpoint,
-                    "<configured locally>",
-                )
-            if isinstance(row.get("message"), str):
-                row["message"] = row["message"].replace(
-                    endpoint,
-                    "<configured locally>",
-                )
     return {
-        "ok": not result["skipped"],
+        "ok": not result["skipped"] and result.get("metadata_error") is None,
         "mode": "qianchuan_work_inspection",
-        "metadata_integration": "configured" if endpoint else "not_configured",
+        "metadata_integration": "f2_cli",
         "input_count": len(work_urls),
         "resolved_count": len(result["resolved"]),
         "skipped_count": len(result["skipped"]),

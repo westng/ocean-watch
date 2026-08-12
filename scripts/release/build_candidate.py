@@ -257,7 +257,7 @@ def write_runtime_manifest(
     environment: dict,
 ) -> tuple[Path, Path]:
     assets = {}
-    for path, (goos, goarch) in zip(runtimes, TARGETS):
+    for path, (goos, goarch) in zip(runtimes, TARGETS, strict=True):
         assets[f"{goos}-{goarch}"] = {
             "name": path.name,
             "sha256": sha256_file(path),

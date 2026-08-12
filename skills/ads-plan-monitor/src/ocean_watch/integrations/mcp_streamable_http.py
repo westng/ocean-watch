@@ -405,7 +405,7 @@ class StreamableHttpMcpClient:
                 "Unable to connect to the official Qianchuan MCP",
                 {"transport_error": transport_error, "retryable": True},
             ) from exc
-        except (TimeoutError, socket.timeout) as exc:
+        except TimeoutError as exc:
             raise ApiError(
                 "Official Qianchuan MCP request timed out",
                 {"transport_error": "timeout", "retryable": True},

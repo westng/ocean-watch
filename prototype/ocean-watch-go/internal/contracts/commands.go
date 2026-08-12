@@ -17,7 +17,6 @@ var Commands = []Command{
 	{"setup", "doctor", "Check local runtime requirements"},
 	{"setup", "init", "Initialize local configuration"},
 	{"setup", "validate", "Validate configuration readiness"},
-	{"setup", "work-metadata", "Configure optional local Qianchuan work metadata"},
 	{"auth", "set-app", "Store app credentials"},
 	{"auth", "authorize", "Run local OAuth authorization"},
 	{"auth", "status", "Show redacted token status"},

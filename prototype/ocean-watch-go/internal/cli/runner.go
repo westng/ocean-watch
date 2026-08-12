@@ -343,27 +343,6 @@ func (runner Runner) runSetup(
 			return 2
 		}
 		return RunValidate(ctx, args, onboarding.Validator{State: state}, configPath, config, stdout)
-	case "work-metadata":
-		options, err := parseWorkMetadataOptions(args)
-		if err != nil {
-			WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
-			return 2
-		}
-		configPath := ""
-		if options.homeConfig {
-			configPath = filepath.Join(codexRoot, "ads-plan-monitor", "config.json")
-		} else {
-			configPath = filesystem.ResolveConfigPath(options.configPath, cwd, getenv, userHome)
-		}
-		configPath = filepath.Clean(configPath)
-		resolvedPath, resolveErr := absoluteLocalPath(configPath)
-		if resolveErr != nil {
-			resolvedPath = configPath
-		}
-		store := filesystem.ConfigStore{Path: configPath}
-		_, statErr := os.Stat(configPath)
-		service := application.WorkMetadata{Store: store, Path: resolvedPath, RequestedPath: configPath}
-		return RunWorkMetadata(ctx, args, service, statErr == nil, stdout)
 	default:
 		WriteDomainError(stdout, domain.NewError("go_handler_missing", "Go route has no handler", 1, nil))
 		return 1

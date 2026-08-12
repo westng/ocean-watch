@@ -12,7 +12,7 @@ source .venv/bin/activate              # Windows: .venv\Scripts\activate
 python3 -m pip install -e ".[dev]"
 ```
 
-项目最低支持 Python 3.9，CI 同时验证 3.9 和 3.12。
+项目最低支持 Python 3.10，CI 同时验证 3.10 和 3.12。
 
 ## 架构规则
 
@@ -57,7 +57,7 @@ python3 -m json.tool skills/ads-plan-monitor/assets/config.example.json >/dev/nu
 git diff --check
 ```
 
-CI 还会在 Windows、macOS 和 Linux 的 Python `3.9`、`3.12` 环境中验证源码安装、首次初始化、Plugin 清单和两个 Skill 元数据。
+CI 还会在 Windows、macOS 和 Linux 的 Python `3.10`、`3.12` 环境中验证源码安装、首次初始化、Plugin 清单和两个 Skill 元数据。
 
 ## 发布
 

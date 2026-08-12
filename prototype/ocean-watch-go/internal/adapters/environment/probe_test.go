@@ -31,7 +31,7 @@ func TestPythonCheckUsesResolvedLauncherRuntime(t *testing.T) {
 	if check["status"] != "ready" || check["executable"] != "/synthetic/python" || check["version"] != "3.12.4" {
 		t.Fatalf("unexpected Python check: %#v", check)
 	}
-	if check["minimum_version"] != "3.9" || check["available"] != nil || check["source"] != nil {
+	if check["minimum_version"] != "3.10" || check["available"] != nil || check["source"] != nil {
 		t.Fatalf("Python check changed the public contract: %#v", check)
 	}
 }

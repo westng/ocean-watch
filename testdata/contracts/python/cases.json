@@ -372,36 +372,6 @@
       "network_policy": "forbidden"
     },
     {
-      "id": "setup-work-metadata-status",
-      "argv": ["setup", "work-metadata", "--config", "{{workspace}}/config.json"],
-      "fixture": "work-metadata",
-      "network_policy": "forbidden"
-    },
-    {
-      "id": "setup-work-metadata-set",
-      "argv": ["setup", "work-metadata", "--config", "{{workspace}}/config.json", "--endpoint", "https://metadata.example.test/api?version=1"],
-      "fixture": "work-metadata",
-      "network_policy": "forbidden"
-    },
-    {
-      "id": "setup-work-metadata-clear",
-      "argv": ["setup", "work-metadata", "--config", "{{workspace}}/config.json", "--clear"],
-      "fixture": "work-metadata",
-      "network_policy": "forbidden"
-    },
-    {
-      "id": "setup-work-metadata-invalid-endpoint",
-      "argv": ["setup", "work-metadata", "--config", "{{workspace}}/config.json", "--endpoint", "http://metadata.example.test/api"],
-      "fixture": "work-metadata",
-      "network_policy": "forbidden"
-    },
-    {
-      "id": "setup-work-metadata-missing-config",
-      "argv": ["setup", "work-metadata", "--config", "{{workspace}}/missing.json"],
-      "fixture": "work-metadata",
-      "network_policy": "forbidden"
-    },
-    {
       "id": "setup-doctor-local",
       "argv": ["setup", "doctor", "--config", "{{workspace}}/config.json", "--channel", "marketing", "--redirect-uri", "http://127.0.0.1:18787/oauth/callback", "--out", "{{workspace}}/outputs/doctor.json"],
       "fixture": "setup-local",

@@ -14,14 +14,12 @@ from ocean_watch.api import QianchuanClientFactory, qianchuan_advertiser_lock_pa
 from ocean_watch.core.data import get_path
 from ocean_watch.core.output import write_json
 from ocean_watch.core.process_lock import ProcessLock
-from ocean_watch.integrations import qianchuan_work_metadata
 from ocean_watch.materials import qianchuan_work_owner_cache
 from ocean_watch.materials.douyin_work_links import (
     MAX_CONCURRENCY,
-    DouyinWorkLinkResolver,
-    DouyinWorkMetadataResolver,
     resolve_work_links,
 )
+from ocean_watch.materials.f2_work_metadata import F2WorkMetadataCliResolver
 from ocean_watch.materials.qianchuan_work_materials import resolve_work_materials
 from ocean_watch.plans import create_qianchuan_plan
 from ocean_watch.plans.qianchuan_executor import (
@@ -70,11 +68,6 @@ def build_parser():
         default=DEFAULT_QIANCHUAN_CONCURRENCY,
     )
     parser.add_argument("--auth-account-id")
-    parser.add_argument(
-        "--no-link-metadata-api",
-        action="store_true",
-        help="Disable the configured public Douyin work metadata hint service.",
-    )
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--include-payloads", action="store_true")
     parser.add_argument("--out")
@@ -100,13 +93,13 @@ def filter_link_product_hints(link_result, allowed_product_ids):
                 **row,
                 "status": "skipped",
                 "reason": "link_metadata_product_mismatch",
-                "message": "作品绑定商品与投放模板商品不匹配",
+                "message": "F2 返回的作品商品与投放模板商品不匹配",
                 "hinted_product_id": hinted_product_id,
                 "template_product_ids": sorted(allowed),
             })
             continue
         resolved.append(row)
-    return {"resolved": resolved, "skipped": skipped}
+    return {**link_result, "resolved": resolved, "skipped": skipped}
 
 
 def weighted_truncate(value, maximum):
@@ -153,6 +146,17 @@ def attach_work_entry_fields(link_result, entries):
             if entry["business"]:
                 row["business"] = entry["business"]
     return link_result
+
+
+def link_metadata_performance(link_result):
+    result = {
+        "provider": "f2_cli",
+        "enabled": True,
+        **(link_result.get("metadata_performance") or {}),
+    }
+    if link_result.get("metadata_error") is not None:
+        result["error"] = link_result["metadata_error"]
+    return result
 
 
 def remove_optional_placeholder(pattern, key):
@@ -248,7 +252,7 @@ def group_plan_name_fields(rows, *, plan_type=None, business=None):
         if str(row.get("creator_name_hint") or "").strip()
     }
     if len(creator_names) > 1:
-        raise ValueError("同一达人素材的第三方达人名称不一致")
+        raise ValueError("同一达人素材的 F2 达人名称不一致")
     field_values["creator_name"] = next(iter(creator_names), "")
     return field_values
 
@@ -502,7 +506,7 @@ def execute_new_plan_group(
         or qianchuan_product_templates.DEFAULT_PLAN_NAME_TEMPLATE
     )
     if "{creator_name}" in plan_name_template and not name_fields["creator_name"]:
-        raise ValueError("第三方解析接口未返回达人名称，无法创建千川计划")
+        raise ValueError("F2 未返回达人名称，无法创建千川计划")
     payload = qianchuan_product_templates.payload_from_template(
         template,
         name=build_plan_name(
@@ -836,20 +840,6 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
         raw_config,
         args.plan_template,
     )
-    metadata_disabled = getattr(args, "no_link_metadata_api", False)
-    metadata_configured = qianchuan_work_metadata.is_configured(raw_config)
-    metadata_endpoint = (
-        None
-        if metadata_disabled
-        else qianchuan_work_metadata.endpoint_from_config(raw_config)
-    )
-    metadata_enabled = metadata_endpoint is not None
-    if link_resolver is None and metadata_enabled:
-        link_resolver = DouyinWorkLinkResolver(
-            metadata_resolver=DouyinWorkMetadataResolver(
-                metadata_endpoint,
-            )
-        )
     entries = [
         parse_work_entry(
             value,
@@ -862,6 +852,7 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
         [entry["work_url"] for entry in entries],
         resolver=link_resolver,
         concurrency=concurrency,
+        metadata_resolver=F2WorkMetadataCliResolver(),
     )
     link_result = attach_work_entry_fields(link_result, entries)
     link_result = filter_link_product_hints(
@@ -885,10 +876,7 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
             "material_resolution_seconds": 0.0,
             "plan_reconciliation_seconds": 0.0,
             "total_seconds": round(time.monotonic() - started_at, 3),
-            "link_metadata": {
-                "configured": metadata_configured,
-                "enabled": metadata_enabled,
-            },
+            "link_metadata": link_metadata_performance(link_result),
             "request_budget": {
                 "limit": None,
                 "used": 0,
@@ -1016,10 +1004,7 @@ def execute(args, *, link_resolver=None, clients=None, now=None, lock_factory=Pr
             "stored": cache_write_count,
             "warning": cache_warning,
         },
-        "link_metadata": {
-            "configured": metadata_configured,
-            "enabled": metadata_enabled,
-        },
+        "link_metadata": link_metadata_performance(link_result),
         "request_budget": (
             client_factory.budget_snapshot()
             if client_factory is not None

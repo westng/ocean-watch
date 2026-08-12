@@ -6,7 +6,7 @@ from pathlib import Path
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.9/3.10 only
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 only
     import tomli as tomllib
 
 import yaml
@@ -33,7 +33,8 @@ class PluginMetadataTests(unittest.TestCase):
         cls.manifest = load_json(REPO_ROOT / ".codex-plugin" / "plugin.json")
         cls.marketplace = load_json(REPO_ROOT / ".agents" / "plugins" / "marketplace.json")
         with (REPO_ROOT / "pyproject.toml").open("rb") as stream:
-            cls.project = tomllib.load(stream)["project"]
+            cls.pyproject = tomllib.load(stream)
+        cls.project = cls.pyproject["project"]
 
     def test_release_versions_are_consistent(self):
         self.assertEqual(self.project["version"], __version__)
@@ -47,6 +48,15 @@ class PluginMetadataTests(unittest.TestCase):
             tool_range=["test-tool"],
         )
         self.assertEqual(client.client_version, __version__)
+
+    def test_python_and_f2_runtime_contract(self):
+        self.assertEqual(self.project["requires-python"], ">=3.10")
+        self.assertEqual(
+            self.project["dependencies"],
+            ["f2==0.0.1.7", "socksio>=1,<2"],
+        )
+        self.assertEqual(self.pyproject["tool"]["ruff"]["target-version"], "py310")
+        self.assertEqual(self.pyproject["tool"]["pyright"]["pythonVersion"], "3.10")
 
     def test_plugin_manifest_starter_prompts_respect_contract(self):
         self.assertEqual(self.manifest["name"], "ocean-watch")
@@ -183,6 +193,23 @@ class PluginMetadataTests(unittest.TestCase):
         self.assertIn("Even when there are no successful rows", content)
         self.assertIn("never infer an override", content)
 
+    def test_qianchuan_f2_keeps_read_only_validation_boundary(self):
+        content = (
+            REPO_ROOT / "skills" / "qc-plan-monitor" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("pinned F2 `0.0.1.7` integration", content)
+        self.assertIn("read-only module CLI", content)
+        self.assertIn("Never invoke F2's downloader command", content)
+        self.assertIn("read browser cookies automatically", content)
+        self.assertIn("OCEAN_WATCH_F2_DOUYIN_COOKIE", content)
+        self.assertIn("untrusted public identity hint", content)
+        self.assertIn("official targeted authorization, ownership, and product checks", content)
+        self.assertIn("F2's own `TokenManager.gen_ttwid()` visitor initialization", content)
+        self.assertIn("`code/message/data` contract", content)
+        self.assertIn("`data.author`, `data.product`, and `data.video`", content)
+        self.assertIn("`product_info_id`, `product_info_img`, and `product_info_name`", content)
+        self.assertIn("Document and present this design only as the current F2 contract", content)
+
     def test_qianchuan_skill_keeps_runtime_mcp_routing_contract(self):
         skill_root = REPO_ROOT / "skills" / "qc-plan-monitor"
         content = (skill_root / "SKILL.md").read_text(encoding="utf-8")
@@ -250,7 +277,10 @@ class PluginMetadataTests(unittest.TestCase):
             (64, "宁夏"),
         ]
         self.assertEqual(len(resolved["city_ids"]), len(resolved["city_names"]))
-        self.assertEqual(list(zip(resolved["city_ids"], resolved["city_names"])), expected)
+        self.assertEqual(
+            list(zip(resolved["city_ids"], resolved["city_names"], strict=True)),
+            expected,
+        )
         self.assertTrue({54, 65, 71, 81, 82}.isdisjoint(resolved["city_ids"]))
 
 

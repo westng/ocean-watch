@@ -42,7 +42,7 @@ func DefaultRouteManifest() RouteManifest {
 		routes[command.Name()] = RuntimePython
 	}
 	for _, name := range []string{
-		"setup doctor", "setup init", "setup validate", "setup work-metadata",
+		"setup doctor", "setup init", "setup validate",
 		"auth migrate",
 		"accounts list", "accounts add", "accounts remove",
 		"accounts enable", "accounts disable",

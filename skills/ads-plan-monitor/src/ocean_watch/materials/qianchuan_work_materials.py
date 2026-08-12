@@ -19,15 +19,6 @@ def chunks(values, size):
     return [values[index : index + size] for index in range(0, len(values), size)]
 
 
-def work_product_ids(work, template_product_ids):
-    hinted_product_id = str(
-        ((work.get("product_hint") or {}).get("product_id")) or ""
-    ).strip()
-    if hinted_product_id and hinted_product_id in template_product_ids:
-        return [hinted_product_id]
-    return template_product_ids
-
-
 def creator_is_usable(creator):
     if creator.get("has_authorized") is False:
         return False
@@ -363,7 +354,7 @@ def resolve_work_materials(
     for aweme_id, creator_works in works_by_creator.items():
         item_ids_by_product = {}
         for work in creator_works:
-            for product_id in work_product_ids(work, product_ids):
+            for product_id in product_ids:
                 item_ids_by_product.setdefault(product_id, []).append(
                     work["aweme_item_id"]
                 )

@@ -16,7 +16,7 @@ func TestDefaultRouteOnlyMigratesApprovedLocalSlice(t *testing.T) {
 	routes := DefaultRouteManifest()
 	for command, runtime := range routes.Snapshot() {
 		approved := command == "setup doctor" || command == "setup init" ||
-			command == "setup validate" || command == "setup work-metadata" ||
+			command == "setup validate" ||
 			command == "auth migrate" ||
 			command == "accounts list" || command == "accounts add" ||
 			command == "accounts remove" || command == "accounts enable" ||

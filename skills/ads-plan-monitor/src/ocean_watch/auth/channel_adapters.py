@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass
-from typing import Optional
 
 import ocean_watch.auth.channels as channels
 
@@ -22,7 +21,7 @@ class RoleExpansion:
     base_params: dict
     row_sources: tuple
     fallback_sources: bool = False
-    base_url: Optional[str] = None
+    base_url: str | None = None
     optional_permission_codes: tuple = ()
 
 

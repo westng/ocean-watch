@@ -23,32 +23,27 @@ class FakeClient:
 
 
 class QianchuanReadCommandTests(unittest.TestCase):
-    def test_work_inspection_hides_private_endpoint_from_errors(self):
-        endpoint = "https://private.example.test/resolve"
+    def test_work_inspection_uses_f2_metadata_integration(self):
         fake = {
-            "resolved": [],
-            "skipped": [{
-                "input_url": "https://v.douyin.com/example/",
-                "message": f"request failed at {endpoint}",
-                "hint_warning": {"message": endpoint},
-            }],
+            "resolved": [{"aweme_item_id": "7000000000000000001"}],
+            "skipped": [],
         }
         with mock.patch.object(
-            inspect_qianchuan_work.qianchuan_work_metadata,
-            "endpoint_from_config",
-            return_value=endpoint,
-        ), mock.patch.object(
             inspect_qianchuan_work,
             "resolve_work_links",
             return_value=fake,
-        ):
+        ) as resolve_links:
             result = inspect_qianchuan_work.inspect(
                 {},
                 ["https://v.douyin.com/example/"],
             )
 
-        self.assertNotIn(endpoint, str(result))
-        self.assertEqual(result["metadata_integration"], "configured")
+        self.assertEqual(result["metadata_integration"], "f2_cli")
+        self.assertEqual(result["resolved_count"], 1)
+        self.assertEqual(
+            resolve_links.call_args.kwargs["metadata_resolver"].__class__.__name__,
+            "F2WorkMetadataCliResolver",
+        )
 
     def test_authorized_creator_list_accepts_empty_zero_page(self):
         client = FakeClient([{
