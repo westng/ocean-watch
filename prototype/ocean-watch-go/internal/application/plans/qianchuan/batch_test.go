@@ -106,7 +106,7 @@ func testBatchProductHintQueryLimits(t *testing.T) {
 			InputIndex:    index,
 			InputURL:      fmt.Sprintf("https://www.douyin.com/video/%s", batchWorkID(index+1)),
 			AwemeItemID:   batchWorkID(index + 1),
-			OwnerHint:     &OwnerHint{AwemeID: batchCreatorID},
+			OwnerHint:     &OwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
 			ProductIDHint: productIDs[index%len(productIDs)],
 		}
 	}
@@ -141,7 +141,7 @@ func testBatchVerificationLimits(t *testing.T) {
 	for index := 1; index <= 55; index++ {
 		inputs = append(inputs, WorkInput{
 			InputIndex: index - 1, InputURL: fmt.Sprintf("https://www.douyin.com/video/%s", batchWorkID(index)),
-			AwemeItemID: batchWorkID(index), OwnerHint: &OwnerHint{AwemeID: batchCreatorID},
+			AwemeItemID: batchWorkID(index), OwnerHint: &OwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
 		})
 	}
 	inputs = append(inputs,
@@ -200,7 +200,8 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if reader.targetedCalls != 1 || reader.broadCalls != 0 || len(result.Matched) != 1 ||
+		if reader.targetedCalls != 1 || reader.lastSearchKeyword != batchVisibleID ||
+			reader.broadCalls != 0 || len(result.Matched) != 1 ||
 			result.AuthorizedCreatorScanCount != 0 || result.OwnerHintSummary.Verified != 1 ||
 			result.OwnerHintSummary.Stale != 0 || result.OwnerHintSummary.BroadScanWorkCount != 0 {
 			t.Fatalf("verified hint crossed the broad-scan boundary: reader=%#v result=%#v", reader, result)
@@ -212,7 +213,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		}
 	})
 
-	t.Run("numeric only hint avoids broad scan", func(t *testing.T) {
+	t.Run("numeric only hint skips without wrong search parameter", func(t *testing.T) {
 		reader := &hintVerificationReader{
 			targetedCreator: domainqianchuan.AuthorizedCreator{
 				AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
@@ -229,9 +230,11 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if reader.targetedCalls != 1 || reader.broadCalls != 0 || len(result.Matched) != 1 ||
-			result.OwnerHintSummary.Eligible != 1 || result.OwnerHintSummary.BroadScanWorkCount != 0 {
-			t.Fatalf("numeric-only hint crossed the broad-scan boundary: reader=%#v result=%#v", reader, result)
+		if reader.targetedCalls != 0 || reader.broadCalls != 0 || len(result.Matched) != 0 ||
+			result.OwnerHintSummary.Eligible != 0 || result.OwnerHintSummary.AuthorizedHintQueryCount != 0 ||
+			result.OwnerHintSummary.BroadScanWorkCount != 0 || len(result.Skipped) != 1 ||
+			result.Skipped[0].Reason != "missing_creator_show_id" {
+			t.Fatalf("numeric-only hint used an invalid authorization search: reader=%#v result=%#v", reader, result)
 		}
 	})
 
@@ -422,6 +425,7 @@ type hintVerificationReader struct {
 	targetedCreator     domainqianchuan.AuthorizedCreator
 	actualCreatorID     string
 	targetedCalls       int
+	lastSearchKeyword   string
 	broadCalls          int
 	ownershipCreatorIDs []string
 	productCreatorIDs   []string
@@ -450,7 +454,8 @@ func (reader *hintVerificationReader) FetchAuthorizedCreators(
 	rows := []domainqianchuan.AuthorizedCreator{}
 	if request.SearchKeyword != "" {
 		reader.targetedCalls++
-		if request.SearchKeyword != reader.targetedCreator.AwemeID {
+		reader.lastSearchKeyword = request.SearchKeyword
+		if request.SearchKeyword != batchVisibleID {
 			return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected targeted creator query")
 		}
 		rows = append(rows, reader.targetedCreator)
@@ -516,7 +521,7 @@ func (reader *batchVerificationReader) FetchAuthorizedCreators(
 		reader.broadCalls++
 		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected broad creator query")
 	}
-	if request.SearchKeyword != batchCreatorID {
+	if request.SearchKeyword != batchVisibleID {
 		return domainqianchuan.AuthorizedCreatorPage{}, errors.New("unexpected targeted creator")
 	}
 	return domainqianchuan.AuthorizedCreatorPage{

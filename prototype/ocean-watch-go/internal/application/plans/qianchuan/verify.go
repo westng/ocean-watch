@@ -124,10 +124,18 @@ func (verifier WorkVerifier) Verify(
 	eligibleHints := map[string]OwnerHint{}
 	authorizationFailedIDs := map[string]bool{}
 	unavailableCreatorIDs := map[string]bool{}
+	missingVisibleCreatorIDs := map[string]bool{}
 	awemeIDOrder, itemIDsByAwemeID := ownerHintAwemeIDGroups(works, suppliedHints)
 	for _, awemeID := range awemeIDOrder {
+		searchKeywords := ownerHintSearchKeywords(itemIDsByAwemeID[awemeID], suppliedHints)
+		if len(searchKeywords) == 0 {
+			missingVisibleCreatorIDs[awemeID] = true
+			continue
+		}
 		result.OwnerHintSummary.AuthorizedHintQueryCount++
-		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(ctx, request, awemeID, maxPages)
+		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(
+			ctx, request, awemeID, searchKeywords, maxPages,
+		)
 		if fetchErr != nil {
 			result.OwnerHintSummary.AuthorizedHintFailureCount++
 			authorizationFailedIDs[awemeID] = true
@@ -206,6 +214,8 @@ func (verifier WorkVerifier) Verify(
 			reason, message := "missing_creator_uid", "未获得可用于官方定向校验的数字达人 UID"
 			if hasHint && (authorizationFailedIDs[hint.AwemeID] || ownershipFailedIDs[hint.AwemeID]) {
 				reason, message = "creator_query_incomplete", "达人授权或作品定向查询不完整，未将作品视为未授权"
+			} else if hasHint && missingVisibleCreatorIDs[hint.AwemeID] {
+				reason, message = "missing_creator_show_id", "未获得可用于官方授权查询的可见抖音号"
 			} else if hasHint && unavailableCreatorIDs[hint.AwemeID] {
 				reason, message = "creator_unavailable", "指定达人未授权或当前不可用于商品全域推广"
 			} else if hasHint {
@@ -317,43 +327,57 @@ func (verifier WorkVerifier) resolveAuthorizedHint(
 	ctx context.Context,
 	request WorkVerificationRequest,
 	awemeID string,
+	searchKeywords []string,
 	maxPages int,
 ) (domainqianchuan.AuthorizedCreator, bool, int, error) {
 	awemeID = strings.TrimSpace(awemeID)
-	if !validPositiveID(awemeID) {
+	if !validPositiveID(awemeID) || len(searchKeywords) == 0 {
 		return domainqianchuan.AuthorizedCreator{}, false, 0, nil
 	}
-	for page := 1; page <= maxPages; page++ {
-		result, err := verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
-			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-			SearchKeyword: awemeID, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
-			Page: page, PageSize: 100,
-		})
-		if err != nil {
-			return domainqianchuan.AuthorizedCreator{}, false, page, err
+	totalPagesRead := 0
+	for _, searchKeyword := range searchKeywords {
+		searchKeyword = strings.TrimSpace(searchKeyword)
+		if searchKeyword == "" {
+			continue
 		}
-		if result.PageInfo.Page != page || result.PageInfo.TotalPages < 0 || result.PageInfo.TotalNumber < 0 {
-			return domainqianchuan.AuthorizedCreator{}, false, page, errors.New("targeted authorized creator query returned invalid pagination")
-		}
-		matches := map[string]domainqianchuan.AuthorizedCreator{}
-		for _, creator := range result.Rows {
-			if strings.TrimSpace(creator.AwemeID) == awemeID {
-				matches[creator.AwemeID] = creator
+		completed := false
+		for page := 1; page <= maxPages; page++ {
+			totalPagesRead++
+			result, err := verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
+				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+				SearchKeyword: searchKeyword, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
+				Page: page, PageSize: 100,
+			})
+			if err != nil {
+				return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, err
+			}
+			if result.PageInfo.Page != page || result.PageInfo.TotalPages < 0 || result.PageInfo.TotalNumber < 0 {
+				return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, errors.New("targeted authorized creator query returned invalid pagination")
+			}
+			matches := map[string]domainqianchuan.AuthorizedCreator{}
+			for _, creator := range result.Rows {
+				if strings.TrimSpace(creator.AwemeID) == awemeID {
+					matches[creator.AwemeID] = creator
+				}
+			}
+			if len(matches) == 1 {
+				for _, creator := range matches {
+					return creator, true, totalPagesRead, nil
+				}
+			}
+			if len(matches) > 1 {
+				return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, errors.New("targeted authorized creator query returned multiple exact matches")
+			}
+			if result.PageInfo.TotalPages == 0 || page >= result.PageInfo.TotalPages {
+				completed = true
+				break
 			}
 		}
-		if len(matches) == 1 {
-			for _, creator := range matches {
-				return creator, true, page, nil
-			}
-		}
-		if len(matches) > 1 {
-			return domainqianchuan.AuthorizedCreator{}, false, page, errors.New("targeted authorized creator query returned multiple exact matches")
-		}
-		if result.PageInfo.TotalPages == 0 || page >= result.PageInfo.TotalPages {
-			return domainqianchuan.AuthorizedCreator{}, false, page, nil
+		if !completed {
+			return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, errors.New("targeted authorized creator query exceeded the page limit")
 		}
 	}
-	return domainqianchuan.AuthorizedCreator{}, false, maxPages, errors.New("targeted authorized creator query exceeded the page limit")
+	return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, nil
 }
 
 func (verifier WorkVerifier) queryWorks(
@@ -443,6 +467,23 @@ func ownerHintAwemeIDGroups(
 		items[hint.AwemeID] = append(items[hint.AwemeID], work.AwemeItemID)
 	}
 	return order, items
+}
+
+func ownerHintSearchKeywords(itemIDs []string, hints map[string]OwnerHint) []string {
+	result := []string{}
+	seen := map[string]struct{}{}
+	for _, itemID := range itemIDs {
+		value := strings.TrimSpace(hints[itemID].AwemeShowID)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func workIDsByHintedCreator(works []WorkInput, hints map[string]OwnerHint) map[string][]string {

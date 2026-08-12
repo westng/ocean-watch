@@ -162,11 +162,17 @@ def resolve_authorized_aweme(
     creator_name=None,
     page_size=MAX_PAGE_SIZE,
     max_pages=100,
+    expected_aweme_id=None,
 ):
     requested = str(douyin_id or "").strip()
     if is_missing(requested):
         raise ConfigurationError("douyin_id is required")
     advertiser_id = positive_integer(advertiser_id, "advertiser_id")
+    expected_aweme_id = (
+        str(positive_integer(expected_aweme_id, "expected_aweme_id"))
+        if not is_missing(expected_aweme_id)
+        else None
+    )
     page_size = positive_integer(page_size, "resolver_page_size", maximum=MAX_PAGE_SIZE)
     max_pages = positive_integer(max_pages, "resolver_max_pages")
 
@@ -196,7 +202,11 @@ def resolve_authorized_aweme(
         for item in page_items:
             row = compact_authorized_aweme(item)
             candidates.append(row)
-            match_field = exact_match(row, requested)
+            match_field = (
+                "aweme_id"
+                if expected_aweme_id and row.get("aweme_id") == expected_aweme_id
+                else exact_match(row, requested) if expected_aweme_id is None else None
+            )
             if match_field and row.get("aweme_id"):
                 matches[row["aweme_id"]] = {**row, "match_field": match_field}
         page_info = get_path(response, "data.page_info", {}) or {}
@@ -223,6 +233,7 @@ def resolve_authorized_aweme(
             {
                 "douyin_id": requested,
                 "advertiser_id": str(advertiser_id),
+                "expected_aweme_id": expected_aweme_id,
                 "candidate_count": len(candidates),
                 "candidates": candidates[:10],
                 "truncated": truncated,

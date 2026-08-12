@@ -171,8 +171,8 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
             works,
             concurrency=2,
             owner_hints={
-                "101": {"aweme_id": "9001"},
-                "102": {"aweme_id": "9002"},
+                "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"},
+                "102": {"aweme_id": "9002", "aweme_show_id": "creator-two"},
             },
         )
         self.assertEqual([row["aweme_item_id"] for row in result["matched"]], ["101"])
@@ -188,7 +188,7 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
         ]
         self.assertEqual(
             sorted(row["filtering"]["search_key_words"] for row in authorized_calls),
-            ["9001", "9002"],
+            ["creator-one", "creator-two"],
         )
         self.assertTrue(all(
             "search_key_words" in row["filtering"] for row in authorized_calls
@@ -219,7 +219,9 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
             ["1001"],
             [{"input_index": 0, "aweme_item_id": "101", "canonical_url": "url-101"}],
             concurrency=2,
-            owner_hints={"101": {"aweme_id": "9001"}},
+            owner_hints={
+                "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"}
+            },
         )
         self.assertEqual([row["aweme_item_id"] for row in result["matched"]], ["101"])
         self.assertEqual(result["query_failures"], [])
@@ -265,7 +267,7 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
         })
         self.assertEqual(result["authorized_creator_query"]["mode"], "targeted_only")
 
-    def test_numeric_owner_hint_survives_changed_visible_id(self):
+    def test_visible_owner_hint_drives_search_and_numeric_identity_check(self):
         client = RoutingClient()
         result = qianchuan_work_materials.resolve_work_materials(
             client,
@@ -275,7 +277,7 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
             [{"input_index": 0, "aweme_item_id": "101", "canonical_url": "url-101"}],
             concurrency=2,
             owner_hints={
-                "101": {"aweme_id": "9001", "aweme_show_id": "old-visible-id"}
+                "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"}
             },
         )
 
@@ -286,7 +288,7 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
         ]
         self.assertEqual(
             [row["filtering"]["search_key_words"] for row in authorized_calls],
-            ["9001"],
+            ["creator-one"],
         )
         self.assertEqual([row["aweme_item_id"] for row in result["matched"]], ["101"])
         self.assertEqual(result["owner_hint_summary"]["broad_scan_work_count"], 0)
@@ -294,7 +296,7 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
             "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"},
         })
 
-    def test_numeric_only_owner_hint_uses_targeted_verification(self):
+    def test_numeric_only_owner_hint_skips_without_wrong_search_parameter(self):
         client = RoutingClient()
         result = qianchuan_work_materials.resolve_work_materials(
             client,
@@ -306,9 +308,37 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
             owner_hints={"101": {"aweme_id": "9001"}},
         )
 
-        self.assertEqual([row["aweme_item_id"] for row in result["matched"]], ["101"])
-        self.assertEqual(result["owner_hint_summary"]["eligible"], 1)
+        self.assertEqual(result["matched"], [])
+        self.assertEqual(result["skipped"][0]["reason"], "missing_creator_show_id")
+        self.assertEqual(client.calls, [])
+        self.assertEqual(result["owner_hint_summary"]["eligible"], 0)
+        self.assertEqual(result["owner_hint_summary"]["authorized_hint_query_count"], 0)
         self.assertEqual(result["owner_hint_summary"]["broad_scan_work_count"], 0)
+
+    def test_visible_id_result_with_different_numeric_uid_is_query_incomplete(self):
+        with mock.patch.object(
+            qianchuan_work_materials,
+            "resolve_authorized_aweme",
+            return_value={
+                "aweme_id": "9002",
+                "aweme_show_id": "creator-one",
+                "aweme_name": "Wrong Creator",
+            },
+        ):
+            result = qianchuan_work_materials.resolve_work_materials(
+                object(),
+                object(),
+                "1234567890123456",
+                ["1001"],
+                [{"input_index": 0, "aweme_item_id": "101"}],
+                owner_hints={
+                    "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"}
+                },
+            )
+
+        self.assertEqual(result["matched"], [])
+        self.assertEqual(result["skipped"][0]["reason"], "creator_query_incomplete")
+        self.assertEqual(result["query_failures"][0]["code"], "configuration_error")
 
     def test_stale_owner_hint_skips_without_scanning_other_creators(self):
         client = RoutingClient()
@@ -369,7 +399,9 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
                 "1234567890123456",
                 ["1001"],
                 [{"input_index": 0, "aweme_item_id": "101"}],
-                owner_hints={"101": {"aweme_id": "9001"}},
+                owner_hints={
+                    "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"}
+                },
             )
 
         self.assertEqual(result["skipped"][0]["reason"], "creator_query_incomplete")
@@ -390,7 +422,9 @@ class QianchuanWorkMaterialTests(unittest.TestCase):
                 "1234567890123456",
                 ["1001"],
                 [{"input_index": 0, "aweme_item_id": "101"}],
-                owner_hints={"101": {"aweme_id": "9001"}},
+                owner_hints={
+                    "101": {"aweme_id": "9001", "aweme_show_id": "creator-one"}
+                },
             )
 
         self.assertEqual(result["skipped"][0]["reason"], "creator_query_incomplete")

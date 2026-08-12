@@ -224,6 +224,28 @@ class QianchuanCreatorVideoTests(unittest.TestCase):
             "creator001-other",
         )
 
+    def test_resolver_searches_visible_id_but_matches_expected_numeric_uid(self):
+        client = FakeClient([
+            authorized_response(
+                aweme_id=9001,
+                aweme_show_id="renamed-visible-id",
+                aweme_name="测试达人甲",
+            )
+        ])
+        result = creator_accounts.resolve_authorized_aweme(
+            client,
+            "1234567890123456",
+            "old-visible-id",
+            expected_aweme_id="9001",
+        )
+        self.assertEqual(result["aweme_id"], "9001")
+        self.assertEqual(result["aweme_show_id"], "renamed-visible-id")
+        self.assertEqual(result["match_field"], "aweme_id")
+        self.assertEqual(
+            client.calls[0][1]["filtering"]["search_key_words"],
+            "old-visible-id",
+        )
+
     def test_resolver_preserves_official_error(self):
         client = FakeClient([{
             "code": 40000,

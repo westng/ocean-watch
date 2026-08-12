@@ -128,28 +128,67 @@ def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
         hint["aweme_id"]
         for hint in hints.values()
     })
+    search_keywords_by_aweme_id = {}
+    for hint in hints.values():
+        search_keyword = str(hint.get("aweme_show_id") or "").strip()
+        if search_keyword:
+            search_keywords_by_aweme_id.setdefault(
+                hint["aweme_id"],
+                set(),
+            ).add(search_keyword)
+    searchable_aweme_ids = sorted(search_keywords_by_aweme_id)
+    missing_aweme_show_ids = set(aweme_ids) - set(searchable_aweme_ids)
     resolved_by_aweme_id = {}
     unavailable_aweme_ids = set()
     query_failures = []
 
     def query(aweme_id):
-        for attempt in range(len(RATE_LIMIT_RETRY_DELAYS) + 1):
-            try:
-                return aweme_id, resolve_authorized_aweme(
-                    client,
-                    advertiser_id,
-                    aweme_id,
-                )
-            except Exception as error:
-                if (
-                    attempt >= len(RATE_LIMIT_RETRY_DELAYS)
-                    or not is_rate_limit_error(error)
-                ):
+        last_unavailable_error = None
+        for search_keyword in sorted(search_keywords_by_aweme_id[aweme_id]):
+            for attempt in range(len(RATE_LIMIT_RETRY_DELAYS) + 1):
+                try:
+                    creator = resolve_authorized_aweme(
+                        client,
+                        advertiser_id,
+                        search_keyword,
+                        expected_aweme_id=aweme_id,
+                    )
+                    if creator.get("aweme_id") != aweme_id:
+                        raise ConfigurationError(
+                            "Authorized Qianchuan creator identity mismatch",
+                            {
+                                "expected_aweme_id": aweme_id,
+                                "actual_aweme_id": creator.get("aweme_id"),
+                                "aweme_show_id": search_keyword,
+                            },
+                        )
+                    return aweme_id, creator
+                except ConfigurationError as error:
+                    if is_creator_unavailable_error(error):
+                        last_unavailable_error = error
+                        break
                     raise
-                time.sleep(RATE_LIMIT_RETRY_DELAYS[attempt])
+                except Exception as error:
+                    if (
+                        attempt >= len(RATE_LIMIT_RETRY_DELAYS)
+                        or not is_rate_limit_error(error)
+                    ):
+                        raise
+                    time.sleep(RATE_LIMIT_RETRY_DELAYS[attempt])
+        if last_unavailable_error is not None:
+            raise last_unavailable_error
+        raise ConfigurationError(
+            "Visible Douyin ID is required for authorized creator search",
+            {"aweme_id": aweme_id},
+        )
 
-    with ThreadPoolExecutor(max_workers=min(concurrency, max(1, len(aweme_ids)))) as pool:
-        futures = {pool.submit(query, aweme_id): aweme_id for aweme_id in aweme_ids}
+    with ThreadPoolExecutor(
+        max_workers=min(concurrency, max(1, len(searchable_aweme_ids)))
+    ) as pool:
+        futures = {
+            pool.submit(query, aweme_id): aweme_id
+            for aweme_id in searchable_aweme_ids
+        }
         for future in as_completed(futures):
             aweme_id = futures[future]
             try:
@@ -187,9 +226,10 @@ def resolve_authorized_hint_creators(client, advertiser_id, hints, concurrency):
         "disabled_creators": {
             creator["aweme_id"]: creator for creator in disabled_creators
         }.values(),
+        "missing_aweme_show_ids": missing_aweme_show_ids,
         "unavailable_aweme_ids": unavailable_aweme_ids,
         "query_failures": query_failures,
-        "query_count": len(aweme_ids),
+        "query_count": len(searchable_aweme_ids),
     }
 
 
@@ -289,6 +329,9 @@ def resolve_work_materials(
         elif not hinted_aweme_id:
             reason = "missing_creator_uid"
             message = "未获得可用于官方定向校验的数字达人 UID"
+        elif hinted_aweme_id in hint_authorization["missing_aweme_show_ids"]:
+            reason = "missing_creator_show_id"
+            message = "未获得可用于官方授权查询的可见抖音号"
         elif hinted_aweme_id in failed_authorization_ids:
             reason = "creator_query_incomplete"
             message = "达人授权定向查询失败，未将作品视为未授权"
