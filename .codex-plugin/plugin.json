@@ -1,6 +1,6 @@
 {
   "name": "ocean-watch",
-  "version": "1.0.7+codex.20260805094116",
+  "version": "1.0.8+codex.20260812022441",
   "description": "Codex plugin for Ocean Engine OAuth, responsible-account reporting, plan operations, performance reporting, and monitoring analysis.",
   "author": {
     "name": "westng",

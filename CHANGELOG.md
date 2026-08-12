@@ -4,6 +4,8 @@
 
 ## 未发布
 
+## 1.0.8 - 2026-08-12
+
 ### 修复
 
 - 修复巨量营销与千川同步授权广告主时，官方空结果仅返回 `total_page: 0`、省略 `page` 或 `total_number` 而被误报 `Malformed pagination metadata` 的问题；仅兼容可证明完整的空首页契约，非空零页、分页总量变化、重复 ID 和校验不完整仍拒绝覆盖快照，Python 生产路径与 Go Shadow 保持一致。
