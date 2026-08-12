@@ -35,10 +35,11 @@ Template advertiser selection must ignore placeholder IDs. When the selected cha
 Use the unified launcher from this Skill root:
 
 ```bash
-python3 run.py <domain> <action> [options]
+./run <domain> <action> [options]
+# Windows: run.cmd <domain> <action> [options]
 ```
 
-If the package is installed, `ocean-watch <domain> <action>` is equivalent. Read `../../docs/cli.md` only when full command details are needed.
+The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed.
 
 Core routes:
 
@@ -85,9 +86,9 @@ Never use browser-admin automation. Use official APIs and the bundled CLI.
 
 ## First-Use Environment Check
 
-Before the first Python command on a new computer, detect a supported interpreter with ordinary system commands. On macOS/Linux, try `python3 --version` and then `python --version`. On Windows, try `py -3 --version`, `python --version`, and `python3 --version`. Require Python `3.10+`; if none is available, stop and tell the user to install Python and reopen Codex. Do not claim that the Plugin can install Python automatically.
+The bundled Go CLI handles every Ocean Watch business command. Python is required only when a Qianchuan workflow resolves public Douyin work metadata through pinned F2 `0.0.1.7`. Require Python `3.10+`; if none is available, ordinary Marketing commands remain Go-native but F2-dependent work-link commands must stop with a clear remediation. Do not claim that the Plugin can install Python automatically.
 
-After finding Python, run `setup doctor` before setup or authorization. It checks the Python version, Windows/macOS/Linux support, Codex CLI availability, secure credential backend, and whether the configured loopback callback port can be bound. Resolve every `blocking_check` before OAuth or business commands; warnings may be reported without blocking ordinary Plugin use. `setup init` includes the same environment report for first-run guidance.
+After finding Python, run `setup doctor` before setup or authorization. It checks Python `3.10+`, the exact F2 `0.0.1.7` package version in that interpreter, Windows/macOS/Linux support, Codex CLI availability, the secure credential backend, and whether the configured loopback callback port can be bound. Resolve every `blocking_check` before OAuth or business commands; warnings may be reported without blocking ordinary Plugin use. `setup init` includes the same environment report for first-run guidance.
 
 ## Config And Secrets
 
@@ -98,7 +99,7 @@ Config resolution order:
 3. Git checkout `config/ads-plan-monitor/config.json`.
 4. `$CODEX_HOME/ads-plan-monitor/config.json` (`CODEX_HOME` defaults to `~/.codex`).
 
-Project config is non-secret. Never ask the user to paste App Secret, Access Token, Refresh Token, auth code, or MCP identifiers into chat. Never print them.
+Project config is non-secret. Never ask the user to paste App Secret, Access Token, Refresh Token, or auth code into chat. Never print them.
 
 Credentials use macOS Keychain, Windows DPAPI, or Linux Secret Service. Plaintext fallback is disabled unless the user explicitly sets `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` for development.
 
@@ -175,9 +176,7 @@ Use official docs as the source of truth:
 - Report config: `https://open.oceanengine.com/labels/34/docs/1755261744248832`
 - Custom report: `https://open.oceanengine.com/labels/34/docs/1741387668314126`
 
-Read `references/official-api-notes.md` for endpoint details and `references/creator-material-api-notes.md` for creator semantics. Read `references/current-template-notes.md` for reusable template and reporting rules. If references conflict with official docs or official MCP results, prefer the official source.
-
-MCP is optional. Use `mcp configure`/`mcp status`, and use `mcp capabilities [--tool TOOL_NAME]` to inspect the current runtime tool inventory and schema. Prefer a configured MCP for official documentation and for an exact advertised remote operation only when its schema matches and credentials remain protected. Marketing project/promotion workflows, local state, OAuth persistence, and any operation without an exact runtime tool continue through the bundled CLI and official API. Route Qianchuan capability selection through `$qc-plan-monitor` and its `references/mcp-capability-routing.md`; never infer tool parameters from a static list.
+Read `references/official-api-notes.md` for endpoint details and `references/creator-material-api-notes.md` for creator semantics. Read `references/current-template-notes.md` for reusable template and reporting rules. If references conflict with current official documentation or an official API response, prefer the current official source. All remote business operations use the bundled Go CLI and official Ocean Engine SDK/REST endpoints.
 
 ## Template Contract
 
@@ -316,7 +315,7 @@ When a write is explicitly requested, use `plans update-project-status`, `update
 
 - Keep IDs as exact strings unless an official JSON field requires a number.
 - Preserve every tracking-link query parameter exactly.
-- Do not print credentials or sensitive MCP URLs.
+- Do not print credentials, authorization codes, or sensitive request headers.
 - Report partial batch failures per account/job; do not hide successful rows.
 - Prefer concise structured summaries; show full payloads only when requested.
 - Plan-setting and template-deletion writes are dry-run by default and require `--submit`.

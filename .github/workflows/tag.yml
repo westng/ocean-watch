@@ -14,7 +14,7 @@ jobs:
   release:
     if: github.repository == 'westng/ocean-watch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write
     env:
@@ -24,11 +24,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.5"
+          cache-dependency-path: runtime/ocean-watch-go/go.sum
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Install project and quality tools
-        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: Install validation dependencies
+        run: python -m pip install --disable-pip-version-check "f2==0.0.1.7" "socksio>=1,<2" PyYAML
       - name: Verify current main revision
         shell: bash
         run: |
@@ -40,27 +44,29 @@ jobs:
         id: release
         shell: bash
         run: |
-          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          latest_tag="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'map(select(.draft == false and .prerelease == false))[0].tag_name // ""')"
           python scripts/version_tag.py release-check \
             --latest-tag "${latest_tag}" \
-            > "${RUNNER_TEMP}/release-candidate.json"
-          version_tag="$(python -c 'import json, sys; print(json.load(sys.stdin)["tag"])' \
-            < "${RUNNER_TEMP}/release-candidate.json")"
+            > "${RUNNER_TEMP}/release.json"
+          version_tag="$(python -c 'import json,sys; print(json.load(sys.stdin)["tag"])' \
+            < "${RUNNER_TEMP}/release.json")"
           echo "version_tag=${version_tag}" >> "${GITHUB_OUTPUT}"
-      - name: Run release quality gate
+      - name: Run release quality checks
+        shell: bash
         run: |
-          python -m compileall -q skills/ads-plan-monitor/src/ocean_watch scripts
-          ruff check skills/ads-plan-monitor/src scripts tests
-          bandit -q --severity-level medium -r skills/ads-plan-monitor/src/ocean_watch scripts
-          python -m unittest discover -s tests -v
+          go -C runtime/ocean-watch-go test ./...
+          go -C runtime/ocean-watch-go vet ./...
+          go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
+          python -m unittest discover -s f2 -p "test_resolve.py" -v
+          python scripts/validate_distribution.py
+          skills/ads-plan-monitor/run --version
+          skills/qc-plan-monitor/run --help
       - name: Generate release notes
         shell: bash
         env:
           VERSION_TAG: ${{ steps.release.outputs.version_tag }}
-        run: |
-          python scripts/version_tag.py notes \
-            --tag "${VERSION_TAG}" \
-            --out "${RUNNER_TEMP}/release-notes.md"
+        run: python scripts/version_tag.py notes --tag "${VERSION_TAG}" --out "${RUNNER_TEMP}/release-notes.md"
       - name: Verify immutable release source
         shell: bash
         run: |
@@ -79,49 +85,39 @@ jobs:
           VERSION_TAG: ${{ steps.release.outputs.version_tag }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
-          set +e
-          git ls-remote --exit-code --tags origin "refs/tags/${VERSION_TAG}" > /dev/null
-          remote_status=$?
-          set -e
-          case "${remote_status}" in
-            0)
-              ;;
-            2)
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-                -f "ref=refs/tags/${VERSION_TAG}" \
-                -f "sha=${RELEASE_SHA}" \
-                > /dev/null
-              ;;
-            *)
-              echo "Unable to determine the remote Tag state." >&2
-              exit "${remote_status}"
-              ;;
-          esac
-          git fetch --force origin "refs/tags/${VERSION_TAG}:refs/tags/${VERSION_TAG}"
-          if [[ "$(git rev-parse "refs/tags/${VERSION_TAG}^{commit}")" != "${RELEASE_SHA}" ]]; then
-            echo "The published Tag points to a different commit." >&2
+          if ! remote_refs="$(git ls-remote --tags origin \
+            "refs/tags/${VERSION_TAG}" "refs/tags/${VERSION_TAG}^{}")"; then
+            echo "Unable to determine the remote Tag state." >&2
             exit 1
           fi
+          if [[ -z "${remote_refs}" ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/tags/${VERSION_TAG}" -f "sha=${RELEASE_SHA}" >/dev/null
+          else
+            remote_sha="$(awk '
+              NR == 1 { direct = $1 }
+              $2 ~ /\^\{\}$/ { peeled = $1 }
+              END { print peeled != "" ? peeled : direct }
+            ' <<< "${remote_refs}")"
+            if [[ "${remote_sha}" != "${RELEASE_SHA}" ]]; then
+              echo "Existing Tag ${VERSION_TAG} points to ${remote_sha}, not ${RELEASE_SHA}." >&2
+              exit 1
+            fi
+          fi
+          git fetch --force origin "refs/tags/${VERSION_TAG}:refs/tags/${VERSION_TAG}"
+          [[ "$(git rev-parse "refs/tags/${VERSION_TAG}^{commit}")" == "${RELEASE_SHA}" ]]
       - name: Create or verify immutable GitHub Release
         shell: bash
         env:
           VERSION_TAG: ${{ steps.release.outputs.version_tag }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
-          if ! gh release view "${VERSION_TAG}" \
-            --json tagName,name,isDraft,isPrerelease,body \
-            > "${RUNNER_TEMP}/release-metadata.json"; then
-            gh release create "${VERSION_TAG}" \
-              --verify-tag \
-              --target "${RELEASE_SHA}" \
-              --title "${VERSION_TAG}" \
-              --notes-file "${RUNNER_TEMP}/release-notes.md"
+          if ! gh release view "${VERSION_TAG}" --json tagName,name,isDraft,isPrerelease,body > "${RUNNER_TEMP}/release-metadata.json"; then
+            gh release create "${VERSION_TAG}" --verify-tag --target "${RELEASE_SHA}" \
+              --title "${VERSION_TAG}" --notes-file "${RUNNER_TEMP}/release-notes.md"
           fi
-          gh release view "${VERSION_TAG}" \
-            --json tagName,name,isDraft,isPrerelease,body \
-            > "${RUNNER_TEMP}/release-metadata.json"
-          python - "${RUNNER_TEMP}/release-metadata.json" \
-            "${RUNNER_TEMP}/release-notes.md" "${VERSION_TAG}" <<'PY'
+          gh release view "${VERSION_TAG}" --json tagName,name,isDraft,isPrerelease,body > "${RUNNER_TEMP}/release-metadata.json"
+          python - "${RUNNER_TEMP}/release-metadata.json" "${RUNNER_TEMP}/release-notes.md" "${VERSION_TAG}" <<'PY'
           import json
           import sys
           from pathlib import Path

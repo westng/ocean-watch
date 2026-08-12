@@ -1,4 +1,4 @@
 interface:
   display_name: "巨量引擎盯盘助手"
   short_description: "营销授权覆盖刷新、负责账户、模板素材、计划报表与策略"
-  default_prompt: "Use $ads-plan-monitor to understand the user's Marketing intent, refresh authorized-advertiser coverage when it should match current official access, and safely handle accounts, templates, materials, plans, reports, or strategy."
+  default_prompt: "Use $ads-plan-monitor to understand my Marketing intent and safely handle authorization freshness, accounts, templates, materials, plans, reports, or strategy through the bundled Go CLI."

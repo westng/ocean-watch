@@ -13,9 +13,6 @@ Official docs:
 - Product all-domain plan detail: https://open.oceanengine.com/labels/12/docs/1804362305657868?origin=left_nav
 - Product all-domain plan materials: https://open.oceanengine.com/labels/12/docs/1804363488115850?origin=left_nav
 - Add product all-domain plan materials: https://open.oceanengine.com/labels/12/docs/1835232814536707?origin=left_nav
-- Qianchuan MCP business tools: https://open.oceanengine.com/labels/12/docs/1839622960207943?origin=left_nav
-- Qianchuan MCP tool list: https://open.oceanengine.com/labels/12/docs/1847297003631945?origin=left_nav
-- Qianchuan MCP guide and examples: https://open.oceanengine.com/labels/12/docs/1849835441833027?origin=left_nav
 - Unified and overall reports: https://open.oceanengine.com/labels/12/docs/1824289224504835?origin=left_nav
 
 ## Authorization And Accounts
@@ -36,18 +33,6 @@ Official docs:
   equal `total_number` before persisting the authorization snapshot.
 - Candidate advertisers are verified through advertiser info in batches of 50 before persistence.
 - Missing optional agent permission error `40002` is a partial discovery result; other expansion failures remain blocking.
-
-## Official MCP Reports
-
-- Remote endpoint: `https://open.oceanengine.com/qianchuan/mcp` using Streamable HTTP.
-- Developer authorization uses the existing Qianchuan `Access-Token` header and `Content-Type: application/json`; no separate MCP API Key is required.
-- Limit exposed tools with the `Tool-Range` header. The report client allows only `qianchuan_uni_promotion_list_v1`, `qianchuan_report_uni_promotion_config_get_v1`, and `qianchuan_report_uni_promotion_data_get_v1`.
-- `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PRODUCT_AD` and dimension `ad_id` is the authoritative product all-domain financial report. Use its nested metric `Value` or `ValueStr` without additional scaling.
-- `qianchuan_uni_promotion_list_v1` supplies plan names, statuses, creators, products, budgets, and ROI targets. Use the same requested date range as the financial report; when dates are omitted, both calls query only the current day. Its `stats_info` uses an internal fixed-point representation and must never be displayed or converted into report currency.
-- The config tool exposes available all-domain dimensions and metrics. Do not use the standard `qianchuan_report_ad_get_v1` as a substitute for product all-domain reporting.
-- Traverse every declared page and reject incomplete pagination, duplicate plan IDs, missing required metrics, fractional count values, and non-finite numbers. Aggregate the raw decimal values before rounding output.
-- `status=ALL` preserves report rows when historical plan metadata is no longer returned and marks them as unavailable. A specific status filter requires resolved metadata and fails closed when it cannot be obtained.
-- Access Tokens remain in the operating-system credential backend, are refreshed before MCP use, and must never be written into Codex MCP configuration or output.
 
 ## Qianchuan Unified And Overall Reports
 
@@ -111,7 +96,7 @@ This is one Qianchuan transaction. It does not use Marketing project and promoti
 - `/v1.0/qianchuan/uni_promotion/list/` uses `marketing_goal=VIDEO_PROM_GOODS`, `filtering.status=ALL`, and `adlab_scene=UNI_PROJECT`. `ALL` includes paused plans and excludes deleted plans.
 - Plan-list `start_time` and `end_time` are required data-period fields and do not filter plan creation time; creation dates have separate optional fields. Batch work-link reconciliation queries the current local day (`00:00:00` through `23:59:59`) because it only decides whether to create a plan or append materials, and traverses every declared page for that day.
 - One batch command scans the current-day plan list once after grouping all verified works, independent of input-link or creator count. A transient page failure retries only that page with jittered backoff; `40100` or HTTP `429` also activates the shared command cooldown and honors `Retry-After` when present.
-- Dry-run and submit serialize the complete official-query phase per advertiser. Both Qianchuan API base clients share the same request throttle and diagnostic attempt counter so concurrent material checks cannot burst immediately into plan reconciliation. Official traffic is single-in-flight per advertiser across endpoints and Plugin processes, uses a 250 ms minimum dispatch interval, and shares bounded `40100`/HTTP 429 cooldown state between Python and Go.
+- Dry-run and submit serialize the complete official-query phase per advertiser. Both Qianchuan API base clients share the same request throttle and diagnostic attempt counter so concurrent material checks cannot burst immediately into plan reconciliation. Official traffic is single-in-flight per advertiser across endpoints and Plugin processes, uses a 250 ms minimum dispatch interval, and shares bounded `40100`/HTTP 429 cooldown state.
 - Batch creation/append and work-material removal transparently queue, pace, and retry official requests without a cumulative local attempt cap. Their shared counter remains diagnostic only and cannot fail a task after an arbitrary number of requests. Batch create/append, deletion reconciliation, plan creation, and plan-setting mutations share the `qianchuan-advertiser-{advertiser_id}.lock`; batch and deletion dry-runs also hold it during official reads and reconciliation.
 - Plan detail returns exact `aweme_id`, `product_infos`, status, and operation status. Never choose among multiple exact creator matches.
 - Plan-list `room_info.anchor_id` is the visible Douyin ID, not the numeric detail `aweme_id`. Candidate reconciliation must carry both identifiers and use plan detail for the final numeric identity check.

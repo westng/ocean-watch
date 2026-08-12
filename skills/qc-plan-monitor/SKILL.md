@@ -23,7 +23,7 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 7. Dry-run or explicitly submit one all-domain plan.
 8. Resolve multiple Douyin work links, group product-matched works by creator, then create or append product all-domain plans.
 9. Resolve Douyin work links to plan `material_id` values and remove verified custom materials.
-10. Prefer verified official MCP tools for supported Qianchuan reads and guarded writes, with OpenAPI fallback where safe.
+10. Execute Qianchuan reads and guarded writes through the bundled Go CLI and official SDK/REST endpoints.
 11. List/search products and inspect plan details, materials, local runs, and authorization mappings.
 12. Dry-run or explicitly submit guarded plan status, budget, and ROI updates.
 13. Route natural-language account, product, live-room, author, and custom 全域/乘方 report intent to the matching official report endpoint.
@@ -41,10 +41,11 @@ Ignore placeholder advertiser IDs during template creation. Validate an entered 
 Use the launcher from this Skill root:
 
 ```bash
-python3 run.py <domain> <action> [options]
+./run <domain> <action> [options]
+# Windows: run.cmd <domain> <action> [options]
 ```
 
-If the package is installed, `ocean-watch <domain> <action>` is equivalent.
+The launcher selects and executes the bundled Go binary for the current platform.
 
 | Request | Command |
 | --- | --- |
@@ -94,9 +95,9 @@ If the package is installed, `ocean-watch <domain> <action>` is equivalent.
 
 ## First-Use Environment Check
 
-On a new computer, detect Python before invoking `run.py`: macOS/Linux should try `python3 --version` then `python --version`; Windows should try `py -3 --version`, `python --version`, then `python3 --version`. Require Python `3.10+`. If no supported interpreter exists, stop and ask the user to install Python and reopen Codex.
+The bundled Go CLI handles all Qianchuan authorization, account, template, material, plan, report, and local-state logic. Python is used only by public Douyin work metadata resolution through pinned F2 `0.0.1.7`. Require Python `3.10+` before `qc-materials inspect-work`, `plans batch-qianchuan-works`, or another F2-dependent work-link flow. If no supported interpreter exists, stop that flow and ask the user to install Python and reopen Codex.
 
-Then run `setup doctor --channel qianchuan`. Resolve blocking Python, operating-system, secure credential backend, or loopback callback-port checks before Qianchuan OAuth. Codex CLI availability is reported separately and may be a warning when the Skill is already running inside Codex.
+Then run `setup doctor --channel qianchuan`. Resolve blocking Python `3.10+`, exact F2 `0.0.1.7` package version, operating-system, secure credential backend, or loopback callback-port checks before Qianchuan OAuth. Codex CLI availability is reported separately and may be a warning when the Skill is already running inside Codex.
 
 ## Authorization
 
@@ -151,14 +152,6 @@ Carry explicit dates, date ranges, IDs, 全域/乘方 scope, marketing goal, tim
 
 Read `references/unified-report-routing.md` before executing any `qc-reports account`, `uni-account`, `schema`, `custom`, `products`, `rooms`, or `authors` request, and before executing any 全域投后素材维度 report. It defines endpoint contracts, required identifiers, topics, pagination, and output boundaries.
 
-## MCP Preference And Capability Check
-
-MCP is an optional acceleration and capability surface, not a setup prerequisite. If the user has configured it, prefer MCP for a Qianchuan remote operation only after confirming that the exact tool is present in the current runtime inventory and that its current input schema matches the operation. Read `references/mcp-capability-routing.md` before choosing an MCP tool; it contains the supported Plugin-operation intersection and the read/write fallback rules.
-
-Use runtime `tools/list` as the authority, not a remembered or static tool list. When the current tool inventory or schema is not already visible, use `mcp capabilities` and `mcp capabilities --tool TOOL_NAME`. Never infer parameters from a tool name. Keep local configuration, OAuth browser flows, credential persistence, templates, responsible-account registry operations, caches, journals, and work-link resolution in the bundled CLI.
-
-Reads may fall back to the existing OpenAPI command after a missing tool, schema mismatch, or pre-dispatch MCP failure. Writes must retain the existing dry-run, explicit confirmation, advertiser binding, locking, result validation, and post-write verification. If an MCP write may have been dispatched but its result is unknown, never retry through OpenAPI until current state has been queried and reconciled. Do not replace a multi-step batch or resumable journal workflow with isolated MCP calls.
-
 ## All-Domain Plan Reports
 
 Query plan performance with the advertiser-bound Qianchuan authorization:
@@ -170,9 +163,7 @@ ocean-watch qc-reports plans \
   --end-date YYYY-MM-DD
 ```
 
-The command uses the official Streamable HTTP MCP at `https://open.oceanengine.com/qianchuan/mcp`. It injects the refreshed local Qianchuan `Access-Token` only in memory and restricts the remote server with `Tool-Range`. This path already satisfies the MCP preference rule for its three report tools. Never persist the token in Plugin metadata, Codex MCP configuration, command output, or report files.
-
-Use `qianchuan_report_uni_promotion_data_get_v1` with topic `SITE_PROMOTION_PRODUCT_AD` and dimension `ad_id` as the only financial source. Read each metric from its returned `Value` or `ValueStr`. Separately call `qianchuan_uni_promotion_list_v1` with `VIDEO_PROM_GOODS`, `UNI_PROJECT`, and `status=ALL` only to enrich report rows with plan names, statuses, creators, products, budgets, and ROI targets. Never display or infer money from plan-list `stats_info`; those internal fixed-point values are not report currency values. Use `qianchuan_report_uni_promotion_config_get_v1` to inspect available metric contracts, and do not substitute the standard Qianchuan plan report for all-domain plans.
+The Go runtime queries the official all-domain report config/data endpoints and product all-domain plan list through the Ocean Engine SDK/REST client. Use topic `SITE_PROMOTION_PRODUCT_AD` and dimension `ad_id` as the financial source, reading each metric from the official returned value without extra scaling. Use the plan list with `VIDEO_PROM_GOODS`, `UNI_PROJECT`, and `status=ALL` only to enrich rows with names, statuses, creators, products, budgets, and ROI targets. Never display or infer money from plan-list `stats_info`; those internal fixed-point values are not report currency. Never persist the refreshed access token in Plugin metadata, output, or report files.
 
 Default to the current day and ten report rows. The report-data and plan-metadata calls must use the same requested date range, so both query only the current day when no dates are supplied; never apply a separate historical lookback. `--top 0` returns all report rows. Summaries must use all paged report data, including rows beyond the display limit, and aggregate raw decimal metrics before display rounding. Treat report money values as CNY exactly as returned; do not apply a guessed scale. Fail closed on missing required metrics, invalid pagination, duplicate plan IDs, or malformed numeric values. Request `need_compensate_info=true` from the plan list and include each plan's status, cost-guarantee state and reason, bid mode, ROI target bid, daily budget, spend, actual ROI, GMV, and orders. For `status=ALL`, retain financial rows missing plan-list metadata and expose `metadata_available=false` plus `metadata_missing_count`; a specific status requires complete metadata. Return total spend, plans with spend, orders, GMV, weighted ROI, one-hour settled amount, and weighted one-hour settled ROI. Do not write a file unless `--out` is explicit.
 
@@ -360,17 +351,14 @@ Use `runs list/show` only for Plugin-managed journals under the local state root
 - Product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1804363488115850`
 - Add product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1835232814536707`
 - Delete product all-domain plan materials: `https://open.oceanengine.com/labels/12/docs/1804363891396633`
-- Qianchuan MCP business tools: `https://open.oceanengine.com/labels/12/docs/1839622960207943`
-- Qianchuan MCP tool list: `https://open.oceanengine.com/labels/12/docs/1847297003631945`
-- Qianchuan MCP guide and examples: `https://open.oceanengine.com/labels/12/docs/1849835441833027`
 - Qianchuan unified and overall reports: `https://open.oceanengine.com/labels/12/docs/1824289224504835`
 
-Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details and `references/mcp-capability-routing.md` before selecting an MCP business tool. If local notes conflict with official documentation, the current MCP schema, or official MCP results, use the current official source.
+Read `references/official-api-notes.md` for confirmed endpoint and account-expansion details. If local notes conflict with current official documentation or an official API response, use the current official source.
 
 ## Output And Safety
 
 - Keep official IDs exact; serialize number fields only where the API requires numbers.
-- Never print App Secret, Access Token, Refresh Token, auth code, or sensitive MCP URLs.
+- Never print App Secret, Access Token, Refresh Token, auth code, or sensitive request headers.
 - Keep only the single-plan payload/template `plans create-qianchuan` dry-run independent of credentials and the HTTP client. Batch work-link and material-removal dry-runs require advertiser-bound credentials and official read APIs for ownership, product, plan, and material reconciliation; they must never write.
 - Never print or persist `OCEAN_WATCH_F2_DOUYIN_COOKIE`, F2 stderr, or raw F2 exceptions.
 - Show advertiser, goal, product count, budget, bid type, ROI, material counts, blocking fields, and endpoint before submission.

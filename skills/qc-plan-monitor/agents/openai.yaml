@@ -1,4 +1,4 @@
 interface:
   display_name: "巨量千川计划助手"
   short_description: "千川授权、模板、计划、素材及全域与乘方多维效果报表"
-  default_prompt: "Use $qc-plan-monitor to understand my Qianchuan intent, route account, product, room, author, plan, or material reports, and safely preview write operations."
+  default_prompt: "Use $qc-plan-monitor to understand my Qianchuan intent, route account, product, room, author, plan, or material operations through the bundled Go CLI, and preview writes safely."

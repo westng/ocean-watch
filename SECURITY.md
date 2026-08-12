@@ -1,65 +1,43 @@
 # Security
 
-`ocean-watch` 调用巨量引擎官方 API，可能接触广告账户、素材、投放链接和 OAuth 凭据。请把本仓库当作公开仓库维护，不要提交任何真实密钥或运行产物。
+Ocean Watch 会接触广告账户、素材、投放链接和 OAuth 凭据。仓库按公开项目维护，不提交真实密钥、业务配置或运行产物。
 
 ## 不要提交
 
-- `config/ads-plan-monitor/config.json`
-- `runs/`
-- `.venv/`
-- `__pycache__/`
-- `*.pyc`
-- `*.log`
-- `*.tmp`
-- `$CODEX_HOME/ads-plan-monitor/` 下的配置、状态和回退凭据
-- OAuth token、refresh token、app secret、auth code
-- API 请求/响应中包含账户、素材、投放链接、转化链路的调试文件
+- `config/ads-plan-monitor/config.json`、`runs/`、日志和自定义输出
+- `$CODEX_HOME/ads-plan-monitor/` 下的配置、授权快照、缓存、执行记录和开发回退凭据
+- App Secret、Access Token、Refresh Token、授权码或 F2 Cookie
+- 含真实账户、商品、作品、素材或转化链路的请求/响应
 
-仓库内的标准开发路径和已知回退凭据文件名已在 `.gitignore` 中排除，但用户自定义 `--out`、journal、响应文件或任意自定义 `CODEX_HOME` 无法由项目自动识别。自定义 `CODEX_HOME` 必须位于 Git 工作树外。提交前仍需运行：
+自定义 `CODEX_HOME` 必须位于 Git 工作树外。提交前检查：
 
 ```bash
 git status --short --ignored
 ```
 
-## 凭据存储
+## 凭据
 
-OAuth App ID、Secret、Access Token、Refresh Token 和官方 MCP `developer_id` 不应写入项目配置。`ocean-watch auth set-app` 和授权服务会将它们存储在本机凭据仓库：
+`auth set-app` 和 OAuth 服务把凭据保存到：macOS Keychain、Windows DPAPI 或 Linux Secret Service。没有安全后端时默认拒绝保存。只有受控开发环境可设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1`；产生的明文文件必须位于工作树外且限制权限。
 
-- macOS: Keychain
-- Windows: DPAPI 保护的用户本地文件
-- Linux: Secret Service (`secret-tool`)
+业务请求只访问固定的巨量引擎官方 HTTPS 主机，拒绝未经许可的端点和重定向，限制响应大小并脱敏错误。SDK 日志不会输出 Token 或请求正文。
 
-缺少安全凭据后端时，脚本默认拒绝保存，不会静默写入明文。只有显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` 才会在 `$CODEX_HOME/ads-plan-monitor/` 生成 `credentials.json`、`oceanengine-app-*.json` 和 `oceanengine-auth-*.json`；这些文件包含明文凭据，只适合受限开发环境。`CODEX_HOME` 未设置时默认为 `~/.codex`。请确保该目录不在仓库内，并限制文件权限。
+## F2
 
-官方 MCP 的动态 URL 同时包含 `app_id` 和 `developer_id`，因此不会写入 `.codex-plugin/plugin.json`、Codex 配置或其他持久化文件。Codex 只注册本地 SSE→stdio 桥接脚本；动态 URL 由桥进程读取系统凭据后在内存中生成，状态输出不会打印 URL 或标识符。
+千川公开作品元数据只通过固定 F2 `0.0.1.7` 的本机只读包装层解析。包装层不下载媒体、不创建数据库、不自动读取浏览器 Cookie。可选 `OCEAN_WATCH_F2_DOUYIN_COOKIE` 只存在于当前进程环境，不进入参数、配置、输出、日志或执行记录。
 
-官方业务 API、OAuth 和 MCP 只接受巨量官方 HTTPS 主机，拒绝重定向并限制响应大小。不要通过配置把端点改到代理、调试回显服务或第三方域名；需要抓包时使用不记录请求头和正文的本地受控环境。
-
-千川公开作品元数据只通过固定版本 F2 的本机只读 CLI 解析。F2 不进入下载模式、不创建数据库、不自动读取浏览器 Cookie；可选 Cookie 只从本机进程环境读取，不进入命令参数、配置、输出或日志。F2 只提供公开作品与达人身份提示，授权、作品归属和商品匹配始终由巨量千川官方接口复核。
-
-## 支持版本
-
-安全修复只维护当前 `main` 和最新发布版本。旧版本发现漏洞时，请先升级；需要回溯修复时会在安全公告中明确标注。
+F2 结果是不可信的公开提示，不能证明达人授权、作品归属、商品匹配或可投放性；这些结论始终由目标广告主下的千川官方 API 定向复核。
 
 ## 发布完整性
 
-项目以 Git 仓库 Tag 作为 Codex Marketplace 安装源，并为同一提交创建 GitHub Release。发布说明只能来自 `CHANGELOG.md` 对应版本段。工作流不覆盖既有 Tag 或 Release；重跑时，Tag 必须仍指向同一提交，Release 标题、状态和正文也必须完全一致。
-
-当前 Release 工作流不读取业务凭据、签名 Secret 或公钥 Variable，也不构建或发布 Go 运行时、平台 bootstrap、Plugin 候选 ZIP、checksum、SBOM、provenance 或 seal。相关候选与验收工具仅保留用于未来 Go 切流设计；正式启用前必须单独建立受保护环境、信任根、跨平台验证和独立审批流程。底层工具存在不代表签名发布链已经启用。
-
-需要可复现安装时，应使用经过审查的 Release Tag 注册 Marketplace。Tag、提交和 Release 说明均保留在 GitHub 中，具体流程见[发布指南](docs/releasing.md)。
+Marketplace 使用已审查 Git Tag 的完整源码快照，其中包含五个平台的 Go CLI。Release 工作流从固定提交重建二进制并逐字节核对，不读取业务凭据、不调用真实广告接口、不修改文件或回推 `main`。既有 Tag 和 Release 不覆盖；修复通过新 patch 发布。
 
 ## 泄露处理
 
-如果你不小心提交了真实 token、secret、auth code 或 MCP 动态 URL：
+发现 Token、Secret、授权码或 Cookie 泄露时：
 
-1. 立即在巨量引擎开放平台撤销或轮换对应凭据。
-2. 删除本地和远端历史中的敏感内容。
-3. 重新授权并更新本机凭据仓库。
-4. 检查 `runs/` 和调试输出，确认没有再次写出敏感字段。
+1. 立即在官方平台撤销或轮换凭据。
+2. 删除本地与远端历史中的敏感内容。
+3. 重新授权并检查本地执行记录与日志。
+4. 必要时通过 GitHub 安全公告通知受影响用户。
 
-如果只是提交了广告主 ID、商品 ID、投放链接等业务信息，请按团队内部信息分级决定是否重写历史。
-
-## 报告问题
-
-安全漏洞请使用 GitHub 的 [Private vulnerability reporting](https://github.com/westng/ocean-watch/security/advisories/new)。普通问题可以提交公开 issue，但不要粘贴真实 token、secret、广告账户完整数据或投放链路；只描述复现步骤、错误码和已脱敏字段。
+安全漏洞请使用 GitHub [Private vulnerability reporting](https://github.com/westng/ocean-watch/security/advisories/new)。公开 issue 不得包含真实凭据或完整业务数据。

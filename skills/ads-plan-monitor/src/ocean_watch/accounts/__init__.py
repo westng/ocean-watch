@@ -1,1 +1,0 @@
-"""Locally managed advertiser accounts."""

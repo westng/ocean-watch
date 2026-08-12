@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import ast
 import datetime as dt
 import json
 import re
@@ -28,18 +27,6 @@ def project_version(root):
     if not value:
         raise VersionTagError("pyproject.toml does not define project.version")
     return value
-
-
-def package_version(root):
-    path = Path(root) / "skills/ads-plan-monitor/src/ocean_watch/__init__.py"
-    module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    for node in module.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets):
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                return node.value.value
-    raise VersionTagError("ocean_watch.__version__ is missing or not a string literal")
 
 
 def plugin_version(root):
@@ -195,16 +182,6 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
         ),
         encoding="utf-8",
     )
-    package_path = root / "skills/ads-plan-monitor/src/ocean_watch/__init__.py"
-    package_path.write_text(
-        replace_once(
-            package_path.read_text(encoding="utf-8"),
-            r'^__version__ = "[^"]+"$',
-            f'__version__ = "{target_version}"',
-            "ocean_watch.__version__",
-        ),
-        encoding="utf-8",
-    )
     plugin_path = root / ".codex-plugin/plugin.json"
     plugin_data = json.loads(plugin_path.read_text(encoding="utf-8"))
     if not isinstance(plugin_data, dict):
@@ -224,22 +201,26 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
 
 def validate_release_candidate(root, latest_tag):
     root = Path(root)
-    latest_version = tag_version(latest_tag)
     versions = validate_versions(root)
     current_version = versions["project"]
-    expected_version = next_patch_version(latest_version)
-    if current_version not in {latest_version, expected_version}:
-        raise VersionTagError(
-            f"release version {current_version} must equal latest release {latest_tag} "
-            f"or its next patch {expected_version}"
-        )
+    if latest_tag:
+        latest_version = tag_version(latest_tag)
+        expected_version = next_patch_version(latest_version)
+        if current_version not in {latest_version, expected_version}:
+            raise VersionTagError(
+                f"release version {current_version} must equal latest release {latest_tag} "
+                f"or its next patch {expected_version}"
+            )
+        already_released = current_version == latest_version
+    else:
+        already_released = False
     version_tag = f"v{current_version}"
     validate_versions(root, tag=version_tag)
     return {
         **versions,
         "tag": version_tag,
-        "latest_tag": latest_tag,
-        "already_released": current_version == latest_version,
+        "latest_tag": latest_tag or None,
+        "already_released": already_released,
     }
 
 
@@ -247,11 +228,10 @@ def validate_versions(root, tag=None):
     root = Path(root)
     versions = {
         "project": project_version(root),
-        "package": package_version(root),
         "plugin": plugin_version(root),
     }
     plugin_base = versions["plugin"].split("+", 1)[0]
-    if versions["project"] != versions["package"] or versions["project"] != plugin_base:
+    if versions["project"] != plugin_base:
         raise VersionTagError(f"version tag metadata does not match: {versions}")
     validate_tag_version(versions["project"])
     if tag:
