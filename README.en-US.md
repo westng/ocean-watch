@@ -229,6 +229,13 @@ git diff --check
 
 CI runs Go tests and static checks and validates the matching bundled CLI on Linux, macOS, and Windows. Linux also runs F2 mapping, version, and distribution-contract checks. Release automation performs deterministic five-platform build verification; it never edits files or pushes a version-bump commit back to `main`.
 
+## Acknowledgements
+
+- [F2](https://github.com/Johnserf-Seed/f2) provides public Douyin work-metadata resolution for Qianchuan work-link flows. Ocean Watch pins F2 `0.0.1.7`, maps its output into a stable contract, and rechecks results through official Qianchuan APIs.
+- [Ocean Engine Open Platform Go SDK](https://github.com/oceanengine/ad_open_sdk_go) provides Go SDK support, request models, and response models for official Ocean Engine Marketing and Qianchuan API integrations.
+
+Thank you to the maintainers and contributors of these projects.
+
 ## License
 
 MIT

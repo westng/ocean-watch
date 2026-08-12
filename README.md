@@ -236,6 +236,13 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
 GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
 ```
 
+## 鸣谢
+
+- [F2](https://github.com/Johnserf-Seed/f2)：为千川作品链接流程提供抖音公开作品元数据解析能力。Ocean Watch 固定使用 F2 `0.0.1.7`，并在其输出之上完成稳定字段映射与千川官方复核。
+- [巨量引擎开放平台 Go SDK](https://github.com/oceanengine/ad_open_sdk_go)：为巨量营销与巨量千川官方 API 集成提供 Go SDK、请求模型和响应模型支持。
+
+感谢这些项目的维护者与贡献者。
+
 ## License
 
 MIT
