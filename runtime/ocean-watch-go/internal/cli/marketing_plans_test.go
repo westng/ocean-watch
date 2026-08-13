@@ -325,6 +325,7 @@ func TestParseMarketingUploadBatchBooleanDefaultsAndValidation(t *testing.T) {
 func TestRunnerMarketingUploadBatchPreservesResultAndExitCode(t *testing.T) {
 	stateRoot := filepath.Join(t.TempDir(), "state")
 	outPath := filepath.Join(t.TempDir(), "upload-result.json")
+	configPath := filepath.FromSlash("/fixture/config.json")
 	stdout := new(bytes.Buffer)
 	service := &marketingUploadBatchServiceStub{result: applicationmarketing.UploadBatchResult{
 		Mode: "submit", GeneratedAt: "2026-07-26T12:00:00", Config: "/fixture/config.json",
@@ -340,12 +341,12 @@ func TestRunnerMarketingUploadBatchPreservesResultAndExitCode(t *testing.T) {
 	}
 	code := runner.runMarketingUploadBatch(
 		context.Background(),
-		[]string{"--config", "/fixture/config.json", "--accounts", "1001", "--plan-template", "template", "--submit", "--out", outPath},
+		[]string{"--config", configPath, "--accounts", "1001", "--plan-template", "template", "--submit", "--out", outPath},
 		stateRoot, nil, stdout,
 	)
 	if code != 1 || service.calls != 1 || !service.last.Submit ||
 		!reflect.DeepEqual(service.last.Accounts, []string{"1001"}) || service.last.PlanTemplate != "template" ||
-		service.last.ConfigPath != "/fixture/config.json" {
+		service.last.ConfigPath != configPath {
 		t.Fatalf("upload batch runner changed: exit=%d calls=%d request=%#v output=%s", code, service.calls, service.last, stdout.String())
 	}
 	written, err := os.ReadFile(outPath)

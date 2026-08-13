@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -45,8 +46,10 @@ func TestAuthorizationStoreCommitsStableGeneration(t *testing.T) {
 	if current["sha256"] != digest {
 		t.Fatalf("checksum mismatch: %#v", current)
 	}
-	if info, err := os.Stat(filepath.Join(root, "channels", "marketing", "current.json")); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("current pointer permissions: %v, %v", info, err)
+	if runtime.GOOS != "windows" {
+		if info, err := os.Stat(filepath.Join(root, "channels", "marketing", "current.json")); err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("current pointer permissions: %v, %v", info, err)
+		}
 	}
 }
 

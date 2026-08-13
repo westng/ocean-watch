@@ -50,10 +50,6 @@ func acquireOpenedLock(
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
-	if err := ensureLockByte(file); err != nil {
-		_ = file.Close()
-		return nil, err
-	}
 	deadline := time.Now().Add(timeout)
 	for {
 		locked, lockErr := tryPlatformLock(file)
@@ -82,20 +78,6 @@ func acquireOpenedLock(
 		case <-timer.C:
 		}
 	}
-}
-
-func ensureLockByte(file *os.File) error {
-	info, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("stat process lock: %w", err)
-	}
-	if info.Size() != 0 {
-		return nil
-	}
-	if _, err := file.WriteAt([]byte{0}, 0); err != nil {
-		return fmt.Errorf("initialize process lock: %w", err)
-	}
-	return file.Sync()
 }
 
 func writeLockMetadata(file *os.File) error {
