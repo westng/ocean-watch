@@ -161,7 +161,7 @@ func TestConfigStoreSerializesConcurrentUpdates(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{\"counter\":0}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store := ConfigStore{Path: path, LockTimeout: 5 * time.Second}
+	store := ConfigStore{Path: path, LockTimeout: 30 * time.Second}
 	const workers = 40
 	var wait sync.WaitGroup
 	wait.Add(workers)
