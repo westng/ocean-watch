@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">面向 Codex 的巨量引擎投放与盯盘 Plugin</p>
+<p align="center">面向 Codex 的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>

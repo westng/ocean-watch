@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Ocean Engine delivery and monitoring for Codex</p>
+<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
