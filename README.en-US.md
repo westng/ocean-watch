@@ -8,8 +8,18 @@
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-Runtime-00ADD8?logo=go&amp;logoColor=white" alt="Go Runtime"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-5A67D8" alt="MCP stdio"></a>
+  <a href="https://www.jsonrpc.org/"><img src="https://img.shields.io/badge/JSON--RPC-Protocol-6B7280" alt="JSON-RPC Protocol"></a>
+  <a href="https://json-schema.org/"><img src="https://img.shields.io/badge/JSON-Schema-000000?logo=json&amp;logoColor=white" alt="JSON Schema"></a>
+  <a href="https://oauth.net/2/"><img src="https://img.shields.io/badge/OAuth-Authorization-3C873A" alt="OAuth Authorization"></a>
+  <a href="https://open.oceanengine.com/"><img src="https://img.shields.io/badge/Ocean_Engine-Official_API-1677FF" alt="Ocean Engine Official API"></a>
+  <a href="https://github.com/oceanengine/ad_open_sdk_go"><img src="https://img.shields.io/badge/Ocean_Engine-Go_SDK-00ADD8?logo=go&amp;logoColor=white" alt="Ocean Engine Go SDK"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-F2_Adapter-3776AB?logo=python&amp;logoColor=white" alt="Python F2 Adapter"></a>
+  <a href="https://github.com/Johnserf-Seed/f2"><img src="https://img.shields.io/badge/F2-Public_Metadata-FF2D55" alt="F2 Public Metadata"></a>
+  <a href="docs/architecture.md"><img src="https://img.shields.io/badge/CLI-macOS_%7C_Linux_%7C_Windows-374151" alt="Cross-platform CLI"></a>
+  <a href="docs/configuration.md"><img src="https://img.shields.io/badge/Secure_Storage-Keychain_%7C_DPAPI_%7C_Secret_Service-0F766E" alt="Secure credential storage"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/westng/ocean-watch/tags"><img src="https://img.shields.io/github/v/tag/westng/ocean-watch?sort=semver" alt="Git Tag"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
 

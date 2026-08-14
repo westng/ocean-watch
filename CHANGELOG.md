@@ -13,6 +13,7 @@
 
 ### 变更
 
+- 调整中英文项目首页技术徽章：移除动态 Git Tag 展示，补充 Go、MCP、JSON-RPC、JSON Schema、OAuth、巨量引擎官方 API/Go SDK、Python/F2、多平台 CLI 与安全存储等当前技术栈入口。
 - 重写中英文项目首页，以产品定位、核心能力、可信边界、快速开始、自然语言场景、运行支持和按受众文档导航组织对外信息；保留 README、Contributing、MIT license 与 Security 一级入口，并将完整操作、架构和发布细节归入对应长期文档。
 - 两个 Skill 的本地模板浏览与精确详情意图改为调用 Ocean Watch MCP；工具不可用、输入不精确或状态变化时明确失败，不搜索仓库、不运行模板 CLI 命令，也不静默降级。模板创建、校验、删除及其他尚未工具化的业务仍通过同一 Go 运行时的 CLI Transport 执行。
 - 将全部授权、账户、模板、素材、计划、报表和本地状态业务命令切换为单一 Go 运行时，通过官方 Ocean Engine Go SDK/REST 执行；删除 Python 业务包、Shadow 路由、运行时回退、MCP 兼容命令和迁移候选/Gate/Bootstrap 资产。
