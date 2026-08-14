@@ -157,7 +157,7 @@ func RunTemplates(
 		WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
 		return 2
 	}
-	query := applicationtemplates.Query{Store: store, Path: resolvedPath}
+	query := applicationtemplates.Query{Store: store}
 	lifecycle := applicationtemplates.Lifecycle{Store: store, Path: resolvedPath}
 	var result map[string]any
 	switch action {
@@ -194,6 +194,7 @@ func RunTemplates(
 		WriteDomainError(stdout, mapped)
 		return mapped.ExitCode
 	}
+	result["config"] = resolvedPath
 	if err := WriteJSONDestination(stdout, result, options.out); err != nil {
 		WriteDomainError(stdout, domain.WrapError("configuration_error", "failed to write template result", 2, err))
 		return 2

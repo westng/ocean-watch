@@ -97,6 +97,58 @@ func Show(config map[string]any, channel, selector string) (map[string]any, erro
 	}, nil
 }
 
+func ShowExact(config map[string]any, channel, templateID string) (map[string]any, error) {
+	if channel == "marketing" {
+		return Show(config, channel, templateID)
+	}
+	if channel != "qianchuan" {
+		return nil, configurationError("unsupported template channel", map[string]any{"channel": channel})
+	}
+	productTemplates, _, err := listQianchuanProductTemplates(config)
+	if err != nil {
+		return nil, err
+	}
+	liveTemplates, _, err := listQianchuanLiveTemplates(config)
+	if err != nil {
+		return nil, err
+	}
+	matches := make([]map[string]any, 0, 1)
+	for _, template := range productTemplates {
+		if template["template_id"] == templateID {
+			row := cloneMap(template)
+			row["template_kind"] = "product"
+			matches = append(matches, row)
+		}
+	}
+	for _, template := range liveTemplates {
+		if template["template_id"] == templateID {
+			row := cloneMap(template)
+			row["template_kind"] = "live"
+			matches = append(matches, row)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, configurationError("Qianchuan template not found", map[string]any{
+			"channel": "qianchuan", "template_id": templateID,
+		})
+	}
+	if len(matches) != 1 {
+		return nil, configurationError("Qianchuan template ID is not unique", map[string]any{
+			"channel": "qianchuan", "template_id": templateID,
+		})
+	}
+	template := matches[0]
+	return map[string]any{
+		"ok":                      true,
+		"source":                  "local_config",
+		"channel":                 "qianchuan",
+		"display_name":            "巨量千川",
+		"selector":                templateID,
+		"ready_for_plan_creation": template["status"] == "active",
+		"template":                template,
+	}, nil
+}
+
 func qianchuanChannel(config map[string]any, includeDetails bool) (map[string]any, error) {
 	productTemplates, productConfig, err := listQianchuanProductTemplates(config)
 	if err != nil {

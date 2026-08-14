@@ -125,3 +125,35 @@ func TestOAuthAdapterRejectsBusinessErrorAndIncompleteSuccess(t *testing.T) {
 		t.Fatal("incomplete OAuth success was accepted")
 	}
 }
+
+func TestQianchuanOAuthRefreshDoesNotRequireAdvertiserScope(t *testing.T) {
+	transport := &oauthTransportFixture{response: `{
+		"code":0,"message":"OK","request_id":"fixture-refresh",
+		"data":{"access_token":"rotated-access","refresh_token":"rotated-refresh","expires_in":3600}
+	}`}
+	shared := &sharedControlFixture{acquired: make(chan struct{}, 1)}
+	factory, err := NewClientFactory(FactoryOptions{
+		TransportFactory:       func(HostProfile) http.RoundTripper { return transport },
+		SharedQianchuanControl: shared,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, budget, metrics := controlledTestRequestContext(t, "qianchuan", testAuthorizationID, 1)
+	_, err = (OAuthAdapter{Factory: factory}).RefreshToken(
+		ctx, "qianchuan",
+		domain.OAuthApp{AppID: "123", Secret: "fixture-secret"}, "fixture-refresh",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 1 || budget.Snapshot().Used != 1 || metrics.Snapshot().Attempts != 1 {
+		t.Fatalf("OAuth refresh was not dispatched exactly once: requests=%d budget=%#v metrics=%#v",
+			len(transport.requests), budget.Snapshot(), metrics.Snapshot())
+	}
+	select {
+	case <-shared.acquired:
+		t.Fatal("OAuth refresh entered advertiser-scoped Qianchuan request control")
+	default:
+	}
+}

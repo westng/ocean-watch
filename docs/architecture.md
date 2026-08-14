@@ -6,21 +6,27 @@
 flowchart LR
     User["用户自然语言"] --> Codex["Codex 意图理解"]
     Codex --> Skill["ads-plan-monitor / qc-plan-monitor"]
+    Skill --> MCP["Plugin 内置本地 stdio MCP"]
+    MCP --> MCPPresenter["MCP Schema / Presenter"]
+    MCPPresenter --> Application["Go Application Service"]
     Skill --> Launcher["run / run.cmd"]
     Launcher --> Go["内置 Go CLI"]
-    Go --> SDK["官方 Go SDK / REST Adapter"]
+    Go --> Application
+    Application --> SDK["官方 Go SDK / REST Adapter"]
     SDK --> API["巨量引擎官方 API"]
-    Go --> State["配置、授权快照、缓存与执行记录"]
-    Go --> Secrets["Keychain / DPAPI / Secret Service"]
-    Go --> F2["Python 3.10+ / F2 0.0.1.7"]
+    Application --> State["配置、授权快照、缓存与执行记录"]
+    Application --> Secrets["Keychain / DPAPI / Secret Service"]
+    Application --> F2["Python 3.10+ / F2 0.0.1.7"]
     F2 --> Public["抖音公开作品元数据"]
 ```
 
-Ocean Watch 是模块化单体。业务命令只有 Go 实现，不存在第二套业务运行时或静默回退。F2 是作品元数据 Adapter 的外部进程依赖，不属于广告业务运行时。
+Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 实现，CLI 与 MCP 是同一实现之上的两个 Transport，不是两套业务运行时，也不存在 MCP 启动 CLI 或解析 CLI stdout 的链路。F2 是作品元数据 Adapter 的外部进程依赖，不属于广告业务运行时。
 
 ## 当前状态
 
-Go 切换已经完成。生产路由清单只接受 `go`，两个 Skill 也只通过 `run`/`run.cmd` 进入五平台内置二进制。旧 Python 业务实现、Prototype、Shadow、运行时策略文件、MCP 兼容入口和迁移验收资产已从当前分发中删除；历史设计仅保留在 Git 历史和已发布版本记录中，不再作为运行或回退路径。
+Go 切换已经完成。Plugin 现在注册本地 stdio MCP；首批 `list_templates` 和 `get_template` 直接调用共享模板 Application Service，用于本地模板列表与精确详情读取。两个 Skill 对这两类请求禁止静默回退 CLI。模板创建、校验、删除以及授权、账户、素材、计划和报表等尚未工具化的业务继续由 `run`/`run.cmd` 进入同一套 Go Application Service。
+
+当前 `.mcp.json` 的固定可执行文件只完成 macOS Apple Silicon Gate 0。五个平台 Go CLI 仍作为现有 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除；历史设计不再作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 
@@ -32,6 +38,7 @@ Go 切换已经完成。生产路由清单只接受 `go`，两个 Skill 也只�
 | `skills/*/run*` | 按操作系统和架构选择内置二进制 |
 | `.codex-plugin/bin/` | Marketplace 快照内的五平台 Go CLI |
 | `runtime/ocean-watch-go/cmd/` | CLI 与确定性运行时构建器 |
+| `runtime/ocean-watch-go/internal/mcpserver/` | stdio MCP、工具 Schema、专用 Presenter、稳定错误和脱敏日志 |
 | `runtime/ocean-watch-go/internal/cli/` | 参数解析、路由、JSON envelope、Presentation |
 | `runtime/ocean-watch-go/internal/application/` | OAuth、账户、模板、素材、计划和报表用例 |
 | `runtime/ocean-watch-go/internal/domain/` | 领域模型、规则和稳定错误 |
@@ -53,7 +60,7 @@ Go 切换已经完成。生产路由清单只接受 `go`，两个 Skill 也只�
 
 ## 状态与凭据
 
-配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
+CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或环境覆盖，只读取当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
 
 营销与千川拥有独立 App、OAuth state、Token 和广告主索引。官方广告主发现只有在完整分页和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。
 
@@ -73,7 +80,7 @@ F2 不可用、超时或数据不完整时，单条作品可使用有效的 30 �
 
 ## 输出合同
 
-CLI stdout 只输出一个 UTF-8 JSON 文档。`presentation.required=true` 时，Skill 必须原样使用 `presentation.rendered_markdown` 并保留所有必需列、日期和口径。日志、错误、Presentation 和执行记录不得包含 Secret 或 Token。
+CLI stdout 只输出一个 UTF-8 JSON 文档。MCP stdout 只输出换行分隔的 JSON-RPC 协议帧，结构化运行日志只写 stderr。MCP 使用独立白名单 Presenter，不输出配置路径、凭据、原始配置或内部对象；所有业务 ID 均序列化为字符串。`presentation.required=true` 时，Skill 必须原样使用 `presentation.rendered_markdown` 并保留所有必需列、日期和口径。日志、错误、Presentation 和执行记录不得包含 Secret 或 Token。
 
 ## 构建与分发
 

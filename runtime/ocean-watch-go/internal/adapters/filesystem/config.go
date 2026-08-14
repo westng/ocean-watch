@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -156,7 +157,11 @@ func readJSON(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("read config: %w", err)
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(file)
+	return decodeJSON(file)
+}
+
+func decodeJSON(reader io.Reader) (map[string]any, error) {
+	decoder := json.NewDecoder(reader)
 	decoder.UseNumber()
 	var value map[string]any
 	if err := decoder.Decode(&value); err != nil {

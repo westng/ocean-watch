@@ -15,9 +15,14 @@ func (store *countingConfigStore) Read(context.Context) (map[string]any, error) 
 	return store.config, nil
 }
 
+func (store *countingConfigStore) ReadWithRevision(context.Context) (map[string]any, string, error) {
+	store.reads++
+	return store.config, "revision", nil
+}
+
 func TestListReadsConfigExactlyOnce(t *testing.T) {
 	store := &countingConfigStore{config: map[string]any{}}
-	query := Query{Store: store, Path: "/synthetic/config.json"}
+	query := Query{Store: store}
 	result, err := query.List(context.Background(), "all", false)
 	if err != nil {
 		t.Fatal(err)
@@ -25,8 +30,8 @@ func TestListReadsConfigExactlyOnce(t *testing.T) {
 	if store.reads != 1 {
 		t.Fatalf("config read %d times, want 1", store.reads)
 	}
-	if result["config"] != "/synthetic/config.json" {
-		t.Fatalf("unexpected config path: %#v", result)
+	if _, exists := result["config"]; exists {
+		t.Fatalf("application result leaked a config path: %#v", result)
 	}
 }
 
@@ -45,11 +50,23 @@ func TestShowReadsConfigExactlyOnce(t *testing.T) {
 			},
 		},
 	}}
-	query := Query{Store: store, Path: "/synthetic/config.json"}
+	query := Query{Store: store}
 	if _, err := query.Show(context.Background(), "marketing", "template"); err != nil {
 		t.Fatal(err)
 	}
 	if store.reads != 1 {
 		t.Fatalf("config read %d times, want 1", store.reads)
+	}
+}
+
+func TestVersionedQueriesReadConfigExactlyOnce(t *testing.T) {
+	store := &countingConfigStore{config: map[string]any{}}
+	query := Query{Store: store, VersionedStore: store}
+	result, err := query.ListVersioned(context.Background(), "all", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.reads != 1 || result.StateVersion != "revision" {
+		t.Fatalf("unexpected versioned read: reads=%d result=%#v", store.reads, result)
 	}
 }

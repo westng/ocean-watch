@@ -26,9 +26,40 @@ def validate_manifest():
     manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
     if manifest.get("name") != "ocean-watch" or manifest.get("skills") != "./skills/":
         fail("plugin manifest identity is invalid")
+    if manifest.get("mcpServers") != "./.mcp.json":
+        fail("plugin manifest MCP contract is invalid")
     version = str(manifest.get("version") or "")
     if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:\+codex\.[A-Za-z0-9.-]+)?", version) is None:
         fail("plugin manifest version is invalid")
+
+
+def validate_mcp():
+    payload = json.loads((ROOT / ".mcp.json").read_text(encoding="utf-8"))
+    if set(payload) != {"mcpServers"}:
+        fail("MCP manifest has unsupported top-level fields")
+    servers = payload.get("mcpServers")
+    if not isinstance(servers, dict) or set(servers) != {"ocean-watch"}:
+        fail("MCP manifest must contain only the ocean-watch server")
+    server = servers["ocean-watch"]
+    expected = {
+        "command": "./.codex-plugin/bin/ocean-watch_darwin_arm64",
+        "args": ["mcp", "serve", "--stdio"],
+        "cwd": ".",
+    }
+    if server != expected:
+        fail("MCP server must use the fixed darwin/arm64 Gate 0 command")
+    command = server["command"].lower()
+    if command in {"sh", "bash", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"}:
+        fail("MCP server must not start through a shell")
+    target = (ROOT / server["command"]).resolve()
+    binary_root = (ROOT / ".codex-plugin" / "bin").resolve()
+    if target.parent != binary_root or not target.is_file():
+        fail("MCP server command escaped the prepared runtime directory")
+    if target.stat().st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        fail("MCP server executable is writable by group or other")
+    for path in (ROOT / ".mcp.json", ROOT / ".codex-plugin" / "plugin.json"):
+        if path.stat().st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            fail(f"MCP manifest file is writable by group or other: {path.name}")
 
 
 def validate_skill(name):
@@ -44,6 +75,19 @@ def validate_skill(name):
     prompt = str(((interface or {}).get("interface") or {}).get("default_prompt") or "")
     if f"${name}" not in prompt:
         fail(f"{name} default_prompt does not mention the Skill")
+    dependencies = ((interface or {}).get("dependencies") or {}).get("tools")
+    expected_dependency = [{
+        "type": "mcp",
+        "value": "ocean-watch",
+        "description": "Ocean Watch local read-only template tools",
+        "transport": "stdio",
+    }]
+    if dependencies != expected_dependency:
+        fail(f"{name} MCP dependency contract is invalid")
+    if "MCP `list_templates`" not in content or "MCP `get_template`" not in content:
+        fail(f"{name} does not route template reads through MCP")
+    if "Never search the repository" not in content or "silent fallback" not in content:
+        fail(f"{name} does not fail closed when MCP template tools are unavailable")
     if not (root / "run.cmd").is_file():
         fail(f"{name} Windows launcher is missing")
     launcher = root / "run"
@@ -67,6 +111,7 @@ def validate_binaries():
 def main():
     try:
         validate_manifest()
+        validate_mcp()
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")
         validate_binaries()

@@ -160,13 +160,21 @@ func (factory *ClientFactory) Client(
 	if transport == nil {
 		return nil, errors.New("Ocean Engine SDK transport factory returned nil")
 	}
+	sharedQianchuanControl := factory.sharedQianchuanControl
+	if channel == "qianchuan" && !qianchuanAdvertiserScopedProfile(hostProfile) {
+		sharedQianchuanControl = nil
+	}
 	client := newClient(
 		channel, definition, timeoutProfile, timeout, factory.maxResponseBytes,
 		factory.requestGovernor, transport,
-		factory.sharedQianchuanControl,
+		sharedQianchuanControl,
 	)
 	factory.clients[key] = client
 	return client, nil
+}
+
+func qianchuanAdvertiserScopedProfile(profile HostProfile) bool {
+	return profile == ProfileBusiness || profile == ProfileQianchuanVideo
 }
 
 func resolveHostProfile(profile HostProfile) (ClientProfile, error) {

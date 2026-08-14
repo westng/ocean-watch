@@ -53,6 +53,10 @@ skills/qc-plan-monitor/run auth mappings --channel qianchuan --advertiser-id ADV
 
 素材、作品、封面和运行时 ID 不应固化到模板。模板删除默认 dry-run，并要求 `--submit`；被引用的模板只有在展示诊断并明确接受后才能使用受保护的强制删除。
 
+Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户的 `$CODEX_HOME/ads-plan-monitor/config.json`。它们不接受 `--config`、`ADS_PLAN_MONITOR_CONFIG`、任意路径或环境覆盖，不解析仓库内开发配置，不读取凭据，也不调用官方 API。Unix 上该目录权限必须不宽于 `0700`、文件权限必须不宽于 `0600`；符号链接或路径逃逸会被拒绝。
+
+`list_templates` 返回可继续传给 `get_template` 的字符串 `template_id`。详情查询必须同时传入精确渠道与 ID；千川显示名不能代替模板 ID。分页游标绑定本地状态版本，状态变化后应丢弃旧游标并从第一页重查，不能拼接不同版本的结果。
+
 ## 本地状态
 
 `$CODEX_HOME/ads-plan-monitor/state/` 保存授权快照、限流控制、作品身份提示缓存和 Plugin 执行记录。它们不属于开源仓库，不应复制到其他用户环境。

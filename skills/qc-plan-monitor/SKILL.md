@@ -45,7 +45,7 @@ Use the launcher from this Skill root:
 # Windows: run.cmd <domain> <action> [options]
 ```
 
-The launcher selects and executes the bundled Go binary for the current platform.
+The launcher selects and executes the bundled Go binary for the current platform. Do not use it for template browsing or exact template-detail reads; those two read-only operations use the Plugin-provided MCP tools defined under `Template Contracts`.
 
 | Request | Command |
 | --- | --- |
@@ -56,12 +56,11 @@ The launcher selects and executes the bundled Go binary for the current platform
 | Advertiser authorization mapping | `auth mappings --channel qianchuan` |
 | Refresh token | `auth refresh --channel qianchuan` |
 | Sync advertisers | `auth sync-accounts --channel qianchuan` |
-| List product templates | `qc-templates list` |
-| List Marketing and Qianchuan templates | `templates list` |
-| Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
+| List Marketing and Qianchuan templates | MCP `list_templates` |
+| Show one exact Marketing or Qianchuan template | MCP `get_template` |
 | Create product template | `qc-templates create` |
 | Migrate product templates | `qc-templates migrate` |
-| List/create live templates | `qc-templates list-live` / `qc-templates create-live` |
+| Create live template | `qc-templates create-live` |
 | Validate/delete templates | `templates validate` / `templates delete` |
 | Inspect public work link | `qc-materials inspect-work` |
 | List authorized creators | `qc-materials authorized-creators` |
@@ -173,6 +172,12 @@ Treat the command's top-level `presentation` object as the default response cont
 
 Qianchuan product templates are independent from Marketing templates.
 
+Use MCP `list_templates` for every natural-language request to find, browse, compare, count, or select local templates. Pass `channel=qianchuan` for a Qianchuan-only request and `channel=all` only for an explicitly cross-channel request. Follow the opaque `next_cursor` until `null` when the full list is required, and preserve the returned string `template_id`, `template_kind`, `status`, and readiness fields. The tool reads only managed local state and does not resolve credentials, call an official API, or refresh authorization.
+
+Use MCP `get_template` for exact template details with `channel=qianchuan` and the stored string `template_id` returned by `list_templates` or explicitly supplied and confirmed by the user. Never pass a display name or fuzzy selector. For an explicitly requested Marketing detail, pass `channel=marketing` and its canonical ID. Return only the tool's whitelisted bindings, delivery settings, material strategy, naming forms, validation issues, and readiness state.
+
+If either MCP tool is unavailable, its dependency is not loaded, the local state changes during pagination, or the call returns an error, explain the stable failure and stop that template read. Never search the repository, run `templates list`/`templates show` or the legacy `qc-templates list` as a silent fallback, and never parse CLI JSON to imitate a tool result. `STATE_CHANGED` permits restarting `list_templates` once from the first page; it does not permit mixing state versions.
+
 - `default_qianchuan_product_template` is a creation skeleton and can never create a real plan.
 - New business templates use the `qc-templates create` wizard and choose the default skeleton or an existing Qianchuan product template as the source.
 - Qianchuan business templates have no active/default pointer. Every material query or plan-creation workflow must provide an explicit template ID or confirmed display name.
@@ -187,8 +192,6 @@ Qianchuan product templates are independent from Marketing templates.
 - Defaults are custom bidding, ROI `1.7`, budget `5000`, smart coupon on, long-term delivery, and net payment ROI optimization.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
 - `material_strategy.source_type` is `CREATOR_RUNTIME_QUERY`; creator information and materials belong to the creation run.
-
-Use `templates show --channel qianchuan --template TEMPLATE_ID_OR_NAME` for a complete, read-only single-template query. It returns top-level `channel=qianchuan`, bindings, delivery settings, material strategy, and readiness from one local config read without credentials or official API calls. Use the same shared command with `--channel marketing` and an exact Marketing template name for Marketing details.
 
 Use `plans create-qianchuan --plan-template TEMPLATE_ID` to build a material-free base payload for low-level preflight. It reports `runtime_creator_materials` and blocks template-only submission. Use `plans batch-qianchuan-works` for the complete runtime work-query and material-injection workflow.
 

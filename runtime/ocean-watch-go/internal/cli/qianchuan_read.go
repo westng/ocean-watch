@@ -415,7 +415,7 @@ func (runner Runner) runQianchuanRead(
 		service = applicationqianchuan.Service{
 			Tokens: tokens, Reader: reader, Now: runtime.Now,
 			Templates: applicationtemplates.Query{
-				Store: filesystem.ConfigStore{Path: filepath.Clean(configPath)}, Path: filepath.Clean(configPath),
+				Store: filesystem.ConfigStore{Path: filepath.Clean(configPath)},
 			},
 		}
 	}

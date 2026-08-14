@@ -2,12 +2,17 @@ package templates
 
 import (
 	"context"
+	"errors"
 
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
 )
 
 type ConfigReader interface {
 	Read(context.Context) (map[string]any, error)
+}
+
+type VersionedConfigReader interface {
+	ReadWithRevision(context.Context) (map[string]any, string, error)
 }
 
 type ConfigStore interface {
@@ -17,8 +22,13 @@ type ConfigStore interface {
 }
 
 type Query struct {
-	Store ConfigReader
-	Path  string
+	Store          ConfigReader
+	VersionedStore VersionedConfigReader
+}
+
+type VersionedResult struct {
+	Value        map[string]any
+	StateVersion string
 }
 
 func (query Query) List(ctx context.Context, channel string, includeDetails bool) (map[string]any, error) {
@@ -30,7 +40,6 @@ func (query Query) List(ctx context.Context, channel string, includeDetails bool
 	if err != nil {
 		return nil, err
 	}
-	result["config"] = query.Path
 	return result, nil
 }
 
@@ -43,8 +52,44 @@ func (query Query) Show(ctx context.Context, channel, selector string) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	result["config"] = query.Path
 	return result, nil
+}
+
+func (query Query) ListVersioned(ctx context.Context, channel string, includeDetails bool) (VersionedResult, error) {
+	config, revision, err := query.readVersioned(ctx)
+	if err != nil {
+		return VersionedResult{}, err
+	}
+	result, err := domaintemplates.List(config, channel, includeDetails)
+	if err != nil {
+		return VersionedResult{}, err
+	}
+	return VersionedResult{Value: result, StateVersion: revision}, nil
+}
+
+func (query Query) ShowExactVersioned(ctx context.Context, channel, templateID string) (VersionedResult, error) {
+	config, revision, err := query.readVersioned(ctx)
+	if err != nil {
+		return VersionedResult{}, err
+	}
+	result, err := domaintemplates.ShowExact(config, channel, templateID)
+	if err != nil {
+		return VersionedResult{}, err
+	}
+	return VersionedResult{Value: result, StateVersion: revision}, nil
+}
+
+func (query Query) readVersioned(ctx context.Context) (map[string]any, string, error) {
+	store := query.VersionedStore
+	if store == nil {
+		if candidate, ok := query.Store.(VersionedConfigReader); ok {
+			store = candidate
+		}
+	}
+	if store == nil {
+		return nil, "", errors.New("versioned template configuration reader is unavailable")
+	}
+	return store.ReadWithRevision(ctx)
 }
 
 func (query Query) ResolveQianchuanProductBinding(

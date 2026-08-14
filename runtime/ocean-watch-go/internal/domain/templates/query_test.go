@@ -79,6 +79,21 @@ func TestShowQianchuanPreservesProductErrorWhenBothKindsMiss(t *testing.T) {
 	}
 }
 
+func TestShowExactQianchuanRejectsDisplayNameSelector(t *testing.T) {
+	config := templateTestConfig(t)
+	product := config[qianchuanProductTemplatesKey].(map[string]any)["qcpt_example"].(map[string]any)
+	if _, err := ShowExact(config, "qianchuan", product["display_name"].(string)); err == nil || err.Error() != "Qianchuan template not found" {
+		t.Fatalf("got %v, want exact-ID not-found error", err)
+	}
+	shown, err := ShowExact(config, "qianchuan", "qcpt_example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown["template"].(map[string]any)["template_kind"] != "product" {
+		t.Fatalf("unexpected exact template: %#v", shown)
+	}
+}
+
 func TestLegacyMarketingAndQianchuanProductMigrationAreReadOnly(t *testing.T) {
 	config := templateTestConfig(t)
 	config["plan_template_schema_version"] = json.Number("1")

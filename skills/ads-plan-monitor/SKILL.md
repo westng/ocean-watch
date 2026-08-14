@@ -39,7 +39,7 @@ Use the unified launcher from this Skill root:
 # Windows: run.cmd <domain> <action> [options]
 ```
 
-The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed.
+The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed. Template browsing and exact template-detail reads are the two exceptions: use the Plugin-provided `list_templates` and `get_template` MCP tools as described in `Template Contract`; do not invoke the launcher for those reads.
 
 Core routes:
 
@@ -53,8 +53,8 @@ Core routes:
 | Token/account status | `auth status --channel marketing` |
 | Refresh current authorized user's advertisers | `auth sync-accounts --channel marketing` |
 | Advertiser authorization mapping | `auth mappings --channel marketing` |
-| List all channel templates | `templates list` |
-| Show one Marketing or Qianchuan template | `templates show --channel CHANNEL --template TEMPLATE` |
+| List local Marketing/Qianchuan templates | MCP `list_templates` |
+| Show one exact local template | MCP `get_template` |
 | Create Marketing template | `templates create --channel marketing` |
 | Validate/delete template | `templates validate` / `templates delete` |
 | Uploaded videos | `materials videos` |
@@ -82,7 +82,7 @@ Classify the request before touching local state:
 - Enter business execution only when the user explicitly asks to query real data, write local business config, authorize locally, or submit real plans.
 - When intent is ambiguous in a development conversation, remain in development mode.
 
-Never use browser-admin automation. Use official APIs and the bundled CLI.
+Never use browser-admin automation. Use the registered MCP tools for the local template reads they cover, and use official APIs through the bundled CLI for the remaining business operations.
 
 ## First-Use Environment Check
 
@@ -182,11 +182,13 @@ Read `references/official-api-notes.md` for endpoint details and `references/cre
 
 Schema v6 has one `default_plan_template` and advertiser-bound business templates.
 
-`templates list` is the fast shared read path for Marketing and Qianchuan. It reads the local config once, calls no official API, and returns compact business-template rows plus default-skeleton counts. Every template record, including default skeletons, detailed rows, and single-template responses, must include top-level `channel=marketing|qianchuan`. Use `--channel marketing` or `--channel qianchuan` to filter, and `--include-details` only when full template diagnostics are needed.
+Use MCP `list_templates` for every natural-language request to find, browse, compare, count, or select local Marketing or Qianchuan business templates. Pass `channel=all|marketing|qianchuan`; page with the returned opaque `next_cursor` until it is `null` when the complete list is required. Preserve the returned string `template_id`, `channel`, `template_kind`, `status`, and readiness fields. This tool reads the current user's managed local state, calls no official API, refreshes no authorization, and does not expose default skeleton internals.
+
+Use MCP `get_template` for one-template details. Pass the exact `channel` and exact string `template_id` returned by `list_templates` or explicitly supplied and confirmed by the user. For Marketing, the canonical template key is the tool ID. For Qianchuan, require the stored template ID; never pass a display name or fuzzy selector. Return only the tool's whitelisted bindings, delivery settings, material strategy, naming forms, validation issues, and readiness state.
+
+If either MCP tool is unavailable, its dependency is not loaded, the local state changes during pagination, or the call returns an error, explain the stable failure and stop that template read. Never search the repository, run `templates list`/`templates show`, or parse CLI JSON as a silent fallback. `STATE_CHANGED` permits restarting `list_templates` once from the first page; it does not permit mixing pages from different state versions.
 
 Use `templates validate` before uncertain template operations. `templates delete` is a local write but still defaults to dry-run and requires `--submit`; do not use `--force` until referenced-template diagnostics have been shown and explicitly accepted. Default skeletons are never deletion targets.
-
-Use `templates show --channel marketing|qianchuan --template TEMPLATE` for one-template detail queries. Marketing requires the exact template name; Qianchuan accepts an exact template ID or display name. Return the complete bindings, delivery settings, material strategy, and readiness state from one local config read without credentials or official API calls.
 
 - The default template is a creation base only and must never submit a plan.
 - New business templates must use the interactive `templates create` wizard.

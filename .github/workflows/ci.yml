@@ -36,6 +36,12 @@ jobs:
       - name: Vet Go runtime
         working-directory: runtime/ocean-watch-go
         run: go vet ./...
+      - name: Test MCP contracts
+        working-directory: runtime/ocean-watch-go
+        run: go test ./internal/mcpserver -count=1
+      - name: Probe MCP stdio process
+        working-directory: runtime/ocean-watch-go
+        run: go run ./cmd/mcp-probe
       - name: Verify built runtime version injection
         if: runner.os == 'Linux'
         working-directory: runtime/ocean-watch-go

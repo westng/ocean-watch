@@ -68,12 +68,11 @@ skills/ads-plan-monitor/run accounts report
 
 ```bash
 skills/ads-plan-monitor/run templates create
-skills/ads-plan-monitor/run templates list
 skills/qc-plan-monitor/run qc-products search --advertiser-id ADVERTISER_ID --keyword PRODUCT
 skills/qc-plan-monitor/run plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
 ```
 
-营销模板区分账户上传与达人授权素材；千川模板区分商品全域与直播全域。默认模板只是创建骨架，实际投放必须选择绑定渠道、广告主和商品的业务模板。
+在 Codex 中直接用自然语言查找或查看模板，Skill 会调用 Plugin 的 `list_templates` 与 `get_template`，不要求用户运行 CLI。营销模板区分账户上传与达人授权素材；千川模板区分商品全域与直播全域。默认模板只是创建骨架，实际投放必须选择绑定渠道、广告主和商品的业务模板。
 
 千川作品链接先由 F2 批量补充公开达人/商品提示，再使用官方千川接口定向确认达人授权、作品归属和商品匹配。F2 不可用或身份缺失时只跳过无法验证的作品，不扫描全部授权达人。
 

@@ -1,6 +1,6 @@
 # 文档中心
 
-Ocean Watch 只有一条业务执行路径：两个 Skill 通过各自启动器进入同一套内置 Go CLI，再调用巨量引擎官方 API。Python 只用于固定版本 F2 的抖音公开作品元数据解析。
+Ocean Watch 只有一套 Go 业务实现：两个 Skill 按能力通过 Plugin 内置 MCP 或各自启动器进入共享 Application Service，再调用巨量引擎官方 API。Python 只用于固定版本 F2 的抖音公开作品元数据解析。
 
 1. [快速开始](getting-started.md)：安装、环境检查、初始化与 OAuth。
 2. [配置与授权](configuration.md)：配置优先级、凭据、账户与 F2 边界。
