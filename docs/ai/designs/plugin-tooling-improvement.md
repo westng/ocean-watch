@@ -1,12 +1,12 @@
 # Ocean Watch Plugin 原生工具化执行设计
 
-> 文档状态：实施中；首批两个模板只读工具已完成代码、本机 Gate 0 进程探针、开发快照安装及安装副本进程探针，独立新任务 Host 验收与量化语义验收尚未完成
+> 文档状态：实施中；两个模板只读工具已完成既有 Gate 0 验证，九个新增千川工具和五个新增巨量营销工具已完成本地实现与定向测试，尚未构建安装或执行新任务 Host 验收
 >
 > 权威边界：本文件同时记录目标架构、执行门禁与当前实现范围；当前可用能力仍以仓库代码、测试、Plugin 清单、Skill 和正式文档为准
 >
-> 证据核实日期：2026-08-13
+> 证据核实日期：2026-08-16
 >
-> 当前授权：本地实现、测试并安装开发快照；不读取真实凭据、不调用真实业务 API、不修改真实业务数据，不执行 commit、push、Tag、Release 或 Marketplace 发布
+> 验证边界：不构建或安装开发快照，不读取真实凭据、不调用真实业务 API、不修改真实业务数据，不执行正式版本升级、Tag、Release 或 Marketplace 发布
 
 ## 1. 结论
 
@@ -23,13 +23,13 @@ Ocean Watch Plugin 原生工具化只采用以下架构：
 执行边界如下：
 
 - Skill 根据完整语义、上下文和用户目标触发，不要求用户记忆固定句式、命令或工具名；
-- 最终状态下 MCP 是正常用户会话的业务执行面；当前首批只有模板列表与精确详情进入 MCP，尚未工具化的操作暂由 CLI Transport 执行；
+- 最终状态下 MCP 是正常用户会话的业务执行面；当前源码包含模板列表/详情、千川作品预检/快照与常用查询、巨量营销授权/素材/固定报表等 16 个任务型工具，确认后的在线提交及高级/自定义操作暂由 CLI Transport 执行；
 - MCP 与 CLI 复用同一套 Go Application Service、Domain、Ports 和 Adapters，不复制 OAuth、账户、模板、素材、计划或报表逻辑；
 - CLI 只保留为开发、诊断和回滚入口，不作为正常用户路径，也不作为 MCP 失败后的静默降级路径；
 - Plugin 只启动本机随包分发的 stdio 进程，不部署网络服务，不改变凭据和业务数据的本地边界；
-- 首批只交付 `list_templates` 与 `get_template` 两个本地只读工具；六项门禁全部通过后，才允许增加其他工具。
+- 首批已交付 `list_templates` 与 `get_template` 两个本地只读工具；本轮源码新增 2 个预检工具、7 个常用千川查询工具和 5 个常用巨量营销查询工具，仍需重新完成分发、安装和 Host 门禁后才能描述为用户当前可用。
 
-当前仓库已经注册 MCP Server，并实现首批两个工具。官方 Go MCP SDK 的进程内合同测试、macOS Apple Silicon 真实子进程探针、开发快照安装和安装副本进程探针已经通过；独立安装后的全新 Codex 任务 Host 验收、360 次量化语义验收以及其他平台的原生安装证据仍未完成，因此不得描述为全部门禁通过或正式可发布。
+当前仓库已经注册 MCP Server，并在源码中实现 16 个工具。两个模板工具的官方 Go MCP SDK 进程内合同测试、macOS Apple Silicon 真实子进程探针、开发快照安装和安装副本进程探针已经通过；其余 9 个千川工具和 5 个巨量营销工具目前只有本地进程内合同和 Application 测试证据，尚未重建 Plugin 二进制、安装开发快照或在全新 Codex 任务完成 Host 验收，因此当前会话看不到新工具属于预期状态，也不得描述为已经发布可用。
 
 ## 2. 前提核实
 
@@ -40,7 +40,7 @@ Ocean Watch Plugin 原生工具化只采用以下架构：
 | Plugin 已声明 `skills` 和 `mcpServers` | [`.codex-plugin/plugin.json`](../../../.codex-plugin/plugin.json)、[`.mcp.json`](../../../.mcp.json) | 安装快照可加载本地 Ocean Watch stdio MCP |
 | 当前自然语言路径按能力分流到 MCP 或 Go CLI | [`docs/architecture.md`](../../architecture.md) | 两个 Transport 共用 Application Service，不复制业务逻辑 |
 | 两个 Skill 的 `description` 支持隐式语义触发 | [`ads-plan-monitor/SKILL.md`](../../../skills/ads-plan-monitor/SKILL.md)、[`qc-plan-monitor/SKILL.md`](../../../skills/qc-plan-monitor/SKILL.md) | 用户不应被要求说固定词汇 |
-| 两个 `agents/openai.yaml` 已声明 `ocean-watch` stdio MCP 依赖 | [`ads-plan-monitor/agents/openai.yaml`](../../../skills/ads-plan-monitor/agents/openai.yaml)、[`qc-plan-monitor/agents/openai.yaml`](../../../skills/qc-plan-monitor/agents/openai.yaml) | 模板读取工具不可用时必须失败关闭，不能静默走 CLI |
+| 两个 `agents/openai.yaml` 已声明 `ocean-watch` stdio MCP 依赖 | [`ads-plan-monitor/agents/openai.yaml`](../../../skills/ads-plan-monitor/agents/openai.yaml)、[`qc-plan-monitor/agents/openai.yaml`](../../../skills/qc-plan-monitor/agents/openai.yaml) | 已工具化能力不可用时必须失败关闭，不能静默走 CLI |
 | 当前业务实现已经集中在 Go 运行时 | [`runtime/ocean-watch-go`](../../../runtime/ocean-watch-go/) | MCP 必须复用现有 Application、Domain 和 Adapter |
 | CLI 仍承担参数解析、交互和部分 Presentation | [`internal/cli`](../../../runtime/ocean-watch-go/internal/cli/) | MCP Handler 不能直接包装 CLI Handler 或解析 CLI stdout |
 | Application 模板查询不再混入配置绝对路径，CLI Presenter 单独补回诊断路径 | [`application/templates/query.go`](../../../runtime/ocean-watch-go/internal/application/templates/query.go)、[`internal/cli/templates.go`](../../../runtime/ocean-watch-go/internal/cli/templates.go) | MCP 与 CLI 各自使用独立 Presenter |
@@ -97,13 +97,13 @@ flowchart TB
 - F2 只承担当前抖音公开作品元数据职责，其结果仍须经过 Domain 和 Presenter；
 - 任何写入都采用“准备 -> 用户确认 -> 提交 -> 读回对账”，并执行第 6 节的确认协议。
 
-## 4. 门禁一：首批工具完整合同
+## 4. 门禁一：工具完整合同
 
-首批只实现以下两个工具。工具注册名、title、description、Schema、授权、注解、错误和限制均属于用户可见合同；修改时必须走兼容性审查。
+模板里程碑包含 `list_templates`、`get_template`；千川里程碑新增 `preflight_qianchuan_works`、`get_qianchuan_preflight` 和七个高频查询工具。工具注册名、title、description、Schema、授权、注解、错误和限制均属于用户可见合同；修改时必须走兼容性审查。
 
 ### 4.1 公共返回合同
 
-成功 `structuredContent` 统一包含以下必填字段：
+所有成功 `structuredContent` 都包含 `ok` 与 `request_id`。模板工具还包含用于一致分页的 `state_version`：
 
 ```json
 {
@@ -139,7 +139,7 @@ flowchart TB
 }
 ```
 
-`request_id` 只用于关联一次调用；`state_version` 是本地模板状态的不透明版本字符串。错误 `details` 只允许合同明确列出的字段，不得包含绝对路径、堆栈、原始配置或凭据内容。
+`request_id` 只用于关联一次调用；`state_version` 是本地模板状态的不透明版本字符串，不适用于官方只读预检或按 ID 查询快照。错误 `details` 只允许合同明确列出的字段，不得包含绝对路径、堆栈、原始配置或凭据内容。
 
 ### 4.2 `list_templates`
 
@@ -240,7 +240,59 @@ flowchart TB
 | `CONFIG_INVALID` | 模板状态不满足当前 Schema 或内部 ID 冲突 | 否 |
 | `INTERNAL_ERROR` | 未分类错误；不得暴露内部细节 | 否 |
 
-### 4.3 `get_template`
+### 4.3 `preflight_qianchuan_works`
+
+| 合同项 | 定义 |
+| --- | --- |
+| Name | `preflight_qianchuan_works` |
+| Title | `预检千川作品计划` |
+| Description | 用户给出一个精确的千川商品全域模板 ID 和作品行后，校验当前授权、作品归属、商品匹配、当前计划及素材差集，返回新建或追加预览。 |
+| 授权 | 只允许模板绑定广告主对应的千川授权；可按现有 Token Manager 规则刷新该授权，不允许调用者提供配置或凭据路径。 |
+| 状态影响 | 不创建或修改官方计划；会访问官方只读接口，可更新非敏感 owner-hint cache，并在存在可提交动作时保存短期本地预检快照。 |
+| 安全注解 | `readOnlyHint: false`、`destructiveHint: false`、`openWorldHint: true`、`idempotentHint: false`，准确反映外部读取、Token 刷新和本地状态写入。 |
+| 限制 | 1–100 条 `work_urls`；`concurrency` 为 1–10、默认 8；强制 `Submit=false` 和 `IncludePayloads=false`；拒绝 `submit`、配置路径、payload 开关和未知字段。 |
+
+输入只允许 `plan_template`、`work_urls`、`concurrency`、`auth_account_id`、`plan_type`、`business`。输出由 MCP 专用 Presenter 白名单构造：模板摘要、计数、达人级新建/追加结果、脱敏跳过与查询失败、阶段耗时、固定五列表格，以及可选的 `preflight_id`/`expires_at`。嵌套对象全部关闭额外字段；不得返回原始作品 URL、模板 payload、授权选择器、Token、Cookie、缓存错误、原始官方错误或 CLI DTO。
+
+稳定错误码：
+
+| 错误码 | 条件 | 可重试 |
+| --- | --- | --- |
+| `INVALID_ARGUMENT` | 字段、数量、长度、并发或未知参数不合法 | 否 |
+| `TEMPLATE_NOT_FOUND` | 精确商品模板不存在或未激活 | 否 |
+| `AUTHORIZATION_UNAVAILABLE` | 广告主授权不存在、歧义、过期且无法刷新 | 否，先修复授权 |
+| `CONFIG_UNAVAILABLE` | 当前托管配置不存在或暂时不可读 | 视底层原因 |
+| `LOCAL_ACCESS_DENIED` | 当前用户无权读取或写入所需托管状态 | 否 |
+| `UPSTREAM_QUERY_FAILED` | 官方只读预检中断或未完成 | 是，按具体原因判断 |
+| `INTERNAL_ERROR` | 未分类错误；不得暴露内部细节 | 否 |
+
+### 4.4 `get_qianchuan_preflight`
+
+| 合同项 | 定义 |
+| --- | --- |
+| Name | `get_qianchuan_preflight` |
+| Title | `查看千川预检快照` |
+| Description | 使用精确 `preflight_id` 查看快照有效期、模板/商品摘要、有效/跳过数量和稳定排序的新建或追加决策。 |
+| 授权 | 只从当前用户的受管 Operation Journal 按固定 ID 白名单读取；不接受任意路径。 |
+| 状态影响 | 完全本地只读；不解析凭据、不刷新 Token、不调用官方接口。 |
+| 安全注解 | `readOnlyHint: true`、`destructiveHint: false`、`openWorldHint: false`、`idempotentHint: true`。 |
+| 限制 | ID 必须匹配 `qianchuan-preflight-YYYYMMDDtHHMMSS-12hex`；过期、损坏、类型错误或指纹不匹配均失败关闭。 |
+
+成功输出使用独立 MCP DTO，只包含 `preflight_id`、时间、广告主与模板/商品摘要、作品计数、按 `creator_id` 稳定排序的 `create|append` 决策和 `ready_for_submit`。`append` 必须包含 `existing_plan_id`，`create` 不得包含。不得透传 Application DTO、原始 journal、作品 URL、模板 payload、授权选择器或快照指纹。
+
+稳定错误码：
+
+| 错误码 | 条件 | 可重试 |
+| --- | --- | --- |
+| `INVALID_ARGUMENT` | ID 格式或额外字段不合法 | 否 |
+| `PREFLIGHT_NOT_FOUND` | 精确 ID 对应快照不存在 | 否 |
+| `PREFLIGHT_EXPIRED` | 快照已过 30 分钟或跨上海业务日 | 否，重新预检 |
+| `PREFLIGHT_INVALID` | 快照类型、结构、时间、任务或指纹无效 | 否，重新预检 |
+| `PREFLIGHT_READ_FAILED` | 本地快照读取被取消或遇到暂时 I/O 故障 | 是 |
+| `LOCAL_ACCESS_DENIED` | 当前用户无权读取受管 journal | 否 |
+| `INTERNAL_ERROR` | 未分类错误；不得暴露内部细节 | 否 |
+
+### 4.5 `get_template`
 
 | 合同项 | 定义 |
 | --- | --- |
@@ -342,6 +394,38 @@ flowchart TB
 | `CONFIG_INVALID` | 模板配置无法安全映射为合同 DTO | 否 |
 | `INTERNAL_ERROR` | 未分类错误；不得暴露内部细节 | 否 |
 
+### 4.6 常用千川查询工具
+
+本里程碑增加七个任务型查询工具，不增加万能查询或 CLI 包装工具：
+
+| 工具 | 输入重点 | 数据源与副作用 | 输出边界 |
+| --- | --- | --- | --- |
+| `list_managed_accounts` | `channel=all|marketing|qianchuan`、`include_disabled` | 只读本地负责账户，不读取凭据、不刷新 Token、不访问官方接口 | 账户名称、渠道、字符串广告主 ID、启用状态及原样 Markdown |
+| `get_qianchuan_authorization` | 可选字符串 `advertiser_id` | 只读本地授权快照和凭据存在性，不刷新 Token、不访问官方接口 | Token 存在布尔值、有效期、授权映射；不返回凭据值和授权账户明细 |
+| `search_qianchuan_products` | 字符串广告主/授权账户/商品 ID，商品名，`limit<=100` | 必要时刷新 Token，访问官方商品读取接口 | 商品 ID、名称、类目、渠道、销量、库存、审核时间；不返回图片 URL |
+| `list_qianchuan_plans` | 字符串广告主 ID、日期、状态、`limit<=100` | 必要时刷新 Token，访问官方计划列表 | 计划设置摘要；不把 `stats_info` 当报表金额 |
+| `get_qianchuan_plan` | 字符串广告主/计划 ID、可选 `include_materials` | 必要时刷新 Token，访问计划详情和最多 100 页素材 | 计划设置、达人、商品和素材成员；不返回素材 URL 或原始官方对象 |
+| `report_qianchuan_account` | 字符串广告主 ID、日期、`scope=overall|uni` | 必要时刷新 Token，调用固定账户汇总接口 | 固定指标白名单；不接受自定义主题/字段 |
+| `report_qianchuan_plans` | 字符串广告主 ID、日期、状态、`limit<=100` | 必要时刷新 Token，调用现有计划报表用例 | 汇总、成本保障详情和 Application Service 原样 Markdown |
+
+共同合同：输入与所有嵌套对象均 `additionalProperties:false`；业务 ID 只接受规范十进制字符串；不接受路径、URL、环境变量或任意上游 JSON；MCP 使用独立 Presenter，不透传请求 URL、图片 URL、原始错误、请求头、Token、Cookie 或内部 DTO。官方查询错误只按领域授权错误、官方 `40103` 和取消/超时映射，其他错误统一脱敏为 `UPSTREAM_QUERY_FAILED`，不能根据错误文本中出现 `token` 等词猜测类型。
+
+这些工具只覆盖高频固定意图。跨渠道负责账户效果、自定义主题、素材维度、商品维度、直播间和达人报表仍走明确的高级 CLI 路由。已工具化查询在当前会话不可用时失败关闭，不静默调用等价 CLI。
+
+### 4.7 常用巨量营销查询工具
+
+本里程碑增加五个任务型查询工具，不增加万能查询或 CLI 包装工具：
+
+| 工具 | 输入重点 | 数据源与副作用 | 输出边界 |
+| --- | --- | --- | --- |
+| `get_marketing_authorization` | 可选字符串 `advertiser_id` | 只读本地授权快照和凭据存在性，不刷新 Token、不访问官方接口 | Token 存在布尔值、有效期、授权映射；不返回凭据值和授权账户明细 |
+| `search_marketing_videos` | 字符串广告主/授权账户 ID、互斥的视频/素材/签名筛选、文件名、日期、`page`、`limit<=100` | 必要时刷新 Token，单页读取账户视频库 | 视频/素材 ID、文件名和媒体属性；不返回视频、封面或播放 URL |
+| `search_marketing_creator_materials` | `authorized|homepage`、达人/作品 ID、可用性、`page`、`limit<=100` | 必要时刷新 Token，按一页读取授权素材或单达人主页；`limit` 直接约束官方 `page_size` | 素材、达人、授权和可用性字段；不返回视频或封面 URL |
+| `report_marketing_materials` | 字符串广告主 ID、日期、可选项目/推广筛选、`active_only`、`limit<=100` | 必要时刷新 Token，复用固定 `MATERIAL_DATA` 用例 | 应用层稳定汇总与素材指标白名单；不返回原始官方对象 |
+| `report_marketing_plans` | 字符串广告主 ID、日期、`limit<=100` | 必要时刷新 Token，协商并查询固定 `UNI_PROJECT_DATA` 用例 | 汇总、项目指标和 Application Service 原样 Markdown |
+
+共同合同与 4.6 一致：严格输入、字符串 ID、专用白名单 Presenter、脱敏稳定错误，不接受路径、任意 URL、任意主题/指标或上游 JSON。`get_marketing_authorization` 为本地只读；其余四个工具是显式官方读取。跨渠道负责账户效果、营销报表字段发现/自定义主题、图片、商品、计划创建和修改仍走明确 CLI 路由。已工具化查询在当前会话不可用时失败关闭，不静默调用等价 CLI。
+
 ## 5. 门禁二：量化语义验收
 
 语义验收不使用固定关键词断言，而验证用户目标是否稳定路由到正确 Skill 和工具。首批建立 120 条不重复语料，每条运行 3 次，共 360 次：
@@ -369,7 +453,7 @@ flowchart TB
 
 ## 6. 门禁三：安全确认协议
 
-首批两个只读工具不需要确认；本协议是以后开放任何本地或外部写入的前置条件。
+两个模板工具和本地快照查询不需要业务写入确认；官方只读预检是否触发 Host 审批由 Host 策略决定。确认协议是以后开放任何官方写入工具的前置条件。
 
 所有写入严格执行：
 
@@ -450,7 +534,7 @@ MCP 必须实现专用 DTO 和 Presenter，并满足：
 
 - 采用字段白名单构造第 4 节输出，不从 CLI DTO 删除几个字段后直接复用；
 - 永不输出 `config`、`config_path`、`state_root`、工作目录、用户目录或其他绝对路径；
-- 永不输出 Secret、Token、refresh token、OAuth code、Authorization header、Cookie 或凭据引用值；`confirmation_id` 只允许由 `prepare_*` 返回并作为对应 `submit_*` 的输入，不得出现在首批只读工具、其他结果或诊断字段；
+- 永不输出 Secret、Token、refresh token、OAuth code、Authorization header、Cookie 或凭据引用值；`confirmation_id` 只允许由 `prepare_*` 返回并作为对应 `submit_*` 的输入，不得出现在当前 16 个工具、其他结果或诊断字段；
 - 永不输出堆栈、内部类型名、原始配置、SQL/HTTP 调试信息和官方 API 原始请求/响应；
 - 只保留完成当前用户目标所需的广告主 ID、模板字段和校验问题；无关个人信息一律删除；
 - ID 在序列化前统一转换并验证为字符串，超出合同的嵌套字段不进入 `structuredContent`、文本内容或 `_meta`；
@@ -468,11 +552,12 @@ MCP 必须实现专用 DTO 和 Presenter，并满足：
 - `plugin.json.mcpServers` 存在且严格指向 `./.mcp.json`；
 - `.mcp.json` 只能包含允许的 Server、固定命令、固定参数，不能经过 shell，不能声明未允许的环境变量；
 - MCP Server 的 `initialize`、`tools/list`、`tools/call`、取消、超时和正常退出符合协议；
-- `list_templates`、`get_template` 的名称、title、description、输入/输出 Schema、字符串 ID 和安全注解与第 4 节完全一致；
-- 两个 Skill 的工具依赖指向实际注册工具，Skill 未提前宣称不存在的能力；
+- 当前 16 个工具的名称、title、description、输入/输出 Schema、字符串 ID 和安全注解与第 4 节完全一致；
+- 两个 Skill 的工具依赖指向实际注册 Server，Skill 未提前宣称不存在的能力；
 - stdout 在成功、输入错误、配置错误、取消和崩溃路径均保持协议纯净；
 - Presenter 的路径、Secret、Token、OAuth、内部诊断和嵌套逃逸测试通过；
-- 只读调用前后受管状态文件摘要、mtime 和外部请求计数不变；测试进程禁止网络访问；
+- 模板工具、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 与 `get_qianchuan_preflight` 调用前后对应受管状态不变且外部请求计数为零；这些测试进程禁止网络访问；
+- `preflight_qianchuan_works` 使用桩件证明官方读取、Token 刷新与受管状态边界，不以无网络测试伪装真实预检；真实业务验收必须单独授权；
 - MCP 与 CLI 针对同一 Application Service 的业务字段和错误语义一致，但 Presenter 合同各自独立；
 - 五个平台二进制仍完整；每个平台必须在对应 runner 执行原生启动探针，不能用交叉编译成功代替运行证据。
 
@@ -484,8 +569,8 @@ CI 通过后，仍必须在当前开发环境执行独立 Gate 0：
 2. 使用 cachebuster 安装最新本地 Plugin 快照；
 3. 新建完全独立的 Codex 任务，确认 Server ready；
 4. 记录 `initialize`、`tools/list`、无凭据 `tools/call`、取消、错误、退出和 stderr；
-5. 确认没有 shell 进程、stdout 污染、路径泄露、文件写入和外部网络访问；
-6. 确认两个只读工具的 Schema 与注解可见，缺少本地状态时返回脱敏稳定错误；
+5. 确认没有 shell 进程、stdout 污染或路径泄露；对模板工具和快照查询另外确认无文件写入、无外部网络访问；
+6. 确认 16 个工具的 Schema 与注解可见；本地查询、官方查询和预检在缺少状态或凭据时分别返回脱敏稳定错误，且无凭据探针不得发出官方业务请求；
 7. 完成后卸载开发快照或恢复上一份已验收快照。
 
 Gate 0 只证明被测试平台和该安装副本可行，不代表五个平台全部可用。真实安装新任务验收不能被单元测试、CI、当前会话或仓库源码调用替代。
@@ -500,22 +585,22 @@ Gate 0 只证明被测试平台和该安装副本可行，不代表五个平台�
 4. **Skill 路由**：工具真实可用后再更新两个 Skill 及工具依赖，正常用户路径切换为 MCP；
 5. **语义验收**：执行第 5 节 360 次验收并保存逐次证据；
 6. **平台验证**：逐一验证 macOS amd64/arm64、Linux amd64/arm64、Windows amd64 安装副本；
-7. **扩大工具面**：只读业务逐个增加；任何写入工具必须先完整实现第 6、7 节；
+7. **扩大工具面**：按独立合同逐个增加只读业务；本轮 9 个千川工具和 5 个巨量营销工具完成本地实现后重新执行分发、安装和 Host 门禁；任何官方写入工具必须先完整实现第 6、7 节；
 8. **发布决策**：本地开发环境验收通过后，才决定是否提交、推送、升级版本、创建 Tag、Release 或 Marketplace 发布。
 
 普通实现提交继续进入 `CHANGELOG.md` 的 `## 未发布`；本设计不授权提交、推送或发布。
 
 ## 11. 完成定义
 
-首批原生工具化只有同时满足以下条件才算完成：
+当前 16 工具原生工具化只有同时满足以下条件才算完成：
 
 - Plugin 清单实际注册本地 stdio MCP，真实安装的新任务中 Server ready；
-- 两个工具的 Schema、注解、授权、错误和限制与第 4 节一致；
+- 16 个工具的 Schema、注解、授权、错误和限制与第 4 节一致；
 - MCP 与 CLI 共用 Go Application Service，MCP 不启动 CLI；
 - 六项门禁和所有 CI 检查通过；
 - 360 次量化语义验收达到阈值，且保留实际 Skill、工具、参数和结果证据；
 - stdout 纯净，日志和结果未泄露路径、凭据或内部诊断；
-- 两个工具被证明只读且不访问外部网络；
+- 本地查询被证明不访问外部网络；商品、计划和报表工具被证明只访问对应官方读取用例；预检被证明不写官方业务数据，并准确声明官方读取、Token 刷新和本地缓存/快照副作用；
 - 已验证与未验证平台清楚分开，不用构建结果冒充安装验收；
 - 正常用户路径不再搜索仓库或运行 CLI；CLI 仍可用于开发、诊断和回滚；
 - 正式架构文档、用户文档、Skill 和 `CHANGELOG.md` 按真实实现同步，不提前描述目标状态。
@@ -526,18 +611,21 @@ Gate 0 只证明被测试平台和该安装副本可行，不代表五个平台�
 
 - Go `mcp serve --stdio`、固定 macOS Apple Silicon 启动清单和 Plugin 注册；
 - `list_templates`、`get_template` 的严格 Schema、只读注解、字符串 ID、状态版本、稳定错误与专用 Presenter；
+- `preflight_qianchuan_works`、`get_qianchuan_preflight` 的共享 Application Service、严格输入、专用 DTO/Presenter、稳定错误与快照白名单读取；
+- 七个常用千川查询工具的共享授权/读取/报表 Application Service、严格输入、专用 DTO/Presenter、稳定错误和 URL/Secret 脱敏边界；
+- 五个常用巨量营销查询工具的共享授权/素材/报表 Application Service、严格输入、单页素材查询、专用 DTO/Presenter、稳定错误和 URL/Secret 脱敏边界；
 - 当前用户受管配置的路径、权限、符号链接、读取竞态和最小继承环境限制；
-- 两个 Skill 的模板读取路由、stdio MCP 依赖和禁止静默 CLI 回退合同；
+- 两个 Skill 的 MCP 依赖，以及模板、预检、常用千川查询与常用巨量营销查询禁止静默 CLI 回退合同；
 - 官方 Go MCP SDK 进程内测试、真实临时二进制子进程探针、Skill 与分发校验。
-- 当前本地开发快照已安装启用，安装副本与仓库本机二进制哈希一致，安装副本进程探针通过。
+- 既有两个模板工具对应的本地开发快照曾完成安装副本进程探针；本轮新增 14 个工具尚未构建或安装。
 
 仍需完成后才能宣称首批原生工具化整体完成：
 
-- 在完全独立的新 Codex 任务确认已安装开发快照的 Server ready、工具可见和真实工具调用；
+- 重建并安装包含 9 个新增千川工具和 5 个新增巨量营销工具的开发快照，再在完全独立的新 Codex 任务确认 Server ready、16 工具可见和真实工具调用；
 - 执行第 5 节 360 次量化语义验收并保存逐次证据；
 - 为 macOS Intel、Linux x86_64/ARM64、Windows x86_64 分别提供原生安装和启动证据，或继续明确不支持这些平台的 MCP；
-- 未读取真实凭据、调用真实业务 API或写入业务数据；这些不属于首批本地模板只读验收；
-- 未执行 commit、push、正式版本升级、Tag、Release 或 Marketplace 发布。
+- 当前本地实现未读取真实凭据、调用真实业务 API 或写入业务数据；真实千川预检和营销官方查询需要另行授权和验收；
+- 尚未执行正式版本升级、Tag、Release 或 Marketplace 发布。
 
 ## 13. 参考资料
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,15 +34,135 @@ func TestQianchuanCommandBoundaries(t *testing.T) {
 
 func TestParseBatchWorkEntries(t *testing.T) {
 	entries := parseBatchWorkEntries([]string{
-		"[https://v.douyin.com/bad/:code](https://v.douyin.com/abc/)\t真人口播营销\t刘岛",
+		"[https://v.douyin.com/bad/:code](https://v.douyin.com/abc/)\t真人口播营销\t测试负责人",
 		"4.87 口令 https://v.douyin.com/xyz/ 复制打开\t9386\t暖身,口播\t刘研",
 		"https://v.douyin.com/only/",
 	}, "", "")
 	if len(entries) != 3 || entries[0].URL != "https://v.douyin.com/abc/" ||
-		entries[0].PlanType != "真人口播营销" || entries[0].Business != "刘岛" ||
+		entries[0].PlanType != "真人口播营销" || entries[0].Business != "测试负责人" ||
 		entries[1].PlanType != "暖身,口播" || entries[1].Business != "刘研" ||
 		entries[2].PlanType != "" || entries[2].Business != "" {
 		t.Fatalf("batch work entry parsing changed: %#v", entries)
+	}
+}
+
+func TestBatchPlanScanStartsBeforeSlowLinkResolutionFinishes(t *testing.T) {
+	scanStarted := make(chan struct{})
+	reconciler := &commandSnapshotReconciler{scanStarted: scanStarted}
+	links := &blockingCommandLinkResolver{
+		scanStarted: scanStarted,
+		result: applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{
+			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
+			AwemeItemID: "6000000000000001", CreatorName: "F2 达人",
+			OwnerHint: &domain.WorkOwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
+		}}},
+	}
+	tokens := &commandTokenProvider{}
+	service := CommandService{
+		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
+		Verifier: WorkVerifier{Reader: &commandReader{}},
+		Batch:    BatchService{Reader: &commandReader{}, Reconciler: reconciler},
+		Locks:    commandLocker{}, Journals: &commandJournalStore{},
+		NewPreflightID: func(string, time.Time) (string, error) {
+			return "qianchuan-preflight-overlap", nil
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 16, 4, 0, 0, 0, time.UTC) },
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := service.BatchWorks(ctx, BatchWorksCommand{
+		PlanTemplate: "qcpt_command", WorkURLs: []string{"https://www.douyin.com/video/6000000000000001"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links.calls != 1 || reconciler.scanCalls != 1 || result.PreflightID != "qianchuan-preflight-overlap" {
+		t.Fatalf("plan scan and slow link branch did not overlap: links=%d scans=%d result=%#v",
+			links.calls, reconciler.scanCalls, result)
+	}
+}
+
+func TestBatchEmptyLinkResultSkipsCredentialsLockAndPlanScan(t *testing.T) {
+	tokens := &blockingCommandTokenProvider{started: make(chan struct{})}
+	links := &commandLinkResolver{result: applicationworkmetadata.ResolveResult{
+		Skipped: []domain.SkippedWorkLink{{InputIndex: 0, Reason: "invalid_url", Message: "fixture"}},
+	}}
+	reconciler := &commandSnapshotReconciler{}
+	service := CommandService{
+		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
+		Batch: BatchService{Reconciler: reconciler},
+	}
+	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{
+		PlanTemplate: "qcpt_command", WorkURLs: []string{"invalid"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Mode != "dry_run" || len(result.Skipped) != 1 || reconciler.scanCalls != 0 ||
+		result.PreflightID != "" {
+		t.Fatalf("empty link result crossed the official-read boundary: %#v scans=%d", result, reconciler.scanCalls)
+	}
+	select {
+	case <-tokens.started:
+	case <-time.After(time.Second):
+		t.Fatal("parallel credential preparation did not start")
+	}
+}
+
+func TestBatchPreflightSubmitSkipsLinksAndWorkVerification(t *testing.T) {
+	reader := &commandReader{}
+	reconciler := &commandSnapshotReconciler{}
+	links := &commandLinkResolver{result: applicationworkmetadata.ResolveResult{
+		Resolved: []domain.ResolvedWorkLink{{
+			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
+			AwemeItemID: "6000000000000001", CreatorName: "F2 达人",
+			OwnerHint: &domain.WorkOwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
+		}},
+	}}
+	writer := &commandSuccessfulWriter{}
+	journals := &commandJournalStore{}
+	tokens := &commandTokenProvider{}
+	now := time.Date(2026, 8, 16, 4, 0, 0, 0, time.UTC)
+	service := CommandService{
+		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
+		Verifier: WorkVerifier{Reader: reader},
+		Batch: BatchService{
+			Guard:  sharedplans.GuardedExecutor{Locks: commandLocker{}},
+			Reader: reader, Writer: writer, Reconciler: reconciler,
+		},
+		Locks: commandLocker{}, Journals: journals,
+		NewPreflightID: func(string, time.Time) (string, error) {
+			return "qianchuan-preflight-fast-submit", nil
+		},
+		Now: func() time.Time { return now },
+	}
+	preview, err := service.BatchWorks(context.Background(), BatchWorksCommand{
+		PlanTemplate: "qcpt_command", WorkURLs: []string{"https://www.douyin.com/video/6000000000000001"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.PreflightID != "qianchuan-preflight-fast-submit" || links.calls != 1 || reconciler.scanCalls != 1 {
+		t.Fatalf("preflight snapshot was not prepared: %#v links=%d scans=%d", preview, links.calls, reconciler.scanCalls)
+	}
+	authorizedCalls, videoCalls := reader.authorizedCalls, reader.videoCalls
+	now = now.Add(time.Minute)
+	tokens.onEnsure = func() { now = now.Add(2 * time.Second) }
+	submitted, err := service.BatchWorks(context.Background(), BatchWorksCommand{
+		PreflightID: preview.PreflightID, Submit: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if submitted.Mode != "submit" || len(submitted.Results) != 1 || submitted.Results[0].Status != "created" ||
+		links.calls != 1 || reader.authorizedCalls != authorizedCalls || reader.videoCalls != videoCalls ||
+		reconciler.scanCalls != 2 || writer.createCalls != 1 ||
+		submitted.Performance.CredentialResolutionSeconds != 2 ||
+		submitted.Performance.LinkMetadata.Provider != "preflight_snapshot" ||
+		submitted.Performance.LinkMetadata.Enabled {
+		t.Fatalf("fast submit repeated preparation or missed write: result=%#v links=%d auth=%d/%d videos=%d/%d scans=%d writes=%d",
+			submitted, links.calls, reader.authorizedCalls, authorizedCalls, reader.videoCalls, videoCalls,
+			reconciler.scanCalls, writer.createCalls)
 	}
 }
 
@@ -152,7 +274,11 @@ func testBatchCommandReadScope(t *testing.T) {
 		Verifier: WorkVerifier{Reader: reader},
 		Batch:    BatchService{Reader: reader, Reconciler: commandNoPlanFinder{}},
 		Locks:    commandLocker{},
-		Now:      func() time.Time { return time.Date(2026, time.July, 26, 12, 0, 0, 0, time.UTC) },
+		Journals: &commandJournalStore{},
+		NewPreflightID: func(string, time.Time) (string, error) {
+			return "qianchuan-preflight-fixture", nil
+		},
+		Now: func() time.Time { return time.Date(2026, time.July, 26, 12, 0, 0, 0, time.UTC) },
 	}
 	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{
 		PlanTemplate: "qcpt_command", WorkURLs: []string{"https://www.douyin.com/video/6000000000000001"},
@@ -166,7 +292,8 @@ func testBatchCommandReadScope(t *testing.T) {
 		t.Fatalf("batch read scope changed: tokens=%d query=%#v unscoped=%d", tokens.calls, tokens.last, reader.unscopedCalls)
 	}
 	if len(result.Results) != 1 || len(result.Results[0].Writes) != 1 ||
-		len(result.Results[0].Writes[0].Payload) == 0 {
+		len(result.Results[0].Writes[0].Payload) == 0 || result.PreflightID != "qianchuan-preflight-fixture" ||
+		result.ExpiresAt != "2026-07-26T12:30:00Z" {
 		t.Fatalf("include-payloads did not reach batch writes: %#v", result.Results)
 	}
 	wantColumns := []domain.PresentationColumn{
@@ -296,9 +423,47 @@ func (reader commandConfigReader) Read(context.Context) (map[string]any, error) 
 	return reader.config, nil
 }
 
+type commandJournalStore struct {
+	journals map[string]domainplans.Journal
+}
+
+func (store *commandJournalStore) Load(_ context.Context, runID string) (domainplans.Journal, error) {
+	if store == nil || store.journals == nil {
+		return domainplans.Journal{}, errors.New("fixture journal not found")
+	}
+	journal, exists := store.journals[runID]
+	if !exists {
+		return domainplans.Journal{}, fmt.Errorf("fixture journal %s not found", runID)
+	}
+	return journal, nil
+}
+
+func (store *commandJournalStore) Save(_ context.Context, runID string, journal domainplans.Journal) error {
+	if store.journals == nil {
+		store.journals = map[string]domainplans.Journal{}
+	}
+	store.journals[runID] = journal
+	return nil
+}
+
 type commandTokenProvider struct {
-	calls int
-	last  authapplication.TokenQuery
+	calls    int
+	last     authapplication.TokenQuery
+	onEnsure func()
+}
+
+type blockingCommandTokenProvider struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (provider *blockingCommandTokenProvider) Ensure(
+	ctx context.Context,
+	_ authapplication.TokenQuery,
+) (authapplication.TokenLease, error) {
+	provider.once.Do(func() { close(provider.started) })
+	<-ctx.Done()
+	return authapplication.TokenLease{}, ctx.Err()
 }
 
 const commandToken = "TEST_QIANCHUAN_COMMAND_TOKEN_DO_NOT_USE"
@@ -306,6 +471,9 @@ const commandToken = "TEST_QIANCHUAN_COMMAND_TOKEN_DO_NOT_USE"
 func (provider *commandTokenProvider) Ensure(_ context.Context, query authapplication.TokenQuery) (authapplication.TokenLease, error) {
 	provider.calls++
 	provider.last = query
+	if provider.onEnsure != nil {
+		provider.onEnsure()
+	}
 	return authapplication.TokenLease{
 		Channel: "qianchuan", AuthorizationID: "fixture-command-authorization", AccessToken: commandToken,
 	}, nil
@@ -314,6 +482,25 @@ func (provider *commandTokenProvider) Ensure(_ context.Context, query authapplic
 type commandLinkResolver struct {
 	calls  int
 	result applicationworkmetadata.ResolveResult
+}
+
+type blockingCommandLinkResolver struct {
+	calls       int
+	scanStarted <-chan struct{}
+	result      applicationworkmetadata.ResolveResult
+}
+
+func (resolver *blockingCommandLinkResolver) Resolve(
+	ctx context.Context,
+	_ applicationworkmetadata.ResolveRequest,
+) (applicationworkmetadata.ResolveResult, error) {
+	resolver.calls++
+	select {
+	case <-resolver.scanStarted:
+		return resolver.result, nil
+	case <-ctx.Done():
+		return applicationworkmetadata.ResolveResult{}, ctx.Err()
+	}
 }
 
 type commandOwnerHintCache struct {
@@ -351,7 +538,11 @@ func (resolver *commandLinkResolver) Resolve(context.Context, applicationworkmet
 	return resolver.result, nil
 }
 
-type commandReader struct{ unscopedCalls int }
+type commandReader struct {
+	unscopedCalls   int
+	authorizedCalls int
+	videoCalls      int
+}
 
 func (reader *commandReader) checkScope(ctx context.Context) {
 	scope, ok := requestcontrol.Authorization(ctx)
@@ -378,6 +569,7 @@ func (*commandReader) FetchPlanMaterials(context.Context, portqianchuan.Material
 
 func (reader *commandReader) FetchAuthorizedCreators(ctx context.Context, _ portqianchuan.AuthorizedCreatorPageRequest) (domainqianchuan.AuthorizedCreatorPage, error) {
 	reader.checkScope(ctx)
+	reader.authorizedCalls++
 	return domainqianchuan.AuthorizedCreatorPage{
 		Rows: []domainqianchuan.AuthorizedCreator{{
 			AwemeID: batchCreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
@@ -388,6 +580,7 @@ func (reader *commandReader) FetchAuthorizedCreators(ctx context.Context, _ port
 
 func (reader *commandReader) FetchCreatorVideos(ctx context.Context, request portqianchuan.CreatorVideoPageRequest) (domainqianchuan.CreatorVideoPage, error) {
 	reader.checkScope(ctx)
+	reader.videoCalls++
 	rows := make([]domainqianchuan.CreatorVideo, 0, len(request.AwemeItemIDs))
 	for _, itemID := range request.AwemeItemIDs {
 		rows = append(rows, domainqianchuan.CreatorVideo{
@@ -408,6 +601,36 @@ func (commandNoPlanFinder) FindCurrentPlans(_ context.Context, request CurrentPl
 	return result, nil
 }
 
+type commandSnapshotReconciler struct {
+	scanStarted chan struct{}
+	scanOnce    sync.Once
+	scanCalls   int
+}
+
+func (reconciler *commandSnapshotReconciler) ScanCurrentPlans(
+	context.Context,
+	CurrentPlanScanRequest,
+) (CurrentPlanInventory, error) {
+	reconciler.scanCalls++
+	if reconciler.scanStarted != nil {
+		reconciler.scanOnce.Do(func() { close(reconciler.scanStarted) })
+	}
+	return CurrentPlanInventory{
+		StartTime: "2026-08-16 00:00:00", EndTime: "2026-08-16 23:59:59", PageCount: 1,
+		Plans: []domainqianchuan.Plan{},
+	}, nil
+}
+
+func (*commandSnapshotReconciler) FindCurrentPlans(
+	_ context.Context,
+	request CurrentPlanRequest,
+) (CurrentPlanResult, error) {
+	if request.Inventory == nil {
+		return CurrentPlanResult{}, errors.New("expected pre-scanned inventory")
+	}
+	return commandNoPlanFinder{}.FindCurrentPlans(context.Background(), request)
+}
+
 type commandNoMatchFinder struct{ calls int }
 
 func (finder *commandNoMatchFinder) FindCurrentPlans(_ context.Context, request CurrentPlanRequest) (CurrentPlanResult, error) {
@@ -418,6 +641,25 @@ func (finder *commandNoMatchFinder) FindCurrentPlans(_ context.Context, request 
 type commandWriter struct {
 	createCalls int
 	createErr   error
+}
+
+type commandSuccessfulWriter struct{ createCalls int }
+
+func (writer *commandSuccessfulWriter) CreatePlan(context.Context, portqianchuan.CreatePlanRequest) (portqianchuan.WriteResult, error) {
+	writer.createCalls++
+	return portqianchuan.WriteResult{ObjectID: batchPlanID, RequestID: "fixture-create-request"}, nil
+}
+
+func (*commandSuccessfulWriter) AddMaterials(context.Context, portqianchuan.MaterialWriteRequest) (portqianchuan.WriteResult, error) {
+	return portqianchuan.WriteResult{}, errors.New("unexpected material add")
+}
+
+func (*commandSuccessfulWriter) DeleteMaterials(context.Context, portqianchuan.DeleteMaterialsRequest) (portqianchuan.WriteResult, error) {
+	return portqianchuan.WriteResult{}, errors.New("unexpected material delete")
+}
+
+func (*commandSuccessfulWriter) UpdatePlan(context.Context, portqianchuan.MutationRequest) (portqianchuan.WriteResult, error) {
+	return portqianchuan.WriteResult{}, errors.New("unexpected plan mutation")
 }
 
 func (writer *commandWriter) CreatePlan(context.Context, portqianchuan.CreatePlanRequest) (portqianchuan.WriteResult, error) {

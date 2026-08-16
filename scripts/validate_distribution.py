@@ -76,16 +76,54 @@ def validate_skill(name):
     if f"${name}" not in prompt:
         fail(f"{name} default_prompt does not mention the Skill")
     dependencies = ((interface or {}).get("dependencies") or {}).get("tools")
+    dependency_descriptions = {
+        "ads-plan-monitor": "Ocean Watch template and common Marketing query tools",
+        "qc-plan-monitor": "Ocean Watch template, common Qianchuan query, report, and preflight tools",
+    }
     expected_dependency = [{
         "type": "mcp",
         "value": "ocean-watch",
-        "description": "Ocean Watch local read-only template tools",
+        "description": dependency_descriptions[name],
         "transport": "stdio",
     }]
     if dependencies != expected_dependency:
         fail(f"{name} MCP dependency contract is invalid")
     if "MCP `list_templates`" not in content or "MCP `get_template`" not in content:
         fail(f"{name} does not route template reads through MCP")
+    if name == "qc-plan-monitor" and (
+        "MCP `preflight_qianchuan_works`" not in content
+        or "MCP `get_qianchuan_preflight`" not in content
+    ):
+        fail("qc-plan-monitor does not route Qianchuan preflight through MCP")
+    if name == "qc-plan-monitor":
+        query_tools = (
+            "list_managed_accounts",
+            "get_qianchuan_authorization",
+            "search_qianchuan_products",
+            "list_qianchuan_plans",
+            "get_qianchuan_plan",
+            "report_qianchuan_account",
+            "report_qianchuan_plans",
+        )
+        missing = [tool for tool in query_tools if f"MCP `{tool}`" not in content]
+        if missing:
+            fail(f"qc-plan-monitor does not route common Qianchuan reads through MCP: {missing}")
+        if "Do not run the equivalent CLI command" not in content:
+            fail("qc-plan-monitor does not fail closed for common Qianchuan MCP reads")
+    if name == "ads-plan-monitor":
+        query_tools = (
+            "list_managed_accounts",
+            "get_marketing_authorization",
+            "search_marketing_videos",
+            "search_marketing_creator_materials",
+            "report_marketing_materials",
+            "report_marketing_plans",
+        )
+        missing = [tool for tool in query_tools if f"MCP `{tool}`" not in content]
+        if missing:
+            fail(f"ads-plan-monitor does not route common Marketing reads through MCP: {missing}")
+        if "Do not run the equivalent CLI command" not in content:
+            fail("ads-plan-monitor does not fail closed for common Marketing MCP reads")
     if "Never search the repository" not in content or "silent fallback" not in content:
         fail(f"{name} does not fail closed when MCP template tools are unavailable")
     if not (root / "run.cmd").is_file():

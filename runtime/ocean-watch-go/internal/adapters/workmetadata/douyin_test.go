@@ -37,6 +37,36 @@ func TestNormalizeDouyinURLRejectsSSRFShapes(t *testing.T) {
 	}
 }
 
+func TestNormalizeDouyinURLUsesOnlyShareCodePathSegment(t *testing.T) {
+	tests := map[string]string{
+		"time marker":      "https://v.douyin.com/abc-123_X/:3pm",
+		"date and command": "分享 https://v.douyin.com/abc-123_X/04/07 oDu:/ 复制打开",
+		"query suffix":     "https://v.douyin.com/abc-123_X/?from=copy",
+	}
+	for name, input := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := NormalizeDouyinURL(input)
+			if err != nil {
+				t.Fatalf("share URL was rejected: %v", err)
+			}
+			if want := "https://v.douyin.com/abc-123_X/"; got != want {
+				t.Fatalf("NormalizeDouyinURL() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestNormalizeDouyinURLDoesNotTruncateCanonicalWorkPath(t *testing.T) {
+	const input = "https://www.douyin.com/video/123456/?previous_page=copy"
+	got, err := NormalizeDouyinURL(input)
+	if err != nil {
+		t.Fatalf("canonical URL was rejected: %v", err)
+	}
+	if got != input {
+		t.Fatalf("NormalizeDouyinURL() = %q, want %q", got, input)
+	}
+}
+
 func TestDouyinRedirectResolverRejectsCrossHostRedirectBeforeDispatch(t *testing.T) {
 	calls := 0
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {

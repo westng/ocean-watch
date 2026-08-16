@@ -96,7 +96,8 @@ Codex → Skill → local stdio MCP ─┐
 ```
 
 - Advertising logic has one Go Application/Domain implementation. MCP and CLI are two transports over that implementation, not separate business runtimes or silent fallback paths.
-- Local template lists and exact details use MCP's `list_templates` and `get_template`; capabilities not yet exposed as tools use the bundled Go CLI.
+- Local template lists and exact details use MCP's `list_templates` and `get_template`; Qianchuan work-batch preflight and snapshot inspection use `preflight_qianchuan_works` and `get_qianchuan_preflight`. Confirmed online submission still uses the bundled Go CLI and requires explicit write permission.
+- MCP shortens the natural-language-to-preflight path and stabilizes structured results. It does not bypass official authorization, ownership, product-match, or plan-reconciliation reads, whose real latency remains part of preflight.
 - The Plugin bundles CLI binaries for macOS Intel and Apple Silicon, Linux x86_64 and ARM64, and Windows x86_64. Ordinary users do not need Go.
 - The current fixed MCP launch manifest has completed development acceptance only on macOS Apple Silicon; five-platform CLI packaging does not mean five-platform MCP installation acceptance.
 - Python participates only in public metadata resolution for Qianchuan work links. It does not own authorization, accounts, templates, plans, or reports.

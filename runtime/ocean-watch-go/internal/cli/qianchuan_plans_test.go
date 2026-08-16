@@ -48,6 +48,30 @@ func TestParseQianchuanBatchReadsRuntimePlanNameFields(t *testing.T) {
 	}
 }
 
+func TestParseQianchuanBatchPreflightIDIsSubmitOnlyAndExclusive(t *testing.T) {
+	options, command, err := parseQianchuanBatchOptions([]string{
+		"--preflight-id", " qianchuan-preflight-fixture ", "--submit",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.preflightID != "qianchuan-preflight-fixture" ||
+		command.PreflightID != "qianchuan-preflight-fixture" || !command.Submit {
+		t.Fatalf("preflight submit parsing changed: options=%#v command=%#v", options, command)
+	}
+	for _, args := range [][]string{
+		{"--preflight-id", "qianchuan-preflight-fixture"},
+		{"--preflight-id", "qianchuan-preflight-fixture", "--submit", "--plan-template", "fixture"},
+		{"--preflight-id", "qianchuan-preflight-fixture", "--submit", "--work-url", "https://v.douyin.com/fixture/"},
+		{"--preflight-id", "qianchuan-preflight-fixture", "--submit", "--plan-type", "随手po"},
+		{"--preflight-id", "qianchuan-preflight-fixture", "--submit", "--business", "测试负责人"},
+	} {
+		if _, _, err := parseQianchuanBatchOptions(args); err == nil {
+			t.Fatalf("invalid preflight argument combination was accepted: %v", args)
+		}
+	}
+}
+
 func TestRunnerRoutesQianchuanPlanActionsWithoutMarketing(t *testing.T) {
 	manifest := qianchuanPlanGoManifest(t, "plans create-qianchuan")
 	qianchuan := &qianchuanPlanCommandServiceStub{createResult: applicationqianchuan.CreateCommandResult{

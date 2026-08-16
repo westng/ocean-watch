@@ -8,7 +8,6 @@ import (
 	"time"
 
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
-	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/pagination"
 	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
 )
 
@@ -28,6 +27,22 @@ type CurrentPlanRequest struct {
 	AdvertiserID string
 	AccessToken  string
 	Targets      []CreatorTarget
+	ReadPool     *ReadPool
+	Inventory    *CurrentPlanInventory
+}
+
+type CurrentPlanScanRequest struct {
+	AdvertiserID string
+	AccessToken  string
+	ReadPool     *ReadPool
+}
+
+type CurrentPlanInventory struct {
+	StartTime  string
+	EndTime    string
+	PageCount  int
+	RequestIDs []string
+	Plans      []domainqianchuan.Plan
 }
 
 type ExistingPlan struct {
@@ -49,6 +64,10 @@ type CurrentPlanResult struct {
 
 type CurrentPlanFinder interface {
 	FindCurrentPlans(context.Context, CurrentPlanRequest) (CurrentPlanResult, error)
+}
+
+type CurrentPlanScanner interface {
+	ScanCurrentPlans(context.Context, CurrentPlanScanRequest) (CurrentPlanInventory, error)
 }
 
 type CurrentDayReconciler struct {
@@ -79,57 +98,40 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 	if err != nil {
 		return CurrentPlanResult{}, err
 	}
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return CurrentPlanResult{}, fmt.Errorf("load Asia/Shanghai timezone: %w", err)
+	inventory := request.Inventory
+	if inventory == nil {
+		scanned, scanErr := reconciler.ScanCurrentPlans(ctx, CurrentPlanScanRequest{
+			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, ReadPool: request.ReadPool,
+		})
+		if scanErr != nil {
+			return CurrentPlanResult{}, scanErr
+		}
+		inventory = &scanned
 	}
-	now := time.Now()
-	if reconciler.Now != nil {
-		now = reconciler.Now()
-	}
-	day := now.In(location).Format("2006-01-02")
-	startTime, endTime := day+" 00:00:00", day+" 23:59:59"
-	maxPages := reconciler.MaxPages
-	if maxPages == 0 {
-		maxPages = CurrentPlanMaxPages
-	}
-	requestIDs := []string{}
-	pageCount := 0
-	plans, err := pagination.CollectPages(ctx, pagination.PageOptions[domainqianchuan.Plan]{
-		MaxPages: maxPages,
-		Key:      func(plan domainqianchuan.Plan) string { return plan.AdID },
-		Fetch: func(ctx context.Context, page int) (pagination.Page[domainqianchuan.Plan], error) {
-			pageCount++
-			result, fetchErr := reconciler.Reader.FetchPlans(ctx, portqianchuan.PlanPageRequest{
-				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-				StartTime: startTime, EndTime: endTime, Status: "ALL",
-				MarketingGoal: "VIDEO_PROM_GOODS", AdlabScene: "UNI_PROJECT",
-				NeedCompensateInfo: true, Page: page, PageSize: CurrentPlanPageSize,
-			})
-			if fetchErr != nil {
-				return pagination.Page[domainqianchuan.Plan]{}, fetchErr
-			}
-			if result.RequestID != "" {
-				requestIDs = append(requestIDs, result.RequestID)
-			}
-			return pagination.Page[domainqianchuan.Plan]{
-				Number: result.PageInfo.Page, TotalPages: result.PageInfo.TotalPages,
-				TotalNumber: result.PageInfo.TotalNumber, Rows: result.Rows,
-			}, nil
-		},
-	})
-	if err != nil {
-		return CurrentPlanResult{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+	if inventory == nil || strings.TrimSpace(inventory.StartTime) == "" ||
+		strings.TrimSpace(inventory.EndTime) == "" || inventory.PageCount < 1 {
+		return CurrentPlanResult{}, errors.New("Qianchuan current-plan inventory is incomplete")
 	}
 	matches := make(map[string][]ExistingPlan, len(targets))
 	for _, target := range targets {
 		matches[target.AwemeID] = []ExistingPlan{}
 	}
-	candidates := selectListCandidates(plans, targets)
-	for _, candidate := range candidates {
-		detail, fetchErr := reconciler.Reader.FetchPlanDetail(ctx, portqianchuan.PlanDetailRequest{
-			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, AdID: candidate.plan.AdID,
+	candidates := selectListCandidates(inventory.Plans, targets)
+	type candidateDetail struct {
+		detail domainqianchuan.PlanDetail
+		err    error
+	}
+	details := parallelOrdered(ctx, request.ReadPool, len(candidates), func(ctx context.Context, index int) candidateDetail {
+		candidate := candidates[index]
+		detail, fetchErr := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.PlanDetail, error) {
+			return reconciler.Reader.FetchPlanDetail(ctx, portqianchuan.PlanDetailRequest{
+				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, AdID: candidate.plan.AdID,
+			})
 		})
+		return candidateDetail{detail: detail, err: fetchErr}
+	})
+	for index, candidate := range candidates {
+		detail, fetchErr := details[index].detail, details[index].err
 		if fetchErr != nil {
 			return CurrentPlanResult{}, fmt.Errorf("confirm Qianchuan plan %s: %w", candidate.plan.AdID, fetchErr)
 		}
@@ -153,9 +155,134 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 		}
 	}
 	return CurrentPlanResult{
-		StartTime: startTime, EndTime: endTime, PageCount: pageCount,
-		RequestIDs: requestIDs, Matches: matches,
+		StartTime: inventory.StartTime, EndTime: inventory.EndTime, PageCount: inventory.PageCount,
+		RequestIDs: append([]string(nil), inventory.RequestIDs...), Matches: matches,
 	}, nil
+}
+
+func (reconciler CurrentDayReconciler) ScanCurrentPlans(
+	ctx context.Context,
+	request CurrentPlanScanRequest,
+) (CurrentPlanInventory, error) {
+	if ctx == nil {
+		return CurrentPlanInventory{}, errors.New("Qianchuan reconciliation context is required")
+	}
+	if reconciler.Reader == nil {
+		return CurrentPlanInventory{}, errors.New("Qianchuan reconciliation reader is required")
+	}
+	request.AdvertiserID = strings.TrimSpace(request.AdvertiserID)
+	request.AccessToken = strings.TrimSpace(request.AccessToken)
+	if !validPositiveID(request.AdvertiserID) {
+		return CurrentPlanInventory{}, errors.New("advertiser_id must be a positive decimal ID")
+	}
+	if request.AccessToken == "" {
+		return CurrentPlanInventory{}, errors.New("Qianchuan reconciliation access token is required")
+	}
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return CurrentPlanInventory{}, fmt.Errorf("load Asia/Shanghai timezone: %w", err)
+	}
+	now := time.Now()
+	if reconciler.Now != nil {
+		now = reconciler.Now()
+	}
+	day := now.In(location).Format("2006-01-02")
+	startTime, endTime := day+" 00:00:00", day+" 23:59:59"
+	maxPages := reconciler.MaxPages
+	if maxPages == 0 {
+		maxPages = CurrentPlanMaxPages
+	}
+	fetchPage := func(ctx context.Context, page int) (domainqianchuan.PlanPage, error) {
+		return runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.PlanPage, error) {
+			return reconciler.Reader.FetchPlans(ctx, portqianchuan.PlanPageRequest{
+				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+				StartTime: startTime, EndTime: endTime, Status: "ALL",
+				MarketingGoal: "VIDEO_PROM_GOODS", AdlabScene: "UNI_PROJECT",
+				NeedCompensateInfo: true, Page: page, PageSize: CurrentPlanPageSize,
+			})
+		})
+	}
+	first, err := fetchPage(ctx, 1)
+	if err != nil {
+		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+	}
+	if err := validateCurrentPlanPage(first, 1, -1, -1); err != nil {
+		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+	}
+	if first.PageInfo.TotalPages > maxPages {
+		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: pagination exceeds the safety cap of %d pages", maxPages)
+	}
+	type planPageResult struct {
+		page domainqianchuan.PlanPage
+		err  error
+	}
+	remaining := parallelOrdered(ctx, request.ReadPool, max(0, first.PageInfo.TotalPages-1), func(ctx context.Context, index int) planPageResult {
+		page := index + 2
+		fetched, fetchErr := fetchPage(ctx, page)
+		return planPageResult{page: fetched, err: fetchErr}
+	})
+	pages := make([]domainqianchuan.PlanPage, 1, max(1, first.PageInfo.TotalPages))
+	pages[0] = first
+	for index, fetched := range remaining {
+		page := index + 2
+		if fetched.err != nil {
+			return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: fetch page %d: %w", page, fetched.err)
+		}
+		if err := validateCurrentPlanPage(
+			fetched.page, page, first.PageInfo.TotalPages, first.PageInfo.TotalNumber,
+		); err != nil {
+			return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+		}
+		pages = append(pages, fetched.page)
+	}
+	plans := make([]domainqianchuan.Plan, 0, first.PageInfo.TotalNumber)
+	requestIDs := make([]string, 0, len(pages))
+	seenPlanIDs := map[string]struct{}{}
+	for pageIndex, page := range pages {
+		if page.RequestID != "" {
+			requestIDs = append(requestIDs, page.RequestID)
+		}
+		for _, plan := range page.Rows {
+			if strings.TrimSpace(plan.AdID) == "" {
+				return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: page %d returned an empty unique key", pageIndex+1)
+			}
+			if _, duplicate := seenPlanIDs[plan.AdID]; duplicate {
+				return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: page %d returned duplicate unique key %q", pageIndex+1, plan.AdID)
+			}
+			seenPlanIDs[plan.AdID] = struct{}{}
+			plans = append(plans, plan)
+		}
+	}
+	if len(plans) != first.PageInfo.TotalNumber {
+		return CurrentPlanInventory{}, fmt.Errorf(
+			"scan current-day Qianchuan plans: pagination returned %d unique rows but declared %d",
+			len(plans), first.PageInfo.TotalNumber,
+		)
+	}
+	return CurrentPlanInventory{
+		StartTime: startTime, EndTime: endTime, PageCount: len(pages),
+		RequestIDs: requestIDs, Plans: plans,
+	}, nil
+}
+
+func validateCurrentPlanPage(page domainqianchuan.PlanPage, number, totalPages, totalNumber int) error {
+	info := page.PageInfo
+	if info.Page != number || info.TotalPages < 0 || info.TotalNumber < 0 {
+		return fmt.Errorf("page %d returned invalid pagination metadata", number)
+	}
+	if info.TotalPages == 0 {
+		if number != 1 || info.TotalNumber != 0 || len(page.Rows) != 0 {
+			return fmt.Errorf("page %d returned contradictory empty pagination metadata", number)
+		}
+		return nil
+	}
+	if number > info.TotalPages {
+		return fmt.Errorf("page %d exceeds declared total pages %d", number, info.TotalPages)
+	}
+	if totalPages >= 0 && (info.TotalPages != totalPages || info.TotalNumber != totalNumber) {
+		return fmt.Errorf("page %d changed declared pagination totals", number)
+	}
+	return nil
 }
 
 type normalizedCreatorTarget struct {

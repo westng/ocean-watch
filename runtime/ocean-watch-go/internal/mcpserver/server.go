@@ -11,21 +11,79 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
+	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
+	applicationmaterials "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/materials"
+	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
+	applicationqianchuanread "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/qianchuan"
+	applicationreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
 )
 
+type QianchuanPreflightService interface {
+	BatchWorks(context.Context, applicationqianchuan.BatchWorksCommand) (applicationqianchuan.BatchCommandResult, error)
+	GetBatchPreflight(context.Context, string) (applicationqianchuan.BatchPreflightSummary, error)
+}
+
+type ManagedAccountReader interface {
+	Read(context.Context) (domain.AccountBook, error)
+}
+
+type QianchuanAuthorizationReader interface {
+	Inspect(context.Context, authapplication.StatusQuery) (authapplication.InspectionResult, error)
+}
+
+type MarketingAuthorizationReader interface {
+	Inspect(context.Context, authapplication.StatusQuery) (authapplication.InspectionResult, error)
+}
+
+type MarketingMaterialService interface {
+	QueryVideos(context.Context, applicationmaterials.VideoQuery) (applicationmaterials.VideoResult, error)
+	QueryCreator(context.Context, applicationmaterials.CreatorQuery) (applicationmaterials.CreatorResult, error)
+}
+
+type MarketingReportService interface {
+	Plans(context.Context, applicationreports.MarketingPlanQuery) (applicationreports.MarketingPlanResult, error)
+	Materials(context.Context, applicationreports.MarketingMaterialQuery) (applicationreports.MarketingMaterialResult, error)
+}
+
+type QianchuanReadService interface {
+	QueryProducts(context.Context, applicationqianchuanread.ProductQuery, string) (applicationqianchuanread.ProductResult, error)
+	ListPlans(context.Context, applicationqianchuanread.PlanListQuery) (applicationqianchuanread.PlanListResult, error)
+	ShowPlan(context.Context, applicationqianchuanread.CredentialScope, string) (applicationqianchuanread.PlanDetailResult, error)
+	ListPlanMaterials(context.Context, applicationqianchuanread.PlanMaterialsQuery) (applicationqianchuanread.PlanMaterialsResult, error)
+}
+
+type QianchuanReportService interface {
+	PlanReport(context.Context, applicationreports.PlanQuery) (applicationreports.PlanResult, error)
+	QianchuanAllPromotion(context.Context, applicationreports.QianchuanAggregateQuery) (applicationreports.QianchuanAggregateResult, error)
+	QianchuanUniPromotion(context.Context, applicationreports.QianchuanAggregateQuery) (applicationreports.QianchuanAggregateResult, error)
+}
+
 type Runtime struct {
-	Query     applicationtemplates.Query
-	LogWriter io.Writer
-	Now       func() time.Time
-	RequestID func() string
+	Query               applicationtemplates.Query
+	ManagedAccounts     ManagedAccountReader
+	MarketingAuth       MarketingAuthorizationReader
+	MarketingMaterials  MarketingMaterialService
+	MarketingReports    MarketingReportService
+	QianchuanAuth       QianchuanAuthorizationReader
+	QianchuanReads      QianchuanReadService
+	QianchuanReports    QianchuanReportService
+	QianchuanPreflights QianchuanPreflightService
+	LogWriter           io.Writer
+	Now                 func() time.Time
+	RequestID           func() string
 }
 
 type toolFailure struct {
@@ -132,9 +190,35 @@ func RunManaged(ctx context.Context, version string) error {
 	if err := retainManagedEnvironment(os.Getenv, os.Clearenv, os.Setenv); err != nil {
 		return err
 	}
+	cwd, _ := os.Getwd()
+	stateRoot := filepath.Join(store.Root, "state")
+	credentialStore := credentials.Store{Root: store.Root, Getenv: os.Getenv}
+	qianchuanRuntime, err := bootstrap.NewQianchuanRuntime(bootstrap.QianchuanOptions{
+		Config: store, StateRoot: stateRoot,
+		CredentialStore: credentialStore,
+		PythonResolver:  python.Resolver{Getenv: os.Getenv}, PluginRoot: filesystem.ResolvePluginRoot(cwd),
+		OnlineRead: true, BatchReadConcurrency: 10,
+	})
+	if err != nil {
+		return err
+	}
+	marketingRuntime, err := bootstrap.NewMarketingRuntime(bootstrap.MarketingOptions{
+		StateRoot: stateRoot, CredentialStore: credentialStore,
+	})
+	if err != nil {
+		return err
+	}
 	runtime := Runtime{
-		Query:     applicationtemplates.Query{Store: store, VersionedStore: store},
-		LogWriter: os.Stderr,
+		Query:               applicationtemplates.Query{Store: store, VersionedStore: store},
+		ManagedAccounts:     filesystem.AccountStore{Path: store.Path},
+		MarketingAuth:       marketingRuntime.Auth,
+		MarketingMaterials:  marketingRuntime.Materials,
+		MarketingReports:    marketingRuntime.Reports,
+		QianchuanAuth:       qianchuanRuntime.Auth,
+		QianchuanReads:      qianchuanRuntime.Reads,
+		QianchuanReports:    qianchuanRuntime.Reports,
+		QianchuanPreflights: qianchuanRuntime.Preflights,
+		LogWriter:           os.Stderr,
 	}
 	server := runtime.NewServer(version)
 	err = server.Run(ctx, &mcp.StdioTransport{})
@@ -149,7 +233,12 @@ func retainManagedEnvironment(
 	clearenv func(),
 	setenv func(string, string) error,
 ) error {
-	names := []string{"LANG", "LC_ALL", "LC_CTYPE"}
+	names := []string{
+		"LANG", "LC_ALL", "LC_CTYPE", "PATH",
+		"OCEAN_WATCH_PYTHON", "OCEAN_WATCH_F2_DOUYIN_COOKIE",
+		"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+		"ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK",
+	}
 	if runtime.GOOS == "windows" {
 		names = append(names, "SystemRoot", "WINDIR")
 	}
@@ -174,7 +263,7 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	server := mcp.NewServer(
 		&mcp.Implementation{Name: "ocean-watch", Version: version},
 		&mcp.ServerOptions{
-			Instructions: "Use these tools only for the current OS user's local Ocean Watch template state.",
+			Instructions: "Use Ocean Watch task tools for the current OS user's managed local state and explicitly scoped official reads.",
 			Logger:       slog.New(slog.DiscardHandler),
 			Capabilities: &mcp.ServerCapabilities{},
 		},
@@ -198,6 +287,111 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Description: "当用户已经给出或在当前会话中选中了一个本地投放模板，并需要查看安全详情或创建计划前的就绪状态时调用。必须使用渠道和精确模板 ID。",
 		InputSchema: json.RawMessage(getInputSchema), OutputSchema: json.RawMessage(getOutputSchema),
 	}, runtime.getTemplate)
+	preflightReadOnly, openWorld := false, true
+	preflightAnnotations := &mcp.ToolAnnotations{
+		Title: "预检千川作品计划", DestructiveHint: &readOnly, IdempotentHint: false,
+		OpenWorldHint: &openWorld, ReadOnlyHint: preflightReadOnly,
+	}
+	server.AddTool(&mcp.Tool{
+		Name: "preflight_qianchuan_works", Annotations: preflightAnnotations,
+		Description: "当用户给出千川商品全域模板和抖音作品链接，需要校验授权、归属、商品匹配并决定新建或追加计划时调用。不会创建或修改计划，但会读取官方接口、必要时刷新授权并保存短期本地预检快照。",
+		InputSchema: json.RawMessage(preflightInputSchema), OutputSchema: json.RawMessage(preflightOutputSchema),
+	}, runtime.preflightQianchuanWorks)
+	getPreflightAnnotations := *annotations
+	getPreflightAnnotations.Title = "查看千川预检快照"
+	server.AddTool(&mcp.Tool{
+		Name: "get_qianchuan_preflight", Annotations: &getPreflightAnnotations,
+		Description: "当用户已经有精确的千川预检 ID，并需要确认其有效期、模板、商品和新建或追加决策时调用。只读本地快照，不刷新授权且不访问官方接口。",
+		InputSchema: json.RawMessage(getPreflightInputSchema), OutputSchema: json.RawMessage(getPreflightOutputSchema),
+	}, runtime.getQianchuanPreflight)
+	accountAnnotations := *annotations
+	accountAnnotations.Title = "列出负责账户"
+	server.AddTool(&mcp.Tool{
+		Name: "list_managed_accounts", Annotations: &accountAnnotations,
+		Description: "当用户询问自己负责、常用或日常投放范围内的账户时调用。只读取本地负责账户清单，不读取凭据、不刷新 Token，也不访问官方接口。",
+		InputSchema: json.RawMessage(managedAccountsInputSchema), OutputSchema: json.RawMessage(managedAccountsOutputSchema),
+	}, runtime.listManagedAccounts)
+	authAnnotations := *annotations
+	authAnnotations.Title = "查看千川授权状态"
+	server.AddTool(&mcp.Tool{
+		Name: "get_qianchuan_authorization", Annotations: &authAnnotations,
+		Description: "当用户需要确认本机千川应用、Token 存在状态或广告主到授权的映射时调用。只读取本地授权与凭据存在性，不刷新 Token、不访问官方接口，也不返回凭据值。",
+		InputSchema: json.RawMessage(qianchuanAuthorizationInputSchema), OutputSchema: json.RawMessage(qianchuanAuthorizationOutputSchema),
+	}, runtime.getQianchuanAuthorization)
+	officialReadAnnotations := &mcp.ToolAnnotations{
+		DestructiveHint: &readOnly, IdempotentHint: false,
+		OpenWorldHint: &openWorld, ReadOnlyHint: false,
+	}
+	productAnnotations := *officialReadAnnotations
+	productAnnotations.Title = "搜索千川商品"
+	server.AddTool(&mcp.Tool{
+		Name: "search_qianchuan_products", Annotations: &productAnnotations,
+		Description: "当用户需要查找千川可投商品、商品 ID、名称、类目、渠道、销量或库存时调用。读取官方接口，必要时会刷新本地 Token；不用于查询商品消耗或 ROI。",
+		InputSchema: json.RawMessage(qianchuanProductsInputSchema), OutputSchema: json.RawMessage(qianchuanProductsOutputSchema),
+	}, runtime.searchQianchuanProducts)
+	planListAnnotations := *officialReadAnnotations
+	planListAnnotations.Title = "列出千川计划"
+	server.AddTool(&mcp.Tool{
+		Name: "list_qianchuan_plans", Annotations: &planListAnnotations,
+		Description: "当用户需要按广告主、日期和状态列出千川商品全域计划时调用。读取官方计划列表，必要时会刷新本地 Token；不把列表统计字段当成报表金额。",
+		InputSchema: json.RawMessage(qianchuanPlansInputSchema), OutputSchema: json.RawMessage(qianchuanPlansOutputSchema),
+	}, runtime.listQianchuanPlans)
+	planDetailAnnotations := *officialReadAnnotations
+	planDetailAnnotations.Title = "查看千川计划详情"
+	server.AddTool(&mcp.Tool{
+		Name: "get_qianchuan_plan", Annotations: &planDetailAnnotations,
+		Description: "当用户给出精确千川计划 ID，需要查看计划设置、达人、商品及可选素材成员时调用。读取官方详情和可选素材接口，必要时会刷新本地 Token。",
+		InputSchema: json.RawMessage(qianchuanPlanInputSchema), OutputSchema: json.RawMessage(qianchuanPlanOutputSchema),
+	}, runtime.getQianchuanPlan)
+	accountReportAnnotations := *officialReadAnnotations
+	accountReportAnnotations.Title = "查询千川账户报表"
+	server.AddTool(&mcp.Tool{
+		Name: "report_qianchuan_account", Annotations: &accountReportAnnotations,
+		Description: "当用户需要一个千川广告主的账户汇总消耗、订单、GMV 或 ROI 时调用。scope=overall 包含乘方，scope=uni 仅全域；使用固定官方指标集。",
+		InputSchema: json.RawMessage(qianchuanAccountReportInputSchema), OutputSchema: json.RawMessage(qianchuanAccountReportOutputSchema),
+	}, runtime.reportQianchuanAccount)
+	planReportAnnotations := *officialReadAnnotations
+	planReportAnnotations.Title = "查询千川计划报表"
+	server.AddTool(&mcp.Tool{
+		Name: "report_qianchuan_plans", Annotations: &planReportAnnotations,
+		Description: "当用户需要千川商品全域计划级消耗、订单、GMV、ROI、预算和成本保障信息时调用。保留应用服务生成的完整 Markdown 表格。",
+		InputSchema: json.RawMessage(qianchuanPlanReportInputSchema), OutputSchema: json.RawMessage(qianchuanPlanReportOutputSchema),
+	}, runtime.reportQianchuanPlans)
+	marketingAuthAnnotations := *annotations
+	marketingAuthAnnotations.Title = "查看营销授权状态"
+	server.AddTool(&mcp.Tool{
+		Name: "get_marketing_authorization", Annotations: &marketingAuthAnnotations,
+		Description: "当用户需要确认本机巨量营销应用、Token 存在状态或广告主到授权的映射时调用。只读取本地授权与凭据存在性，不刷新 Token、不访问官方接口，也不返回凭据值。",
+		InputSchema: json.RawMessage(marketingAuthorizationInputSchema), OutputSchema: json.RawMessage(marketingAuthorizationOutputSchema),
+	}, runtime.getMarketingAuthorization)
+	marketingVideoAnnotations := *officialReadAnnotations
+	marketingVideoAnnotations.Title = "搜索营销视频素材"
+	server.AddTool(&mcp.Tool{
+		Name: "search_marketing_videos", Annotations: &marketingVideoAnnotations,
+		Description: "当用户需要按巨量营销广告主、素材标识、文件名或日期查找账户视频素材时调用。只查询账户素材库，不返回视频或封面 URL。",
+		InputSchema: json.RawMessage(marketingVideosInputSchema), OutputSchema: json.RawMessage(marketingVideosOutputSchema),
+	}, runtime.searchMarketingVideos)
+	marketingCreatorAnnotations := *officialReadAnnotations
+	marketingCreatorAnnotations.Title = "搜索营销达人素材"
+	server.AddTool(&mcp.Tool{
+		Name: "search_marketing_creator_materials", Annotations: &marketingCreatorAnnotations,
+		Description: "当用户需要查询巨量营销达人授权素材或一个达人主页素材时调用。返回授权和可用性白名单字段，不返回播放或封面 URL。",
+		InputSchema: json.RawMessage(marketingCreatorInputSchema), OutputSchema: json.RawMessage(marketingCreatorOutputSchema),
+	}, runtime.searchMarketingCreatorMaterials)
+	marketingMaterialReportAnnotations := *officialReadAnnotations
+	marketingMaterialReportAnnotations.Title = "查询营销素材报表"
+	server.AddTool(&mcp.Tool{
+		Name: "report_marketing_materials", Annotations: &marketingMaterialReportAnnotations,
+		Description: "当用户需要巨量营销项目或单元下的素材级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定 MATERIAL_DATA 指标集。",
+		InputSchema: json.RawMessage(marketingMaterialReportInputSchema), OutputSchema: json.RawMessage(marketingMaterialReportOutputSchema),
+	}, runtime.reportMarketingMaterials)
+	marketingPlanReportAnnotations := *officialReadAnnotations
+	marketingPlanReportAnnotations.Title = "查询营销项目报表"
+	server.AddTool(&mcp.Tool{
+		Name: "report_marketing_plans", Annotations: &marketingPlanReportAnnotations,
+		Description: "当用户需要巨量营销项目级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定指标集并保留应用服务生成的完整 Markdown 表格。",
+		InputSchema: json.RawMessage(marketingPlanReportInputSchema), OutputSchema: json.RawMessage(marketingPlanReportOutputSchema),
+	}, runtime.reportMarketingPlans)
 	return server
 }
 

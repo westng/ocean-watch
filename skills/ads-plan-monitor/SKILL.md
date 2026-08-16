@@ -39,7 +39,7 @@ Use the unified launcher from this Skill root:
 # Windows: run.cmd <domain> <action> [options]
 ```
 
-The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed. Template browsing and exact template-detail reads are the two exceptions: use the Plugin-provided `list_templates` and `get_template` MCP tools as described in `Template Contract`; do not invoke the launcher for those reads.
+The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed. Use the Plugin-provided MCP tools for template reads and the common Marketing reads listed below; do not invoke the launcher for an equivalent read.
 
 Core routes:
 
@@ -50,25 +50,25 @@ Core routes:
 | Validate config | `setup validate --mode query|create-preview|create-submit|all` |
 | Marketing OAuth | `auth authorize --channel marketing` |
 | Replace Marketing app | `auth set-app --channel marketing` |
-| Token/account status | `auth status --channel marketing` |
+| Token/account status and mapping | MCP `get_marketing_authorization` |
 | Refresh current authorized user's advertisers | `auth sync-accounts --channel marketing` |
 | Advertiser authorization mapping | `auth mappings --channel marketing` |
 | List local Marketing/Qianchuan templates | MCP `list_templates` |
 | Show one exact local template | MCP `get_template` |
 | Create Marketing template | `templates create --channel marketing` |
 | Validate/delete template | `templates validate` / `templates delete` |
-| Uploaded videos | `materials videos` |
-| Creator videos | `materials creator` |
+| Uploaded videos | MCP `search_marketing_videos` |
+| Creator videos | MCP `search_marketing_creator_materials` |
 | Single upload plan | `plans create` |
 | Single creator plan | `plans create-creator` |
 | Upload batch | `plans batch-upload` |
 | Creator batch | `plans batch-creator` |
-| Current material report | `reports materials` |
-| Marketing project report | `reports plans` |
+| Current material report | MCP `report_marketing_materials` |
+| Marketing project report | MCP `report_marketing_plans` |
 | Report field discovery | `reports schema` |
 | Update project/unit settings | `plans update-*` |
 | List/show local batch runs | `runs list` / `runs show` |
-| List responsible accounts | `accounts list` |
+| List responsible accounts | MCP `list_managed_accounts` |
 | Add responsible account | `accounts add` |
 | Query responsible-account spend | `accounts report` |
 
@@ -82,7 +82,7 @@ Classify the request before touching local state:
 - Enter business execution only when the user explicitly asks to query real data, write local business config, authorize locally, or submit real plans.
 - When intent is ambiguous in a development conversation, remain in development mode.
 
-Never use browser-admin automation. Use the registered MCP tools for the local template reads they cover, and use official APIs through the bundled CLI for the remaining business operations.
+Never use browser-admin automation. Use the registered MCP tools for the template and common Marketing reads they cover, and use official APIs through the bundled CLI for the remaining business operations.
 
 ## First-Use Environment Check
 
@@ -118,11 +118,7 @@ Split this semantic intent by what the user asks for:
 
 Do not infer a performance request merely because the user asks for their accounts. Do not require exact keywords; determine whether the requested output is membership or metrics from the full utterance and conversation context.
 
-For a membership request, run:
-
-```bash
-ocean-watch accounts list
-```
+For a membership request, call MCP `list_managed_accounts`. Pass `channel=marketing` only when the request names Marketing; otherwise pass `channel=all`. Set `include_disabled=true` only when the user explicitly asks to include disabled accounts.
 
 Treat `accounts list` top-level `presentation` as the mandatory membership response contract. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim. It contains only channel, account name, advertiser ID, and enabled state. Do not add spend, GMV, ROI, orders, query status, date range, or failure columns. Use `--channel` only when the request names one channel, and use `--all` only when the user explicitly asks to include disabled accounts.
 
@@ -162,7 +158,19 @@ When Codex starts OAuth, always use `--print-url --no-open` and return only `sta
 
 After presenting `start_url`, keep the authorization command running and continue polling the same process; do not end the task while it is waiting for the callback. As soon as OAuth completes, proactively run `auth status` and report the channel, authorization result, authorized-subject count, verified advertiser count, pending/partial sync counts, and advertiser-to-Token mapping result. Never wait for the user to ask whether authorization succeeded, and never include credentials in the feedback.
 
-Use `auth mappings --channel marketing [--advertiser-id ID]` for the mapping check. It may report authorization IDs, account IDs, advertiser IDs, and token-presence booleans only. Never expose credential values.
+Use MCP `get_marketing_authorization` for a local status or mapping check, with optional exact `advertiser_id`. It may report authorization IDs, advertiser IDs, expiry timestamps and token-presence booleans only. It does not refresh Token or call an official API. Never expose credential values.
+
+## Common Marketing MCP Reads
+
+Use these MCP tools for the corresponding current-turn intent:
+
+- `get_marketing_authorization`: local Marketing app, Token-presence and advertiser mapping status. It is local-only and never refreshes authorization.
+- `search_marketing_videos`: account-uploaded video-library search by advertiser, optional authorization account, video/material/signature filter, filename, date and page. It never returns poster or video URLs.
+- `search_marketing_creator_materials`: authorized creator materials, or one exact numeric `aweme_id` homepage. Page with `page` and `limit`; each call reads only that official page, and `has_more` indicates whether another page exists. It returns only material identity, creator, authorization and usability fields; it never returns playback or cover URLs.
+- `report_marketing_materials`: fixed `MATERIAL_DATA` material report, optionally narrowed by project, promotion IDs or active-only status.
+- `report_marketing_plans`: fixed project-level report. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim.
+
+All official-read tools may refresh only the advertiser-bound Marketing authorization before calling the existing Application Service. They reject unknown fields, paths, URLs and arbitrary report topics or metrics. If a required MCP tool is unavailable or returns an error, explain the stable failure and stop that common read. Do not run the equivalent CLI command, parse CLI JSON or reconstruct a report from other endpoints. Keep report schema/custom topics, images, products, cross-channel responsible-account performance, plan creation and mutations on their explicit CLI routes.
 
 ## Official References
 

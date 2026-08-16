@@ -7,16 +7,22 @@
 ### 新增
 
 - Plugin 新增内置本地 stdio MCP，并首批提供 `list_templates`、`get_template` 两个模板只读工具；工具与 CLI 共享 Go Application Service，使用严格 Schema、字符串 ID、状态版本游标、稳定错误码、只读安全注解和独立脱敏 Presenter，不启动或解析 CLI。
+- MCP 新增 `preflight_qianchuan_works` 与 `get_qianchuan_preflight`：前者复用千川批量 Application Service 执行无业务写入的官方只读预检并保存短期快照，后者完全本地读取白名单摘要；两者拒绝配置路径和提交参数，不返回原始链接、模板 payload、授权选择器、Token 或内部错误，确认后的在线提交仍保留在显式 CLI 写入路径。
+- MCP 新增 `list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account` 与 `report_qianchuan_plans` 七个高频任务型查询工具；本地账户/授权查询不刷新 Token、不访问官方接口，商品、计划和固定报表复用现有 Application Service，使用严格 Schema、字符串 ID、白名单 Presenter 和脱敏稳定错误。
+- MCP 新增 `get_marketing_authorization`、`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 与 `report_marketing_plans` 五个巨量营销高频任务型查询工具；本地授权查询不刷新 Token、不访问官方接口，素材和固定报表复用现有 Application Service，达人素材按显式单页读取，避免为少量结果扫描全部分页。
 - 新增真实 MCP 子进程协议门禁，验证初始化、工具发现、成功与错误调用、取消、正常退出和 stderr 脱敏；当前固定启动清单只声明并验收 macOS Apple Silicon Gate 0，不把五平台交叉构建等同于五平台 MCP 支持。
 - Plugin 内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 五个平台的 Go CLI；两个 Skill 通过各自的 `run`/`run.cmd` 直接选择并执行当前平台二进制，Marketplace 源码快照安装后不再依赖 Python 业务包或额外编译。
 - 为千川抖音作品链接接入固定版本 F2 `0.0.1.7` 只读 CLI，作为唯一公开作品元数据解析器：一次批量补充作品 ID、数值达人 UID、可见抖音号和昵称；不进入 F2 下载模式、不创建数据库、不自动读取浏览器 Cookie，任何缺包、Cookie、网络、超时或异常输出都安全降级到 30 天缓存或快速跳过单条作品，授权、作品归属和商品匹配仍由千川官方接口复核。
 
 ### 变更
 
+- 千川作品批量预检改为命令级共享有界读取并发（默认 8、最大 10），让链接/F2、凭据和当天计划扫描重叠，并并发执行计划分页、候选详情、素材及作品核验；dry-run 对可提交结果返回最长 30 分钟且不跨上海业务日的 `preflight_id`，确认提交复用最小快照，只重扫当前计划和必要素材差集。单个创建的零网络 dry-run 保持不变，广告主锁、串行写入、操作键、单次派发和未知写入读回对账继续保留。
 - 完善中英文项目首页定位文案，明确 Ocean Watch 覆盖巨量营销与巨量千川的一体化投放管理、数据报表和监控分析能力。
 - 调整中英文项目首页技术徽章：移除动态 Git Tag 展示，补充 Go、MCP、JSON-RPC、JSON Schema、OAuth、巨量引擎官方 API/Go SDK、Python/F2、多平台 CLI 与安全存储等当前技术栈入口。
 - 重写中英文项目首页，以产品定位、核心能力、可信边界、快速开始、自然语言场景、运行支持和按受众文档导航组织对外信息；保留 README、Contributing、MIT license 与 Security 一级入口，并将完整操作、架构和发布细节归入对应长期文档。
 - 两个 Skill 的本地模板浏览与精确详情意图改为调用 Ocean Watch MCP；工具不可用、输入不精确或状态变化时明确失败，不搜索仓库、不运行模板 CLI 命令，也不静默降级。模板创建、校验、删除及其他尚未工具化的业务仍通过同一 Go 运行时的 CLI Transport 执行。
+- 千川 Skill 的负责账户清单、授权状态、商品查询、计划列表/详情及固定账户/计划报表改为优先且必须调用对应 MCP；工具缺失时失败关闭，不静默回退 CLI。跨渠道负责账户效果、自定义主题及素材、商品、直播间、达人等高级报表继续保留显式 CLI 路由。
+- 巨量营销 Skill 的负责账户清单、授权状态、账户上传/达人素材查询及固定素材/项目报表改为优先且必须调用对应 MCP；工具缺失时失败关闭，不静默回退 CLI。跨渠道负责账户效果、报表字段发现、自定义主题、图片/商品及计划写入继续保留显式 CLI 路由。
 - 将全部授权、账户、模板、素材、计划、报表和本地状态业务命令切换为单一 Go 运行时，通过官方 Ocean Engine Go SDK/REST 执行；删除 Python 业务包、Shadow 路由、运行时回退、MCP 兼容命令和迁移候选/Gate/Bootstrap 资产。
 - Python 3.10+ 现在只作为 F2 `0.0.1.7` 解析抖音公开作品元数据的依赖边界，不再承载 Ocean Watch CLI 或任何广告业务逻辑，也不引入隔离 Python 环境。
 - 千川作品公开元数据统一由 F2 CLI 提供，并映射为稳定的达人、商品和视频结构；商品匹配继续由千川官方接口复核。
@@ -25,6 +31,7 @@
 
 ### 修复
 
+- 修复 MCP 共享组合层预先注入普通千川客户端后，批量预检无法建立命令级并发读取客户端、可能重新落回串行请求控制的问题；普通查询与授权刷新继续共享受控客户端，只有批量预检使用现有 1–10 并发读取边界，Token Manager 保持共享。
 - 修复千川 Access Token 过期时，OAuth 刷新请求因缺少业务广告主作用域而被共享请求控制器在本地错误拦截；OAuth 与授权账户发现保留授权级并发、请求预算及安全门禁，广告主级共享限流仅用于千川业务接口。
 - 收紧 Plugin 内置只读 MCP 的本地边界：托管配置改为通过受限根目录句柄读取，拒绝符号链接或读取期间身份变化的状态文件，并在解析托管状态位置后清除无关继承环境。
 - 修复 Go 三平台 CI 在 Windows 上因锁文件初始化竞争、POSIX 权限与路径假设及检出行尾变化而失败，以及 macOS 在常规单元测试内重复完整构建 Runtime 导致超时的问题；仓库文本输入现在固定使用 LF，平台专属断言按实际文件系统语义执行，真实二进制版本注入改由 Linux 独立集成门禁验证。

@@ -57,9 +57,19 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 `list_templates` 返回可继续传给 `get_template` 的字符串 `template_id`。详情查询必须同时传入精确渠道与 ID；千川显示名不能代替模板 ID。分页游标绑定本地状态版本，状态变化后应丢弃旧游标并从第一页重查，不能拼接不同版本的结果。
 
+千川作品批量预检使用 MCP `preflight_qianchuan_works`，输入精确 `plan_template` 和 1–100 条 `work_urls`，可选 `concurrency` 为 1–10、默认 8。该工具不接受配置路径、`submit` 或 payload 输出开关；它不会写入官方业务数据，但会访问官方只读接口、必要时刷新当前广告主授权、更新非敏感作品身份提示缓存，并保存最长 30 分钟且不跨上海业务日的本地预检快照。
+
+`get_qianchuan_preflight` 只接受严格的 `preflight_id`，只读本地 Operation Journal，不读取凭据、不刷新 Token、不调用官方 API。工具只返回模板、商品、有效期、可提交作品数量和稳定排序的新建/追加决策，不返回原始作品链接、模板 payload、授权选择器或快照指纹。确认提交仍使用 `plans batch-qianchuan-works --submit --preflight-id ID`，MCP 不会自动提交。
+
+常用千川查询由七个任务型 MCP 工具承载：`list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account` 和 `report_qianchuan_plans`。前两个只读本地账户/授权状态，不刷新 Token、不调用官方 API；后五个使用广告主绑定授权，必要时刷新 Token，并读取官方商品、计划或报表接口。所有输入拒绝配置路径与未知字段，所有 ID 使用字符串，输出只保留完成任务所需字段，不返回图片/素材 URL、原始官方响应、请求 URL、凭据值或内部错误。
+
+常用巨量营销查询由五个任务型 MCP 工具承载：`get_marketing_authorization` 只读本地授权和广告主映射，不刷新 Token、不调用官方 API；`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 和 `report_marketing_plans` 使用广告主绑定授权并读取现有素材或固定报表用例。达人素材查询按 `page` 单页读取，`limit` 直接作为官方 `page_size`，最多 100 条，不会先扫描最多 100 页再截断输出。
+
+这些工具只覆盖高频固定查询。跨渠道负责账户效果、营销报表字段发现和自定义主题、营销图片/商品，以及千川素材/商品/直播间/达人等高级报表仍使用明确的 CLI 路由；缺失某个已工具化 MCP 能力时必须停止该常用查询，不能静默改走等价 CLI。
+
 ## 本地状态
 
-`$CODEX_HOME/ads-plan-monitor/state/` 保存授权快照、限流控制、作品身份提示缓存和 Plugin 执行记录。它们不属于开源仓库，不应复制到其他用户环境。
+`$CODEX_HOME/ads-plan-monitor/state/` 保存授权快照、请求控制、作品身份提示缓存、短期千川预检快照和 Plugin 执行记录。它们不属于开源仓库，不应复制到其他用户环境。
 
 30 天作品身份缓存只保存非敏感的作品 ID、可见抖音号与数字达人 UID 关系，用作下一次官方定向查询提示。缓存不证明授权、归属或商品匹配，过期或不匹配时快速跳过。
 

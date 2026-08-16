@@ -57,6 +57,7 @@ type WorkVerificationRequest struct {
 	ProductIDs   []string
 	Works        []WorkInput
 	MaxPages     int
+	ReadPool     *ReadPool
 }
 
 type WorkVerificationResult struct {
@@ -123,28 +124,44 @@ func (verifier WorkVerifier) Verify(
 	unavailableCreatorIDs := map[string]bool{}
 	missingVisibleCreatorIDs := map[string]bool{}
 	awemeIDOrder, itemIDsByAwemeID := ownerHintAwemeIDGroups(works, suppliedHints)
-	for _, awemeID := range awemeIDOrder {
+	type authorizationResult struct {
+		creator        domainqianchuan.AuthorizedCreator
+		found          bool
+		pages          int
+		err            error
+		missingVisible bool
+	}
+	authorizations := parallelOrdered(ctx, request.ReadPool, len(awemeIDOrder), func(ctx context.Context, index int) authorizationResult {
+		awemeID := awemeIDOrder[index]
 		searchKeywords := ownerHintSearchKeywords(itemIDsByAwemeID[awemeID], suppliedHints)
 		if len(searchKeywords) == 0 {
+			return authorizationResult{missingVisible: true}
+		}
+		creator, found, pages, fetchErr := verifier.resolveAuthorizedHint(
+			ctx, request, awemeID, searchKeywords, maxPages,
+		)
+		return authorizationResult{creator: creator, found: found, pages: pages, err: fetchErr}
+	})
+	for index, awemeID := range awemeIDOrder {
+		authorization := authorizations[index]
+		if authorization.missingVisible {
 			missingVisibleCreatorIDs[awemeID] = true
 			continue
 		}
 		result.OwnerHintSummary.AuthorizedHintQueryCount++
-		creator, found, _, fetchErr := verifier.resolveAuthorizedHint(
-			ctx, request, awemeID, searchKeywords, maxPages,
-		)
-		if fetchErr != nil {
+		if authorization.err != nil {
 			result.OwnerHintSummary.AuthorizedHintFailureCount++
 			authorizationFailedIDs[awemeID] = true
 			result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
-				AwemeID: awemeID, Message: fetchErr.Error(),
+				AwemeID: awemeID, Message: authorization.err.Error(),
 			})
 			continue
 		}
-		if !found {
+		if !authorization.found {
 			unavailableCreatorIDs[awemeID] = true
 			continue
 		}
+		creator := authorization.creator
 		if !creatorUsable(creator) {
 			unavailableCreatorIDs[awemeID] = true
 			result.DisabledCreators = appendCreatorUnique(result.DisabledCreators, creator)
@@ -163,6 +180,11 @@ func (verifier WorkVerifier) Verify(
 
 	ownershipFailedIDs := map[string]bool{}
 	targetedByCreator := workIDsByHintedCreator(works, eligibleHints)
+	type workQueryTask struct {
+		creator domainqianchuan.AuthorizedCreator
+		items   []string
+	}
+	ownershipTasks := []workQueryTask{}
 	for _, creatorID := range creatorOrder {
 		itemIDs := targetedByCreator[creatorID]
 		if len(itemIDs) == 0 {
@@ -170,19 +192,31 @@ func (verifier WorkVerifier) Verify(
 		}
 		creator := creatorsByID[creatorID]
 		for _, batch := range stringBatches(itemIDs, WorkQueryBatchSize) {
-			result.OwnershipQueryCount++
-			result.OwnerHintSummary.OfficialVideoQueryCount++
-			videos, fetchErr := verifier.queryWorks(ctx, request, creator.AwemeID, "", batch)
-			if fetchErr != nil {
-				ownershipFailedIDs[creator.AwemeID] = true
-				result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
-					AwemeID: creator.AwemeID, Message: fetchErr.Error(),
-				})
-				continue
-			}
-			if err := collectVerifiedOwners(owners, creator, batch, videos); err != nil {
-				return WorkVerificationResult{}, err
-			}
+			ownershipTasks = append(ownershipTasks, workQueryTask{creator: creator, items: batch})
+		}
+	}
+	type workQueryResult struct {
+		videos []domainqianchuan.CreatorVideo
+		err    error
+	}
+	ownershipResults := parallelOrdered(ctx, request.ReadPool, len(ownershipTasks), func(ctx context.Context, index int) workQueryResult {
+		task := ownershipTasks[index]
+		videos, fetchErr := verifier.queryWorks(ctx, request, task.creator.AwemeID, "", task.items)
+		return workQueryResult{videos: videos, err: fetchErr}
+	})
+	result.OwnershipQueryCount = len(ownershipTasks)
+	result.OwnerHintSummary.OfficialVideoQueryCount = len(ownershipTasks)
+	for index, task := range ownershipTasks {
+		query := ownershipResults[index]
+		if query.err != nil {
+			ownershipFailedIDs[task.creator.AwemeID] = true
+			result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
+				AwemeID: task.creator.AwemeID, Message: query.err.Error(),
+			})
+			continue
+		}
+		if err := collectVerifiedOwners(owners, task.creator, task.items, query.videos); err != nil {
+			return WorkVerificationResult{}, err
 		}
 	}
 
@@ -247,6 +281,12 @@ func (verifier WorkVerifier) Verify(
 	matches := map[string]domainqianchuan.CreatorVideo{}
 	matchedProducts := map[string]map[string]struct{}{}
 	failedProductWorks := map[string]bool{}
+	type productQueryTask struct {
+		creator   domainqianchuan.AuthorizedCreator
+		productID string
+		items     []string
+	}
+	productTasks := []productQueryTask{}
 	for _, creatorID := range resolvedCreatorOrder {
 		creator := creatorsByID[creatorID]
 		creatorWorks := worksByCreator[creatorID]
@@ -255,33 +295,41 @@ func (verifier WorkVerifier) Verify(
 		}
 		for _, productID := range productIDs {
 			for _, batch := range stringBatches(workInputIDs(creatorWorks), WorkQueryBatchSize) {
-				result.ProductQueryCount++
-				videos, fetchErr := verifier.queryWorks(
-					ctx, request, creator.AwemeID, productID, batch,
-				)
-				if fetchErr != nil {
-					for _, itemID := range batch {
-						failedProductWorks[itemID] = true
-					}
-					result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
-						AwemeID: creator.AwemeID, ProductID: productID, Message: fetchErr.Error(),
-					})
-					continue
-				}
-				requested := stringSetFrom(batch)
-				for _, video := range videos {
-					if _, ok := requested[video.AwemeItemID]; !ok {
-						return WorkVerificationResult{}, errors.New("Qianchuan product query returned an unrequested work")
-					}
-					matches[video.AwemeItemID] = video
-					set := matchedProducts[video.AwemeItemID]
-					if set == nil {
-						set = map[string]struct{}{}
-						matchedProducts[video.AwemeItemID] = set
-					}
-					set[productID] = struct{}{}
-				}
+				productTasks = append(productTasks, productQueryTask{
+					creator: creator, productID: productID, items: batch,
+				})
 			}
+		}
+	}
+	productResults := parallelOrdered(ctx, request.ReadPool, len(productTasks), func(ctx context.Context, index int) workQueryResult {
+		task := productTasks[index]
+		videos, fetchErr := verifier.queryWorks(ctx, request, task.creator.AwemeID, task.productID, task.items)
+		return workQueryResult{videos: videos, err: fetchErr}
+	})
+	result.ProductQueryCount = len(productTasks)
+	for index, task := range productTasks {
+		query := productResults[index]
+		if query.err != nil {
+			for _, itemID := range task.items {
+				failedProductWorks[itemID] = true
+			}
+			result.QueryFailures = append(result.QueryFailures, WorkQueryFailure{
+				AwemeID: task.creator.AwemeID, ProductID: task.productID, Message: query.err.Error(),
+			})
+			continue
+		}
+		requested := stringSetFrom(task.items)
+		for _, video := range query.videos {
+			if _, ok := requested[video.AwemeItemID]; !ok {
+				return WorkVerificationResult{}, errors.New("Qianchuan product query returned an unrequested work")
+			}
+			matches[video.AwemeItemID] = video
+			set := matchedProducts[video.AwemeItemID]
+			if set == nil {
+				set = map[string]struct{}{}
+				matchedProducts[video.AwemeItemID] = set
+			}
+			set[task.productID] = struct{}{}
 		}
 	}
 	for _, work := range works {
@@ -339,10 +387,12 @@ func (verifier WorkVerifier) resolveAuthorizedHint(
 		completed := false
 		for page := 1; page <= maxPages; page++ {
 			totalPagesRead++
-			result, err := verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
-				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-				SearchKeyword: searchKeyword, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
-				Page: page, PageSize: 100,
+			result, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.AuthorizedCreatorPage, error) {
+				return verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
+					AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+					SearchKeyword: searchKeyword, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
+					Page: page, PageSize: 100,
+				})
 			})
 			if err != nil {
 				return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, err
@@ -383,9 +433,11 @@ func (verifier WorkVerifier) queryWorks(
 	productID string,
 	itemIDs []string,
 ) ([]domainqianchuan.CreatorVideo, error) {
-	result, err := verifier.Reader.FetchCreatorVideos(ctx, portqianchuan.CreatorVideoPageRequest{
-		AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-		AwemeID: awemeID, ProductID: productID, AwemeItemIDs: itemIDs, Count: WorkQueryBatchSize,
+	result, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.CreatorVideoPage, error) {
+		return verifier.Reader.FetchCreatorVideos(ctx, portqianchuan.CreatorVideoPageRequest{
+			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+			AwemeID: awemeID, ProductID: productID, AwemeItemIDs: itemIDs, Count: WorkQueryBatchSize,
+		})
 	})
 	if err != nil {
 		return nil, err

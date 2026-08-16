@@ -303,8 +303,9 @@ func ReserveAttempt(ctx context.Context) error {
 }
 
 type Limits struct {
-	AuthorizationConcurrency int
-	EndpointConcurrency      int
+	AuthorizationConcurrency          int
+	EndpointConcurrency               int
+	QianchuanAuthorizationConcurrency int
 }
 
 type authorizationKey struct {
@@ -331,7 +332,11 @@ func NewGovernor(limits Limits) (*Governor, error) {
 	if limits.EndpointConcurrency == 0 {
 		limits.EndpointConcurrency = DefaultEndpointConcurrency
 	}
-	if limits.AuthorizationConcurrency < 1 || limits.EndpointConcurrency < 1 {
+	if limits.QianchuanAuthorizationConcurrency == 0 {
+		limits.QianchuanAuthorizationConcurrency = QianchuanAuthorizationConcurrency
+	}
+	if limits.AuthorizationConcurrency < 1 || limits.EndpointConcurrency < 1 ||
+		limits.QianchuanAuthorizationConcurrency < 1 {
 		return nil, errors.New("request concurrency limits must be positive")
 	}
 	return &Governor{
@@ -394,7 +399,7 @@ func (governor *Governor) slots(
 	if authorizationSlot == nil {
 		capacity := governor.limits.AuthorizationConcurrency
 		if authorization.channel == "qianchuan" {
-			capacity = QianchuanAuthorizationConcurrency
+			capacity = governor.limits.QianchuanAuthorizationConcurrency
 		}
 		authorizationSlot = make(chan struct{}, capacity)
 		governor.authorizations[authorization] = authorizationSlot

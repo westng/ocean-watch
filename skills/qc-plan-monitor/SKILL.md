@@ -45,19 +45,26 @@ Use the launcher from this Skill root:
 # Windows: run.cmd <domain> <action> [options]
 ```
 
-The launcher selects and executes the bundled Go binary for the current platform. Do not use it for template browsing or exact template-detail reads; those two read-only operations use the Plugin-provided MCP tools defined under `Template Contracts`.
+The launcher selects and executes the bundled Go binary for the current platform. Do not use it for the common MCP-backed reads listed below: template browsing/details, responsible-account membership, local Qianchuan authorization inspection, product search, plan list/detail/material membership, fixed account/plan reports, work-link batch preflight, or preflight snapshot inspection. Use the Plugin-provided MCP tools for those operations. Keep advanced and custom reads on the explicit CLI routes documented below.
 
 | Request | Command |
 | --- | --- |
 | Check local environment | `setup doctor --channel qianchuan` |
 | Start Qianchuan OAuth | `auth authorize --channel qianchuan` |
 | Replace Qianchuan app | `auth set-app --channel qianchuan` |
-| Token/account status | `auth status --channel qianchuan` |
-| Advertiser authorization mapping | `auth mappings --channel qianchuan` |
+| Token/account status or advertiser mapping | MCP `get_qianchuan_authorization` |
 | Refresh token | `auth refresh --channel qianchuan` |
 | Sync advertisers | `auth sync-accounts --channel qianchuan` |
 | List Marketing and Qianchuan templates | MCP `list_templates` |
 | Show one exact Marketing or Qianchuan template | MCP `get_template` |
+| List responsible/common accounts | MCP `list_managed_accounts` |
+| List/search products | MCP `search_qianchuan_products` |
+| List plans | MCP `list_qianchuan_plans` |
+| Show plan details or material membership | MCP `get_qianchuan_plan` |
+| Query one account aggregate | MCP `report_qianchuan_account` |
+| Query all-domain plan spend | MCP `report_qianchuan_plans` |
+| Preflight product plans from work links | MCP `preflight_qianchuan_works` |
+| Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
 | Create product template | `qc-templates create` |
 | Migrate product templates | `qc-templates migrate` |
 | Create live template | `qc-templates create-live` |
@@ -65,16 +72,11 @@ The launcher selects and executes the bundled Go binary for the current platform
 | Inspect public work link | `qc-materials inspect-work` |
 | List authorized creators | `qc-materials authorized-creators` |
 | Query product-matched creator videos | `qc-materials creator-videos` |
-| List/search products | `qc-products list` / `qc-products search` |
-| List/show plan materials | `qc-plans list/show/materials` |
 | Create all-domain plan | `plans create-qianchuan` |
-| Create or append from work links | `plans batch-qianchuan-works` |
+| Submit a confirmed work-link preflight | `plans batch-qianchuan-works --submit --preflight-id ID` |
 | Remove plan materials by work link | `plans remove-qianchuan-work` |
-| Query all-domain plan spend | `qc-reports plans` |
 | Query legacy material report | `qc-reports materials` |
 | Query all-domain post material dimensions | `qc-reports custom --data-topic SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO|SITE_PROMOTION_PRODUCT_POST_DATA_IMAGE|SITE_PROMOTION_PRODUCT_POST_DATA_TITLE|SITE_PROMOTION_PRODUCT_POST_DATA_OTHER` |
-| Query account aggregate including 乘方 | `qc-reports account` |
-| Query only 全域 account aggregate | `qc-reports uni-account` |
 | Inspect report topics, dimensions, and metrics | `qc-reports schema [--data-topic TOPIC] [--managed-accounts]` |
 | Query a custom 全域/乘方 topic | `qc-reports custom --data-topic TOPIC --dimension DIM --metric METRIC [--advertiser-id ID ...|--managed-accounts]` |
 | Query product-dimension performance | `qc-reports products` |
@@ -82,7 +84,7 @@ The launcher selects and executes the bundled Go binary for the current platform
 | Query Douyin-author performance | `qc-reports authors` |
 | Update status/budget/ROI | `qc-plans update-status/update-budget/update-roi` |
 | List/show local batch runs | `runs list` / `runs show` |
-| Manage responsible accounts | `accounts add/list/remove/enable/disable` |
+| Manage responsible accounts | `accounts add/remove/enable/disable` |
 | Query responsible-account spend | `accounts report` |
 
 ## Development Boundary
@@ -112,18 +114,18 @@ OAuth starts on first use, not during Plugin installation. Run `auth authorize` 
 
 Business commands resolve the Qianchuan authorization bound to the target `advertiser_id`. Never fall back to a Marketing authorization. Use `--auth-account-id` only when multiple Qianchuan authorizations cover the same advertiser.
 
-Use `auth mappings --channel qianchuan [--advertiser-id ID]` to verify advertiser-to-authorization resolution. The output contains token-presence booleans only, never token values.
+Use MCP `get_qianchuan_authorization` with an optional string `advertiser_id` to inspect local advertiser-to-authorization resolution. It reads only local authorization and credential-presence state, never refreshes a Token or calls an official API, and returns token-presence booleans only, never token values. Keep `auth mappings --channel qianchuan` only as an explicit development or diagnostic CLI entry; never use it as an automatic MCP fallback.
 
 `managed_accounts` is a separate local user preference shared by both Skills. Interpret requests about the accounts the user commonly uses, is responsible for, manages, operates, maintains, or normally runs campaigns from as one semantic responsible-account intent, not by exact wording or keyword matching. Recognize colloquial abbreviations such as `常用的户` or `我管的户`, misspellings, omitted nouns, and contextual follow-ups; these examples are illustrative, not an exact or exhaustive keyword list. Never require canonical wording.
 
 Split that semantic intent by requested output, using the full utterance and conversation context rather than exact keywords:
 
-- A membership-only request such as `我负责的账户`, `我常用的账户`, or a contextual equivalent asks which accounts are in scope. Run `accounts list` during the current turn. It reads enabled local registry records only and must not resolve credentials, refresh a Token, or call an official report API. Use `--all` only when the user explicitly asks to include disabled records.
+- A membership-only request such as `我负责的账户`, `我常用的账户`, or a contextual equivalent asks which accounts are in scope. Call MCP `list_managed_accounts` during the current turn. It reads enabled local registry records only and must not resolve credentials, refresh a Token, or call an official report API. Set `include_disabled=true` only when the user explicitly asks to include disabled records.
 - A performance request mentioning spend, GMV, ROI, orders, performance, a date range, or equivalent metrics asks how those accounts are performing. Run `accounts report` during the current turn. Run without a channel filter unless the user explicitly names Marketing or Qianchuan.
 
 Do not infer a performance request merely because the user asks for their accounts. Do not reuse an earlier conversational answer or cached result when either intent is repeated or paraphrased. Never replace this registry with every OAuth-authorized advertiser.
 
-For membership results, treat `accounts list` top-level `presentation` as mandatory. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim. Preserve its four columns: channel, account name, advertiser ID, and enabled state. Do not add performance metrics, query status, date range, or failure details.
+For membership results, treat `list_managed_accounts` top-level `presentation` as mandatory. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim. Preserve its four columns: channel, account name, advertiser ID, and enabled state. Do not add performance metrics, query status, date range, or failure details.
 
 For performance results, treat `accounts report` top-level `presentation` as mandatory. When `presentation.required=true`, output `presentation.rendered_markdown` verbatim as the complete result. Do not reconstruct it from `accounts` or `summary`, and do not omit, merge, rename, reorder, summarize, or replace its date range, account summary, account rows, per-channel summaries, failure details, or metric-basis section. Cross-channel spend is additive; use `channel_summaries` for GMV and ROI because each channel uses a different official conversion definition. One account failure must not hide successful accounts. Never persist real registry entries in tracked Plugin files or dump raw JSON unless requested.
 
@@ -136,12 +138,12 @@ Interpret report requests semantically from the full utterance and conversation 
 First identify the requested subject and scope:
 
 - Keep a request about the performance of the user's responsible/common account set on `accounts report`, with an optional Qianchuan channel filter. Do not replace this multi-account workflow with a single-advertiser `qc-reports` command.
-- Use `qc-reports account` for one Qianchuan advertiser's account aggregate when the user asks for 乘方, the combined/overall account view, or a view that must include 乘方. Default `adlab_scene=OVERALL_PROJECT`; pass `data_period` only when its meaning is requested and the scene supports it.
-- Use `qc-reports uni-account` when the user explicitly limits one advertiser's account aggregate to 全域 and does not ask for 乘方 or a combined view.
+- Use MCP `report_qianchuan_account` with `scope=overall` for one Qianchuan advertiser's fixed account aggregate when the user asks for 乘方, the combined/overall account view, or a view that must include 乘方.
+- Use MCP `report_qianchuan_account` with `scope=uni` when the user explicitly limits one advertiser's fixed account aggregate to 全域 and does not ask for 乘方 or a combined view.
 - Use `qc-reports products` when performance is grouped by, filtered to, or compared across products. Select `--report-mode uni` for 全域 and `--report-mode overall` for 乘方; preserve an explicit product ID as a report filter. Do not use `qc-products` for spend, GMV, ROI, orders, or other performance data.
-- Use `qc-products list/search` only for product assets, eligibility, names, inventory, or finding a product ID without performance metrics.
+- Use MCP `search_qianchuan_products` only for product assets, eligibility, names, inventory, or finding a product ID without performance metrics.
 - Use `qc-reports rooms` for a live-room performance subject and `qc-reports authors` for a Douyin account/creator performance subject. If the user supplies only a creator name or visible Douyin ID, resolve one exact authorized numeric `aweme_id` before the author report; never choose a fuzzy or ambiguous creator.
-- Use `qc-reports plans` for individual plan rows and plan-target comparison.
+- Use MCP `report_qianchuan_plans` for the fixed individual-plan report and plan-target comparison. Preserve its `presentation.rendered_markdown` verbatim. Use `qc-reports custom` only when the user requests a different topic, dimension, metric set, filter, ordering, or aggregation that the fixed MCP report does not expose.
 - Use `qc-reports custom` for 全域投后素材维度 requests, including 素材维度数据, 视频素材数据, 图片素材数据, 标题素材数据, 其他创意, and similar phrases. Resolve the current official topic with `qc-reports schema` when uncertain; default explicit video-material requests to `SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO`, image-material requests to `SITE_PROMOTION_PRODUCT_POST_DATA_IMAGE`, title-material requests to `SITE_PROMOTION_PRODUCT_POST_DATA_TITLE`, and other-creative requests to `SITE_PROMOTION_PRODUCT_POST_DATA_OTHER`. Carry the user's requested dimensions, metrics, dates, sorting, and limits into the custom report.
 - Use `qc-reports materials` only when the user explicitly asks for the legacy `/v1.0/qianchuan/report/material/get/` material report or gives legacy material filters such as `material_type`, `material_mode`, or `video_source`. Do not route ordinary 素材维度, 全域素材, 投后素材, or video-material performance requests to `qc-reports materials`.
 - Use `qc-reports schema` when the user asks for `数据主题列表`, report topics, dimensions, or metrics. Omit `--data-topic` to fetch the default common Qianchuan topic list; pass explicit topics when named. Add `--managed-accounts` only when the user asks for the locally responsible/common Qianchuan account set, and preserve explicit multiple `--advertiser-id` values for a user-provided multi-account scope.
@@ -149,11 +151,11 @@ First identify the requested subject and scope:
 
 Carry explicit dates, date ranges, IDs, 全域/乘方 scope, marketing goal, time granularity, requested metrics, filters, and display limits into the command. Default omitted dates to the current local day. Ask only for a genuinely required unresolved advertiser or dimension identity; do not ask the user to restate natural language as a command.
 
-Read `references/unified-report-routing.md` before executing any `qc-reports account`, `uni-account`, `schema`, `custom`, `products`, `rooms`, or `authors` request, and before executing any 全域投后素材维度 report. It defines endpoint contracts, required identifiers, topics, pagination, and output boundaries.
+Read `references/unified-report-routing.md` before executing any advanced `qc-reports schema`, `custom`, `products`, `rooms`, or `authors` request, and before executing any 全域投后素材维度 report. It defines endpoint contracts, required identifiers, topics, pagination, and output boundaries.
 
 ## All-Domain Plan Reports
 
-Query plan performance with the advertiser-bound Qianchuan authorization:
+Query the fixed plan-performance view with MCP `report_qianchuan_plans`. The equivalent diagnostic CLI remains:
 
 ```bash
 ocean-watch qc-reports plans \
@@ -225,6 +227,12 @@ Query every product in the template separately. Keep only videos returned by the
 
 ## Work-Link Batch Creation
 
+For an ordinary natural-language request to validate or prepare product all-domain plans from work links, call MCP `preflight_qianchuan_works` with the exact product template ID and all user work rows. Do not launch `plans batch-qianchuan-works` for this preflight and do not silently fall back to CLI if the MCP tool is unavailable. The MCP preflight never creates or modifies an official plan, but it does call official read endpoints, may refresh the advertiser-bound Token, may update the non-sensitive owner-hint cache, and stores a short-lived local snapshot. Preserve its top-level `presentation` contract exactly as required below.
+
+Use MCP `get_qianchuan_preflight` when the user asks to inspect or reconfirm an exact `preflight_id`. It is local-only: it must not resolve credentials, refresh a Token, or call an official endpoint. It returns only expiry, template/product summary, eligible/skipped counts, and stable creator `create|append` decisions. It must never expose source URLs, template payloads, authorization selectors, raw journals, or fingerprints.
+
+MCP shortens the intent-to-Application-Service path and avoids CLI argument/stdout translation; it does not remove the official authorization, ownership, product-match, current-plan, and material-diff reads required for a trustworthy preflight. Diagnose remaining latency from `performance`, not from transport choice alone.
+
 Accept one or more Douyin share links or complete user rows with repeated `--work-url` arguments:
 
 ```bash
@@ -240,7 +248,7 @@ Follow only redirects that remain under the official `douyin.com` or `iesdouyin.
 
 Resolve each work only from a valid numeric creator UID and visible Douyin ID supplied by the bundled F2 CLI or the 30-day owner cache. Pass the visible Douyin ID to the official authorization endpoint as `search_key_words`, require the returned row's numeric `aweme_id` to equal the hinted UID, verify ownership in batches of 50 under that exact numeric creator, then query the same creator with the template products. Never pass the numeric UID as `search_key_words`, list every authorized creator, or scan unrelated creators during batch plan creation. Skip invalid links, missing creator identities, unavailable creators, creator/work mismatches, product mismatches, unsupported material types, and duplicate input without stopping the batch.
 
-The first successful official ownership check stores only the non-sensitive `aweme_item_id`, visible Douyin ID, and numeric `aweme_id` relationship in the local state cache for 30 days. A later preflight or confirmed submission uses that relationship only as a query hint: it must query the official authorization endpoint with the cached visible Douyin ID, require one returned row whose numeric `aweme_id` matches the cached UID, then re-query the numeric creator with the current work and template products. The returned visible ID may differ after an account rename without invalidating a matching numeric identity. Missing, expired, disabled, unavailable, or stale identity hints skip that work with an explicit reason; a numeric-only hint must not be placed in `search_key_words`, trigger an unfiltered authorization-list request, or scan other creators. An official targeted-query or identity-check error must be reported as an incomplete query, not as proof that the work is unauthorized or mismatched. Cache read or write failures are non-blocking and must be exposed in `performance.owner_hint_cache`; they never weaken validation or fail an otherwise valid batch. The legacy `broad_scan_work_count` diagnostic remains present for output compatibility but is always zero. The default bounded concurrency is 8, with an explicit maximum of 10, only for public-link resolution and local task coordination. All official Qianchuan API requests for one advertiser have exactly one in-flight request across endpoints, clients, commands, and Plugin processes, with at least 250 ms between dispatches. Only the small targeted authorization, ownership, and product checks may retry official rate-limit code `40100` with bounded backoff.
+The first successful official ownership check stores only the non-sensitive `aweme_item_id`, visible Douyin ID, and numeric `aweme_id` relationship in the local state cache for 30 days. A later preflight uses that relationship only as a query hint: it must query the official authorization endpoint with the cached visible Douyin ID, require one returned row whose numeric `aweme_id` matches the cached UID, then re-query the numeric creator with the current work and template products. The returned visible ID may differ after an account rename without invalidating a matching numeric identity. Missing, expired, disabled, unavailable, or stale identity hints skip that work with an explicit reason; a numeric-only hint must not be placed in `search_key_words`, trigger an unfiltered authorization-list request, or scan other creators. An official targeted-query or identity-check error must be reported as an incomplete query, not as proof that the work is unauthorized or mismatched. Cache read or write failures are non-blocking and must be exposed in `performance.owner_hint_cache`; they never weaken validation or fail an otherwise valid batch. The legacy `broad_scan_work_count` diagnostic remains present for output compatibility but is always zero. Batch preflight uses one command-scoped bounded read pool for official plan pages, plan details, plan materials, targeted authorization, ownership, and product checks. `--concurrency` controls the maximum number of in-flight reads for that command, defaults to 8, and has an explicit maximum of 10; it is not an endpoint QPS target or a QPS policy table. Transient `40100` or HTTP `429` handling retries and cools down only the failed request within existing bounded retry rules.
 
 Invoke the pinned F2 `0.0.1.7` integration once for all resolved work IDs through the current Python interpreter's read-only module CLI. Validate that exact version before querying. Never invoke F2's downloader command, create its database, download media, or read browser cookies automatically. The CLI may read `OCEAN_WATCH_F2_DOUYIN_COOKIE` from the local process environment; when it is absent, use F2's own `TokenManager.gen_ttwid()` visitor initialization. It must run in a temporary directory, emit one JSON document only, and map F2's raw response to the stable `code/message/data` contract with `data.author`, `data.product`, and `data.video`. Query unique works through one shared read-only F2 HTTP connection pool with bounded concurrency, an 8-second per-work deadline, one retry for only the failed first-pass works, and a 20-second overall metadata deadline; preserve completed rows when a slow work reaches either deadline. Return compact first-pass, retry, slowest-work, timeout, and total-duration diagnostics. Document and present this design only as the current F2 contract. Do not pass a Cookie on the command line, persist it, or print F2 stderr. The mapped product uses the first item in `aweme_detail.anchor_info.extra` and exposes `product_info_id`, `product_info_img`, and `product_info_name`; use a non-empty product ID only as an early mismatch hint. Treat the F2 identity as an untrusted public identity hint, and treat every other F2 field as an untrusted public hint: they cannot prove authorization, ownership, product match, or deliverability. Always perform the same official targeted authorization, ownership, and product checks before creation. F2 unavailable, visitor initialization failure, timeout, network failure, malformed output, or an incomplete identity must remain a compact per-work warning and continue to the 30-day cache; otherwise skip only that work. Batch creation never restores broad official creator discovery.
 
@@ -252,11 +260,11 @@ Before writing, list current product all-domain plans and confirm candidates thr
 
 The plan list exposes the visible Douyin ID in `room_info.anchor_id`, while plan detail exposes the numeric `aweme_id`. Use both identities to select list candidates, then require the numeric detail `aweme_id` to match before treating a plan as existing. Never compare only one identifier type and never create a new plan merely because the list uses the visible ID.
 
-The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. For batch work-link reconciliation, set both to the current local date (`00:00:00` through `23:59:59`) because this lookup only decides whether the current batch should create a plan or append materials. Traverse every declared page for that day and do not stop after an arbitrary number of plans. Scan this current-day plan list exactly once per command after all verified works have been grouped; 1, 50, or more input links must not multiply plan-list scans or trigger one scan per creator.
+The plan-list `start_time` and `end_time` describe the returned data period, not the plan creation period. For batch work-link reconciliation, set both to the current local date (`00:00:00` through `23:59:59`) because this lookup only decides whether the current batch should create a plan or append materials. Traverse every declared page for that day and do not stop after an arbitrary number of plans. Start this current-day scan once credentials and the advertiser lock are ready, without waiting for F2, then reuse the completed inventory after verified works have been grouped. One command performs exactly one logical plan scan; 1, 50, or more input links must not multiply it or trigger one scan per creator.
 
-Serialize the complete official-query and reconciliation phase for the same advertiser in both dry-run and submit mode. Use the same `qianchuan-advertiser-{advertiser_id}.lock` for batch creation/append, material deletion, plan creation, and status/budget/ROI updates. The current and legacy Qianchuan API clients in one command must share one request throttle, one rate-limit cooldown, and one diagnostic request counter. When the official response supplies `Retry-After`, honor it within the bounded cooldown; otherwise apply the bounded local cooldown. Persist interval and cooldown state under the local request-control directory so Python and Go Plugin processes share it and fail closed when that state is corrupt. This advertiser-scoped serialization prevents concurrent preflights, submissions, and immediate material-to-plan transitions from creating an avoidable request burst.
+Serialize the complete official-query and reconciliation phase for the same advertiser in both dry-run and submit mode. Use the same `qianchuan-advertiser-{advertiser_id}.lock` for batch creation/append, material deletion, plan creation, and status/budget/ROI updates. Within one batch command, all official reads share the command-scoped `--concurrency` pool and do not use the legacy fixed 250 ms dispatch interval or cross-endpoint cooldown. The advertiser lock still serializes separate batch commands and every write remains serial. Other Qianchuan commands retain their existing request-control behavior unless their own contract says otherwise.
 
-For `plans batch-qianchuan-works` and `plans remove-qianchuan-work`, transparently queue and pace all official HTTP attempts instead of imposing a cumulative local request cap. Retries and all clients share one counter for diagnosis, but the counter must never block or fail the business task merely because it exceeds a local threshold. Expose `{limit: null, used, remaining: null}` as `performance.request_budget` for batch completion. Continue respecting advertiser serialization, endpoint page-size limits, complete pagination, bounded retry/cooldown rules, and explicit cancellation or genuine official/business errors.
+For `plans batch-qianchuan-works` and `plans remove-qianchuan-work`, do not impose a cumulative local request cap. Request counts remain diagnostic and must never fail a business task merely because they exceed a local threshold. Continue respecting advertiser serialization, endpoint page-size limits, complete pagination, bounded retry rules, explicit cancellation, and genuine official or business errors.
 
 Retry transient `40100` rate limits, `51010` service timeouts, retryable transport failures, and explicit RPC timeouts with bounded jittered backoff while reading the product all-domain plan list and candidate plan details. A failed list page must retry that same page without restarting the completed portion of the current-day scan. Do not retry non-transient business errors or any write request through this read retry path.
 
@@ -267,7 +275,11 @@ Retry transient `40100` rate limits, `51010` service timeouts, retryable transpo
 - More than one product-matched plan after filtering: fail that creator with `multiple_existing_plans` without choosing one. Never report this ambiguity from creator matches that bind only unrelated products.
 - More than 100 works: create once, then append remaining chunks through the dedicated add-material endpoint.
 
-Default to dry-run. Add `--submit` only after explicit online-write permission. Link parsing and creator task preparation may execute concurrently, but official API traffic remains single-in-flight for the advertiser. Both dry-run and submit take the advertiser-scoped process lock around official validation and reconciliation. Return one final summary. Do not emit per-link progress or create a file unless `--out` is explicit.
+Default to dry-run. Add `--submit` only after explicit online-write permission. Link/F2 resolution and credential preparation start concurrently; once credentials are ready, the current-plan scan starts without waiting for F2. Official read tasks share the command-scoped bounded pool, while writes remain serial. Both dry-run and submit take the advertiser-scoped process lock around official validation and reconciliation. Return one final summary. Do not emit per-link progress or create a file unless `--out` is explicit.
+
+When a dry-run has at least one `would_create` or `would_append` creator group, it stores a minimal short-lived snapshot in the managed operation journal and returns `preflight_id` plus `expires_at`. The snapshot expires after 30 minutes or at the end of the current `Asia/Shanghai` business day, whichever comes first. It contains only the template digest and the minimum verified creator, work, product, and expected-action data needed for a safe write; it must not contain Tokens, Cookies, source URLs, raw F2 responses, or raw official responses. A dry-run with no eligible write action does not return a submit-capable snapshot.
+
+After explicit online-write permission, submit the confirmed snapshot with `plans batch-qianchuan-works --submit --preflight-id ID`. There is no `submit_qianchuan_preflight` MCP tool yet. `--preflight-id` requires `--submit` and cannot be combined with `--plan-template`, `--work-url`, `--plan-type`, or `--business`. The submit path validates the journal, expiry, fingerprint, and current template digest, resolves the advertiser-bound credential again, holds the existing advertiser lock, rescans current plans once, and queries only the material membership needed for the current diff. It must not repeat link redirects, F2, targeted creator authorization, ownership checks, or product checks. If a creator's create/append action or append target changed, mark only that creator `preflight_changed`; continue other unchanged creator jobs serially. Newly present append materials are idempotently skipped. Preserve the existing Guard, `OnceDispatcher`, operation keys, and unknown-write readback reconciliation.
 
 ### Mandatory Batch Completion Response
 
@@ -281,7 +293,7 @@ After every `plans batch-qianchuan-works` result, treat the top-level `presentat
 
 The five-column table is the default for both dry-run previews and submitted batch completion. A dry-run may show `—` for an unknown plan ID. For `素材ID`, the command prefers the official `material_id` and explicitly falls back to the creation `aweme_item_id` only when the official material ID is absent. Brevity, a large batch, partial failure, or conversational wording is not permission to change this format. Only a direct user request in the current turn that explicitly asks to suppress the table or names different columns may override it; never infer an override.
 
-Use `qc-products list/search` for the official selectable-product endpoint. Use `qc-plans list/show/materials` for plan metadata and material membership. Never interpret plan-list `stats_info` as report currency.
+Use MCP `search_qianchuan_products` for the official selectable-product endpoint. Use MCP `list_qianchuan_plans` for plan metadata and MCP `get_qianchuan_plan` with `include_materials=true` for exact plan details and material membership. Never interpret plan-list `stats_info` as report currency.
 
 ## Work-Link Material Removal
 
@@ -332,6 +344,8 @@ Bid rules:
 Block submission before token resolution when validation fails. Success requires both official `code: 0` and `data.ad_id`.
 
 ## Plan And Material Operations
+
+For the common read tools in the command table, require the corresponding MCP capability in the current session. If a required tool is unavailable, explain that the installed Plugin snapshot or current Host session does not expose it and stop that read. Do not run the equivalent CLI command, parse CLI JSON, search local state, or reconstruct a result as a silent fallback. This fail-closed rule does not prohibit the explicitly advanced CLI report routes below, responsible-account mutations, authorization refresh/sync, plan writes, or local run inspection.
 
 Use `qc-reports schema` with no `--data-topic` for a default common Qianchuan data-topic list, or with one or more explicit topics to inspect official dimensions and metrics. It can run for one account, multiple explicit advertiser IDs, or `--managed-accounts`; preserve partial successes and report failed accounts separately.
 

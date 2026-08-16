@@ -22,7 +22,6 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
-	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/configuration"
 )
 
 const (
@@ -173,7 +172,9 @@ func (runner Runner) runAuth(
 			}
 		}
 	case "status":
-		result, err = authorizationStatus(ctx, options.channel, options.advertiserID, credentials, authorizations)
+		result, err = (authapplication.QueryService{
+			Credentials: credentials, Authorizations: authorizations,
+		}).Status(ctx, authapplication.StatusQuery{Channel: options.channel, AdvertiserID: options.advertiserID})
 	case "refresh":
 		result, err = manager.Ensure(ctx, authapplication.TokenQuery{
 			Channel: options.channel, AdvertiserID: options.advertiserID,
@@ -188,7 +189,9 @@ func (runner Runner) runAuth(
 			AuthAccountID: options.authAccountID, RebindExisting: options.rebindExisting,
 		})
 	case "mappings":
-		result, err = authorizationMappings(ctx, options.channel, options.advertiserID, credentials, authorizations)
+		result, err = (authapplication.QueryService{
+			Credentials: credentials, Authorizations: authorizations,
+		}).Mappings(ctx, authapplication.StatusQuery{Channel: options.channel, AdvertiserID: options.advertiserID})
 	default:
 		err = errors.New("unsupported authorization action")
 	}
@@ -206,114 +209,6 @@ func (runner Runner) runAuth(
 		return 2
 	}
 	return 0
-}
-
-func authorizationStatus(
-	ctx context.Context,
-	channel string,
-	advertiserID string,
-	credentials authapplication.CredentialStore,
-	authorizations authapplication.AuthorizationStore,
-) (map[string]any, error) {
-	app, err := readOAuthApp(ctx, credentials, channel)
-	if err != nil {
-		return nil, err
-	}
-	state, err := authorizations.LoadChannel(ctx, channel)
-	if err != nil {
-		return nil, err
-	}
-	rows := []map[string]any{}
-	for _, authorizationID := range sortedMapKeys(configuration.Object(state["authorizations"])) {
-		metadata := configuration.Object(configuration.Object(state["authorizations"])[authorizationID])
-		revision, _ := positiveCLIInteger(metadata["token_revision"], 1)
-		account, accountErr := domain.AuthorizationCredentialAccount(channel, authorizationID, revision)
-		if accountErr != nil {
-			return nil, accountErr
-		}
-		token, readErr := credentials.Read(ctx, account)
-		if readErr != nil {
-			return nil, readErr
-		}
-		rows = append(rows, map[string]any{
-			"authorization_id": authorizationID, "token_revision": revision,
-			"has_access_token":            credentialPresent(token, "access_token"),
-			"has_refresh_token":           credentialPresent(token, "refresh_token"),
-			"access_token_expires_at":     credentialSafeString(token, "access_token_expires_at"),
-			"refresh_token_expires_at":    credentialSafeString(token, "refresh_token_expires_at"),
-			"pending_account_sync":        metadata["pending_account_sync"] == true,
-			"authorized_account_count":    len(objectMaps(metadata["authorized_accounts"])),
-			"authorized_advertiser_count": len(stringValues(metadata["advertiser_ids"])),
-		})
-	}
-	advertiserIndex := configuration.Object(state["advertiser_index"])
-	result := map[string]any{
-		"channel": channel, "has_app_id": app.AppID != "", "has_secret": app.Secret != "",
-		"authorization_count": len(rows), "authorizations": rows,
-		"authorized_account_count":    len(configuration.Object(state["account_index"])),
-		"authorized_advertiser_count": len(advertiserIndex), "generation": state["generation"],
-	}
-	if advertiserID != "" {
-		result["advertiser_id"] = advertiserID
-		result["advertiser_id_authorized"] = len(stringValues(advertiserIndex[advertiserID])) != 0
-	}
-	return result, nil
-}
-
-func authorizationMappings(
-	ctx context.Context,
-	channel string,
-	advertiserID string,
-	credentials authapplication.CredentialStore,
-	authorizations authapplication.AuthorizationStore,
-) (map[string]any, error) {
-	state, err := authorizations.LoadChannel(ctx, channel)
-	if err != nil {
-		return nil, err
-	}
-	index := configuration.Object(state["advertiser_index"])
-	mappings := []map[string]any{}
-	for _, current := range sortedMapKeys(index) {
-		if advertiserID != "" && current != advertiserID {
-			continue
-		}
-		owners := stringValues(index[current])
-		mappings = append(mappings, map[string]any{
-			"advertiser_id": current, "authorization_ids": owners, "ambiguous": len(owners) > 1,
-		})
-	}
-	rows := []map[string]any{}
-	for _, authorizationID := range sortedMapKeys(configuration.Object(state["authorizations"])) {
-		metadata := configuration.Object(configuration.Object(state["authorizations"])[authorizationID])
-		advertisers := stringValues(metadata["advertiser_ids"])
-		if advertiserID != "" && !containsString(advertisers, advertiserID) {
-			continue
-		}
-		revision, _ := positiveCLIInteger(metadata["token_revision"], 1)
-		account, accountErr := domain.AuthorizationCredentialAccount(channel, authorizationID, revision)
-		if accountErr != nil {
-			return nil, accountErr
-		}
-		token, readErr := credentials.Read(ctx, account)
-		if readErr != nil {
-			return nil, readErr
-		}
-		rows = append(rows, map[string]any{
-			"authorization_id": authorizationID, "token_revision": revision,
-			"has_access_token":     credentialPresent(token, "access_token"),
-			"has_refresh_token":    credentialPresent(token, "refresh_token"),
-			"pending_account_sync": metadata["pending_account_sync"] == true,
-			"advertiser_ids":       advertisers, "authorized_accounts": sanitizedAuthorizedAccounts(metadata["authorized_accounts"]),
-		})
-	}
-	if advertiserID != "" && len(mappings) == 0 {
-		return nil, domain.NewError("authorization_not_found", "advertiser is not mapped to an authorization", 1, map[string]any{"advertiser_id": advertiserID})
-	}
-	return map[string]any{
-		"channel": channel, "advertiser_filter": advertiserID,
-		"authorization_count": len(rows), "mapping_count": len(mappings),
-		"credential_values_exposed": false, "mappings": mappings, "authorizations": rows,
-	}, nil
 }
 
 type localOAuthRequest struct {

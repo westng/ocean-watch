@@ -96,7 +96,8 @@ Codex → Skill → 本地 stdio MCP ─┐
 ```
 
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
-- 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；其他尚未工具化的能力通过内置 Go CLI 执行。
+- 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
+- MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
 - 当前 MCP 固定启动清单只完成 macOS Apple Silicon 开发验收；五平台 CLI 分发不等于五平台 MCP 已完成安装验收。
 - Python 只参与千川作品链接的公开元数据解析，不承载授权、账户、模板、计划或报表逻辑。

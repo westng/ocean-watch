@@ -319,6 +319,32 @@ func TestMarketingCreatorAuthorizationFilteringAndExpiry(t *testing.T) {
 	}
 }
 
+func TestMarketingCreatorSinglePageStopsWithoutScanningAllPages(t *testing.T) {
+	reader := &marketingReaderStub{authorizations: func(request portmarketing.CreatorAuthorizationRequest) (domainmarketing.CreatorAuthorizationPage, error) {
+		return domainmarketing.CreatorAuthorizationPage{
+			Rows: []domainmarketing.CreatorAuthorization{
+				creatorAuthorization("creator-a", "5000000000000001", "2026-07-30 08:00:00", "cover-a"),
+			},
+			PageInfo: domainmarketing.PageInfo{
+				Page: request.Page, PageSize: request.PageSize, TotalPages: 100, TotalNumber: 100,
+			},
+		}, nil
+	}}
+	result, err := (Service{Tokens: &marketingTokenSpy{}, Reader: reader}).QueryCreator(
+		context.Background(), CreatorQuery{
+			CredentialScope: CredentialScope{AdvertiserID: fixtureAdvertiserID}, Source: "authorized",
+			Page: 2, PageSize: 1, MaxPages: 1, SinglePage: true, IncludeUnusable: true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reader.authorizationRequests) != 1 || reader.authorizationRequests[0].Page != 2 ||
+		result.PageCount != 1 || result.PageInfo == nil || result.PageInfo.TotalPages != 100 {
+		t.Fatalf("single-page creator query scanned beyond its page: requests=%#v result=%#v", reader.authorizationRequests, result)
+	}
+}
+
 func TestMarketingHomepageDoesNotClaimAuthorization(t *testing.T) {
 	reader := &marketingReaderStub{homepage: func(request portmarketing.CreatorHomepageRequest) (domainmarketing.CreatorHomepagePage, error) {
 		return domainmarketing.CreatorHomepagePage{

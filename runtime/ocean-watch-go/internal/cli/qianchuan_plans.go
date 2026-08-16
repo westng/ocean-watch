@@ -16,12 +16,13 @@ import (
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
-	adapterworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/workmetadata"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	applicationworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/workmetadata"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 	platformretry "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/retry"
 	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
 )
@@ -72,6 +73,7 @@ type qianchuanCreateOptions struct {
 
 type qianchuanBatchOptions struct {
 	configPath      string
+	preflightID     string
 	planTemplate    string
 	workURLs        repeatedValues
 	concurrency     int
@@ -170,6 +172,7 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	flags := flag.NewFlagSet("plans batch-qianchuan-works", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&options.configPath, "config", "", "")
+	flags.StringVar(&options.preflightID, "preflight-id", "", "")
 	flags.StringVar(&options.planTemplate, "plan-template", "", "")
 	flags.Var(&options.workURLs, "work-url", "")
 	flags.StringVar(&options.planType, "plan-type", "", "")
@@ -186,16 +189,26 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 		return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("unexpected positional Qianchuan batch arguments")
 	}
 	options.trim()
-	if options.planTemplate == "" {
-		return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("plan_template is required")
-	}
-	if len(options.workURLs) == 0 {
-		return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("at least one work URL is required")
+	if options.preflightID != "" {
+		if !options.submit {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--preflight-id requires --submit")
+		}
+		if options.planTemplate != "" || len(options.workURLs) != 0 || options.planType != "" || options.business != "" {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--preflight-id cannot be combined with --plan-template, --work-url, --plan-type, or --business")
+		}
+	} else {
+		if options.planTemplate == "" {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("plan_template is required")
+		}
+		if len(options.workURLs) == 0 {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("at least one work URL is required")
+		}
 	}
 	if options.concurrency < 1 || options.concurrency > applicationworkmetadata.MaxConcurrency {
 		return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("concurrency must be between 1 and 10")
 	}
 	return options, applicationqianchuan.BatchWorksCommand{
+		PreflightID:  options.preflightID,
 		PlanTemplate: options.planTemplate, WorkURLs: append([]string(nil), options.workURLs...),
 		Concurrency: options.concurrency, AuthAccountID: options.authAccountID,
 		IncludePayloads: options.includePayloads,
@@ -337,7 +350,7 @@ func (runner Runner) runQianchuanCreatePlan(
 		return writeQianchuanPlanError(stdout, err)
 	}
 	command.ConfigPath = configPath
-	service, err := runner.qianchuanCommandService(configPath, stateRoot, credentialsStore, command.Submit, false)
+	service, err := runner.qianchuanCommandService(configPath, stateRoot, credentialsStore, command.Submit, false, 0)
 	if err != nil {
 		return writeQianchuanPlanError(stdout, err)
 	}
@@ -375,7 +388,9 @@ func (runner Runner) runQianchuanBatchWorks(
 	if err != nil {
 		return writeQianchuanPlanError(stdout, err)
 	}
-	service, err := runner.qianchuanCommandService(configPath, stateRoot, credentialsStore, command.Submit, true)
+	service, err := runner.qianchuanCommandService(
+		configPath, stateRoot, credentialsStore, command.Submit, true, command.Concurrency,
+	)
 	if err != nil {
 		return writeQianchuanPlanError(stdout, err)
 	}
@@ -413,7 +428,7 @@ func (runner Runner) runQianchuanRemoveWorks(
 	if err != nil {
 		return writeQianchuanPlanError(stdout, err)
 	}
-	service, err := runner.qianchuanCommandService(configPath, stateRoot, credentialsStore, command.Submit, true)
+	service, err := runner.qianchuanCommandService(configPath, stateRoot, credentialsStore, command.Submit, true, 0)
 	if err != nil {
 		return writeQianchuanPlanError(stdout, err)
 	}
@@ -471,46 +486,25 @@ func (runner Runner) qianchuanCommandService(
 	credentialsStore authapplication.CredentialStore,
 	submit bool,
 	onlineRead bool,
+	batchReadConcurrency int,
 ) (QianchuanPlanCommandService, error) {
 	runtime := runner.QianchuanPlans
 	if runtime.Commands != nil {
 		return runtime.Commands, nil
 	}
-	service := applicationqianchuan.CommandService{
-		Config: filesystem.ConfigStore{Path: configPath}, Links: runtime.Links, Now: runtime.Now,
-	}
-	if !onlineRead && !submit {
-		return service, nil
-	}
-	components, err := runner.qianchuanPlanComponents(stateRoot, credentialsStore)
+	service, err := bootstrap.NewQianchuanCommandService(bootstrap.QianchuanOptions{
+		Config: filesystem.ConfigStore{Path: configPath}, StateRoot: stateRoot,
+		CredentialStore: credentialsStore, Links: runtime.Links, OwnerHints: runtime.OwnerHints,
+		Authorizations: runtime.Authorizations, RefreshLocker: runtime.RefreshLocker, OAuth: runtime.OAuth,
+		ClientFactory: runtime.ClientFactory, HTTPClient: runtime.HTTPClient,
+		PythonResolver: runner.PythonResolver, PluginRoot: filesystem.ResolvePluginRoot(runner.Cwd),
+		Reader: runtime.Reader, Writer: runtime.Writer, Credentials: runtime.Credentials,
+		Locker: runtime.Locker, Tokens: runtime.Tokens, Retry: runtime.Retry, Now: runtime.Now,
+		Submit: submit, OnlineRead: onlineRead, BatchReadConcurrency: batchReadConcurrency,
+	})
 	if err != nil {
 		return nil, err
 	}
-	service.Tokens = components.tokens
-	if service.Links == nil {
-		service.Links = applicationworkmetadata.Resolver{
-			Links: adapterworkmetadata.DouyinRedirectResolver{Client: runtime.HTTPClient},
-			Metadata: adapterworkmetadata.F2Resolver{
-				Python: runner.PythonResolver, Directory: filesystem.ResolvePluginRoot(runner.Cwd),
-			},
-		}
-	}
-	service.OwnerHints = runtime.OwnerHints
-	if service.OwnerHints == nil {
-		service.OwnerHints = filesystem.QianchuanOwnerHintCache{
-			Path: filepath.Join(stateRoot, "cache", "qianchuan-work-owners.json"), Now: runtime.Now,
-		}
-	}
-	service.Verifier = applicationqianchuan.WorkVerifier{Reader: components.reader}
-	service.Locks = components.locker
-	reconciler := applicationqianchuan.CurrentDayReconciler{Reader: components.reader, Now: runtime.Now}
-	guard := sharedplans.GuardedExecutor{Credentials: components.credentials, Locks: components.locker, Now: runtime.Now}
-	service.Create = applicationqianchuan.CreateExecutor{Guard: guard, Writer: components.writer, Reconciler: reconciler}
-	service.Batch = applicationqianchuan.BatchService{
-		Guard: guard, Reader: components.reader, Writer: components.writer,
-		Reconciler: reconciler, Now: runtime.Now,
-	}
-	service.Remove = applicationqianchuan.RemoveExecutor{Guard: guard, Reader: components.reader, Writer: components.writer}
 	return service, nil
 }
 
@@ -526,7 +520,7 @@ func (runner Runner) qianchuanMutationService(
 	if !submit {
 		return applicationqianchuan.MutationExecutor{}, nil
 	}
-	components, err := runner.qianchuanPlanComponents(stateRoot, credentialsStore)
+	components, err := runner.qianchuanPlanComponents(stateRoot, credentialsStore, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -549,9 +543,11 @@ type qianchuanPlanComponents struct {
 func (runner Runner) qianchuanPlanComponents(
 	stateRoot string,
 	credentialsStore authapplication.CredentialStore,
+	batchReadConcurrency int,
 ) (qianchuanPlanComponents, error) {
 	runtime := runner.QianchuanPlans
 	factory := runtime.ClientFactory
+	readFactory := factory
 	var err error
 	if factory == nil && (runtime.Reader == nil || runtime.Writer == nil) {
 		factory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{
@@ -559,6 +555,19 @@ func (runner Runner) qianchuanPlanComponents(
 		})
 		if err != nil {
 			return qianchuanPlanComponents{}, err
+		}
+		readFactory = factory
+		if batchReadConcurrency > 0 {
+			readFactory, err = oceanengine.NewClientFactory(oceanengine.FactoryOptions{
+				RequestLimits: requestcontrol.Limits{
+					AuthorizationConcurrency:          batchReadConcurrency,
+					EndpointConcurrency:               batchReadConcurrency,
+					QianchuanAuthorizationConcurrency: batchReadConcurrency,
+				},
+			})
+			if err != nil {
+				return qianchuanPlanComponents{}, err
+			}
 		}
 	}
 	authorizations := runtime.Authorizations
@@ -590,7 +599,7 @@ func (runner Runner) qianchuanPlanComponents(
 	}
 	reader := runtime.Reader
 	if reader == nil {
-		reader = oceanengine.QianchuanReadAdapter{Factory: factory, Retry: runtime.Retry}
+		reader = oceanengine.QianchuanReadAdapter{Factory: readFactory, Retry: runtime.Retry}
 	}
 	writer := runtime.Writer
 	if writer == nil {
@@ -655,6 +664,7 @@ func (options *qianchuanCreateOptions) trim() {
 
 func (options *qianchuanBatchOptions) trim() {
 	options.configPath = strings.TrimSpace(options.configPath)
+	options.preflightID = strings.TrimSpace(options.preflightID)
 	options.planTemplate = strings.TrimSpace(options.planTemplate)
 	options.authAccountID = strings.TrimSpace(options.authAccountID)
 	options.planType = strings.TrimSpace(options.planType)

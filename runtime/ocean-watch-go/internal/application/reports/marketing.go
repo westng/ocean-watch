@@ -220,37 +220,48 @@ type MarketingMaterialQuery struct {
 	OrderType                   string
 }
 
+type MarketingMaterialSummary struct {
+	PromotionCount         int `json:"promotion_count"`
+	SelectedPromotionCount int `json:"selected_promotion_count"`
+	ActivePromotionCount   int `json:"active_promotion_count"`
+	ExcludedPromotionCount int `json:"excluded_promotion_count"`
+	MaterialCount          int `json:"material_count"`
+	RowsWithReportData     int `json:"rows_with_report_data"`
+	RowsWithoutReportData  int `json:"rows_without_report_data"`
+}
+
 type MarketingMaterialResult struct {
-	Mode                           string            `json:"mode"`
-	StatusHandling                 string            `json:"status_handling"`
-	DateRange                      DateRange         `json:"date_range"`
-	PromotionEndpoint              string            `json:"promotion_endpoint"`
-	MaterialReportEndpoint         string            `json:"material_report_endpoint"`
-	PromotionRequestID             any               `json:"promotion_request_id"`
-	PromotionRequestIDs            []string          `json:"promotion_request_ids"`
-	MaterialReportRequestID        any               `json:"material_report_request_id"`
-	MaterialReportRequestIDs       []string          `json:"material_report_request_ids"`
-	PromotionResponseCode          int64             `json:"promotion_response_code"`
-	PromotionResponseCodes         []int64           `json:"promotion_response_codes"`
-	PromotionResponseMessage       any               `json:"promotion_response_message"`
-	PromotionResponseMessages      []string          `json:"promotion_response_messages"`
-	MaterialReportResponseCode     any               `json:"material_report_response_code"`
-	MaterialReportResponseCodes    []int64           `json:"material_report_response_codes"`
-	MaterialReportResponseMessage  any               `json:"material_report_response_message"`
-	MaterialReportResponseMessages []string          `json:"material_report_response_messages"`
-	PromotionCount                 int               `json:"promotion_count"`
-	SelectedPromotionCount         int               `json:"selected_promotion_count"`
-	ActiveLikePromotionCount       int               `json:"active_like_promotion_count"`
-	MaterialCount                  int               `json:"material_count"`
-	RowCount                       int               `json:"row_count"`
-	PromotionPageInfo              MarketingPageInfo `json:"promotion_page_info"`
-	ReportPageInfo                 any               `json:"report_page_info"`
-	ReportTotalMetrics             any               `json:"report_total_metrics"`
-	ReportScope                    string            `json:"report_scope"`
-	PromotionParams                map[string]any    `json:"promotion_params"`
-	MaterialReportParams           any               `json:"material_report_params"`
-	Rows                           []map[string]any  `json:"rows"`
-	ExcludedPromotions             []map[string]any  `json:"excluded_promotions"`
+	Mode                           string                   `json:"mode"`
+	StatusHandling                 string                   `json:"status_handling"`
+	DateRange                      DateRange                `json:"date_range"`
+	Summary                        MarketingMaterialSummary `json:"summary"`
+	PromotionEndpoint              string                   `json:"promotion_endpoint"`
+	MaterialReportEndpoint         string                   `json:"material_report_endpoint"`
+	PromotionRequestID             any                      `json:"promotion_request_id"`
+	PromotionRequestIDs            []string                 `json:"promotion_request_ids"`
+	MaterialReportRequestID        any                      `json:"material_report_request_id"`
+	MaterialReportRequestIDs       []string                 `json:"material_report_request_ids"`
+	PromotionResponseCode          int64                    `json:"promotion_response_code"`
+	PromotionResponseCodes         []int64                  `json:"promotion_response_codes"`
+	PromotionResponseMessage       any                      `json:"promotion_response_message"`
+	PromotionResponseMessages      []string                 `json:"promotion_response_messages"`
+	MaterialReportResponseCode     any                      `json:"material_report_response_code"`
+	MaterialReportResponseCodes    []int64                  `json:"material_report_response_codes"`
+	MaterialReportResponseMessage  any                      `json:"material_report_response_message"`
+	MaterialReportResponseMessages []string                 `json:"material_report_response_messages"`
+	PromotionCount                 int                      `json:"promotion_count"`
+	SelectedPromotionCount         int                      `json:"selected_promotion_count"`
+	ActiveLikePromotionCount       int                      `json:"active_like_promotion_count"`
+	MaterialCount                  int                      `json:"material_count"`
+	RowCount                       int                      `json:"row_count"`
+	PromotionPageInfo              MarketingPageInfo        `json:"promotion_page_info"`
+	ReportPageInfo                 any                      `json:"report_page_info"`
+	ReportTotalMetrics             any                      `json:"report_total_metrics"`
+	ReportScope                    string                   `json:"report_scope"`
+	PromotionParams                map[string]any           `json:"promotion_params"`
+	MaterialReportParams           any                      `json:"material_report_params"`
+	Rows                           []map[string]any         `json:"rows"`
+	ExcludedPromotions             []map[string]any         `json:"excluded_promotions"`
 }
 
 func ValidMarketingDataTopic(value string) bool {
@@ -614,6 +625,12 @@ func (service MarketingService) Materials(
 	}
 
 	joined := joinMarketingMaterialRows(materialRows, reportRows)
+	rowsWithReportData := 0
+	for _, row := range joined {
+		if row["has_report_data"] == true {
+			rowsWithReportData++
+		}
+	}
 	promotionFiltering := map[string]any{}
 	if query.ProjectID != "" {
 		promotionFiltering["project_id"] = query.ProjectID
@@ -632,7 +649,13 @@ func (service MarketingService) Materials(
 	}
 	result := MarketingMaterialResult{
 		Mode: "unit_materials_report", StatusHandling: "record_only",
-		DateRange:         DateRange{StartDate: query.StartDate, EndDate: query.EndDate},
+		DateRange: DateRange{StartDate: query.StartDate, EndDate: query.EndDate},
+		Summary: MarketingMaterialSummary{
+			PromotionCount: len(promotions), SelectedPromotionCount: len(selected),
+			ActivePromotionCount: activeCount, ExcludedPromotionCount: len(excluded),
+			MaterialCount: len(materialRows), RowsWithReportData: rowsWithReportData,
+			RowsWithoutReportData: len(joined) - rowsWithReportData,
+		},
 		PromotionEndpoint: MarketingPromotionEndpoint, MaterialReportEndpoint: MarketingReportEndpoint,
 		PromotionRequestID:       nullableMarketingString(promotionFirstRequestID),
 		PromotionRequestIDs:      promotionRequestIDs,

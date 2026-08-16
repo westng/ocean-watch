@@ -270,6 +270,11 @@ func TestMarketingMaterialReportPaginatesFiltersAndJoins(t *testing.T) {
 		result.ActiveLikePromotionCount != 1 || result.MaterialCount != 2 || result.RowCount != 2 {
 		t.Fatalf("material counts or token scope changed: result=%#v tokens=%#v", result, tokens.queries)
 	}
+	if result.Summary.PromotionCount != 2 || result.Summary.ActivePromotionCount != 1 ||
+		result.Summary.MaterialCount != 2 || result.Summary.RowsWithReportData != 2 ||
+		result.Summary.RowsWithoutReportData != 0 {
+		t.Fatalf("material summary changed: %#v", result.Summary)
+	}
 	if !reflect.DeepEqual(result.PromotionRequestIDs, []string{"promotion-page-1", "promotion-page-2"}) ||
 		!reflect.DeepEqual(result.MaterialReportRequestIDs, []string{"material-page-1", "material-page-2"}) ||
 		result.Rows[0]["material_id"] != "9007199254740995" || result.Rows[0]["stat_cost"] != "1.005" ||

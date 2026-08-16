@@ -179,6 +179,32 @@ func TestGovernorSerializesQianchuanAcrossEndpointFamilies(t *testing.T) {
 	}
 }
 
+func TestGovernorAllowsConfiguredQianchuanAuthorizationConcurrency(t *testing.T) {
+	governor, err := NewGovernor(Limits{
+		AuthorizationConcurrency:          4,
+		EndpointConcurrency:               4,
+		QianchuanAuthorizationConcurrency: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, _, _, err := PrepareCommandContext(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := AuthorizationScope{Channel: "qianchuan", AuthorizationID: "authorization-a"}
+	first, err := governor.Acquire(ctx, scope, "plans")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first()
+	second, err := governor.Acquire(ctx, scope, "materials")
+	if err != nil {
+		t.Fatalf("configured Qianchuan authorization concurrency was not applied: %v", err)
+	}
+	second()
+}
+
 func TestPrepareCommandContextPreservesInjectedBudget(t *testing.T) {
 	budget, err := NewBudget(1)
 	if err != nil {

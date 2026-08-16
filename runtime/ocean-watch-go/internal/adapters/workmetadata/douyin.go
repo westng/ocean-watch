@@ -102,6 +102,18 @@ func NormalizeDouyinURL(value string) (string, error) {
 	if err != nil {
 		return "", domain.NewWorkLinkError("invalid_url", "作品链接必须是有效的 HTTPS 地址")
 	}
+	if strings.EqualFold(strings.TrimSuffix(parsed.Hostname(), "."), "v.douyin.com") {
+		shareCode := strings.TrimPrefix(parsed.Path, "/")
+		if separator := strings.IndexByte(shareCode, '/'); separator >= 0 {
+			shareCode = shareCode[:separator]
+		}
+		if shareCode != "" {
+			parsed.Path = "/" + shareCode + "/"
+			parsed.RawPath = ""
+			parsed.RawQuery = ""
+			parsed.ForceQuery = false
+		}
+	}
 	return ValidateDouyinURL(parsed)
 }
 

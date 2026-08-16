@@ -105,8 +105,10 @@ type CreatorQuery struct {
 	AwemeIDs             []string
 	ItemIDs              []string
 	MinimumRemainingDays int
+	Page                 int
 	PageSize             int
 	MaxPages             int
+	SinglePage           bool
 	IncludeUnusable      bool
 }
 
@@ -122,6 +124,7 @@ type CreatorResult struct {
 	AdvertiserID   string                             `json:"advertiser_id"`
 	AwemeID        string                             `json:"aweme_id,omitempty"`
 	Filters        *CreatorFilters                    `json:"filters,omitempty"`
+	PageInfo       *domainmarketing.PageInfo          `json:"-"`
 	PageCount      int                                `json:"page_count"`
 	RequestIDs     []string                           `json:"request_ids"`
 	SourceType     string                             `json:"source_type"`
@@ -423,9 +426,10 @@ func (service Service) queryCreatorAuthorizations(
 ) (CreatorResult, error) {
 	requestIDs := []string{}
 	pageCount := 0
+	var pageInfo *domainmarketing.PageInfo
 	rows, err := pagination.CollectPages(ctx, pagination.PageOptions[domainmarketing.CreatorAuthorization]{
-		MaxPages: query.MaxPages,
-		Key:      creatorAuthorizationKey,
+		MaxPages: query.MaxPages, StartPage: query.Page, SinglePage: query.SinglePage,
+		Key: creatorAuthorizationKey,
 		Fetch: func(ctx context.Context, page int) (pagination.Page[domainmarketing.CreatorAuthorization], error) {
 			pageCount++
 			result, fetchErr := service.Reader.FetchCreatorAuthorizations(ctx, portmarketing.CreatorAuthorizationRequest{
@@ -438,6 +442,8 @@ func (service Service) queryCreatorAuthorizations(
 			if result.RequestID != "" {
 				requestIDs = append(requestIDs, result.RequestID)
 			}
+			current := result.PageInfo
+			pageInfo = &current
 			return pagination.Page[domainmarketing.CreatorAuthorization]{
 				Number: result.PageInfo.Page, TotalPages: result.PageInfo.TotalPages,
 				TotalNumber: result.PageInfo.TotalNumber, Rows: result.Rows,
@@ -476,7 +482,7 @@ func (service Service) queryCreatorAuthorizations(
 	filters := &CreatorFilters{AuthType: []string{OfficialVideoItemAuthType},
 		AuthStatus: []string{OfficialAuthorizedStatus}, AwemeIDs: query.AwemeIDs, ItemIDs: query.ItemIDs}
 	return CreatorResult{Endpoint: CreatorAuthorizationEndpoint, AdvertiserID: query.AdvertiserID,
-		Filters: filters, PageCount: pageCount, RequestIDs: requestIDs,
+		Filters: filters, PageInfo: pageInfo, PageCount: pageCount, RequestIDs: requestIDs,
 		SourceType: CreatorAuthorizedSource, CandidateCount: len(candidates), Candidates: candidates}, nil
 }
 
@@ -488,9 +494,10 @@ func (service Service) queryCreatorHomepage(
 	requestIDs := []string{}
 	pageCount := 0
 	awemeID := query.AwemeIDs[0]
+	var pageInfo *domainmarketing.PageInfo
 	rows, err := pagination.CollectPages(ctx, pagination.PageOptions[domainmarketing.CreatorVideo]{
-		MaxPages: query.MaxPages,
-		Key:      creatorVideoKey,
+		MaxPages: query.MaxPages, StartPage: query.Page, SinglePage: query.SinglePage,
+		Key: creatorVideoKey,
 		Fetch: func(ctx context.Context, page int) (pagination.Page[domainmarketing.CreatorVideo], error) {
 			pageCount++
 			result, fetchErr := service.Reader.FetchCreatorHomepage(ctx, portmarketing.CreatorHomepageRequest{
@@ -503,6 +510,8 @@ func (service Service) queryCreatorHomepage(
 			if result.RequestID != "" {
 				requestIDs = append(requestIDs, result.RequestID)
 			}
+			current := result.PageInfo
+			pageInfo = &current
 			return pagination.Page[domainmarketing.CreatorVideo]{Number: result.PageInfo.Page,
 				TotalPages: result.PageInfo.TotalPages, TotalNumber: result.PageInfo.TotalNumber,
 				Rows: result.Rows}, nil
@@ -519,7 +528,7 @@ func (service Service) queryCreatorHomepage(
 		}
 	}
 	return CreatorResult{Endpoint: CreatorHomepageEndpoint, AdvertiserID: query.AdvertiserID,
-		AwemeID: awemeID, PageCount: pageCount, RequestIDs: requestIDs,
+		AwemeID: awemeID, PageInfo: pageInfo, PageCount: pageCount, RequestIDs: requestIDs,
 		SourceType: CreatorHomepageSource, CandidateCount: len(candidates), Candidates: candidates}, nil
 }
 
@@ -579,6 +588,9 @@ func normalizeCreatorQuery(query CreatorQuery) CreatorQuery {
 		query.Source = "authorized"
 	}
 	query.AwemeIDs, query.ItemIDs = uniqueStrings(query.AwemeIDs), uniqueStrings(query.ItemIDs)
+	if query.Page == 0 {
+		query.Page = 1
+	}
 	if query.PageSize == 0 {
 		query.PageSize = DefaultCreatorPageSize
 	}
@@ -680,6 +692,9 @@ func validateCreatorQuery(query CreatorQuery) error {
 	}
 	if query.MinimumRemainingDays < 0 {
 		return errors.New("minimum_remaining_days must not be negative")
+	}
+	if query.Page < 1 || query.Page > 10000 || (!query.SinglePage && query.Page != 1) {
+		return errors.New("creator page is outside the supported range")
 	}
 	if query.PageSize < 1 || query.PageSize > MaxPageSize || query.MaxPages < 1 || query.MaxPages > DefaultMaxPages {
 		return errors.New("creator pagination is outside the supported range")

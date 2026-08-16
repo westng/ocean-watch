@@ -24,9 +24,9 @@ Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 
 
 ## 当前状态
 
-Go 切换已经完成。Plugin 现在注册本地 stdio MCP；首批 `list_templates` 和 `get_template` 直接调用共享模板 Application Service，用于本地模板列表与精确详情读取。两个 Skill 对这两类请求禁止静默回退 CLI。模板创建、校验、删除以及授权、账户、素材、计划和报表等尚未工具化的业务继续由 `run`/`run.cmd` 进入同一套 Go Application Service。
+Go 切换已经完成。源码中的本地 stdio MCP 共注册 16 个任务型工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、巨量营销授权/素材/报表查询 5 个。它们直接调用共享 Go Application Service，不启动 CLI，也不解析 CLI stdout；Skill 对已工具化请求禁止静默回退 CLI。千川预检会读取官方接口、必要时刷新授权并保存短期本地快照，但不会创建或修改计划；确认后的提交、自定义报表和其他高级业务继续由 `run`/`run.cmd` 进入同一套 Application Service。
 
-当前 `.mcp.json` 的固定可执行文件只完成 macOS Apple Silicon Gate 0。五个平台 Go CLI 仍作为现有 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除；历史设计不再作为运行或回退路径。
+当前 `.mcp.json` 的固定可执行文件只对既有模板工具完成过 macOS Apple Silicon Gate 0；本地源码新增的 9 个千川工具和 5 个巨量营销工具尚未构建、安装或完成全新任务 Host 验收，不能描述为当前已安装可用。五个平台 Go CLI 仍作为现有 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除；历史设计不再作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 
@@ -39,6 +39,7 @@ Go 切换已经完成。Plugin 现在注册本地 stdio MCP；首批 `list_templ
 | `.codex-plugin/bin/` | Marketplace 快照内的五平台 Go CLI |
 | `runtime/ocean-watch-go/cmd/` | CLI 与确定性运行时构建器 |
 | `runtime/ocean-watch-go/internal/mcpserver/` | stdio MCP、工具 Schema、专用 Presenter、稳定错误和脱敏日志 |
+| `runtime/ocean-watch-go/internal/bootstrap/` | CLI 与 MCP 共享的 Adapter/Application 组合根，不承载业务规则 |
 | `runtime/ocean-watch-go/internal/cli/` | 参数解析、路由、JSON envelope、Presentation |
 | `runtime/ocean-watch-go/internal/application/` | OAuth、账户、模板、素材、计划和报表用例 |
 | `runtime/ocean-watch-go/internal/domain/` | 领域模型、规则和稳定错误 |
@@ -54,13 +55,16 @@ Go 切换已经完成。Plugin 现在注册本地 stdio MCP；首批 `list_templ
 - 只读请求只对明确临时错误做有界重试；分页失败只重试当前页。
 - 分页器拒绝页码倒退、cursor 不前进、总量矛盾和跨页重复 ID。
 - Token 刷新按渠道和授权单飞；业务请求严格按广告主解析对应授权。
-- 千川同广告主请求跨命令和进程串行，至少间隔 250 ms，并共享官方限流冷却。
+- 千川批量作品预检在广告主锁内使用一次命令级有界读取池，调用级 `concurrency` 默认为 8、最大 10，不表示 QPS 目标；其他千川命令继续使用现有跨进程请求控制与官方限流冷却。
+- 巨量营销达人素材 MCP 使用显式页码和最多 100 条的官方单页读取，`limit` 直接约束 `page_size`，不会为了返回少量结果预先扫描全部授权素材页。
 - 在线写入默认 dry-run；`--submit` 后如结果不确定，先读回对账，禁止盲目重放。
 - 营销项目/单元和千川计划/素材均在成功后检查官方对象 ID 或状态。
 
 ## 状态与凭据
 
-CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或环境覆盖，只读取当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
+CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
+
+MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
 
 营销与千川拥有独立 App、OAuth state、Token 和广告主索引。官方广告主发现只有在完整分页和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。
 
