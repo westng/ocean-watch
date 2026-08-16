@@ -118,7 +118,25 @@ func run(binaryFlag string) error {
 		names = append(names, tool.Name)
 	}
 	sort.Strings(names)
-	if strings.Join(names, ",") != "get_template,list_templates" {
+	expectedNames := []string{
+		"get_marketing_authorization",
+		"get_qianchuan_authorization",
+		"get_qianchuan_plan",
+		"get_qianchuan_preflight",
+		"get_template",
+		"list_managed_accounts",
+		"list_qianchuan_plans",
+		"list_templates",
+		"preflight_qianchuan_works",
+		"report_marketing_materials",
+		"report_marketing_plans",
+		"report_qianchuan_account",
+		"report_qianchuan_plans",
+		"search_marketing_creator_materials",
+		"search_marketing_videos",
+		"search_qianchuan_products",
+	}
+	if strings.Join(names, ",") != strings.Join(expectedNames, ",") {
 		_ = session.Close()
 		return fmt.Errorf("unexpected tools: %v", names)
 	}
