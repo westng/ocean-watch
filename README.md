@@ -62,7 +62,7 @@ codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-安装或升级后新建 Codex 任务，直接描述目标即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
+首次安装后新建 Codex 任务并描述目标。后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启 Codex；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
 
 ## 可以直接这样问
 
@@ -97,9 +97,11 @@ Codex → Skill → 本地 stdio MCP ─┐
 
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
 - 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
+- 稳定代理保持 17 个 MCP 工具合同不变，并在同一外层会话内监控已安装快照、校验版本/哈希/插件身份/F2 资源和工具 Schema，再切换本机私有 Runtime；坏版本自动回滚且只拒绝该次清单，后续修复版仍可自动升级。
+- `get_capabilities` 只读返回 74 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
 - MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
-- 当前 MCP 固定启动清单只完成 macOS Apple Silicon 开发验收；五平台 CLI 分发不等于五平台 MCP 已完成安装验收。
+- macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前 Codex Plugin/MCP 清单没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。
 - Python 只参与千川作品链接的公开元数据解析，不承载授权、账户、模板、计划或报表逻辑。
 
 技术边界与当前实现见[架构说明](docs/architecture.md)。

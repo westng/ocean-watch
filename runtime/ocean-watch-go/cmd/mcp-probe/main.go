@@ -43,17 +43,44 @@ const fixture = `{
   "qianchuan_live_templates": {}
 }`
 
+type stringValues []string
+
+func (values *stringValues) String() string {
+	return strings.Join(*values, ",")
+}
+
+func (values *stringValues) Set(value string) error {
+	*values = append(*values, value)
+	return nil
+}
+
 func main() {
 	binaryFlag := flag.String("binary", "", "existing Ocean Watch binary to probe")
+	proxyRoot := flag.String("proxy-root", "", "start the stable proxy for this plugin root")
+	codexHome := flag.String("codex-home", "", "use an existing Codex home for a runtime-switch probe")
+	expectInitialRuntime := flag.String("expect-initial-runtime", "", "require this initial Runtime version")
+	waitRuntime := flag.String("wait-runtime", "", "wait for this Runtime version in the same MCP session")
+	waitTimeout := flag.Duration("wait-timeout", 30*time.Second, "maximum runtime-switch wait")
+	preflightTemplate := flag.String("preflight-template", "", "call one read-only Qianchuan preflight with this template")
+	preflightWorkURLs := stringValues{}
+	flag.Var(&preflightWorkURLs, "preflight-work-url", "repeatable work row for the read-only Qianchuan preflight")
 	flag.Parse()
-	if err := run(*binaryFlag); err != nil {
+	if (*preflightTemplate == "") != (len(preflightWorkURLs) == 0) {
+		fmt.Fprintln(os.Stderr, "MCP stdio probe failed: preflight template and work URL must be provided together")
+		os.Exit(2)
+	}
+	if err := run(*binaryFlag, *proxyRoot, *codexHome, *expectInitialRuntime, *waitRuntime, *waitTimeout, *preflightTemplate, preflightWorkURLs); err != nil {
 		fmt.Fprintln(os.Stderr, "MCP stdio probe failed:", err)
 		os.Exit(1)
+	}
+	if *waitRuntime != "" {
+		fmt.Printf("MCP runtime switch probe passed: %s -> %s\n", *expectInitialRuntime, *waitRuntime)
+		return
 	}
 	fmt.Println("MCP stdio process probe passed")
 }
 
-func run(binaryFlag string) error {
+func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime string, waitTimeout time.Duration, preflightTemplate string, preflightWorkURLs []string) error {
 	moduleRoot, err := findModuleRoot()
 	if err != nil {
 		return err
@@ -80,24 +107,55 @@ func run(binaryFlag string) error {
 		}
 	}
 
-	configRoot := filepath.Join(temporary, "codex-home", "ads-plan-monitor")
-	if err := os.MkdirAll(configRoot, 0o700); err != nil {
-		return err
+	switchProbe := strings.TrimSpace(waitRuntime) != ""
+	if switchProbe && (strings.TrimSpace(proxyRoot) == "" || strings.TrimSpace(codexHome) == "" || waitTimeout <= 0) {
+		return errors.New("runtime-switch probe requires --proxy-root, --codex-home, and a positive --wait-timeout")
 	}
+	resolvedCodexHome := filepath.Join(temporary, "codex-home")
+	configRoot := filepath.Join(resolvedCodexHome, "ads-plan-monitor")
 	configPath := filepath.Join(configRoot, "config.json")
-	if err := os.WriteFile(configPath, []byte(fixture), 0o600); err != nil {
-		return err
-	}
-	before, err := snapshotManagedState(configRoot, configPath)
-	if err != nil {
-		return err
+	before := ""
+	isolatedState := strings.TrimSpace(codexHome) == ""
+	if !isolatedState {
+		resolvedCodexHome, err = filepath.Abs(codexHome)
+		if err != nil {
+			return err
+		}
+		configRoot = filepath.Join(resolvedCodexHome, "ads-plan-monitor")
+		configPath = filepath.Join(configRoot, "config.json")
+	} else {
+		if err := os.MkdirAll(configRoot, 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(configPath, []byte(fixture), 0o600); err != nil {
+			return err
+		}
+		before, err = snapshotManagedState(configRoot, configPath)
+		if err != nil {
+			return err
+		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	probeTimeout := 15 * time.Second
+	if switchProbe {
+		probeTimeout = waitTimeout + 10*time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	command := exec.Command(binary, "mcp", "serve", "--stdio")
+	arguments := []string{"mcp", "serve", "--stdio"}
+	if strings.TrimSpace(proxyRoot) != "" {
+		resolvedRoot, resolveErr := filepath.Abs(proxyRoot)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		arguments = []string{"mcp", "proxy", "--stdio", "--plugin-root", resolvedRoot}
+	}
+	command := exec.Command(binary, arguments...)
 	command.Dir = filepath.Dir(moduleRoot)
-	command.Env = replaceEnvironment(os.Environ(), "CODEX_HOME", filepath.Join(temporary, "codex-home"))
+	command.Env = replaceEnvironment(os.Environ(), "CODEX_HOME", resolvedCodexHome)
+	if strings.TrimSpace(proxyRoot) == "" {
+		command.Env = replaceEnvironment(command.Env, "OCEAN_WATCH_MANAGED_RUNTIME", "1")
+	}
 	command.Env = replaceEnvironment(command.Env, "OCEAN_WATCH_PROBE_SECRET", "must-not-be-inherited")
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
@@ -106,7 +164,7 @@ func run(binaryFlag string) error {
 		Command: command, TerminateDuration: 2 * time.Second,
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("initialize: %w", err)
+		return fmt.Errorf("initialize: %w; stderr=%s", err, sanitizedDiagnostic(stderr.String(), temporary))
 	}
 
 	tools, err := session.ListTools(ctx, nil)
@@ -120,6 +178,7 @@ func run(binaryFlag string) error {
 	}
 	sort.Strings(names)
 	expectedNames := []string{
+		"get_capabilities",
 		"get_marketing_authorization",
 		"get_qianchuan_authorization",
 		"get_qianchuan_plan",
@@ -140,6 +199,58 @@ func run(binaryFlag string) error {
 	if strings.Join(names, ",") != strings.Join(expectedNames, ",") {
 		_ = session.Close()
 		return fmt.Errorf("unexpected tools: %v", names)
+	}
+	if preflightTemplate != "" && !switchProbe {
+		if err := callReadOnlyPreflight(ctx, session, preflightTemplate, preflightWorkURLs); err != nil {
+			_ = session.Close()
+			return err
+		}
+		if err := session.Close(); err != nil {
+			return fmt.Errorf("normal shutdown: %w", err)
+		}
+		return validateStderr(stderr.Bytes(), temporary)
+	}
+	if switchProbe {
+		initial, err := runtimeVersion(ctx, session)
+		if err != nil {
+			_ = session.Close()
+			return err
+		}
+		if expectInitialRuntime != "" && initial != expectInitialRuntime {
+			_ = session.Close()
+			return fmt.Errorf("initial Runtime version = %q, want %q", initial, expectInitialRuntime)
+		}
+		fmt.Printf("MCP runtime switch probe ready: %s\n", initial)
+		deadline := time.NewTimer(waitTimeout)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer deadline.Stop()
+		defer ticker.Stop()
+		for initial != waitRuntime {
+			select {
+			case <-ctx.Done():
+				_ = session.Close()
+				return ctx.Err()
+			case <-deadline.C:
+				_ = session.Close()
+				return fmt.Errorf("Runtime did not switch from %q to %q", initial, waitRuntime)
+			case <-ticker.C:
+				initial, err = runtimeVersion(ctx, session)
+				if err != nil {
+					_ = session.Close()
+					return err
+				}
+			}
+		}
+		if preflightTemplate != "" {
+			if callErr := callReadOnlyPreflight(ctx, session, preflightTemplate, preflightWorkURLs); callErr != nil {
+				_ = session.Close()
+				return callErr
+			}
+		}
+		if err := session.Close(); err != nil {
+			return fmt.Errorf("normal shutdown: %w", err)
+		}
+		return validateStderr(stderr.Bytes(), temporary)
 	}
 
 	listed, err := session.CallTool(ctx, &mcp.CallToolParams{
@@ -173,17 +284,60 @@ func run(binaryFlag string) error {
 	if err := session.Close(); err != nil {
 		return fmt.Errorf("normal shutdown: %w", err)
 	}
-	after, err := snapshotManagedState(configRoot, configPath)
-	if err != nil {
-		return err
-	}
-	if before != after {
-		return errors.New("read-only tools changed managed local state")
+	if isolatedState {
+		after, err := snapshotManagedState(configRoot, configPath)
+		if err != nil {
+			return err
+		}
+		if before != after {
+			return errors.New("read-only tools changed managed local state")
+		}
 	}
 	if err := validateStderr(stderr.Bytes(), temporary); err != nil {
 		return err
 	}
 	return nil
+}
+
+func callReadOnlyPreflight(ctx context.Context, session *mcp.ClientSession, template string, workURLs []string) error {
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "preflight_qianchuan_works", Arguments: map[string]any{
+		"plan_template": template, "work_urls": append([]string(nil), workURLs...), "concurrency": min(8, len(workURLs)),
+	}})
+	if err != nil {
+		return fmt.Errorf("preflight_qianchuan_works: %w", err)
+	}
+	payload, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		return fmt.Errorf("encode preflight result: %w", err)
+	}
+	fmt.Printf("MCP read-only preflight result: %s\n", payload)
+	return nil
+}
+
+func runtimeVersion(ctx context.Context, session *mcp.ClientSession) (string, error) {
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "get_capabilities", Arguments: map[string]any{"channel": "shared"},
+	})
+	if err != nil || result.IsError {
+		return "", fmt.Errorf("get_capabilities: result_error=%t error=%v", result != nil && result.IsError, err)
+	}
+	metadata, ok := result.Meta["ocean_watch"].(map[string]any)
+	if !ok {
+		return "", errors.New("get_capabilities omitted proxy metadata")
+	}
+	version, _ := metadata["runtime_version"].(string)
+	if strings.TrimSpace(version) == "" {
+		return "", errors.New("get_capabilities omitted proxy runtime_version")
+	}
+	return version, nil
+}
+
+func sanitizedDiagnostic(value, temporary string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), temporary, "<temp>")
+	if len(value) > 2048 {
+		value = value[len(value)-2048:]
+	}
+	return value
 }
 
 func snapshotManagedState(root, configPath string) (string, error) {
@@ -257,7 +411,7 @@ func validateStderr(payload []byte, temporary string) error {
 		}
 		for key := range record {
 			switch key {
-			case "timestamp", "level", "request_id", "tool", "duration_ms", "status", "error_code":
+			case "timestamp", "level", "request_id", "tool", "phase", "duration_ms", "status", "error_code", "from_version", "to_version":
 			default:
 				return fmt.Errorf("stderr contains unsupported field %q", key)
 			}

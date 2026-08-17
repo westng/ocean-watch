@@ -9,7 +9,7 @@ codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-安装或升级后新建 Codex 任务。普通用户直接说“帮我初始化巨量引擎盯盘”即可，不必记忆命令。
+首次安装后新建 Codex 任务。普通用户直接说“帮我初始化巨量引擎盯盘”即可，不必记忆命令。兼容升级只替换本机业务 Runtime，已加载的稳定 MCP 代理会在同一任务内自动切换，不要求退出或重启客户端；若升级增加/删除工具、修改 Schema 或 Skill 触发合同，则属于 Host 合同升级，需要新任务加载新的工具清单。
 
 ## 2. 环境与配置
 

@@ -109,6 +109,37 @@ func TestFileLockContenderTimesOutWithoutDeletingLockFile(t *testing.T) {
 	}
 }
 
+func TestSharedFileLocksBlockExclusiveLockUntilReleased(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.lease")
+	first, err := AcquireSharedLock(context.Background(), path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := AcquireSharedLock(context.Background(), path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock, acquired, err := TryAcquireLock(path); err != nil || acquired || lock != nil {
+		t.Fatalf("exclusive lease ignored active readers: lock=%#v acquired=%t err=%v", lock, acquired, err)
+	}
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if lock, acquired, err := TryAcquireLock(path); err != nil || acquired || lock != nil {
+		t.Fatalf("exclusive lease ignored second reader: lock=%#v acquired=%t err=%v", lock, acquired, err)
+	}
+	if err := second.Release(); err != nil {
+		t.Fatal(err)
+	}
+	lock, acquired, err := TryAcquireLock(path)
+	if err != nil || !acquired || lock == nil {
+		t.Fatalf("exclusive lease was not available after readers exited: lock=%#v acquired=%t err=%v", lock, acquired, err)
+	}
+	if err := lock.Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeFixtureConfig(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.json")

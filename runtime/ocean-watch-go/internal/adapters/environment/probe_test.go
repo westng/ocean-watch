@@ -52,8 +52,7 @@ func TestF2CheckRequiresPinnedPackageVersion(t *testing.T) {
 		},
 	}}
 	blocked := probe.F2(context.Background())
-	if blocked["status"] != "blocked" || blocked["version"] != installed ||
-		blocked["required_version"] != python.RequiredF2Version {
+	if blocked["status"] != "blocked" || blocked["required_version"] != python.RequiredF2Version {
 		t.Fatalf("unexpected mismatched F2 check: %#v", blocked)
 	}
 	installed = python.RequiredF2Version

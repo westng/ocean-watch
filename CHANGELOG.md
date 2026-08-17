@@ -6,15 +6,22 @@
 
 ### 新增
 
+- 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。
+- MCP 新增只读 `get_capabilities`，从 74 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
+- MCP 代理新增初始化、Runtime 切换、拒绝回滚和业务调用阶段计时日志，并在工具结果 `_meta.ocean_watch` 返回实际 Runtime 版本与代理内业务调用耗时。
+
 - Plugin 新增内置本地 stdio MCP，并首批提供 `list_templates`、`get_template` 两个模板只读工具；工具与 CLI 共享 Go Application Service，使用严格 Schema、字符串 ID、状态版本游标、稳定错误码、只读安全注解和独立脱敏 Presenter，不启动或解析 CLI。
 - MCP 新增 `preflight_qianchuan_works` 与 `get_qianchuan_preflight`：前者复用千川批量 Application Service 执行无业务写入的官方只读预检并保存短期快照，后者完全本地读取白名单摘要；两者拒绝配置路径和提交参数，不返回原始链接、模板 payload、授权选择器、Token 或内部错误，确认后的在线提交仍保留在显式 CLI 写入路径。
 - MCP 新增 `list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account` 与 `report_qianchuan_plans` 七个高频任务型查询工具；本地账户/授权查询不刷新 Token、不访问官方接口，商品、计划和固定报表复用现有 Application Service，使用严格 Schema、字符串 ID、白名单 Presenter 和脱敏稳定错误。
 - MCP 新增 `get_marketing_authorization`、`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 与 `report_marketing_plans` 五个巨量营销高频任务型查询工具；本地授权查询不刷新 Token、不访问官方接口，素材和固定报表复用现有 Application Service，达人素材按显式单页读取，避免为少量结果扫描全部分页。
-- 新增真实 MCP 子进程协议门禁，验证初始化、工具发现、成功与错误调用、取消、正常退出和 stderr 脱敏；当前固定启动清单只声明并验收 macOS Apple Silicon Gate 0，不把五平台交叉构建等同于五平台 MCP 支持。
-- Plugin 内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 五个平台的 Go CLI；两个 Skill 通过各自的 `run`/`run.cmd` 直接选择并执行当前平台二进制，Marketplace 源码快照安装后不再依赖 Python 业务包或额外编译。
+- 新增真实 MCP 子进程协议门禁，验证初始化、工具发现、成功与错误调用、取消、正常退出、代理阶段计时和 stderr 脱敏；macOS/Linux 通过固定本地启动器验收稳定代理，五平台交叉构建只证明对应 CLI 产物，不额外宣称 Windows MCP 已验收。
+- Plugin 内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 五个平台的 Go CLI；macOS/Linux 的 Skill 与 MCP 统一进入稳定启动器并解析当前版本化 Runtime，Windows Skill 继续通过 `run.cmd` 选择内置 CLI，Marketplace 源码快照安装后不再依赖 Python 业务包或额外编译。
 - 为千川抖音作品链接接入固定版本 F2 `0.0.1.7` 只读 CLI，作为唯一公开作品元数据解析器：一次批量补充作品 ID、数值达人 UID、可见抖音号和昵称；不进入 F2 下载模式、不创建数据库、不自动读取浏览器 Cookie，任何缺包、Cookie、网络、超时或异常输出都安全降级到 30 天缓存或快速跳过单条作品，授权、作品归属和商品匹配仍由千川官方接口复核。
 
 ### 变更
+
+- 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。
+- 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
 
 - 千川作品批量预检改为命令级共享有界读取并发（默认 8、最大 10），让链接/F2、凭据和当天计划扫描重叠，并并发执行计划分页、候选详情、素材及作品核验；dry-run 对可提交结果返回最长 30 分钟且不跨上海业务日的 `preflight_id`，确认提交复用最小快照，只重扫当前计划和必要素材差集。单个创建的零网络 dry-run 保持不变，广告主锁、串行写入、操作键、单次派发和未知写入读回对账继续保留。
 - 完善中英文项目首页定位文案，明确 Ocean Watch 覆盖巨量营销与巨量千川的一体化投放管理、数据报表和监控分析能力。
@@ -30,6 +37,19 @@
 - 日常 CI 改为 Linux、macOS、Windows 三平台 Go 测试/静态检查与启动器验证，并在 Python 3.10、3.12 验证 F2 包装层；手动 Release 会从固定提交重建五个平台二进制并逐字节核对仓库内产物，工作流始终不修改或回推 `main`。
 
 ### 修复
+
+- 修复桌面客户端在运行期间通过 CLI 重装 Plugin 后仍缓存已删除的旧版本目录，导致新任务无法加载 Skill 与 MCP、错误报告工具缺失的问题；稳定代理在新版完整 Host 资源通过清单哈希且 MCP 可初始化后，为被安装器删除的旧缓存路径建立受限兼容别名。兼容工具合同可在当前任务切换 Runtime；不兼容工具/Skill 合同仅让当前任务保留旧 Runtime，不再把新版全局标记为坏候选，由新任务加载新版 Host，均无需退出或重启客户端。两个 Skill 同时禁止通过首屏工具枚举、缓存或 Memory 判断工具缺失，命中高频意图后必须直接调用对应 MCP。
+- 修复旧插件缓存、源码目录和运行中 Host 合同混为一体，导致升级后仍执行旧实现、坏候选污染 current、普通 CLI 重复查询安装信息并哈希大二进制的问题；更新发现不再调用可能阻塞数十秒的 `codex plugin list`，而是读取本地安装版本目录的小清单，再对候选执行完整身份、资源、二进制、自报版本和 MCP 合同校验；私有槽位快速复用只核对不可变小清单和二进制身份。
+- 修复 Runtime 自报版本探针未继承有界截止时间，恶意或损坏候选可能拖住初始化的问题；单候选探针现在最多等待 2 秒，超时即拒绝候选并保留当前有效 Runtime。
+- 修复安装器原子替换版本目录时父目录修改时间可能不变、稳定代理因此漏掉兼容升级的问题；监控现在比较排序后的本地安装版本目录指纹，并用同一外层 MCP 会话的 A→B 只读探针锁定实际切换。
+- 修复 MCP 内层只返回基础产品版本、无法区分 cachebuster Runtime 的诊断歧义；CLI `--version` 继续返回产品版本，MCP 能力结果和代理 `_meta` 统一返回完整 Runtime 版本。
+- 修复版本化 Runtime 中 `setup init` 可能把私有槽位误当成可写 Plugin 配置根的问题；托管 Runtime 在用户未显式覆盖路径时始终使用 `$CODEX_HOME/ads-plan-monitor/config.json`，F2 仍与被选中的 Runtime 版本保持一致。
+- 修复 Apple Silicon 桌面客户端使用 arm64、终端或 Codex CLI 使用 Rosetta/x64 时共享私有 Runtime 状态会互相把架构专属二进制误判为损坏的问题；每个签名槽位现在保存清单中的全部平台产物，版本身份只由版本、清单哈希和槽位根确定，各进程从同一只读槽位选择本架构二进制。
+- 修复 macOS 桌面客户端不继承终端 Homebrew `PATH` 时，千川作品预检选中系统旧 Python 或无法发现已安装 F2 的版本化 Python、随后被统一误报为上游查询失败的问题；F2 业务路径现在只选择 Python 3.10+ 且安装固定 F2 `0.0.1.7` 的解释器，并覆盖 Intel 与 Apple Silicon Homebrew 稳定槽位。MCP 同时将 F2 运行时缺失、超时和异常响应映射为脱敏的独立错误码，避免再次把本地依赖故障误判成官方接口故障。
+- 删除只服务于历史 Runtime 长期保留的人工回退、固定和恢复跟随入口；私有状态升级为 v2，旧状态不再复用，坏候选仅在 MCP 接管失败时自动恢复，成功切换后只保留当前签名槽位。
+- 修复千川作品预检把链接元数据、授权、官方作品核验、当天计划清单、计划对账和本地快照等不同阶段的失败全部压成 `UPSTREAM_QUERY_FAILED`、无法定位真实问题的问题；MCP 现在按脱敏阶段返回稳定错误码，并进一步区分计划库存的官方查询失败、分页变化、无效响应和安全上限，同时保留原错误链供 F2 与授权故障做更精确分类。
+- 修复桌面 App 跨任务复用旧版 `binary mcp serve` 子进程、导致新建任务仍固定执行旧 Runtime 且完全绕过稳定代理的问题；新版 Runtime 兼容接管旧启动参数并作为稳定代理运行，只有代理显式标记的内层进程才启动业务 MCP，从而允许仅重启 Ocean Watch 子进程完成升级，无需退出或重启客户端。
+- 修复版本化私有 Runtime 永久保留历史可执行副本的问题；代理和 CLI 托管进程都为实际运行的 Runtime 持有跨进程共享租约，兼容升级完成后立即删除无人使用的非当前签名槽位，仍有在途调用的旧槽位在最后一个租约释放后自动回收，旧代码不会参与后续新请求。
 
 - 删除旧授权与模板迁移命令、旧 schema 自动归一化、Python 业务字节码、历史诊断产物、旧构建包和虚拟环境控制台入口，并从千川作品预检合同中移除已永远为零的旧全量达人扫描诊断字段；旧配置现在直接拒绝执行，分发校验会阻止旧业务 Runtime、迁移入口和生成目录重新出现。
 - 修复 MCP 官方只读工具未建立命令级请求预算，导致千川计划、商品、报表和作品预检在 SDK 发出请求前被安全层以 `command request budget is missing` 拒绝的问题；普通官方读取使用现有有界预算，千川作品批量预检按既有合同使用无累计上限预算，本地模板、授权与快照读取仍不获得网络预算。

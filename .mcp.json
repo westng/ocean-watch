@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "ocean-watch": {
-      "command": "./.codex-plugin/bin/ocean-watch_darwin_arm64",
-      "args": ["mcp", "serve", "--stdio"],
+      "command": "./bin/ocean-watch-launcher",
+      "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
       "cwd": "."
     }
   }

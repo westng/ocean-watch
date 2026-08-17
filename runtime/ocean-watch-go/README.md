@@ -5,10 +5,11 @@ This module is the only Ocean Watch business runtime. It implements the stable M
 ## Boundaries
 
 ```text
-cmd/ocean-watch        production CLI
-cmd/mcp-probe          stdio MCP protocol probe
-cmd/build-runtime      deterministic multi-platform builder
-internal/mcpserver     stdio transport, schemas, presenters, stable errors
+cmd/ocean-watch        production CLI and stable MCP proxy entrypoint
+cmd/mcp-probe          direct Runtime or stable-proxy stdio protocol probe
+cmd/build-runtime      deterministic multi-platform builder and manifest writer
+internal/mcpserver     stable proxy, Runtime stdio transport, schemas, presenters, errors
+internal/runtimeupdate installed-version discovery, validation, private slots, and safe cleanup
 internal/cli           parsing, routing, envelopes, Presentation
 internal/application   use cases, transactions, orchestration
 internal/domain        business types and rules
@@ -28,6 +29,7 @@ GOTOOLCHAIN=go1.26.5 go test ./...
 GOTOOLCHAIN=go1.26.5 go vet ./...
 GOTOOLCHAIN=go1.26.5 go run ./cmd/ocean-watch --help
 GOTOOLCHAIN=go1.26.5 go run ./cmd/mcp-probe
+GOTOOLCHAIN=go1.26.5 go run ./cmd/mcp-probe --binary ../../bin/ocean-watch-launcher --proxy-root ../..
 GOTOOLCHAIN=go1.26.5 go run ./cmd/build-runtime --all
 GOTOOLCHAIN=go1.26.5 go run ./cmd/build-runtime --all --verify
 ```

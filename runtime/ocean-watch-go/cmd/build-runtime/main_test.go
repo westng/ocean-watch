@@ -20,6 +20,7 @@ func TestBuildInjectsProductVersion(t *testing.T) {
 		filepath.Join(root, "runtime", "ocean-watch-go"),
 		destination,
 		"9.8.7",
+		"9.8.7+codex.probe",
 		target{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
 	); err != nil {
 		t.Fatal(err)

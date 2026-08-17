@@ -18,6 +18,23 @@ func TestCommandsAreUniqueAndExcludeRemovedCompatibilityDomains(t *testing.T) {
 		if seen[command.Name()] {
 			t.Fatalf("duplicate command: %s", command.Name())
 		}
+		capability := CapabilityFor(command)
+		if capability.Channel == "" || capability.Effect == "" ||
+			(capability.RequiresSubmit != (capability.Effect == EffectOnlineWrite)) {
+			t.Fatalf("invalid command capability: command=%#v capability=%#v", command, capability)
+		}
+		classifications := 0
+		for _, classified := range []map[string]bool{
+			localReadCommands, localWriteCommands, authorizationWriteCommands,
+			publicReadCommands, officialReadCommands, onlineWriteCommands,
+		} {
+			if classified[command.Name()] {
+				classifications++
+			}
+		}
+		if classifications != 1 {
+			t.Fatalf("command capability must have one classification: %s has %d", command.Name(), classifications)
+		}
 		seen[command.Name()] = true
 	}
 	if len(Commands) != 74 {

@@ -69,19 +69,14 @@ func (probe Probe) F2(ctx context.Context) onboarding.Check {
 		"message":     "F2 " + python.RequiredF2Version + " is required in the selected Python runtime.",
 		"remediation": "Install F2 " + python.RequiredF2Version + " into the selected Python runtime, then rerun setup doctor.",
 	}
-	runtimeInfo, err := probe.PythonResolver.Resolve(ctx)
+	runtimeInfo, err := probe.PythonResolver.ResolveF2(ctx)
 	if err != nil || !runtimeInfo.Version.AtLeast(minimumPython) {
 		return result
 	}
-	version, err := probe.PythonResolver.F2Version(ctx, runtimeInfo)
-	if version != "" {
-		result["version"] = version
-	}
-	if err == nil && version == python.RequiredF2Version {
-		result["status"] = "ready"
-		result["message"] = "Pinned F2 package is available."
-		result["remediation"] = nil
-	}
+	result["version"] = python.RequiredF2Version
+	result["status"] = "ready"
+	result["message"] = "Pinned F2 package is available."
+	result["remediation"] = nil
 	return result
 }
 

@@ -62,7 +62,7 @@ codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-Start a new Codex task after installation or upgrade and describe the desired outcome. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
+After the first installation, start a Codex task and describe the desired outcome. Later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting Codex. Only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
 
 ## Ask It Naturally
 
@@ -97,9 +97,11 @@ Codex → Skill → local stdio MCP ─┐
 
 - Advertising logic has one Go Application/Domain implementation. MCP and CLI are two transports over that implementation, not separate business runtimes or silent fallback paths.
 - Local template lists and exact details use MCP's `list_templates` and `get_template`; Qianchuan work-batch preflight and snapshot inspection use `preflight_qianchuan_works` and `get_qianchuan_preflight`. Confirmed online submission still uses the bundled Go CLI and requires explicit write permission.
+- The stable proxy keeps a fixed 17-tool MCP contract and switches a validated private Runtime inside the same outer session. It checks version, hashes, plugin identity, the F2 resource, and the tool schema before switching; a bad Runtime rolls back automatically without blocking a later fixed release.
+- Read-only `get_capabilities` exposes all 74 CLI capabilities with channel, side-effect, and submit-gate metadata. Each Skill routes common intent directly and queries this catalog only once for an uncommon already-confirmed Ocean Watch goal; it does not scan the repository or plugin caches.
 - MCP shortens the natural-language-to-preflight path and stabilizes structured results. It does not bypass official authorization, ownership, product-match, or plan-reconciliation reads, whose real latency remains part of preflight.
 - The Plugin bundles CLI binaries for macOS Intel and Apple Silicon, Linux x86_64 and ARM64, and Windows x86_64. Ordinary users do not need Go.
-- The current fixed MCP launch manifest has completed development acceptance only on macOS Apple Silicon; five-platform CLI packaging does not mean five-platform MCP installation acceptance.
+- macOS and Linux MCP use the stable POSIX launcher. The current Codex Plugin/MCP manifest has no operating-system command branch, so Windows is declared as CLI support only rather than falsely claiming Windows MCP acceptance.
 - Python participates only in public metadata resolution for Qianchuan work links. It does not own authorization, accounts, templates, plans, or reports.
 
 See [Architecture](docs/architecture.md) for current implementation boundaries.

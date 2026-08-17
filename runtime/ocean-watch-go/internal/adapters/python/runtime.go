@@ -60,6 +60,14 @@ type Resolver struct {
 }
 
 func (resolver Resolver) Resolve(ctx context.Context) (Runtime, error) {
+	return resolver.resolve(ctx, false)
+}
+
+func (resolver Resolver) ResolveF2(ctx context.Context) (Runtime, error) {
+	return resolver.resolve(ctx, true)
+}
+
+func (resolver Resolver) resolve(ctx context.Context, requireF2 bool) (Runtime, error) {
 	getenv := resolver.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
@@ -72,68 +80,82 @@ func (resolver Resolver) Resolve(ctx context.Context) (Runtime, error) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
-	candidates := []struct {
+	type candidate struct {
 		name   string
 		prefix []string
 		source string
-	}{}
+	}
+	candidates := []candidate{}
+	overridden := false
 	if override := strings.TrimSpace(getenv(PythonOverrideEnv)); override != "" {
-		candidates = append(candidates, struct {
-			name   string
-			prefix []string
-			source string
-		}{name: override, source: "environment"})
+		overridden = true
+		candidates = append(candidates, candidate{name: override, source: "environment"})
 	} else if goos == "windows" {
 		candidates = append(candidates,
-			struct {
-				name   string
-				prefix []string
-				source string
-			}{name: "py", prefix: []string{"-3"}, source: "platform-discovery"},
-			struct {
-				name   string
-				prefix []string
-				source string
-			}{name: "python", source: "platform-discovery"},
-			struct {
-				name   string
-				prefix []string
-				source string
-			}{name: "python3", source: "platform-discovery"},
+			candidate{name: "py", prefix: []string{"-3"}, source: "platform-discovery"},
+			candidate{name: "python", source: "platform-discovery"},
+			candidate{name: "python3", source: "platform-discovery"},
 		)
 	} else {
 		candidates = append(candidates,
-			struct {
-				name   string
-				prefix []string
-				source string
-			}{name: "python3", source: "platform-discovery"},
-			struct {
-				name   string
-				prefix []string
-				source string
-			}{name: "python", source: "platform-discovery"},
+			candidate{name: "python3", source: "platform-discovery"},
+			candidate{name: "python", source: "platform-discovery"},
 		)
+		if goos == "darwin" {
+			candidates = append(candidates,
+				candidate{name: "/opt/homebrew/bin/python3", source: "platform-discovery"},
+				candidate{name: "/usr/local/bin/python3", source: "platform-discovery"},
+			)
+			for _, prefix := range []string{"/opt/homebrew", "/usr/local"} {
+				for _, version := range []string{"3.14", "3.13", "3.12", "3.11", "3.10"} {
+					candidates = append(candidates, candidate{
+						name:   prefix + "/opt/python@" + version + "/libexec/bin/python3",
+						source: "platform-discovery",
+					})
+				}
+			}
+		}
 	}
 
 	var failures []string
+	seen := map[string]bool{}
 	for _, candidate := range candidates {
 		path, err := lookPath(candidate.name)
 		if err != nil {
 			failures = append(failures, candidate.name+": not found")
 			continue
 		}
+		key := path + "\x00" + strings.Join(candidate.prefix, "\x00")
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		version, err := resolver.probe(ctx, path, candidate.prefix)
 		if err != nil {
 			failures = append(failures, candidate.name+": "+err.Error())
 			continue
 		}
-		return Runtime{
+		runtimeInfo := Runtime{
 			Executable: path,
 			Prefix:     append([]string(nil), candidate.prefix...),
 			Version:    version,
 			Source:     candidate.source,
-		}, nil
+		}
+		if requireF2 {
+			if !version.AtLeast(Version{Major: 3, Minor: 10}) {
+				failures = append(failures, candidate.name+": Python 3.10 or newer is required")
+				continue
+			}
+			f2Version, f2Err := resolver.F2Version(ctx, runtimeInfo)
+			if f2Err != nil || f2Version != RequiredF2Version {
+				failures = append(failures, candidate.name+": F2 "+RequiredF2Version+" is unavailable")
+				if overridden {
+					break
+				}
+				continue
+			}
+		}
+		return runtimeInfo, nil
 	}
 	return Runtime{}, fmt.Errorf("%w: %s", ErrRuntimeUnavailable, strings.Join(failures, "; "))
 }

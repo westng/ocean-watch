@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
@@ -58,7 +60,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listedTools.Tools) != 16 || listedTools.Tools[0].Annotations == nil {
+	if len(listedTools.Tools) != 17 || listedTools.Tools[0].Annotations == nil {
 		t.Fatalf("unexpected tools: %#v", listedTools.Tools)
 	}
 	wantAnnotations := map[string]struct {
@@ -66,6 +68,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	}{
 		"list_templates":                     {readOnly: true, idempotent: true},
 		"get_template":                       {readOnly: true, idempotent: true},
+		"get_capabilities":                   {readOnly: true, idempotent: true},
 		"preflight_qianchuan_works":          {readOnly: false, idempotent: false, openWorld: true},
 		"get_qianchuan_preflight":            {readOnly: true, idempotent: true},
 		"list_managed_accounts":              {readOnly: true, idempotent: true},
@@ -89,6 +92,41 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 			annotations.OpenWorldHint == nil || *annotations.OpenWorldHint != want.openWorld {
 			t.Fatalf("unsafe annotations for %s: %#v", tool.Name, annotations)
 		}
+	}
+	capabilitiesResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "get_capabilities", Arguments: map[string]any{"channel": "qianchuan"},
+	})
+	if err != nil || capabilitiesResult.IsError {
+		t.Fatalf("get_capabilities result=%#v err=%v", capabilitiesResult, err)
+	}
+	capabilities := decodeStructured[capabilityOutput](t, capabilitiesResult)
+	if capabilities.RuntimeVersion != "test" || len(capabilities.Commands) == 0 || len(capabilities.Commands) >= len(contracts.Commands) {
+		t.Fatalf("unexpected filtered capabilities: %#v", capabilities)
+	}
+	wantCapabilities := map[string]struct {
+		effect         string
+		requiresSubmit bool
+	}{
+		"auth refresh":                {effect: "authorization_write"},
+		"accounts report":             {effect: "official_read"},
+		"qc-materials inspect-work":   {effect: "public_read"},
+		"plans batch-qianchuan-works": {effect: "online_write", requiresSubmit: true},
+		"qc-plans update-budget":      {effect: "online_write", requiresSubmit: true},
+	}
+	for _, command := range capabilities.Commands {
+		name := command.Domain + " " + command.Action
+		if want, ok := wantCapabilities[name]; ok {
+			if command.Effect != want.effect || command.RequiresSubmit != want.requiresSubmit {
+				t.Fatalf("unsafe capability for %s: %#v", name, command)
+			}
+			delete(wantCapabilities, name)
+		}
+		if command.Channel == "marketing" {
+			t.Fatalf("Qianchuan capability query leaked Marketing route: %#v", command)
+		}
+	}
+	if len(wantCapabilities) != 0 {
+		t.Fatalf("missing capabilities: %#v", wantCapabilities)
 	}
 
 	listResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -229,6 +267,15 @@ func TestQianchuanErrorsDistinguishPreflightExecutionFromSnapshotLookup(t *testi
 	}
 	if failure := mapQianchuanSnapshotError(errors.New("temporary local read failure")); failure.Code != "PREFLIGHT_READ_FAILED" || !failure.Retryable {
 		t.Fatalf("snapshot local read failure = %#v", failure)
+	}
+	if failure := mapQianchuanPreflightError(domain.NewWorkLinkError("f2_runtime_unavailable", "private runtime detail")); failure.Code != "F2_RUNTIME_UNAVAILABLE" || failure.Retryable || strings.Contains(failure.Message, "private") {
+		t.Fatalf("F2 runtime error was not safely classified: %#v", failure)
+	}
+	if failure := mapQianchuanPreflightError(domain.NewWorkLinkError("f2_cli_timeout", "private timeout detail")); failure.Code != "F2_QUERY_TIMEOUT" || !failure.Retryable || strings.Contains(failure.Message, "private") {
+		t.Fatalf("F2 timeout was not safely classified: %#v", failure)
+	}
+	if failure := mapQianchuanPreflightError(&applicationqianchuan.PreflightStageError{Stage: "plan_inventory"}); failure.Code != "PLAN_INVENTORY_FAILED" || !failure.Retryable {
+		t.Fatalf("plan inventory error was not classified: %#v", failure)
 	}
 }
 

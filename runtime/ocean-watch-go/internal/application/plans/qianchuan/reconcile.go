@@ -70,6 +70,23 @@ type CurrentPlanScanner interface {
 	ScanCurrentPlans(context.Context, CurrentPlanScanRequest) (CurrentPlanInventory, error)
 }
 
+type PlanInventoryError struct {
+	Reason string
+	cause  error
+}
+
+func (err *PlanInventoryError) Error() string {
+	return "Qianchuan plan inventory failed: " + err.Reason
+}
+
+func (err *PlanInventoryError) Unwrap() error {
+	return err.cause
+}
+
+func planInventoryError(reason string, err error) error {
+	return &PlanInventoryError{Reason: reason, cause: err}
+}
+
 type CurrentDayReconciler struct {
 	Reader   portqianchuan.Reader
 	Now      func() time.Time
@@ -204,13 +221,13 @@ func (reconciler CurrentDayReconciler) ScanCurrentPlans(
 	}
 	first, err := fetchPage(ctx, 1)
 	if err != nil {
-		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+		return CurrentPlanInventory{}, planInventoryError("official_query", err)
 	}
 	if err := validateCurrentPlanPage(first, 1, -1, -1); err != nil {
-		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+		return CurrentPlanInventory{}, planInventoryError("pagination_metadata", err)
 	}
 	if first.PageInfo.TotalPages > maxPages {
-		return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: pagination exceeds the safety cap of %d pages", maxPages)
+		return CurrentPlanInventory{}, planInventoryError("safety_cap", errors.New("pagination exceeds the safety cap"))
 	}
 	type planPageResult struct {
 		page domainqianchuan.PlanPage
@@ -226,38 +243,35 @@ func (reconciler CurrentDayReconciler) ScanCurrentPlans(
 	for index, fetched := range remaining {
 		page := index + 2
 		if fetched.err != nil {
-			return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: fetch page %d: %w", page, fetched.err)
+			return CurrentPlanInventory{}, planInventoryError("official_query", fetched.err)
 		}
 		if err := validateCurrentPlanPage(
 			fetched.page, page, first.PageInfo.TotalPages, first.PageInfo.TotalNumber,
 		); err != nil {
-			return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: %w", err)
+			return CurrentPlanInventory{}, planInventoryError("pagination_changed", err)
 		}
 		pages = append(pages, fetched.page)
 	}
 	plans := make([]domainqianchuan.Plan, 0, first.PageInfo.TotalNumber)
 	requestIDs := make([]string, 0, len(pages))
 	seenPlanIDs := map[string]struct{}{}
-	for pageIndex, page := range pages {
+	for _, page := range pages {
 		if page.RequestID != "" {
 			requestIDs = append(requestIDs, page.RequestID)
 		}
 		for _, plan := range page.Rows {
 			if strings.TrimSpace(plan.AdID) == "" {
-				return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: page %d returned an empty unique key", pageIndex+1)
+				return CurrentPlanInventory{}, planInventoryError("invalid_plan", errors.New("plan has no unique key"))
 			}
 			if _, duplicate := seenPlanIDs[plan.AdID]; duplicate {
-				return CurrentPlanInventory{}, fmt.Errorf("scan current-day Qianchuan plans: page %d returned duplicate unique key %q", pageIndex+1, plan.AdID)
+				return CurrentPlanInventory{}, planInventoryError("duplicate_plan", errors.New("duplicate plan unique key"))
 			}
 			seenPlanIDs[plan.AdID] = struct{}{}
 			plans = append(plans, plan)
 		}
 	}
 	if len(plans) != first.PageInfo.TotalNumber {
-		return CurrentPlanInventory{}, fmt.Errorf(
-			"scan current-day Qianchuan plans: pagination returned %d unique rows but declared %d",
-			len(plans), first.PageInfo.TotalNumber,
-		)
+		return CurrentPlanInventory{}, planInventoryError("count_mismatch", errors.New("pagination row count differs from declared total"))
 	}
 	return CurrentPlanInventory{
 		StartTime: startTime, EndTime: endTime, PageCount: len(pages),

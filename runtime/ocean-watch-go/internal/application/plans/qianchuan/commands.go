@@ -102,6 +102,26 @@ type BatchWorksCommand struct {
 	Submit          bool
 }
 
+type PreflightStageError struct {
+	Stage string
+	cause error
+}
+
+func (err *PreflightStageError) Error() string {
+	return "Qianchuan preflight stage failed: " + err.Stage
+}
+
+func (err *PreflightStageError) Unwrap() error {
+	return err.cause
+}
+
+func preflightStageError(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &PreflightStageError{Stage: stage, cause: err}
+}
+
 type OwnerHintCachePerformance struct {
 	OwnerHintSummary
 	Loaded                 int `json:"loaded"`
@@ -218,13 +238,13 @@ func (service CommandService) BatchWorks(
 	entries := parseBatchWorkEntries(command.WorkURLs, command.PlanType, command.Business)
 	config, err := service.Config.Read(ctx)
 	if err != nil {
-		return BatchCommandResult{}, err
+		return BatchCommandResult{}, preflightStageError("configuration", err)
 	}
 	exported, err := domaintemplates.ExportQianchuanPlanPayload(
 		config, domaintemplates.QianchuanTemplateProduct, command.PlanTemplate, "",
 	)
 	if err != nil {
-		return BatchCommandResult{}, err
+		return BatchCommandResult{}, preflightStageError("template", err)
 	}
 	if !exported.Active {
 		return BatchCommandResult{}, errors.New("Qianchuan product template is not active")
@@ -279,7 +299,7 @@ func (service CommandService) BatchWorks(
 		linksFinished = linksResult.finished
 		if linksResult.err != nil {
 			cancelParallel()
-			return BatchCommandResult{}, linksResult.err
+			return BatchCommandResult{}, preflightStageError("work_metadata", linksResult.err)
 		}
 		baseRequest.Skipped = qianchuanSkippedLinks(linksResult.result.Skipped)
 		if len(linksResult.result.Resolved) == 0 {
@@ -298,7 +318,7 @@ func (service CommandService) BatchWorks(
 	}
 	if leaseResult.err != nil {
 		cancelParallel()
-		return BatchCommandResult{}, leaseResult.err
+		return BatchCommandResult{}, preflightStageError("authorization", leaseResult.err)
 	}
 	lease, scopedContext := leaseResult.lease, leaseResult.ctx
 	credentialsFinished := leaseResult.finished
@@ -338,7 +358,7 @@ func (service CommandService) BatchWorks(
 			if canScan {
 				<-inventoryChannel
 			}
-			return linksResult.err
+			return preflightStageError("work_metadata", linksResult.err)
 		}
 		links := linksResult.result
 		baseRequest.Skipped = qianchuanSkippedLinks(links.Skipped)
@@ -372,12 +392,12 @@ func (service CommandService) BatchWorks(
 			if canScan {
 				<-inventoryChannel
 			}
-			return verifyErr
+			return preflightStageError("work_verification", verifyErr)
 		}
 		if canScan {
 			inventoryResult := <-inventoryChannel
 			if inventoryResult.err != nil {
-				return inventoryResult.err
+				return preflightStageError("plan_inventory", inventoryResult.err)
 			}
 			baseRequest.PlanInventory = &inventoryResult.inventory
 		}
@@ -405,7 +425,11 @@ func (service CommandService) BatchWorks(
 		return executeErr
 	})
 	if err != nil && executeErr == nil {
-		return BatchCommandResult{}, err
+		var stageError *PreflightStageError
+		if errors.As(err, &stageError) {
+			return BatchCommandResult{}, err
+		}
+		return BatchCommandResult{}, preflightStageError("local_coordination", err)
 	}
 	finished := service.now()
 	commandResult := BatchCommandResult{
@@ -413,11 +437,11 @@ func (service CommandService) BatchWorks(
 		Performance: batchPerformance(started, linksFinished, credentialsFinished, materialsFinished, finished, metadata, cachePerformance),
 	}
 	if executeErr != nil || command.Submit {
-		return commandResult, executeErr
+		return commandResult, preflightStageError("plan_reconciliation", executeErr)
 	}
 	snapshot, eligible, snapshotErr := prepareBatchSnapshot(baseRequest, result, finished)
 	if snapshotErr != nil {
-		return BatchCommandResult{}, snapshotErr
+		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
 	if !eligible {
 		return commandResult, nil
@@ -431,14 +455,14 @@ func (service CommandService) BatchWorks(
 	}
 	preflightID, snapshotErr := newID(snapshot.AdvertiserID, finished)
 	if snapshotErr != nil {
-		return BatchCommandResult{}, fmt.Errorf("create Qianchuan preflight id: %w", snapshotErr)
+		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
 	journal, snapshotErr := batchPreflightJournal(snapshot, finished)
 	if snapshotErr != nil {
-		return BatchCommandResult{}, snapshotErr
+		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
 	if snapshotErr = service.Journals.Save(ctx, preflightID, journal); snapshotErr != nil {
-		return BatchCommandResult{}, fmt.Errorf("save Qianchuan batch preflight: %w", snapshotErr)
+		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
 	commandResult.PreflightID, commandResult.ExpiresAt = preflightID, snapshot.ExpiresAt
 	return commandResult, nil

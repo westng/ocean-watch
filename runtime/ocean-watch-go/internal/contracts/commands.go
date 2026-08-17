@@ -1,11 +1,30 @@
 package contracts
 
+import "strings"
+
 // Command is a stable two-token CLI identity.
 // The route is deliberately not configurable by a user command line flag.
 type Command struct {
 	Domain      string
 	Action      string
 	Description string
+}
+
+type Effect string
+
+const (
+	EffectLocalRead          Effect = "local_read"
+	EffectLocalWrite         Effect = "local_write"
+	EffectPublicRead         Effect = "public_read"
+	EffectAuthorizationWrite Effect = "authorization_write"
+	EffectOfficialRead       Effect = "official_read"
+	EffectOnlineWrite        Effect = "online_write"
+)
+
+type Capability struct {
+	Channel        string
+	Effect         Effect
+	RequiresSubmit bool
 }
 
 func (c Command) Name() string { return c.Domain + " " + c.Action }
@@ -113,4 +132,81 @@ func Names() []string {
 		result = append(result, command.Name())
 	}
 	return result
+}
+
+func CapabilityFor(command Command) Capability {
+	name := command.Name()
+	capability := Capability{Channel: commandChannel(command)}
+	if localReadCommands[name] {
+		capability.Effect = EffectLocalRead
+	} else if localWriteCommands[name] {
+		capability.Effect = EffectLocalWrite
+	} else if authorizationWriteCommands[name] {
+		capability.Effect = EffectAuthorizationWrite
+	} else if publicReadCommands[name] {
+		capability.Effect = EffectPublicRead
+	} else if onlineWriteCommands[name] {
+		capability.Effect = EffectOnlineWrite
+		capability.RequiresSubmit = true
+	} else if officialReadCommands[name] {
+		capability.Effect = EffectOfficialRead
+	}
+	return capability
+}
+
+var localReadCommands = map[string]bool{
+	"setup doctor": true, "setup validate": true, "auth status": true, "auth mappings": true,
+	"accounts list": true, "templates list": true, "templates show": true, "templates validate": true,
+	"qc-templates list": true, "qc-templates list-live": true, "runs list": true, "runs show": true,
+}
+
+var localWriteCommands = map[string]bool{
+	"setup init": true, "accounts add": true, "accounts remove": true, "accounts enable": true,
+	"accounts disable": true, "templates create": true, "templates set-copy": true, "templates delete": true,
+	"qc-templates create": true, "qc-templates create-live": true,
+}
+
+var authorizationWriteCommands = map[string]bool{
+	"auth set-app": true, "auth authorize": true, "auth refresh": true, "auth sync-accounts": true,
+}
+
+var publicReadCommands = map[string]bool{
+	"qc-materials inspect-work": true,
+}
+
+var officialReadCommands = map[string]bool{
+	"accounts report":  true,
+	"materials videos": true, "materials creator": true, "materials images": true, "materials products": true,
+	"qc-materials creator-videos": true, "qc-materials authorized-creators": true,
+	"qc-products list": true, "qc-products search": true,
+	"qc-plans list": true, "qc-plans show": true, "qc-plans materials": true,
+	"reports materials": true, "reports schema": true, "reports custom": true, "reports plans": true,
+	"qc-reports plans": true, "qc-reports materials": true, "qc-reports account": true,
+	"qc-reports uni-account": true, "qc-reports schema": true, "qc-reports custom": true,
+	"qc-reports products": true, "qc-reports rooms": true, "qc-reports authors": true,
+	"discover projects": true, "discover promotions": true, "discover dpa": true, "discover events": true,
+	"discover deep-bids": true, "discover goals": true, "discover cities": true,
+}
+
+var onlineWriteCommands = map[string]bool{
+	"plans create": true, "plans create-creator": true, "plans create-qianchuan": true,
+	"plans batch-qianchuan-works": true, "plans remove-qianchuan-work": true,
+	"plans batch-upload": true, "plans batch-creator": true, "plans update-project-status": true,
+	"plans update-promotion-status": true, "plans update-budget": true, "plans update-bid": true,
+	"plans update-roi": true, "qc-plans update-status": true, "qc-plans update-budget": true,
+	"qc-plans update-roi": true,
+}
+
+func commandChannel(command Command) string {
+	if strings.HasPrefix(command.Domain, "qc-") || strings.Contains(command.Action, "qianchuan") {
+		return "qianchuan"
+	}
+	if command.Domain == "materials" || command.Domain == "reports" || command.Domain == "discover" ||
+		command.Action == "create" || command.Action == "create-creator" ||
+		strings.HasPrefix(command.Action, "batch-upload") || strings.HasPrefix(command.Action, "batch-creator") ||
+		strings.HasPrefix(command.Action, "update-project") || strings.HasPrefix(command.Action, "update-promotion") ||
+		command.Action == "update-bid" {
+		return "marketing"
+	}
+	return "shared"
 }

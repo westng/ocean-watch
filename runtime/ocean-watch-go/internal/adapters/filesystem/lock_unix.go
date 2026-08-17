@@ -10,6 +10,15 @@ import (
 
 func tryPlatformLock(file *os.File) (bool, error) {
 	err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	return platformLockResult(err)
+}
+
+func tryPlatformSharedLock(file *os.File) (bool, error) {
+	err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+	return platformLockResult(err)
+}
+
+func platformLockResult(err error) (bool, error) {
 	if err == nil {
 		return true, nil
 	}

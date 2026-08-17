@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +19,25 @@ import (
 
 const sdkVersion = "v1.1.92"
 const cliVersionSymbol = "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/cli.Version"
+const runtimeVersionSymbol = "main.runtimeVersion"
 
 type pluginManifest struct {
+	Name    string `json:"name"`
 	Version string `json:"version"`
+}
+
+type runtimeManifest struct {
+	SchemaVersion int               `json:"schema_version"`
+	Version       string            `json:"version"`
+	Plugin        runtimeFile       `json:"plugin"`
+	Resources     map[string]string `json:"resources"`
+	SHA256        map[string]string `json:"sha256"`
+}
+
+type runtimeFile struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
 }
 
 type target struct {
@@ -47,6 +66,10 @@ func main() {
 		fatal(err)
 	}
 	version, err := productVersion(root)
+	if err != nil {
+		fatal(err)
+	}
+	distribution, err := distributionVersion(root)
 	if err != nil {
 		fatal(err)
 	}
@@ -81,7 +104,7 @@ func main() {
 			_ = temporary.Close()
 			_ = os.Remove(temporaryPath)
 			defer os.Remove(temporaryPath)
-			if err := build(moduleRoot, temporaryPath, version, item); err != nil {
+			if err := build(moduleRoot, temporaryPath, version, distribution, item); err != nil {
 				fatal(err)
 			}
 			if err := equalFiles(destination, temporaryPath); err != nil {
@@ -90,11 +113,31 @@ func main() {
 			fmt.Printf("verified %s\n", name)
 			continue
 		}
-		if err := build(moduleRoot, destination, version, item); err != nil {
+		if err := build(moduleRoot, destination, version, distribution, item); err != nil {
 			fatal(err)
 		}
 		fmt.Printf("built %s\n", destination)
 	}
+	if strings.TrimSpace(*output) != "" && !*all {
+		return
+	}
+	payload, err := buildRuntimeManifest(root, outputRoot, distribution)
+	if err != nil {
+		fatal(err)
+	}
+	manifestPath := filepath.Join(root, ".codex-plugin", "runtime-manifest.json")
+	if *verify {
+		actual, readErr := os.ReadFile(manifestPath)
+		if readErr != nil || !bytes.Equal(actual, payload) {
+			fatal(errors.New("prepared runtime manifest does not match the current binaries"))
+		}
+		fmt.Println("verified runtime-manifest.json")
+		return
+	}
+	if err := os.WriteFile(manifestPath, payload, 0o644); err != nil {
+		fatal(err)
+	}
+	fmt.Printf("built %s\n", manifestPath)
 }
 
 func hostTarget() target {
@@ -139,6 +182,14 @@ func repositoryRoot() (string, error) {
 }
 
 func productVersion(root string) (string, error) {
+	version, err := distributionVersion(root)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(strings.SplitN(version, "+", 2)[0]), nil
+}
+
+func distributionVersion(root string) (string, error) {
 	payload, err := os.ReadFile(filepath.Join(root, ".codex-plugin", "plugin.json"))
 	if err != nil {
 		return "", err
@@ -147,11 +198,82 @@ func productVersion(root string) (string, error) {
 	if err := json.Unmarshal(payload, &manifest); err != nil {
 		return "", err
 	}
-	version := strings.TrimSpace(strings.SplitN(manifest.Version, "+", 2)[0])
+	version := strings.TrimSpace(manifest.Version)
 	if version == "" {
 		return "", errors.New("plugin product version is missing")
 	}
 	return version, nil
+}
+
+func buildRuntimeManifest(root, binaryRoot, version string) ([]byte, error) {
+	pluginPath := filepath.Join(root, ".codex-plugin", "plugin.json")
+	pluginPayload, err := os.ReadFile(pluginPath)
+	if err != nil {
+		return nil, fmt.Errorf("hash plugin manifest: %w", err)
+	}
+	var plugin pluginManifest
+	if err := json.Unmarshal(pluginPayload, &plugin); err != nil || plugin.Name != "ocean-watch" || plugin.Version != version {
+		return nil, errors.New("plugin manifest identity does not match the runtime version")
+	}
+	resourcePaths := []string{
+		".mcp.json",
+		filepath.Join("f2", "resolve.py"),
+		filepath.Join("bin", "ocean-watch-launcher"),
+	}
+	err = filepath.WalkDir(filepath.Join(root, "skills"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("plugin host resource must not be a symlink: %s", path)
+		}
+		if entry.Type().IsRegular() {
+			relative, relativeErr := filepath.Rel(root, path)
+			if relativeErr != nil {
+				return relativeErr
+			}
+			resourcePaths = append(resourcePaths, relative)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("enumerate plugin host resources: %w", err)
+	}
+	sort.Strings(resourcePaths)
+	manifest := runtimeManifest{
+		SchemaVersion: 1,
+		Version:       version,
+		Plugin: runtimeFile{
+			Name: "ocean-watch", Version: version, SHA256: digest(pluginPayload),
+		},
+		Resources: make(map[string]string, len(resourcePaths)),
+		SHA256:    make(map[string]string, len(releaseTargets)),
+	}
+	for _, resourcePath := range resourcePaths {
+		resourcePayload, err := os.ReadFile(filepath.Join(root, resourcePath))
+		if err != nil {
+			return nil, fmt.Errorf("hash runtime resource %s: %w", resourcePath, err)
+		}
+		manifest.Resources[filepath.ToSlash(resourcePath)] = digest(resourcePayload)
+	}
+	for _, item := range releaseTargets {
+		name := binaryName(item)
+		payload, err := os.ReadFile(filepath.Join(binaryRoot, name))
+		if err != nil {
+			return nil, fmt.Errorf("hash prepared runtime %s: %w", name, err)
+		}
+		manifest.SHA256[name] = digest(payload)
+	}
+	payload, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(payload, '\n'), nil
+}
+
+func digest(payload []byte) string {
+	value := sha256.Sum256(payload)
+	return hex.EncodeToString(value[:])
 }
 
 func supported(value target) bool {
@@ -171,12 +293,13 @@ func binaryName(value target) string {
 	return name
 }
 
-func build(moduleRoot, destination, version string, value target) error {
+func build(moduleRoot, destination, version, distribution string, value target) error {
 	arguments := []string{
 		"build", "-buildvcs=false", "-trimpath",
 		"-ldflags", strings.Join([]string{
 			"-s", "-w", "-buildid=",
 			"-X", cliVersionSymbol + "=" + version,
+			"-X", runtimeVersionSymbol + "=" + distribution,
 			"-X", "main.sdkVersion=" + sdkVersion,
 		}, " "),
 		"-o", destination, "./cmd/ocean-watch",

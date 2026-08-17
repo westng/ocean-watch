@@ -2,15 +2,4 @@
 set -eu
 
 plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-system=$(uname -s)
-machine=$(uname -m)
-
-case "$system:$machine" in
-  Darwin:x86_64) binary=ocean-watch_darwin_amd64 ;;
-  Darwin:arm64) binary=ocean-watch_darwin_arm64 ;;
-  Linux:x86_64) binary=ocean-watch_linux_amd64 ;;
-  Linux:aarch64|Linux:arm64) binary=ocean-watch_linux_arm64 ;;
-  *) echo "Ocean Watch does not support this platform: $system/$machine" >&2; exit 2 ;;
-esac
-
-exec "$plugin_root/.codex-plugin/bin/$binary" "$@"
+exec "$plugin_root/bin/ocean-watch-launcher" "$@"

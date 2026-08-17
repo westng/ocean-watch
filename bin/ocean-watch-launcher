@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+plugin_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -L)
+system=$(uname -s)
+machine=$(uname -m)
+
+case "$system:$machine" in
+  Darwin:x86_64) fallback=ocean-watch_darwin_amd64 ;;
+  Darwin:arm64) fallback=ocean-watch_darwin_arm64 ;;
+  Linux:x86_64) fallback=ocean-watch_linux_amd64 ;;
+  Linux:aarch64|Linux:arm64) fallback=ocean-watch_linux_arm64 ;;
+  *) echo "Ocean Watch does not support this platform: $system/$machine" >&2; exit 2 ;;
+esac
+
+fallback_path="$plugin_root/.codex-plugin/bin/$fallback"
+if [ "${1:-}" = "mcp" ] && [ "${2:-}" = "proxy" ]; then
+  cd "$plugin_root"
+  exec "$fallback_path" mcp proxy --stdio --plugin-root "$plugin_root"
+fi
+if [ "${1:-}" = "runtime" ]; then
+  cd "$plugin_root"
+  exec "$fallback_path" "$@" --plugin-root "$plugin_root"
+fi
+cd "$plugin_root"
+exec "$fallback_path" runtime --plugin-root "$plugin_root" exec -- "$@"

@@ -401,6 +401,53 @@ func mapQianchuanPreflightError(err error) toolFailure {
 			return toolFailure{Code: "AUTHORIZATION_UNAVAILABLE", Message: "Qianchuan authorization is unavailable", Details: map[string]any{}}
 		}
 	}
+	var linkError *domain.WorkLinkError
+	if errors.As(err, &linkError) {
+		switch linkError.Code {
+		case "f2_runtime_unavailable":
+			return toolFailure{Code: "F2_RUNTIME_UNAVAILABLE", Message: "F2 work metadata runtime is unavailable", Details: map[string]any{}}
+		case "f2_cli_timeout", "f2_work_timeout":
+			return toolFailure{Code: "F2_QUERY_TIMEOUT", Message: "F2 work metadata query timed out", Retryable: true, Details: map[string]any{}}
+		case "f2_response_too_large", "invalid_f2_response", "f2_cli_failed":
+			return toolFailure{Code: "F2_QUERY_FAILED", Message: "F2 work metadata query failed", Retryable: true, Details: map[string]any{}}
+		}
+	}
+	var stageError *applicationqianchuan.PreflightStageError
+	if errors.As(err, &stageError) {
+		var inventoryError *applicationqianchuan.PlanInventoryError
+		if errors.As(err, &inventoryError) {
+			switch inventoryError.Reason {
+			case "official_query":
+				return toolFailure{Code: "PLAN_INVENTORY_QUERY_FAILED", Message: "current Qianchuan plan inventory query failed", Retryable: true, Details: map[string]any{}}
+			case "pagination_changed", "count_mismatch", "duplicate_plan":
+				return toolFailure{Code: "PLAN_INVENTORY_CHANGED", Message: "current Qianchuan plan inventory changed during pagination", Retryable: true, Details: map[string]any{}}
+			case "pagination_metadata", "invalid_plan":
+				return toolFailure{Code: "PLAN_INVENTORY_INVALID", Message: "current Qianchuan plan inventory response is invalid", Retryable: true, Details: map[string]any{}}
+			case "safety_cap":
+				return toolFailure{Code: "PLAN_INVENTORY_TOO_LARGE", Message: "current Qianchuan plan inventory exceeds the safety limit", Details: map[string]any{}}
+			}
+		}
+		switch stageError.Stage {
+		case "configuration":
+			return toolFailure{Code: "CONFIG_UNAVAILABLE", Message: "local Ocean Watch configuration is unavailable", Details: map[string]any{}}
+		case "template":
+			return toolFailure{Code: "TEMPLATE_NOT_FOUND", Message: "Qianchuan product template is unavailable", Details: map[string]any{}}
+		case "work_metadata":
+			return toolFailure{Code: "WORK_METADATA_FAILED", Message: "Douyin work metadata resolution failed", Retryable: true, Details: map[string]any{}}
+		case "authorization":
+			return toolFailure{Code: "AUTHORIZATION_UNAVAILABLE", Message: "Qianchuan authorization is unavailable", Details: map[string]any{}}
+		case "work_verification":
+			return toolFailure{Code: "WORK_VERIFICATION_FAILED", Message: "official work verification failed", Retryable: true, Details: map[string]any{}}
+		case "plan_inventory":
+			return toolFailure{Code: "PLAN_INVENTORY_FAILED", Message: "current Qianchuan plan inventory query failed", Retryable: true, Details: map[string]any{}}
+		case "plan_reconciliation":
+			return toolFailure{Code: "PLAN_RECONCILIATION_FAILED", Message: "Qianchuan plan reconciliation failed", Retryable: true, Details: map[string]any{}}
+		case "local_coordination":
+			return toolFailure{Code: "LOCAL_COORDINATION_FAILED", Message: "local Qianchuan preflight coordination failed", Retryable: true, Details: map[string]any{}}
+		case "snapshot":
+			return toolFailure{Code: "PREFLIGHT_SNAPSHOT_FAILED", Message: "preflight snapshot could not be saved", Retryable: true, Details: map[string]any{}}
+		}
+	}
 	message := strings.ToLower(err.Error())
 	if strings.Contains(message, "template") &&
 		(strings.Contains(message, "not found") || strings.Contains(message, "not active")) {

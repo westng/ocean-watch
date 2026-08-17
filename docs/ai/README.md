@@ -19,5 +19,4 @@
 
 ## 当前设计
 
-- [Plugin 原生工具化改进设计](designs/plugin-tooling-improvement.md)
 - [千川计划创建快速工作流设计](designs/qianchuan-plan-creation-workflow-v2.md)

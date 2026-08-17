@@ -79,7 +79,7 @@ func (resolver F2Resolver) ResolveMany(
 			arguments = append(arguments, "--work-id", workID)
 		}
 	}
-	runtime, err := resolver.Python.Resolve(ctx)
+	runtime, err := resolver.Python.ResolveF2(ctx)
 	if err != nil || !runtime.Version.AtLeast(pythonruntime.Version{Major: 3, Minor: 10}) {
 		return portworkmetadata.MetadataResult{}, domain.NewWorkLinkError(
 			"f2_runtime_unavailable", "F2 作品解析需要 Python 3.10+ 和固定版本 F2 "+pythonruntime.RequiredF2Version,

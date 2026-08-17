@@ -42,6 +42,10 @@ jobs:
       - name: Probe MCP stdio process
         working-directory: runtime/ocean-watch-go
         run: go run ./cmd/mcp-probe
+      - name: Probe Unix MCP proxy entry
+        if: runner.os != 'Windows'
+        working-directory: runtime/ocean-watch-go
+        run: go run ./cmd/mcp-probe --binary ../../bin/ocean-watch-launcher --proxy-root ../..
       - name: Verify built runtime version injection
         if: runner.os == 'Linux'
         working-directory: runtime/ocean-watch-go

@@ -17,6 +17,14 @@ type FileLock struct {
 }
 
 func AcquireLock(ctx context.Context, path string, timeout time.Duration) (*FileLock, error) {
+	return acquireLock(ctx, path, timeout, false)
+}
+
+func AcquireSharedLock(ctx context.Context, path string, timeout time.Duration) (*FileLock, error) {
+	return acquireLock(ctx, path, timeout, true)
+}
+
+func acquireLock(ctx context.Context, path string, timeout time.Duration, shared bool) (*FileLock, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create lock directory: %w", err)
 	}
@@ -24,7 +32,32 @@ func AcquireLock(ctx context.Context, path string, timeout time.Duration) (*File
 	if err != nil {
 		return nil, fmt.Errorf("open process lock: %w", err)
 	}
-	return acquireOpenedLock(ctx, file, path, timeout)
+	return acquireOpenedLock(ctx, file, path, timeout, shared)
+}
+
+func TryAcquireLock(path string) (*FileLock, bool, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, false, fmt.Errorf("create lock directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, false, fmt.Errorf("open process lock: %w", err)
+	}
+	locked, err := tryPlatformLock(file)
+	if err != nil {
+		_ = file.Close()
+		return nil, false, fmt.Errorf("acquire process lock: %w", err)
+	}
+	if !locked {
+		_ = file.Close()
+		return nil, false, nil
+	}
+	if err := writeLockMetadata(file); err != nil {
+		_ = unlockPlatformFile(file)
+		_ = file.Close()
+		return nil, false, err
+	}
+	return &FileLock{file: file, path: path}, true, nil
 }
 
 func acquireLockAt(
@@ -38,7 +71,7 @@ func acquireLockAt(
 	if err != nil {
 		return nil, fmt.Errorf("open process lock: %w", err)
 	}
-	return acquireOpenedLock(ctx, file, displayPath, timeout)
+	return acquireOpenedLock(ctx, file, displayPath, timeout, false)
 }
 
 func acquireOpenedLock(
@@ -46,22 +79,31 @@ func acquireOpenedLock(
 	file *os.File,
 	path string,
 	timeout time.Duration,
+	shared bool,
 ) (*FileLock, error) {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		locked, lockErr := tryPlatformLock(file)
+		var locked bool
+		var lockErr error
+		if shared {
+			locked, lockErr = tryPlatformSharedLock(file)
+		} else {
+			locked, lockErr = tryPlatformLock(file)
+		}
 		if lockErr != nil {
 			_ = file.Close()
 			return nil, fmt.Errorf("acquire process lock: %w", lockErr)
 		}
 		if locked {
-			if err := writeLockMetadata(file); err != nil {
-				_ = unlockPlatformFile(file)
-				_ = file.Close()
-				return nil, err
+			if !shared {
+				if err := writeLockMetadata(file); err != nil {
+					_ = unlockPlatformFile(file)
+					_ = file.Close()
+					return nil, err
+				}
 			}
 			return &FileLock{file: file, path: path}, nil
 		}

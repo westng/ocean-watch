@@ -6,8 +6,9 @@
 flowchart LR
     User["用户自然语言"] --> Codex["Codex 意图理解"]
     Codex --> Skill["ads-plan-monitor / qc-plan-monitor"]
-    Skill --> MCP["Plugin 内置本地 stdio MCP"]
-    MCP --> MCPPresenter["MCP Schema / Presenter"]
+    Skill --> MCP["稳定本地 stdio MCP 代理"]
+    MCP --> Runtime["版本化私有业务 Runtime"]
+    Runtime --> MCPPresenter["MCP Schema / Presenter"]
     MCPPresenter --> Application["Go Application Service"]
     Skill --> Launcher["run / run.cmd"]
     Launcher --> Go["内置 Go CLI"]
@@ -24,9 +25,11 @@ Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 
 
 ## 当前状态
 
-Go 切换已经完成。源码中的本地 stdio MCP 共注册 16 个任务型工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、巨量营销授权/素材/报表查询 5 个。它们直接调用共享 Go Application Service，不启动 CLI，也不解析 CLI stdout；Skill 对已工具化请求禁止静默回退 CLI。千川预检会读取官方接口、必要时刷新授权并保存短期本地快照，但不会创建或修改计划；确认后的提交、自定义报表和其他高级业务继续由 `run`/`run.cmd` 进入同一套 Application Service。
+Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 17 个工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、巨量营销授权/素材/报表查询 5 个，以及只读能力目录 `get_capabilities`。前 16 个业务工具直接转发到当前版本化 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout；能力目录返回 74 条 CLI 能力、渠道、副作用和提交门禁。Skill 对高频目标直接选择唯一工具，只在未知但已确认属于 Ocean Watch 的目标上查询一次能力目录。
 
-当前 `.mcp.json` 固定启动内置 macOS Apple Silicon Go Runtime；MCP 工具清单与真实子进程协议已通过本机安装验收。五个平台 Go CLI 仍作为 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除，分发校验会拒绝旧 Python 业务源码或控制台入口重新出现；历史设计不再作为运行或回退路径。
+`.mcp.json` 在 macOS/Linux 启动固定本地代理。代理监控 `$CODEX_HOME/plugins/cache/ocean-watch/ocean-watch/` 的本地安装版本目录，不调用可能阻塞的 `codex plugin list`；目录名只用于发现候选，不能证明候选可信。代理随后校验 Plugin 名称/版本、Runtime 清单、MCP 配置、两套 Skill 及其资源、全部签名平台二进制 SHA-256 与最多 2 秒的当前平台自报版本探针，再把完整五平台产物复制到 `$CODEX_HOME/ocean-watch/runtime/versions/<manifest-sha256>` 私有只读槽位。槽位身份只由版本、清单哈希和槽位根确定，arm64/x64 进程从同一槽位选择各自二进制。若桌面客户端仍缓存被安装器删除的旧版本目录，代理只在该路径确属 Ocean Watch 缓存且不存在时建立指向已验证新 Host 的兼容别名，使随后新任务加载新版 Skill/MCP。同一外层 MCP 会话只在工具合同兼容时建立新内层会话并原子切换；工具名、Schema 或注解变化时，当前任务保留上一 Runtime，新任务别名仍发布新版 Host，因此只需新任务、不需退出客户端。真正无法初始化或校验身份的候选不会发布；候选握手失败时自动恢复上一 Runtime，成功切换后则清除瞬时回退状态，并通过跨进程共享租约删除不再使用的历史签名槽位。私有 Runtime 状态只提供启动解析与只读诊断，不再提供长期固定或人工回退入口。
+
+当前 Plugin/MCP 清单没有操作系统命令分支。macOS 与 Linux 可使用同一个 POSIX 稳定启动器；五个平台 Go CLI 仍是 CLI 分发目标，Windows MCP 尚无原生 Host 启动合同，不得把 Windows CLI 或交叉构建成功描述为 Windows MCP 已验收。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 
@@ -35,10 +38,12 @@ Go 切换已经完成。源码中的本地 stdio MCP 共注册 16 个任务型�
 | 路径 | 职责 |
 | --- | --- |
 | `skills/*/SKILL.md` | 自然语言意图、业务安全边界、强制输出合同 |
-| `skills/*/run*` | 按操作系统和架构选择内置二进制 |
+| `bin/ocean-watch-launcher` | macOS/Linux 稳定 MCP/CLI 外壳与 Runtime 解析入口 |
+| `skills/*/run*` | Unix 委派稳定外壳；Windows 解析版本化 CLI Runtime |
 | `.codex-plugin/bin/` | Marketplace 快照内的五平台 Go CLI |
 | `runtime/ocean-watch-go/cmd/` | CLI 与确定性运行时构建器 |
-| `runtime/ocean-watch-go/internal/mcpserver/` | stdio MCP、工具 Schema、专用 Presenter、稳定错误和脱敏日志 |
+| `runtime/ocean-watch-go/internal/mcpserver/` | 稳定代理、stdio MCP、工具 Schema、专用 Presenter、稳定错误和脱敏阶段日志 |
+| `runtime/ocean-watch-go/internal/runtimeupdate/` | 安装快照发现、完整性校验、版本槽位、切换与回滚状态机 |
 | `runtime/ocean-watch-go/internal/bootstrap/` | CLI 与 MCP 共享的 Adapter/Application 组合根，不承载业务规则 |
 | `runtime/ocean-watch-go/internal/cli/` | 参数解析、路由、JSON envelope、Presentation |
 | `runtime/ocean-watch-go/internal/application/` | OAuth、账户、模板、素材、计划和报表用例 |
@@ -91,3 +96,10 @@ CLI stdout 只输出一个 UTF-8 JSON 文档。MCP stdout 只输出换行分隔�
 `cmd/build-runtime` 使用固定 Go 工具链、`CGO_ENABLED=0`、`-trimpath` 与清空 build ID 构建五个平台二进制，并从 Plugin 基础版本注入 CLI 版本。`--all --verify` 在临时位置重建并逐字节对比仓库内产物。
 
 Marketplace 安装直接消费 Git 快照中的 `.codex-plugin/bin/`。Release 工作流不修改文件或回推 `main`，只验证固定提交、测试、重建产物并创建不可变 Tag/Release。
+
+## 升级与耗时证据
+
+- 兼容升级不改变外层 17 工具名称、Schema 或注解；稳定代理在同一 Host 会话中切换实现，不要求重启客户端。
+- 非兼容工具合同或 Skill 触发合同由 Host 在任务开始时加载，当前方案不声称能热替换；此类升级需要新任务。
+- 代理 stderr 分别记录 `runtime_initialized`、`runtime_switched`、`runtime_rejected` 和 `business_tool` 阶段及 `duration_ms`；工具结果 `_meta.ocean_watch` 返回实际 Runtime 版本和代理内业务调用耗时。版本目录监控只在安装目录变化时触发完整候选验证，普通业务调用不查询插件清单或扫描仓库。
+- 千川作品预检结构化 `performance` 继续记录链接解析、凭据、素材解析、计划对账和总耗时。模型意图理解发生在 Host 侧，Plugin 无法伪造内部计时；通过 Skill 第一屏唯一矩阵、禁止仓库/缓存探索和一次性能力目录约束其可控路径。

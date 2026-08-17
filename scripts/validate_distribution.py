@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import hashlib
 import re
 import stat
 import sys
@@ -42,19 +43,19 @@ def validate_mcp():
         fail("MCP manifest must contain only the ocean-watch server")
     server = servers["ocean-watch"]
     expected = {
-        "command": "./.codex-plugin/bin/ocean-watch_darwin_arm64",
-        "args": ["mcp", "serve", "--stdio"],
+        "command": "./bin/ocean-watch-launcher",
+        "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
         "cwd": ".",
     }
     if server != expected:
-        fail("MCP server must use the fixed darwin/arm64 Gate 0 command")
+        fail("MCP server must use the stable local runtime proxy")
     command = server["command"].lower()
     if command in {"sh", "bash", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"}:
         fail("MCP server must not start through a shell")
     target = (ROOT / server["command"]).resolve()
-    binary_root = (ROOT / ".codex-plugin" / "bin").resolve()
-    if target.parent != binary_root or not target.is_file():
-        fail("MCP server command escaped the prepared runtime directory")
+    launcher_root = (ROOT / "bin").resolve()
+    if target.parent != launcher_root or not target.is_file():
+        fail("MCP server command escaped the stable launcher directory")
     if target.stat().st_mode & (stat.S_IWGRP | stat.S_IWOTH):
         fail("MCP server executable is writable by group or other")
     for path in (ROOT / ".mcp.json", ROOT / ".codex-plugin" / "plugin.json"):
@@ -90,6 +91,8 @@ def validate_skill(name):
         fail(f"{name} MCP dependency contract is invalid")
     if "MCP `list_templates`" not in content or "MCP `get_template`" not in content:
         fail(f"{name} does not route template reads through MCP")
+    if "MCP `get_capabilities`" not in content or "Do not call `get_capabilities` when" not in content:
+        fail(f"{name} does not expose the bounded uncommon-capability route")
     if name == "qc-plan-monitor" and (
         "MCP `preflight_qianchuan_works`" not in content
         or "MCP `get_qianchuan_preflight`" not in content
@@ -108,7 +111,7 @@ def validate_skill(name):
         missing = [tool for tool in query_tools if f"MCP `{tool}`" not in content]
         if missing:
             fail(f"qc-plan-monitor does not route common Qianchuan reads through MCP: {missing}")
-        if "Do not run the equivalent CLI command" not in content:
+        if "Do not call an equivalent CLI route" not in content or "stop without a CLI fallback" not in content:
             fail("qc-plan-monitor does not fail closed for common Qianchuan MCP reads")
     if name == "ads-plan-monitor":
         query_tools = (
@@ -122,10 +125,12 @@ def validate_skill(name):
         missing = [tool for tool in query_tools if f"MCP `{tool}`" not in content]
         if missing:
             fail(f"ads-plan-monitor does not route common Marketing reads through MCP: {missing}")
-        if "Do not run the equivalent CLI command" not in content:
+        if "Do not call an equivalent CLI route" not in content or "stop without a CLI fallback" not in content:
             fail("ads-plan-monitor does not fail closed for common Marketing MCP reads")
-    if "Never search the repository" not in content or "silent fallback" not in content:
+    if "search the repository" not in content or "stop without a CLI fallback" not in content:
         fail(f"{name} does not fail closed when MCP template tools are unavailable")
+    if "call that exact MCP tool immediately" not in content or "never enumerate `ALL_TOOLS`" not in content:
+        fail(f"{name} may inspect deferred tool declarations before direct routing")
     if not (root / "run.cmd").is_file():
         fail(f"{name} Windows launcher is missing")
     launcher = root / "run"
@@ -144,6 +149,55 @@ def validate_binaries():
             fail(f"prepared runtime is empty: {name}")
         if not name.endswith(".exe") and not path.stat().st_mode & stat.S_IXUSR:
             fail(f"prepared runtime is not executable: {name}")
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_runtime_manifest():
+    plugin_path = ROOT / ".codex-plugin" / "plugin.json"
+    plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
+    path = ROOT / ".codex-plugin" / "runtime-manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    if set(manifest) != {"schema_version", "version", "plugin", "resources", "sha256"}:
+        fail("runtime manifest shape is invalid")
+    if manifest.get("schema_version") != 1 or manifest.get("version") != plugin.get("version"):
+        fail("runtime manifest version is invalid")
+    expected_plugin = {
+        "name": "ocean-watch",
+        "version": plugin.get("version"),
+        "sha256": sha256(plugin_path),
+    }
+    if manifest.get("plugin") != expected_plugin:
+        fail("runtime manifest plugin identity is invalid")
+    resources = {
+        ".mcp.json": ROOT / ".mcp.json",
+        "f2/resolve.py": ROOT / "f2" / "resolve.py",
+        "bin/ocean-watch-launcher": ROOT / "bin" / "ocean-watch-launcher",
+    }
+    for resource in sorted((ROOT / "skills").rglob("*")):
+        if resource.is_symlink():
+            fail(f"plugin Host resource must not be a symlink: {resource.relative_to(ROOT)}")
+        if resource.is_file():
+            resources[resource.relative_to(ROOT).as_posix()] = resource
+    expected_resources = {name: sha256(resource) for name, resource in resources.items()}
+    if manifest.get("resources") != expected_resources:
+        fail("runtime manifest resource hashes are invalid")
+    expected_binaries = {
+        name: sha256(ROOT / ".codex-plugin" / "bin" / name) for name in TARGETS
+    }
+    if manifest.get("sha256") != expected_binaries:
+        fail("runtime manifest binary hashes are invalid")
+
+
+def validate_fast_routing_has_no_legacy_conflicts():
+    ads_reference = (ROOT / "skills" / "ads-plan-monitor" / "references" / "workflow-reference.md").read_text(encoding="utf-8")
+    qc_reference = (ROOT / "skills" / "qc-plan-monitor" / "references" / "workflow-reference.md").read_text(encoding="utf-8")
+    if "Run `accounts list` during the current turn" in ads_reference:
+        fail("Marketing workflow reference retains the legacy responsible-account route")
+    if "install Python and reopen Codex" in qc_reference:
+        fail("Qianchuan workflow reference retains the legacy client-restart requirement")
 
 
 def validate_single_business_runtime():
@@ -188,6 +242,8 @@ def main():
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")
         validate_binaries()
+        validate_runtime_manifest()
+        validate_fast_routing_has_no_legacy_conflicts()
         validate_single_business_runtime()
         validate_removed_compatibility_paths()
     except (OSError, ValueError, RuntimeError, yaml.YAMLError) as error:

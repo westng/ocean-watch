@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	ConfigEnv    = "ADS_PLAN_MONITOR_CONFIG"
-	CodexHomeEnv = "CODEX_HOME"
+	ConfigEnv         = "ADS_PLAN_MONITOR_CONFIG"
+	CodexHomeEnv      = "CODEX_HOME"
+	ManagedRuntimeEnv = "OCEAN_WATCH_MANAGED_RUNTIME"
 )
 
 func CodexHome(getenv func(string) string, userHome string) string {
@@ -23,6 +24,9 @@ func ResolveConfigPath(explicit, cwd string, getenv func(string) string, userHom
 	}
 	if value := getenv(ConfigEnv); value != "" {
 		return expandHome(value, userHome)
+	}
+	if getenv(ManagedRuntimeEnv) == "1" {
+		return filepath.Join(CodexHome(getenv, userHome), "ads-plan-monitor", "config.json")
 	}
 	for root := cwd; root != filepath.Dir(root); root = filepath.Dir(root) {
 		manifest := filepath.Join(root, ".codex-plugin", "plugin.json")
@@ -49,6 +53,9 @@ func ResolveInitializationConfigPath(
 	}
 	if value := getenv(ConfigEnv); value != "" {
 		return expandHome(value, userHome)
+	}
+	if getenv(ManagedRuntimeEnv) == "1" {
+		return filepath.Join(CodexHome(getenv, userHome), "ads-plan-monitor", "config.json")
 	}
 	for root := cwd; ; root = filepath.Dir(root) {
 		if fileExists(filepath.Join(root, ".codex-plugin", "plugin.json")) {
