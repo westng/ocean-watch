@@ -107,8 +107,8 @@ func ResolveAuthorization(
 		pending := pendingAuthorizationIDs(authorizations)
 		if len(pending) != 0 {
 			return AuthorizationBinding{}, NewError(
-				"legacy_authorization_pending_sync",
-				fmt.Sprintf("%s legacy authorization requires an authorized-account sync", channel),
+				"authorization_pending_sync",
+				fmt.Sprintf("%s authorization requires an authorized-account sync", channel),
 				1,
 				map[string]any{"authorization_ids": pending},
 			)
@@ -133,7 +133,7 @@ func ResolveAuthorization(
 	pending := authorizationBool(metadata["pending_account_sync"])
 	if pending && !allowPending {
 		return AuthorizationBinding{}, NewError(
-			"legacy_authorization_pending_sync",
+			"authorization_pending_sync",
 			fmt.Sprintf("%s authorization %s requires an authorized-account sync", channel, selectedID),
 			1,
 			map[string]any{"authorization_ids": []string{selectedID}},

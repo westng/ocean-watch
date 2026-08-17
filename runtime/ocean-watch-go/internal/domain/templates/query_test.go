@@ -94,36 +94,22 @@ func TestShowExactQianchuanRejectsDisplayNameSelector(t *testing.T) {
 	}
 }
 
-func TestLegacyMarketingAndQianchuanProductMigrationAreReadOnly(t *testing.T) {
-	config := templateTestConfig(t)
-	config["plan_template_schema_version"] = json.Number("1")
-	config["plan_templates"] = map[string]any{
-		"legacy": map[string]any{
-			"platform": "平台", "traffic_source": "CID", "product_id": "3001",
-			"product_label": "旧商品", "titles": []any{"旧标题"},
-		},
-	}
-	config["account"] = map[string]any{"channel": "marketing", "advertiser_id": json.Number("1000000000000001")}
-	productTemplates := config[qianchuanProductTemplatesKey].(map[string]any)
-	product := productTemplates["qcpt_example"].(map[string]any)
-	product["display_name"] = "旧名称"
-	config[qianchuanProductSchemaVersionKey] = json.Number("2")
-	before := cloneMap(config)
-	result, err := List(config, "all", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(config, before) {
-		t.Fatal("template query mutated input config")
-	}
-	channels := result["channels"].(map[string]any)
-	marketing := channels["marketing"].(map[string]any)["templates"].([]any)[0].(map[string]any)
-	if marketing["legacy"] != true || marketing["material_source_type"] != "ACCOUNT_UPLOAD" {
-		t.Fatalf("legacy Marketing template was not normalized: %#v", marketing)
-	}
-	productRow := channels["qianchuan"].(map[string]any)["templates"].([]any)[0].(map[string]any)
-	if productRow["display_name"] != "巨量千川-2000000000000001-示例商品-8000000000000001/8000000000000002-商品全域" {
-		t.Fatalf("product name was not migrated: %#v", productRow)
+func TestTemplateQueriesRejectOldSchemas(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		field string
+		value int
+	}{
+		{name: "marketing", field: "plan_template_schema_version", value: 5},
+		{name: "qianchuan product", field: qianchuanProductSchemaVersionKey, value: 7},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := templateTestConfig(t)
+			config[test.field] = test.value
+			if _, err := List(config, "all", true); err == nil {
+				t.Fatalf("old schema %s=%d remained readable", test.field, test.value)
+			}
+		})
 	}
 }
 
@@ -146,6 +132,7 @@ func templateTestConfig(t *testing.T) map[string]any {
     "巨量营销-1000000000000001-示例商品-3001-混剪素材": {
       "display_name": "巨量营销-1000000000000001-示例商品-3001-混剪素材",
       "bindings": {
+        "channel": "marketing",
         "advertiser_id": "1000000000000001",
         "platform": "平台",
         "traffic_source": "CID",

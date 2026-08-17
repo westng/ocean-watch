@@ -79,7 +79,6 @@ func TestTemplateActionErrorPreservesStableExitClasses(t *testing.T) {
 		code     string
 		exitCode int
 	}{
-		{action: "migrate", code: "unexpected_error", exitCode: 1},
 		{action: "set-copy", code: "unexpected_error", exitCode: 1},
 		{action: "validate", code: "configuration_error", exitCode: 2},
 		{action: "delete", code: "configuration_error", exitCode: 2},

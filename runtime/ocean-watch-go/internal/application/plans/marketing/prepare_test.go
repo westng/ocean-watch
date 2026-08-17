@@ -250,6 +250,7 @@ func marketingPrepareFixture(sourceType string) map[string]any {
 		}
 	}
 	base["plan_templates"] = map[string]any{name: map[string]any{
+		"display_name": name,
 		"bindings": map[string]any{
 			"channel": "marketing", "advertiser_id": "1234567890", "platform": "测试平台",
 			"traffic_source": "CID", "product_id": "9007199254740993", "product_name": "test product",

@@ -708,7 +708,7 @@ func orderedMarketingRows(values []any) []any {
 				"name", "project_name_template", "promotion_name_template", "channel", "advertiser_id", "platform", "traffic_source",
 				"product_id", "product_name", "product_image_ids", "product_image",
 				"delivery_settings", "material_source_type", "material_source_name",
-				"material_strategy", "copy_materials", "bindings", "legacy", "binding_error",
+				"material_strategy", "copy_materials", "bindings", "binding_error",
 			},
 			func(key string, item any) any {
 				switch key {

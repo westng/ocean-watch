@@ -21,18 +21,17 @@ func (values *repeatedStrings) Set(value string) error {
 }
 
 type templateOptions struct {
-	configPath                   string
-	channel                      string
-	selector                     string
-	includeDetails               bool
-	force                        bool
-	submit                       bool
-	out                          string
-	titles                       repeatedStrings
-	fromTemplate                 string
-	materialSourceType           string
-	templateType                 string
-	confirmRemoveLegacyMaterials bool
+	configPath         string
+	channel            string
+	selector           string
+	includeDetails     bool
+	force              bool
+	submit             bool
+	out                string
+	titles             repeatedStrings
+	fromTemplate       string
+	materialSourceType string
+	templateType       string
 }
 
 func parseTemplateOptions(action string, args []string) (templateOptions, error) {
@@ -51,9 +50,8 @@ func parseTemplateOptions(action string, args []string) (templateOptions, error)
 	case "show":
 		flags.StringVar(&options.channel, "channel", "", "")
 		flags.StringVar(&options.selector, "template", "", "")
-	case "migrate", "set-copy":
+	case "set-copy":
 		flags.StringVar(&options.materialSourceType, "material-source-type", "", "")
-		flags.BoolVar(&options.confirmRemoveLegacyMaterials, "confirm-remove-legacy-materials", false, "")
 		flags.StringVar(&options.selector, "template", "", "")
 		flags.Var(&options.titles, "title", "")
 		flags.StringVar(&options.fromTemplate, "from-template", "", "")
@@ -100,19 +98,9 @@ func parseTemplateOptions(action string, args []string) (templateOptions, error)
 		if options.selector == "" {
 			return templateOptions{}, errors.New("--template is required for show")
 		}
-	case "migrate":
-		if options.materialSourceType != "" {
-			return templateOptions{}, errors.New("--material-source-type is only valid for create-wizard")
-		}
-		if options.selector != "" || len(options.titles) != 0 || options.fromTemplate != "" {
-			return templateOptions{}, errors.New("--template, --title, and --from-template are only valid for set-copy")
-		}
 	case "set-copy":
 		if options.materialSourceType != "" {
 			return templateOptions{}, errors.New("--material-source-type is only valid for create-wizard")
-		}
-		if options.confirmRemoveLegacyMaterials {
-			return templateOptions{}, errors.New("--confirm-remove-legacy-materials is only valid for migrate")
 		}
 		if options.selector == "" {
 			return templateOptions{}, errors.New("--template is required for set-copy")
@@ -171,25 +159,10 @@ func RunTemplates(
 		result, err = lifecycle.Delete(ctx, options.channel, options.selector, options.force, options.submit)
 	case "set-copy":
 		result, err = lifecycle.SetCopy(ctx, options.selector, options.titles, options.fromTemplate)
-	case "migrate":
-		result, err = lifecycle.MigrateMarketing(ctx, options.confirmRemoveLegacyMaterials)
 	default:
 		err = errors.New("unsupported template action")
 	}
 	if err != nil {
-		var legacyError *domaintemplates.LegacyMaterialError
-		if errors.As(err, &legacyError) {
-			_ = WriteJSON(stdout, map[string]any{
-				"config":             resolvedPath,
-				"command":            action,
-				"changed":            false,
-				"error_code":         "legacy_material_selection_requires_confirmation",
-				"error":              legacyError.Error(),
-				"affected_templates": legacyError.Templates,
-				"required_flag":      "--confirm-remove-legacy-materials",
-			})
-			return 2
-		}
 		mapped := templateActionError(action, err)
 		WriteDomainError(stdout, mapped)
 		return mapped.ExitCode
@@ -206,7 +179,7 @@ func RunTemplates(
 }
 
 func templateActionError(action string, err error) *domain.Error {
-	if action == "migrate" || action == "set-copy" {
+	if action == "set-copy" {
 		return domain.NewError("unexpected_error", err.Error(), 1, nil)
 	}
 	return templateError(err)

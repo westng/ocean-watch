@@ -12,7 +12,7 @@ import (
 
 func parseQianchuanTemplateOptions(action string, args []string) (string, error) {
 	switch action {
-	case "list", "create", "migrate", "list-live", "create-live", "migrate-live":
+	case "list", "create", "list-live", "create-live":
 	default:
 		return "", errors.New("unsupported Qianchuan template action")
 	}
@@ -46,12 +46,8 @@ func RunQianchuanTemplates(
 	switch action {
 	case "list":
 		result, err = lifecycle.ListQianchuanProduct(ctx)
-	case "migrate":
-		result, err = lifecycle.MigrateQianchuanProduct(ctx)
 	case "list-live":
 		result, err = lifecycle.ListQianchuanLive(ctx)
-	case "migrate-live":
-		result, err = lifecycle.MigrateQianchuanLive(ctx)
 	default:
 		err = errors.New("unsupported Qianchuan template action")
 	}

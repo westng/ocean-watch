@@ -144,24 +144,7 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		return RunAccounts(ctx, invocation.Command.Action, invocation.Arguments, store, stdout)
 	case "auth":
 		stateRoot := filepath.Join(codexRoot, "ads-plan-monitor", "state")
-		if invocation.Command.Action != "migrate" {
-			return runner.runAuth(ctx, invocation.Command.Action, invocation.Arguments, stateRoot, credentialStore, stdout, stderr)
-		}
-		explicitConfig := argumentValue(invocation.Arguments, "--config")
-		configPath := filepath.Clean(filesystem.ResolveConfigPath(explicitConfig, cwd, getenv, userHome))
-		resolvedPath, resolveErr := filepath.Abs(configPath)
-		if resolveErr != nil {
-			WriteDomainError(stdout, domain.NewError("unexpected_error", resolveErr.Error(), 1, nil))
-			return 1
-		}
-		migration := application.AuthorizationMigration{
-			Config:         filesystem.ConfigStore{Path: configPath},
-			Credentials:    credentialStore,
-			Authorizations: filesystem.AuthorizationStore{Root: stateRoot},
-			Journal:        filesystem.MigrationJournalStore{Root: stateRoot},
-			ConfigPath:     resolvedPath,
-		}
-		return RunAuthorizationMigration(ctx, invocation.Arguments, migration, resolvedPath, stdout)
+		return runner.runAuth(ctx, invocation.Command.Action, invocation.Arguments, stateRoot, credentialStore, stdout, stderr)
 	case "runs":
 		store := filesystem.RunStore{Root: filesystem.ResolveRunsRoot(getenv, userHome)}
 		return RunRuns(ctx, invocation.Command.Action, invocation.Arguments, store, stdout)
@@ -283,12 +266,19 @@ func (runner Runner) runSetup(
 		}
 		redirectURI := configuration.Channels[options.channel].RedirectURI
 		configPath := filepath.Clean(filesystem.ResolveConfigPath(options.configPath, cwd, getenv, userHome))
-		if raw, readErr := (filesystem.ConfigStore{Path: configPath}).Read(ctx); readErr == nil {
-			if runtimeConfig, _, runtimeErr := configuration.Runtime(raw, options.channel, "oauth"); runtimeErr == nil {
-				if configured := strings.TrimSpace(fmt.Sprint(configuration.Value(runtimeConfig, "oauth.redirect_uri"))); configured != "" && configured != "<nil>" {
-					redirectURI = configured
-				}
+		raw, readErr := (filesystem.ConfigStore{Path: configPath}).Read(ctx)
+		if readErr == nil {
+			runtimeConfig, _, runtimeErr := configuration.Runtime(raw, options.channel, "oauth")
+			if runtimeErr != nil {
+				WriteDomainError(stdout, domain.NewError("configuration_error", runtimeErr.Error(), 2, nil))
+				return 2
 			}
+			if configured := strings.TrimSpace(fmt.Sprint(configuration.Value(runtimeConfig, "oauth.redirect_uri"))); configured != "" && configured != "<nil>" {
+				redirectURI = configured
+			}
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			WriteDomainError(stdout, domain.NewError("configuration_error", readErr.Error(), 2, nil))
+			return 2
 		}
 		return RunDoctor(ctx, args, doctor, redirectURI, stdout)
 	case "init":

@@ -85,8 +85,7 @@ func validateMarketing(config map[string]any, selector string) (map[string]any, 
 		"valid":    len(defaultErrors) == 0,
 		"errors":   defaultErrors,
 	}
-	migrationRequired := version != marketingSchemaVersion
-	valid := len(errorsList) == 0 && !migrationRequired && exactTrue(defaultSkeleton["valid"])
+	valid := len(errorsList) == 0 && version == marketingSchemaVersion && exactTrue(defaultSkeleton["valid"])
 	for _, value := range rows {
 		valid = valid && exactTrue(value.(map[string]any)["valid"])
 	}
@@ -94,7 +93,6 @@ func validateMarketing(config map[string]any, selector string) (map[string]any, 
 		"channel":                  "marketing",
 		"schema_version":           nullableVersion(version, versionError),
 		"supported_schema_version": marketingSchemaVersion,
-		"migration_required":       migrationRequired,
 		"valid":                    valid,
 		"errors":                   errorsList,
 		"default_skeletons":        []any{defaultSkeleton},
@@ -123,16 +121,8 @@ func marketingValidationRow(config map[string]any, name string, raw any) map[str
 	if fields := marketingFixedMaterialFields(normalized); len(fields) != 0 {
 		errorsList = append(errorsList, "runtime material IDs stored in template: "+strings.Join(fields, ", "))
 	}
-	version, _ := validationSchemaVersion(config["plan_template_schema_version"], "plan_template_schema_version")
-	if version >= marketingSchemaVersion {
-		if name != stringValue(normalized["display_name"]) {
-			errorsList = append(errorsList, "template display_name must match the template key")
-		}
-	} else if version >= 4 {
-		canonical := marketingCanonicalName(normalized)
-		if name != canonical || normalized["display_name"] != canonical {
-			errorsList = append(errorsList, "template name must be "+canonical)
-		}
+	if name != stringValue(normalized["display_name"]) {
+		errorsList = append(errorsList, "template display_name must match the template key")
 	}
 	return map[string]any{
 		"template": name,
@@ -209,8 +199,7 @@ func validateQianchuan(config map[string]any, selector string) (map[string]any, 
 			errorsList = append(errorsList, message)
 		}
 	}
-	migrationRequired := productVersion != qianchuanProductSchemaVersion || liveVersion != qianchuanLiveSchemaVersion
-	valid := len(errorsList) == 0 && !migrationRequired
+	valid := len(errorsList) == 0 && productVersion == qianchuanProductSchemaVersion && liveVersion == qianchuanLiveSchemaVersion
 	for _, collection := range [][]any{defaultSkeletons, rows} {
 		for _, value := range collection {
 			valid = valid && exactTrue(value.(map[string]any)["valid"])
@@ -231,11 +220,10 @@ func validateQianchuan(config map[string]any, selector string) (map[string]any, 
 			"product": qianchuanProductSchemaVersion,
 			"live":    qianchuanLiveSchemaVersion,
 		},
-		"migration_required": migrationRequired,
-		"valid":              valid,
-		"errors":             errorsList,
-		"default_skeletons":  defaultSkeletons,
-		"templates":          rows,
+		"valid":             valid,
+		"errors":            errorsList,
+		"default_skeletons": defaultSkeletons,
+		"templates":         rows,
 	}, nil
 }
 
@@ -352,9 +340,8 @@ func validateQianchuanLiveDefault(value any) error {
 func Delete(config map[string]any, channel, selector string, force bool) (map[string]any, map[string]any, error) {
 	updated := cloneMap(config)
 	if channel == "marketing" {
-		version, _ := validationSchemaVersion(config["plan_template_schema_version"], "plan_template_schema_version")
-		if version != marketingSchemaVersion {
-			return nil, nil, configurationError("migrate Marketing templates before deletion", nil)
+		if err := requireTemplateSchema(config, "plan_template_schema_version", marketingSchemaVersion, "Marketing"); err != nil {
+			return nil, nil, err
 		}
 		rawTemplates := config["plan_templates"]
 		templates, ok := rawTemplates.(map[string]any)
@@ -403,14 +390,6 @@ func Delete(config map[string]any, channel, selector string, force bool) (map[st
 	liveConfig, err := ensureQianchuanLiveConfig(config)
 	if err != nil {
 		return nil, nil, err
-	}
-	productVersion, _ := validationSchemaVersion(config[qianchuanProductSchemaVersionKey], qianchuanProductSchemaVersionKey)
-	liveVersion, _ := validationSchemaVersion(config[qianchuanLiveSchemaVersionKey], qianchuanLiveSchemaVersionKey)
-	if productVersion != qianchuanProductSchemaVersion {
-		return nil, nil, configurationError("migrate Qianchuan templates before deletion", nil)
-	}
-	if liveVersion != qianchuanLiveSchemaVersion {
-		return nil, nil, configurationError("migrate Qianchuan live templates before deletion", nil)
 	}
 	template, productErr := resolveQianchuanProductTemplate(productConfig, selector)
 	templateKind := "product"
@@ -479,8 +458,8 @@ func SetCopy(config map[string]any, templateName string, titles []string, fromTe
 	if err != nil {
 		return nil, err
 	}
-	if version < marketingSchemaVersion {
-		return nil, configurationError("migrate the config before setting copy materials", nil)
+	if version != marketingSchemaVersion {
+		return nil, configurationError(fmt.Sprintf("Marketing template schema %d is unsupported; only schema %d is supported", version, marketingSchemaVersion), nil)
 	}
 	if (len(titles) != 0) == (fromTemplate != "") {
 		return nil, configurationError("provide either titles or one source template", nil)
@@ -524,242 +503,6 @@ func SetCopy(config map[string]any, templateName string, titles []string, fromTe
 	templates[templateName] = clonedTemplate
 	updated["plan_templates"] = templates
 	return updated, nil
-}
-
-func MigrateMarketing(config map[string]any, confirmRemoveLegacyMaterials bool) (map[string]any, *LegacyMaterialError, error) {
-	version, versionError := validationSchemaVersion(config["plan_template_schema_version"], "plan_template_schema_version")
-	if versionError != "" {
-		return nil, nil, configurationError(versionError, nil)
-	}
-	if version > marketingSchemaVersion {
-		return nil, nil, configurationError(fmt.Sprintf("plan template schema %d is newer than supported %d", version, marketingSchemaVersion), nil)
-	}
-	if version == marketingSchemaVersion {
-		validated := cloneMap(config)
-		if _, exists := validated["active_plan_template"]; exists {
-			return nil, nil, configurationError("schema v6 does not support active_plan_template; migrate the config", nil)
-		}
-		for _, name := range sortedKeys(mapOrEmpty(validated["plan_templates"])) {
-			row := marketingValidationRow(validated, name, mapOrEmpty(validated["plan_templates"])[name])
-			if !exactTrue(row["valid"]) {
-				errorsList := listOrEmpty(row["errors"])
-				message := "invalid plan template " + name
-				if len(errorsList) != 0 {
-					message += ": " + stringValue(errorsList[0])
-				}
-				return nil, nil, configurationError(message, nil)
-			}
-		}
-		return validated, nil, nil
-	}
-	if version == 5 {
-		migrated := cloneMap(config)
-		delete(migrated, "active_plan_template")
-		migrated["plan_template_schema_version"] = marketingSchemaVersion
-		return MigrateMarketingValue(migrated, confirmRemoveLegacyMaterials)
-	}
-	if version == 4 {
-		migrated := cloneMap(config)
-		delete(migrated, "active_plan_template")
-		migrated["plan_template_schema_version"] = marketingSchemaVersion
-		return MigrateMarketingValue(migrated, confirmRemoveLegacyMaterials)
-	}
-	if version >= 3 {
-		migrated, err := migrateMarketingNames(config)
-		if err != nil {
-			return nil, nil, err
-		}
-		return MigrateMarketingValue(migrated, confirmRemoveLegacyMaterials)
-	}
-	return migrateLegacyMarketing(config, confirmRemoveLegacyMaterials)
-}
-
-type LegacyMaterialError struct {
-	Templates []string
-}
-
-func (err *LegacyMaterialError) Error() string {
-	return "legacy templates contain fixed video IDs; rerun migration with explicit confirmation: " + strings.Join(err.Templates, ", ")
-}
-
-func MigrateMarketingValue(config map[string]any, confirmRemoveLegacyMaterials bool) (map[string]any, *LegacyMaterialError, error) {
-	return MigrateMarketing(config, confirmRemoveLegacyMaterials)
-}
-
-func migrateMarketingNames(config map[string]any) (map[string]any, error) {
-	templates := mapOrEmpty(config["plan_templates"])
-	nameMap := map[string]string{}
-	owners := map[string]string{}
-	for _, oldName := range sortedKeys(templates) {
-		raw, ok := templates[oldName].(map[string]any)
-		if !ok {
-			return nil, configurationError("Marketing plan template must be an object", map[string]any{"template": oldName})
-		}
-		normalized, err := normalizeMarketingTemplate(config, oldName, raw)
-		if err != nil {
-			return nil, err
-		}
-		newName := marketingCanonicalName(normalized)
-		if owner, exists := owners[newName]; exists && owner != oldName {
-			return nil, configurationError("plan template naming collision after schema v4 migration: "+owner+", "+oldName+" -> "+newName, nil)
-		}
-		nameMap[oldName] = newName
-		owners[newName] = oldName
-	}
-	migrated := cloneMap(config)
-	renamed := map[string]any{}
-	for _, oldName := range sortedKeys(templates) {
-		newName := nameMap[oldName]
-		template := cloneMap(mapOrEmpty(templates[oldName]))
-		template["display_name"] = newName
-		if createdFrom, ok := template["created_from"].(map[string]any); ok {
-			if replacement, exists := nameMap[stringValue(createdFrom["template"])]; exists {
-				createdFrom["template"] = replacement
-			}
-		}
-		if copyMaterials, ok := template["copy_materials"].(map[string]any); ok {
-			if replacement, exists := nameMap[stringValue(copyMaterials["copied_from_template"])]; exists {
-				copyMaterials["copied_from_template"] = replacement
-			}
-		}
-		renamed[newName] = template
-	}
-	migrated["plan_templates"] = renamed
-	migrated["plan_template_schema_version"] = 4
-	return migrated, nil
-}
-
-func migrateLegacyMarketing(config map[string]any, confirm bool) (map[string]any, *LegacyMaterialError, error) {
-	// The legacy transformation is intentionally expressed in terms of the same
-	// normalized templates used by queries so unknown root and template fields survive.
-	originalBase := marketingDefaultBundle(config)
-	base := sharedMarketingDefaultBundle(originalBase)
-	templates := map[string]any{}
-	affected := []string{}
-	for _, name := range sortedKeys(mapOrEmpty(config["plan_templates"])) {
-		raw := mapOrEmpty(mapOrEmpty(config["plan_templates"])[name])
-		normalized, err := normalizeMarketingTemplate(config, name, raw)
-		if err != nil {
-			return nil, nil, err
-		}
-		bindings := cloneMap(mapOrEmpty(normalized["bindings"]))
-		if _, exists := bindings["channel"]; !exists {
-			bindings["channel"] = "marketing"
-		}
-		effective := cloneMap(originalBase)
-		for _, section := range marketingTemplateSections {
-			if override, exists := mapOrEmpty(normalized["overrides"])[section]; exists {
-				effective[section] = deepMerge(mapOrEmpty(effective[section]), mapOrEmpty(override))
-			}
-		}
-		effective["titles"] = clone(listOrEmpty(mapOrEmpty(normalized["copy_materials"])["titles"]))
-		materials := cloneMap(mapOrEmpty(effective["materials"]))
-		for _, field := range []string{"video_ids", "video_cover_ids"} {
-			if hasValue(materials[field]) {
-				affected = append(affected, name)
-			}
-			delete(materials, field)
-		}
-		effective["materials"] = materials
-		overrides := deepDifference(base, effective)
-		delete(overrides, "titles")
-		maximum := mapOrEmpty(effective["defaults"])["max_videos_per_project"]
-		if !hasValue(maximum) {
-			maximum = 5
-		}
-		parsedMaximum, err := integerValue(maximum)
-		if err != nil {
-			return nil, nil, configurationError("max_videos_per_project must be an integer", nil)
-		}
-		result := map[string]any{
-			"display_name":   normalized["display_name"],
-			"bindings":       bindings,
-			"copy_materials": clone(mapOrEmpty(normalized["copy_materials"])),
-			"material_strategy": map[string]any{
-				"source_type": "ACCOUNT_UPLOAD", "selection_mode": "MANUAL", "max_materials_per_unit": parsedMaximum,
-			},
-			"overrides": overrides,
-		}
-		if normalized["created_from"] != nil {
-			result["created_from"] = clone(normalized["created_from"])
-		}
-		for key, value := range raw {
-			if !marketingMigrationCoreFields[key] {
-				result[key] = clone(value)
-			}
-		}
-		templates[name] = result
-	}
-	affected = uniqueSorted(affected)
-	if len(affected) != 0 && !confirm {
-		legacyErr := &LegacyMaterialError{Templates: affected}
-		return nil, legacyErr, legacyErr
-	}
-	migrated := cloneMap(config)
-	migrated["plan_template_schema_version"] = 3
-	migrated["default_plan_template"] = base
-	migrated["plan_templates"] = templates
-	for _, section := range marketingTemplateSections {
-		delete(migrated, section)
-	}
-	delete(migrated, "titles")
-	return MigrateMarketingValue(migrated, confirm)
-}
-
-var marketingMigrationCoreFields = map[string]bool{
-	"display_name": true, "bindings": true, "copy_materials": true, "material_strategy": true,
-	"created_from": true, "overrides": true, "platform": true, "traffic_source": true,
-	"product_label": true, "product_id": true, "defaults": true, "materials": true,
-	"resolved_ids": true, "links": true, "tracking_urls": true, "titles": true,
-}
-
-func sharedMarketingDefaultBundle(bundle map[string]any) map[string]any {
-	shared := cloneMap(bundle)
-	defaults := cloneMap(mapOrEmpty(shared["defaults"]))
-	for _, field := range []string{"product_name", "product_id", "source"} {
-		delete(defaults, field)
-	}
-	shared["defaults"] = defaults
-	resolved := mapOrEmpty(shared["resolved_ids"])
-	sharedResolved := map[string]any{}
-	for _, field := range []string{"city_ids", "city_names"} {
-		if value, exists := resolved[field]; exists {
-			sharedResolved[field] = clone(value)
-		}
-	}
-	shared["resolved_ids"] = sharedResolved
-	shared["materials"] = map[string]any{}
-	shared["links"] = map[string]any{}
-	shared["tracking_urls"] = map[string]any{}
-	shared["titles"] = []any{}
-	return shared
-}
-
-func deepDifference(base, value any) map[string]any {
-	baseMap, baseOK := base.(map[string]any)
-	valueMap, valueOK := value.(map[string]any)
-	if !baseOK || !valueOK {
-		return map[string]any{}
-	}
-	result := map[string]any{}
-	for key, item := range valueMap {
-		baseItem, exists := baseMap[key]
-		if !exists {
-			result[key] = clone(item)
-			continue
-		}
-		baseNested, baseNestedOK := baseItem.(map[string]any)
-		valueNested, valueNestedOK := item.(map[string]any)
-		if baseNestedOK && valueNestedOK {
-			difference := deepDifference(baseNested, valueNested)
-			if len(difference) != 0 {
-				result[key] = difference
-			}
-		} else if !reflect.DeepEqual(normalizeComparable(baseItem), normalizeComparable(item)) {
-			result[key] = clone(item)
-		}
-	}
-	return result
 }
 
 func ListQianchuanProduct(config map[string]any) (map[string]any, error) {
@@ -808,22 +551,6 @@ func MarketingLifecycleResult(config map[string]any, path, command string, chang
 	}, nil
 }
 
-func MigrateQianchuanProduct(config map[string]any) (map[string]any, map[string]any, bool, error) {
-	normalized, err := ensureQianchuanProductConfig(config)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	listed, err := ListQianchuanProduct(normalized)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	return normalized, map[string]any{
-		"migrated":       !semanticEqual(config, normalized),
-		"schema_version": qianchuanProductSchemaVersion,
-		"templates":      listed["templates"],
-	}, !semanticEqual(config, normalized), nil
-}
-
 func ListQianchuanLive(config map[string]any) (map[string]any, error) {
 	templates, normalized, err := listQianchuanLiveTemplates(config)
 	if err != nil {
@@ -845,21 +572,6 @@ func ListQianchuanLive(config map[string]any) (map[string]any, error) {
 		},
 		"templates": rows,
 	}, nil
-}
-
-func MigrateQianchuanLive(config map[string]any) (map[string]any, map[string]any, bool, error) {
-	normalized, err := ensureQianchuanLiveConfig(config)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	listed, err := ListQianchuanLive(normalized)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	changed := !semanticEqual(config, normalized)
-	return normalized, map[string]any{
-		"migrated": changed, "schema_version": qianchuanLiveSchemaVersion, "templates": listed["templates"],
-	}, changed, nil
 }
 
 func marketingMaterialStrategyError(value any) string {

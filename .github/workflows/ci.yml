@@ -46,6 +46,10 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: runtime/ocean-watch-go
         run: go test -tags=integration ./cmd/build-runtime -run '^TestBuildInjectsProductVersion$' -count=1 -timeout=10m
+      - name: Verify packaged runtimes match source
+        if: runner.os == 'Linux'
+        working-directory: runtime/ocean-watch-go
+        run: go run ./cmd/build-runtime --all --verify
       - name: Verify Unix launcher
         if: runner.os != 'Windows'
         shell: bash

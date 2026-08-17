@@ -29,6 +29,7 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 type QianchuanPreflightService interface {
@@ -296,7 +297,7 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Name: "preflight_qianchuan_works", Annotations: preflightAnnotations,
 		Description: "当用户给出千川商品全域模板和抖音作品链接，需要校验授权、归属、商品匹配并决定新建或追加计划时调用。不会创建或修改计划，但会读取官方接口、必要时刷新授权并保存短期本地预检快照。",
 		InputSchema: json.RawMessage(preflightInputSchema), OutputSchema: json.RawMessage(preflightOutputSchema),
-	}, runtime.preflightQianchuanWorks)
+	}, withUnboundedRequestBudget(runtime.preflightQianchuanWorks))
 	getPreflightAnnotations := *annotations
 	getPreflightAnnotations.Title = "查看千川预检快照"
 	server.AddTool(&mcp.Tool{
@@ -328,35 +329,35 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Name: "search_qianchuan_products", Annotations: &productAnnotations,
 		Description: "当用户需要查找千川可投商品、商品 ID、名称、类目、渠道、销量或库存时调用。读取官方接口，必要时会刷新本地 Token；不用于查询商品消耗或 ROI。",
 		InputSchema: json.RawMessage(qianchuanProductsInputSchema), OutputSchema: json.RawMessage(qianchuanProductsOutputSchema),
-	}, runtime.searchQianchuanProducts)
+	}, withBoundedRequestBudget(runtime.searchQianchuanProducts))
 	planListAnnotations := *officialReadAnnotations
 	planListAnnotations.Title = "列出千川计划"
 	server.AddTool(&mcp.Tool{
 		Name: "list_qianchuan_plans", Annotations: &planListAnnotations,
 		Description: "当用户需要按广告主、日期和状态列出千川商品全域计划时调用。读取官方计划列表，必要时会刷新本地 Token；不把列表统计字段当成报表金额。",
 		InputSchema: json.RawMessage(qianchuanPlansInputSchema), OutputSchema: json.RawMessage(qianchuanPlansOutputSchema),
-	}, runtime.listQianchuanPlans)
+	}, withBoundedRequestBudget(runtime.listQianchuanPlans))
 	planDetailAnnotations := *officialReadAnnotations
 	planDetailAnnotations.Title = "查看千川计划详情"
 	server.AddTool(&mcp.Tool{
 		Name: "get_qianchuan_plan", Annotations: &planDetailAnnotations,
 		Description: "当用户给出精确千川计划 ID，需要查看计划设置、达人、商品及可选素材成员时调用。读取官方详情和可选素材接口，必要时会刷新本地 Token。",
 		InputSchema: json.RawMessage(qianchuanPlanInputSchema), OutputSchema: json.RawMessage(qianchuanPlanOutputSchema),
-	}, runtime.getQianchuanPlan)
+	}, withBoundedRequestBudget(runtime.getQianchuanPlan))
 	accountReportAnnotations := *officialReadAnnotations
 	accountReportAnnotations.Title = "查询千川账户报表"
 	server.AddTool(&mcp.Tool{
 		Name: "report_qianchuan_account", Annotations: &accountReportAnnotations,
 		Description: "当用户需要一个千川广告主的账户汇总消耗、订单、GMV 或 ROI 时调用。scope=overall 包含乘方，scope=uni 仅全域；使用固定官方指标集。",
 		InputSchema: json.RawMessage(qianchuanAccountReportInputSchema), OutputSchema: json.RawMessage(qianchuanAccountReportOutputSchema),
-	}, runtime.reportQianchuanAccount)
+	}, withBoundedRequestBudget(runtime.reportQianchuanAccount))
 	planReportAnnotations := *officialReadAnnotations
 	planReportAnnotations.Title = "查询千川计划报表"
 	server.AddTool(&mcp.Tool{
 		Name: "report_qianchuan_plans", Annotations: &planReportAnnotations,
 		Description: "当用户需要千川商品全域计划级消耗、订单、GMV、ROI、预算和成本保障信息时调用。保留应用服务生成的完整 Markdown 表格。",
 		InputSchema: json.RawMessage(qianchuanPlanReportInputSchema), OutputSchema: json.RawMessage(qianchuanPlanReportOutputSchema),
-	}, runtime.reportQianchuanPlans)
+	}, withBoundedRequestBudget(runtime.reportQianchuanPlans))
 	marketingAuthAnnotations := *annotations
 	marketingAuthAnnotations.Title = "查看营销授权状态"
 	server.AddTool(&mcp.Tool{
@@ -370,29 +371,49 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Name: "search_marketing_videos", Annotations: &marketingVideoAnnotations,
 		Description: "当用户需要按巨量营销广告主、素材标识、文件名或日期查找账户视频素材时调用。只查询账户素材库，不返回视频或封面 URL。",
 		InputSchema: json.RawMessage(marketingVideosInputSchema), OutputSchema: json.RawMessage(marketingVideosOutputSchema),
-	}, runtime.searchMarketingVideos)
+	}, withBoundedRequestBudget(runtime.searchMarketingVideos))
 	marketingCreatorAnnotations := *officialReadAnnotations
 	marketingCreatorAnnotations.Title = "搜索营销达人素材"
 	server.AddTool(&mcp.Tool{
 		Name: "search_marketing_creator_materials", Annotations: &marketingCreatorAnnotations,
 		Description: "当用户需要查询巨量营销达人授权素材或一个达人主页素材时调用。返回授权和可用性白名单字段，不返回播放或封面 URL。",
 		InputSchema: json.RawMessage(marketingCreatorInputSchema), OutputSchema: json.RawMessage(marketingCreatorOutputSchema),
-	}, runtime.searchMarketingCreatorMaterials)
+	}, withBoundedRequestBudget(runtime.searchMarketingCreatorMaterials))
 	marketingMaterialReportAnnotations := *officialReadAnnotations
 	marketingMaterialReportAnnotations.Title = "查询营销素材报表"
 	server.AddTool(&mcp.Tool{
 		Name: "report_marketing_materials", Annotations: &marketingMaterialReportAnnotations,
 		Description: "当用户需要巨量营销项目或单元下的素材级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定 MATERIAL_DATA 指标集。",
 		InputSchema: json.RawMessage(marketingMaterialReportInputSchema), OutputSchema: json.RawMessage(marketingMaterialReportOutputSchema),
-	}, runtime.reportMarketingMaterials)
+	}, withBoundedRequestBudget(runtime.reportMarketingMaterials))
 	marketingPlanReportAnnotations := *officialReadAnnotations
 	marketingPlanReportAnnotations.Title = "查询营销项目报表"
 	server.AddTool(&mcp.Tool{
 		Name: "report_marketing_plans", Annotations: &marketingPlanReportAnnotations,
 		Description: "当用户需要巨量营销项目级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定指标集并保留应用服务生成的完整 Markdown 表格。",
 		InputSchema: json.RawMessage(marketingPlanReportInputSchema), OutputSchema: json.RawMessage(marketingPlanReportOutputSchema),
-	}, runtime.reportMarketingPlans)
+	}, withBoundedRequestBudget(runtime.reportMarketingPlans))
 	return server
+}
+
+func withBoundedRequestBudget(handler mcp.ToolHandler) mcp.ToolHandler {
+	return func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		ctx, _, _, err := requestcontrol.PrepareCommandContext(ctx, requestcontrol.DefaultCommandRequestLimit)
+		if err != nil {
+			return nil, err
+		}
+		return handler(ctx, request)
+	}
+}
+
+func withUnboundedRequestBudget(handler mcp.ToolHandler) mcp.ToolHandler {
+	return func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		ctx, _, _, err := requestcontrol.PrepareUnboundedCommandContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return handler(ctx, request)
+	}
 }
 
 func (runtime Runtime) listTemplates(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -13,6 +13,7 @@ import (
 	applicationreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 const queryTestSecret = "SECRET_TOKEN_COOKIE_RAW_URL_ERROR"
@@ -153,7 +154,9 @@ func TestQianchuanQueryToolsUseTaskServicesAndWhitelistOutputs(t *testing.T) {
 		"advertiser_id": "2000000000000001", "start_date": "2026-08-16", "end_date": "2026-08-16",
 	})
 	planListOutput := decodeStructured[qianchuanPlansOutput](t, planListResult)
-	if reads.planListCalls != 1 || planListOutput.Items[0].AdID != "3000000000000001" {
+	if reads.planListCalls != 1 || planListOutput.Items[0].AdID != "3000000000000001" ||
+		reads.planListBudget.Limit != requestcontrol.DefaultCommandRequestLimit ||
+		reads.planListBudget.Remaining != requestcontrol.DefaultCommandRequestLimit {
 		t.Fatalf("plan list boundary changed: service=%#v output=%#v", reads, planListOutput)
 	}
 
@@ -271,6 +274,7 @@ type qianchuanReadServiceStub struct {
 	materialCalls    int
 	lastProductQuery applicationqianchuan.ProductQuery
 	lastProductMode  string
+	planListBudget   requestcontrol.BudgetSnapshot
 }
 
 func (stub *qianchuanReadServiceStub) QueryProducts(_ context.Context, query applicationqianchuan.ProductQuery, mode string) (applicationqianchuan.ProductResult, error) {
@@ -279,8 +283,11 @@ func (stub *qianchuanReadServiceStub) QueryProducts(_ context.Context, query app
 	return stub.productResult, stub.err
 }
 
-func (stub *qianchuanReadServiceStub) ListPlans(context.Context, applicationqianchuan.PlanListQuery) (applicationqianchuan.PlanListResult, error) {
+func (stub *qianchuanReadServiceStub) ListPlans(ctx context.Context, _ applicationqianchuan.PlanListQuery) (applicationqianchuan.PlanListResult, error) {
 	stub.planListCalls++
+	if budget, ok := requestcontrol.BudgetFrom(ctx); ok {
+		stub.planListBudget = budget.Snapshot()
+	}
 	return stub.planListResult, stub.err
 }
 

@@ -138,7 +138,7 @@ func TestAccountListUsesGoRuntime(t *testing.T) {
 func TestSetupDoctorUsesGoOnceWithoutCredentialsOrConfigWrites(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")
-	config := []byte(`{"channels":{"qianchuan":{"oauth":{"redirect_uri":"http://127.0.0.1:9922/from-config"}}}}`)
+	config := []byte(`{"config_schema_version":2,"channels":{"qianchuan":{"oauth":{"redirect_uri":"http://127.0.0.1:9922/from-config"}}}}`)
 	if err := os.WriteFile(configPath, config, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -383,61 +383,6 @@ func TestResolveSkillRootUsesPluginRoot(t *testing.T) {
 	}
 }
 
-func TestAuthorizationMigrationUsesGoRuntime(t *testing.T) {
-	root := t.TempDir()
-	configPath := filepath.Join(root, "config.json")
-	config := `{
-  "future": {"preserved": true},
-  "api": {
-    "app_id": "fixture-app",
-    "secret": "fixture-secret",
-    "access_token": "fixture-access",
-    "refresh_token": "fixture-refresh"
-  },
-  "account": {"advertiser_id": "1000000000000001"}
-}`
-	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	credentialStore := &runnerCredentialStore{entries: map[string]map[string]any{}}
-	stdout := new(bytes.Buffer)
-	runner := Runner{
-		Routes: application.DefaultRouteManifest(), Stdout: stdout,
-		Cwd: root, UserHome: root, Credentials: credentialStore,
-		Getenv: func(name string) string {
-			if name == "CODEX_HOME" {
-				return filepath.Join(root, "codex-home")
-			}
-			return ""
-		},
-	}
-	if code := runner.Execute(context.Background(), []string{"auth", "migrate", "--config", configPath}); code != 0 {
-		t.Fatalf("got exit %d: %s", code, stdout.String())
-	}
-	result := decodeSingleJSONObject(t, stdout.Bytes())
-	if result["activation"] != "schema_v2_active" || result["config"] != configPath {
-		t.Fatalf("unexpected migration result: %#v", result)
-	}
-	migrated, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var migratedConfig map[string]any
-	if err := json.Unmarshal(migrated, &migratedConfig); err != nil {
-		t.Fatal(err)
-	}
-	if migratedConfig["api"] != nil || migratedConfig["future"].(map[string]any)["preserved"] != true {
-		t.Fatalf("migration did not clean and preserve config: %#v", migratedConfig)
-	}
-	if credentialStore.entries["oceanengine-app-marketing"] == nil {
-		t.Fatal("migration did not write the split Marketing app credential")
-	}
-	currentPath := filepath.Join(root, "codex-home", "ads-plan-monitor", "state", "channels", "marketing", "current.json")
-	if _, err := os.Stat(currentPath); err != nil {
-		t.Fatalf("authorization pointer was not committed: %v", err)
-	}
-}
-
 func TestInvalidCommandProducesOneJSONError(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	runner := Runner{Routes: application.DefaultRouteManifest(), Stdout: stdout}
@@ -520,7 +465,7 @@ func TestRunListUsesManagedStateRoot(t *testing.T) {
 
 func TestTemplateListUsesGoRuntime(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"plan_templates":{}}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"plan_template_schema_version":6,"plan_templates":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	stdout := new(bytes.Buffer)

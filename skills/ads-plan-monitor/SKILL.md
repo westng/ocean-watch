@@ -231,7 +231,7 @@ Use `templates validate` before uncertain template operations. `templates delete
 
 Marketing business-template names are user-defined labels. The wizard must ask for a non-empty template name and keep business ownership exclusively in `bindings`; never derive or validate ownership by parsing the label.
 
-The wizard separately asks for `project_name_template` and `promotion_name_template`. These forms are stored under `overrides.defaults`, shown in the preview, and rendered when a project and promotion are created. Existing templates keep their keys and display names during the v5-to-v6 migration.
+The wizard separately asks for `project_name_template` and `promotion_name_template`. These forms are stored under `overrides.defaults`, shown in the preview, and rendered when a project and promotion are created. Only the current template schema is accepted; older schemas must not be normalized or executed.
 
 ## Marketing Create Workflow
 

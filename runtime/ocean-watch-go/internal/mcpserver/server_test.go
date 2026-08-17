@@ -15,6 +15,7 @@ import (
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 type versionedStore struct {
@@ -178,6 +179,7 @@ func TestQianchuanPreflightToolsUseApplicationServiceAndSanitizeOutput(t *testin
 	output := decodeStructured[preflightOutput](t, preflight)
 	if service.batchCalls != 1 || service.lastCommand.Submit || service.lastCommand.IncludePayloads ||
 		service.lastCommand.Concurrency != applicationqianchuan.DefaultBatchConcurrency ||
+		!service.budget.Unbounded ||
 		output.PreflightID == "" || output.Presentation.RenderedMarkdown == "" {
 		t.Fatalf("preflight contract changed: service=%#v output=%#v", service, output)
 	}
@@ -236,14 +238,18 @@ type preflightServiceStub struct {
 	lastCommand applicationqianchuan.BatchWorksCommand
 	batchResult applicationqianchuan.BatchCommandResult
 	summary     applicationqianchuan.BatchPreflightSummary
+	budget      requestcontrol.BudgetSnapshot
 }
 
 func (service *preflightServiceStub) BatchWorks(
-	_ context.Context,
+	ctx context.Context,
 	command applicationqianchuan.BatchWorksCommand,
 ) (applicationqianchuan.BatchCommandResult, error) {
 	service.batchCalls++
 	service.lastCommand = command
+	if budget, ok := requestcontrol.BudgetFrom(ctx); ok {
+		service.budget = budget.Snapshot()
+	}
 	return service.batchResult, nil
 }
 
@@ -384,7 +390,8 @@ func mcpTemplateConfig() map[string]any {
   "default_plan_template": {"defaults":{"daily_budget":300,"roi_goal":1.5,"product_info":{"product_image_type":"DPA","product_image_fields":[]}}},
   "plan_templates": {
     "marketing-test": {
-      "bindings":{"advertiser_id":"1000000000000001","platform":"抖音","traffic_source":"CID","product_id":"3001","product_name":"示例商品"},
+      "display_name":"marketing-test",
+      "bindings":{"channel":"marketing","advertiser_id":"1000000000000001","platform":"抖音","traffic_source":"CID","product_id":"3001","product_name":"示例商品"},
       "material_strategy":{"source_type":"ACCOUNT_UPLOAD","selection_mode":"MANUAL","max_materials_per_unit":5},
       "copy_materials":{"titles":[]},"overrides":{}
     }

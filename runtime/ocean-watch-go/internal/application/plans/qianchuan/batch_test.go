@@ -164,7 +164,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		if reader.targetedCalls != 1 || reader.lastSearchKeyword != batchVisibleID ||
 			reader.broadCalls != 0 || len(result.Matched) != 1 ||
 			result.AuthorizedCreatorScanCount != 0 || result.OwnerHintSummary.Verified != 1 ||
-			result.OwnerHintSummary.Stale != 0 || result.OwnerHintSummary.BroadScanWorkCount != 0 {
+			result.OwnerHintSummary.Stale != 0 {
 			t.Fatalf("verified hint crossed the broad-scan boundary: reader=%#v result=%#v", reader, result)
 		}
 		if !reflect.DeepEqual(reader.ownershipCreatorIDs, []string{batchCreatorID}) ||
@@ -193,7 +193,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		}
 		if reader.targetedCalls != 0 || reader.broadCalls != 0 || len(result.Matched) != 0 ||
 			result.OwnerHintSummary.Eligible != 0 || result.OwnerHintSummary.AuthorizedHintQueryCount != 0 ||
-			result.OwnerHintSummary.BroadScanWorkCount != 0 || len(result.Skipped) != 1 ||
+			len(result.Skipped) != 1 ||
 			result.Skipped[0].Reason != "missing_creator_show_id" {
 			t.Fatalf("numeric-only hint used an invalid authorization search: reader=%#v result=%#v", reader, result)
 		}
@@ -219,7 +219,7 @@ func testBatchOwnerHintVerification(t *testing.T) {
 		}
 		if reader.targetedCalls != 1 || reader.broadCalls != 0 || len(result.Matched) != 0 ||
 			result.AuthorizedCreatorScanCount != 0 || result.OwnerHintSummary.Verified != 0 ||
-			result.OwnerHintSummary.Stale != 1 || result.OwnerHintSummary.BroadScanWorkCount != 0 ||
+			result.OwnerHintSummary.Stale != 1 ||
 			len(result.Skipped) != 1 || result.Skipped[0].Reason != "creator_work_mismatch" {
 			t.Fatalf("stale hint escaped the targeted-only boundary: reader=%#v result=%#v", reader, result)
 		}

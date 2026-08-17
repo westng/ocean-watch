@@ -368,7 +368,7 @@ func testBatchOwnerHintCacheBoundary(t *testing.T) {
 	if tokens.calls != 1 || cache.loadCalls != 1 || cache.storeCalls != 1 ||
 		performance.Loaded != 1 || performance.LoadedFromCache != 1 ||
 		performance.LoadedFromLinkMetadata != 1 || performance.Verified != 1 ||
-		performance.BroadScanWorkCount != 0 || performance.Stored != 0 ||
+		performance.Stored != 0 ||
 		warning["code"] != "owner_hint_cache_write_failed" {
 		t.Fatalf("owner hint precedence/cache warning contract changed: performance=%#v cache=%#v", performance, cache)
 	}
@@ -694,7 +694,7 @@ func (commandLocker) Acquire(context.Context, domainplans.WriteScope) (func() er
 
 func commandProductConfig() map[string]any {
 	return map[string]any{
-		"qianchuan_product_template_schema_version": 5,
+		"qianchuan_product_template_schema_version": 8,
 		"qianchuan_product_templates": map[string]any{
 			"qcpt_command": map[string]any{
 				"template_id":   "qcpt_command",
@@ -702,7 +702,7 @@ func commandProductConfig() map[string]any {
 				"template_type": "QIANCHUAN_PRODUCT_ALL_DOMAIN", "status": "active",
 				"bindings": map[string]any{
 					"channel": "qianchuan", "advertiser_id": batchAdvertiserID,
-					"product_name": "测试商品", "product_ids": []any{batchProductID},
+					"product_name": "测试商品", "product_short_name": "测试商品", "product_ids": []any{batchProductID},
 				},
 				"delivery_setting": map[string]any{
 					"smart_bid_type": "SMART_BID_CUSTOM", "roi2_goal": 1.7,

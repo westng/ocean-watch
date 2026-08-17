@@ -143,7 +143,7 @@ func testFiftyFiveLinkAuthorizationScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.AuthorizedCreatorScanCount != 0 || result.AuthorizedCreatorPageCount != 0 ||
-		result.OwnerHintSummary.BroadScanWorkCount != 0 || reader.authorizedCalls != 1 {
+		reader.authorizedCalls != 1 {
 		t.Fatalf("55-link creator scans = result:%d reader:%d, want zero broad scans and one targeted query",
 			result.AuthorizedCreatorScanCount, reader.authorizedCalls)
 	}

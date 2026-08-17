@@ -12,28 +12,13 @@ const (
 	qianchuanProductSchemaVersionKey = "qianchuan_product_template_schema_version"
 	qianchuanProductDefaultKey       = "default_qianchuan_product_template"
 	qianchuanProductTemplatesKey     = "qianchuan_product_templates"
-	qianchuanProductLegacyActiveKey  = "active_qianchuan_product_template"
 	qianchuanProductTemplateType     = "QIANCHUAN_PRODUCT_ALL_DOMAIN"
 	qianchuanProductMaterialSource   = "CREATOR_RUNTIME_QUERY"
-	qianchuanProductLegacyPlanName   = "{product_name}-{creator_name}-{datetime}"
-	qianchuanProductPreviousPlanName = "{month_day}-{creator_name}-{product_name}-{type}-{business}"
 	qianchuanProductDefaultPlanName  = "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 )
 
 var qianchuanProductIDSeparator = regexp.MustCompile(`[/,，\s]+`)
 var qianchuanPlanNamePlaceholder = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_]*)\}`)
-
-func usesLegacyQianchuanPlanName(value any) bool {
-	if value == nil {
-		return true
-	}
-	planName, ok := value.(string)
-	if !ok {
-		return false
-	}
-	planName = strings.TrimSpace(planName)
-	return planName == "" || planName == qianchuanProductLegacyPlanName
-}
 
 func defaultQianchuanProductTemplate() map[string]any {
 	return map[string]any{
@@ -64,110 +49,26 @@ func defaultQianchuanProductTemplate() map[string]any {
 
 func ensureQianchuanProductConfig(config map[string]any) (map[string]any, error) {
 	normalized := cloneMap(config)
-	version, err := parseVersion(normalized[qianchuanProductSchemaVersionKey], 1, qianchuanProductSchemaVersionKey)
-	if err != nil {
+	_, hasVersion := normalized[qianchuanProductSchemaVersionKey]
+	_, hasDefault := normalized[qianchuanProductDefaultKey]
+	_, hasTemplates := normalized[qianchuanProductTemplatesKey]
+	if !hasVersion && !hasDefault && !hasTemplates {
+		normalized[qianchuanProductSchemaVersionKey] = qianchuanProductSchemaVersion
+		normalized[qianchuanProductDefaultKey] = defaultQianchuanProductTemplate()
+		normalized[qianchuanProductTemplatesKey] = map[string]any{}
+	}
+	if err := requireTemplateSchema(normalized, qianchuanProductSchemaVersionKey, qianchuanProductSchemaVersion, "Qianchuan product"); err != nil {
 		return nil, err
 	}
-	if version > qianchuanProductSchemaVersion {
-		return nil, configurationError(fmt.Sprintf(
-			"Qianchuan product template schema %d is newer than supported %d",
-			version, qianchuanProductSchemaVersion,
-		), nil)
-	}
-	if version < 2 {
-		normalized[qianchuanProductDefaultKey] = defaultQianchuanProductTemplate()
-		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
-			bindings := mapOrEmpty(mapOrEmpty(value)["bindings"])
-			delete(bindings, "shop_name")
-		}
-	}
-	if version < 3 {
-		migratedNames := map[string]string{}
-		for _, templateID := range sortedKeys(mapOrEmpty(normalized[qianchuanProductTemplatesKey])) {
-			template := mapOrEmpty(mapOrEmpty(normalized[qianchuanProductTemplatesKey])[templateID])
-			bindings := mapOrEmpty(template["bindings"])
-			productIDs := listOrEmpty(bindings["product_ids"])
-			if hasValue(bindings["advertiser_id"]) && hasValue(bindings["product_name"]) && len(productIDs) != 0 {
-				name := qianchuanProductDisplayName(
-					stringValue(bindings["advertiser_id"]),
-					stringValue(bindings["product_name"]),
-					stringList(productIDs),
-				)
-				if previous, exists := migratedNames[name]; exists && previous != templateID {
-					return nil, configurationError(
-						"Qianchuan product template naming collision during schema v3 migration",
-						map[string]any{"display_name": name, "template_ids": []any{previous, templateID}},
-					)
-				}
-				migratedNames[name] = templateID
-				template["display_name"] = name
-			}
-		}
-	}
-	if version < 4 {
-		delete(normalized, qianchuanProductLegacyActiveKey)
-	}
-	if version < 5 {
-		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
-			if !hasValue(value["plan_name_template"]) {
-				value["plan_name_template"] = qianchuanProductLegacyPlanName
-			}
-		}
-		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
-			if template, ok := value.(map[string]any); ok && !hasValue(template["plan_name_template"]) {
-				template["plan_name_template"] = qianchuanProductLegacyPlanName
-			}
-		}
-	}
-	if version < 6 {
-		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
-			if usesLegacyQianchuanPlanName(value["plan_name_template"]) {
-				value["plan_name_template"] = qianchuanProductDefaultPlanName
-			}
-		}
-	}
-	if version < 7 {
-		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
-			if usesLegacyQianchuanPlanName(value["plan_name_template"]) {
-				value["plan_name_template"] = qianchuanProductDefaultPlanName
-			}
-		}
-		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
-			if template, ok := value.(map[string]any); ok {
-				if usesLegacyQianchuanPlanName(template["plan_name_template"]) {
-					template["plan_name_template"] = qianchuanProductPreviousPlanName
-				}
-			}
-		}
-	}
-	if version < 8 {
-		if value, exists := normalized[qianchuanProductDefaultKey].(map[string]any); exists {
-			bindings := mapOrEmpty(value["bindings"])
-			if _, exists := bindings["product_short_name"]; !exists {
-				bindings["product_short_name"] = "REPLACE_WITH_PRODUCT_SHORT_NAME"
-			}
-			if value["plan_name_template"] == qianchuanProductPreviousPlanName {
-				value["plan_name_template"] = qianchuanProductDefaultPlanName
-			}
-		}
-		for _, value := range mapOrEmpty(normalized[qianchuanProductTemplatesKey]) {
-			if template, ok := value.(map[string]any); ok {
-				bindings := mapOrEmpty(template["bindings"])
-				if _, exists := bindings["product_short_name"]; !exists {
-					bindings["product_short_name"] = bindings["product_name"]
-				}
-				if template["plan_name_template"] == qianchuanProductPreviousPlanName {
-					template["plan_name_template"] = qianchuanProductDefaultPlanName
-				}
-			}
-		}
-	}
-	normalized[qianchuanProductSchemaVersionKey] = qianchuanProductSchemaVersion
 	if _, exists := normalized[qianchuanProductDefaultKey]; !exists {
 		normalized[qianchuanProductDefaultKey] = defaultQianchuanProductTemplate()
+	} else if _, ok := normalized[qianchuanProductDefaultKey].(map[string]any); !ok {
+		return nil, configurationError("default_qianchuan_product_template must be an object", nil)
 	}
 	if _, exists := normalized[qianchuanProductTemplatesKey]; !exists {
 		normalized[qianchuanProductTemplatesKey] = map[string]any{}
+	} else if _, ok := normalized[qianchuanProductTemplatesKey].(map[string]any); !ok {
+		return nil, configurationError("qianchuan_product_templates must be an object", nil)
 	}
 	return normalized, nil
 }

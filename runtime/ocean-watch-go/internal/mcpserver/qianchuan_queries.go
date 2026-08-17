@@ -747,7 +747,7 @@ func mapOfficialQueryError(err error) toolFailure {
 			return toolFailure{Code: "AUTHORIZATION_NOT_FOUND", Message: "Qianchuan authorization was not found", Details: map[string]any{}}
 		case "authorization_ambiguous":
 			return toolFailure{Code: "AUTHORIZATION_AMBIGUOUS", Message: "Qianchuan advertiser maps to multiple authorizations", Details: map[string]any{}}
-		case "reauthorization_required", "legacy_authorization_pending_sync":
+		case "reauthorization_required", "authorization_pending_sync":
 			return toolFailure{Code: "REAUTHORIZATION_REQUIRED", Message: "Qianchuan authorization must be renewed", Details: map[string]any{}}
 		}
 	}

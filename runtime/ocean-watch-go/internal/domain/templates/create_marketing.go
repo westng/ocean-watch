@@ -108,12 +108,9 @@ func MarketingCreateSources(
 	config map[string]any,
 	materialSourceType string,
 ) (map[string]any, []MarketingCreateSource, error) {
-	normalized, legacyError, err := MigrateMarketing(config, false)
+	normalized, err := ensureCurrentMarketingTemplateConfig(config)
 	if err != nil {
 		return nil, nil, err
-	}
-	if legacyError != nil {
-		return nil, nil, legacyError
 	}
 	sources := []MarketingCreateSource{{Name: "default_plan_template"}}
 	for _, name := range sortedKeys(mapOrEmpty(normalized["plan_templates"])) {

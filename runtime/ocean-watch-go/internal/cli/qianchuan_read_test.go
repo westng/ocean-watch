@@ -231,7 +231,7 @@ func (transport *qianchuanRunnerTransport) snapshot() []qianchuanRunnerCall {
 
 func qianchuanRunnerTemplateFixture(status string) string {
 	return strings.Replace(`{
-  "qianchuan_product_template_schema_version": 5,
+  "qianchuan_product_template_schema_version": 8,
   "qianchuan_product_templates": {
     "qcpt_fixture": {
       "template_id": "qcpt_fixture",
@@ -242,6 +242,7 @@ func qianchuanRunnerTemplateFixture(status string) string {
         "channel": "qianchuan",
         "advertiser_id": "1000000000000001",
         "product_name": "Fixture product",
+        "product_short_name": "Fixture product",
         "product_ids": ["3000000000000001", "3000000000000002"]
       },
       "delivery_setting": {
@@ -324,7 +325,7 @@ func TestRunnerQianchuanReadRuntimeAssemblesTokenAndSDKAdapters(t *testing.T) {
 	}
 	configPath := filepath.Join(root, "synthetic-config.json")
 	if err := os.WriteFile(configPath, []byte(`{
-  "qianchuan_product_template_schema_version": 5,
+  "qianchuan_product_template_schema_version": 8,
   "qianchuan_product_templates": {
     "qcpt_fixture": {
       "template_id": "qcpt_fixture",
@@ -335,6 +336,7 @@ func TestRunnerQianchuanReadRuntimeAssemblesTokenAndSDKAdapters(t *testing.T) {
         "channel": "qianchuan",
         "advertiser_id": "1000000000000001",
         "product_name": "Fixture product",
+        "product_short_name": "Fixture product",
         "product_ids": ["3000000000000001", "3000000000000002"]
       },
       "delivery_setting": {

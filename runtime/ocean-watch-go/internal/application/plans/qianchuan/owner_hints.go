@@ -23,7 +23,6 @@ type OwnerHintSummary struct {
 	Eligible                   int `json:"eligible"`
 	Verified                   int `json:"verified"`
 	Stale                      int `json:"stale"`
-	BroadScanWorkCount         int `json:"broad_scan_work_count"`
 	AuthorizedHintQueryCount   int `json:"authorized_hint_query_count"`
 	AuthorizedHintFailureCount int `json:"authorized_hint_failure_count"`
 	OfficialVideoQueryCount    int `json:"official_video_query_count"`

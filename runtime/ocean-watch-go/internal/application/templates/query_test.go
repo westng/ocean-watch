@@ -37,8 +37,11 @@ func TestListReadsConfigExactlyOnce(t *testing.T) {
 
 func TestShowReadsConfigExactlyOnce(t *testing.T) {
 	store := &countingConfigStore{config: map[string]any{
+		"plan_template_schema_version": 6,
+		"default_plan_template":        map[string]any{},
 		"plan_templates": map[string]any{
 			"template": map[string]any{
+				"display_name": "template",
 				"bindings": map[string]any{
 					"channel": "marketing", "advertiser_id": "1", "platform": "p",
 					"traffic_source": "t", "product_id": "2", "product_name": "product",
@@ -46,7 +49,8 @@ func TestShowReadsConfigExactlyOnce(t *testing.T) {
 				"material_strategy": map[string]any{
 					"source_type": "ACCOUNT_UPLOAD", "selection_mode": "MANUAL", "max_materials_per_unit": 5,
 				},
-				"overrides": map[string]any{},
+				"copy_materials": map[string]any{},
+				"overrides":      map[string]any{},
 			},
 		},
 	}}

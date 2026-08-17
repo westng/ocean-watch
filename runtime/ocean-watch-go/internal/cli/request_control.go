@@ -39,7 +39,7 @@ func commandRequestBudgetProfile(command contracts.Command) (requestBudgetProfil
 			return boundedRequestBudget(paginatedReadRequestLimit), nil
 		case "refresh":
 			return boundedRequestBudget(tokenCommandRequestLimit), nil
-		case "set-app", "status", "migrate", "mappings":
+		case "set-app", "status", "mappings":
 			return boundedRequestBudget(localCommandRequestLimit), nil
 		}
 	case "materials", "qc-products", "reports", "qc-reports", "discover":

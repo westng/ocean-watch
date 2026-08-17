@@ -23,7 +23,8 @@ const fixture = `{
   "default_plan_template": {"defaults":{"daily_budget":300,"roi_goal":1.5,"product_info":{"product_image_type":"DPA","product_image_fields":[]}}},
   "plan_templates": {
     "marketing-probe": {
-      "bindings":{"advertiser_id":"1000000000000001","platform":"抖音","traffic_source":"CID","product_id":"3001","product_name":"探针商品"},
+      "display_name":"marketing-probe",
+      "bindings":{"channel":"marketing","advertiser_id":"1000000000000001","platform":"抖音","traffic_source":"CID","product_id":"3001","product_name":"探针商品"},
       "material_strategy":{"source_type":"ACCOUNT_UPLOAD","selection_mode":"MANUAL","max_materials_per_unit":5},
       "copy_materials":{"titles":[]},"overrides":{}
     }

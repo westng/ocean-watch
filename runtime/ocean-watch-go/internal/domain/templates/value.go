@@ -157,6 +157,24 @@ func parseVersion(value any, defaultValue int, field string) (int, error) {
 	return parsed, nil
 }
 
+func requireTemplateSchema(config map[string]any, key string, supported int, label string) error {
+	value, exists := config[key]
+	if !exists || !hasValue(value) {
+		return configurationError(key+" is required", nil)
+	}
+	version, err := parseVersion(value, 0, key)
+	if err != nil {
+		return err
+	}
+	if version != supported {
+		return configurationError(fmt.Sprintf(
+			"%s template schema %d is unsupported; only schema %d is supported",
+			label, version, supported,
+		), nil)
+	}
+	return nil
+}
+
 func requiredText(value any, field string) (string, error) {
 	if !hasValue(value) {
 		return "", configurationError(field+" is required", nil)

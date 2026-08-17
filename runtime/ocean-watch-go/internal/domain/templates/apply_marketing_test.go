@@ -30,7 +30,7 @@ func TestApplyMarketingPlanTemplateMatchesBusinessBindings(t *testing.T) {
 		t.Fatalf("default and business overrides were not deep-merged: %#v", effective["resolved_ids"])
 	}
 	selected := mapOrEmpty(effective["_selected_plan_template"])
-	if selected["name"] != "巨量营销-1001-商品甲-9001-混剪素材" || selected["legacy"] != false {
+	if selected["name"] != "巨量营销-1001-商品甲-9001-混剪素材" {
 		t.Fatalf("selected template metadata changed: %#v", selected)
 	}
 }

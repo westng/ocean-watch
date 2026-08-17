@@ -146,6 +146,41 @@ def validate_binaries():
             fail(f"prepared runtime is not executable: {name}")
 
 
+def validate_single_business_runtime():
+    forbidden = (
+        ROOT / "skills" / "ads-plan-monitor" / "src",
+        ROOT / ".venv",
+    )
+    present = [str(path.relative_to(ROOT)) for path in forbidden if path.exists()]
+    if present:
+        fail(f"legacy Python business runtime is present: {present}")
+
+
+def validate_removed_compatibility_paths():
+    forbidden_commands = (
+        '"auth", "migrate"',
+        '"templates", "migrate"',
+        '"qc-templates", "migrate"',
+        '"qc-templates", "migrate-live"',
+    )
+    commands = (ROOT / "runtime" / "ocean-watch-go" / "internal" / "contracts" / "commands.go").read_text()
+    present = [command for command in forbidden_commands if command in commands]
+    if present:
+        fail(f"removed compatibility command is registered: {present}")
+    forbidden_roots = (
+        ROOT / "artifacts",
+        ROOT / "logs",
+        ROOT / "runs",
+        ROOT / "prototype",
+        ROOT / "build",
+        ROOT / "dist",
+        ROOT / "runtime" / "ocean-watch-go" / "artifacts",
+    )
+    present_roots = [str(path.relative_to(ROOT)) for path in forbidden_roots if path.exists()]
+    if present_roots:
+        fail(f"legacy generated directory is present: {present_roots}")
+
+
 def main():
     try:
         validate_manifest()
@@ -153,6 +188,8 @@ def main():
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")
         validate_binaries()
+        validate_single_business_runtime()
+        validate_removed_compatibility_paths()
     except (OSError, ValueError, RuntimeError, yaml.YAMLError) as error:
         print(f"distribution validation failed: {error}", file=sys.stderr)
         return 1

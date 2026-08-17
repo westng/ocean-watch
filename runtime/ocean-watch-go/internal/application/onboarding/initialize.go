@@ -9,8 +9,6 @@ import (
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
 )
 
-const marketingTemplateSchemaVersion = 5
-
 type ConfigInitializer interface {
 	Initialize(context.Context, map[string]any, bool) (bool, error)
 	Read(context.Context) (map[string]any, error)
@@ -38,27 +36,27 @@ func (initializer Initializer) Run(
 	if err != nil {
 		return nil, err
 	}
-	migrated, err := configuration.MigrateChannels(raw)
+	config, err := configuration.Current(raw)
 	if err != nil {
 		return nil, err
 	}
-	channel := configuration.SelectedChannel(migrated, "")
-	runtimeConfig, _, err := configuration.Runtime(migrated, channel, "oauth")
+	channel := configuration.SelectedChannel(config, "")
+	runtimeConfig, _, err := configuration.Runtime(config, channel, "oauth")
 	if err != nil {
 		return nil, err
 	}
 	redirectURI := strings.TrimSpace(fmt.Sprint(configuration.Value(runtimeConfig, "oauth.redirect_uri")))
 	environment := initializer.Doctor.Report(ctx, channel, redirectURI)
-	validation, err := (Validator{State: initializer.State}).Validate(ctx, migrated, "all", "")
+	validation, err := (Validator{State: initializer.State}).Validate(ctx, config, "all", "")
 	if err != nil {
 		return nil, err
 	}
-	templateRows, err := domaintemplates.MarketingGuideRows(migrated)
+	templateRows, err := domaintemplates.MarketingGuideRows(config)
 	if err != nil {
 		return nil, err
 	}
-	advertiserID := validConfiguredAdvertiserID(migrated)
-	channelRows, err := initializer.State.ChannelRows(ctx, migrated, advertiserID)
+	advertiserID := validConfiguredAdvertiserID(config)
+	channelRows, err := initializer.State.ChannelRows(ctx, config, advertiserID)
 	if err != nil {
 		return nil, err
 	}
@@ -72,20 +70,11 @@ func (initializer Initializer) Run(
 	if templateError := validation["plan_template_error"]; templateError != nil {
 		createMissing = append(createMissing, "plan template: "+fmt.Sprint(templateError))
 	}
-	templateSchemaVersion, err := integerDefault(migrated["plan_template_schema_version"], 1)
-	if err != nil {
-		return nil, err
-	}
-	channelSchemaVersion, err := integerDefault(raw["config_schema_version"], 1)
-	if err != nil {
-		return nil, err
-	}
-
 	result := map[string]any{
 		"mode":                                   "first_run_guide",
 		"skill":                                  "ads-plan-monitor",
 		"skill_root":                             initializer.SkillRoot,
-		"default_channel":                        migrated["default_channel"],
+		"default_channel":                        config["default_channel"],
 		"channels":                               channelRows,
 		"config":                                 configPath,
 		"created_config_from_template":           created,
@@ -96,16 +85,11 @@ func (initializer Initializer) Run(
 		"ok_for_query_data":                      len(queryMissing) == 0,
 		"create_plan_requires_explicit_template": true,
 		"available_plan_templates":               templateRows,
-		"plan_template_schema_version":           templateSchemaVersion,
-		"template_migration_required":            templateSchemaVersion < marketingTemplateSchemaVersion,
-		"channel_migration_required":             channelSchemaVersion < configuration.SchemaVersion,
-		"channel_migration_command":              fmt.Sprintf(`%s auth migrate --config %q`, command, configPath),
 		"template_setup": map[string]any{
 			"rule":                        "Each business template belongs to exactly one advertiser_id and cannot create plans for another advertiser.",
 			"default_template_usage":      "default_plan_template is a creation base shown by create-wizard and never participates in business delivery.",
 			"business_template_selection": "Every create command must name a business template explicitly; there is no active or default business template.",
 			"list_command":                fmt.Sprintf(`%s templates list --config %q`, command, configPath),
-			"migrate_command":             fmt.Sprintf(`%s templates migrate --config %q`, command, configPath),
 			"create_wizard_command":       fmt.Sprintf(`%s templates create --config %q`, command, configPath),
 			"set_copy_command":            fmt.Sprintf(`%s templates set-copy --config %q --template <模板名> --title <文案1> --title <文案2>`, command, configPath),
 			"copy_from_template_command":  fmt.Sprintf(`%s templates set-copy --config %q --template <目标模板名> --from-template <来源模板名>`, command, configPath),
@@ -155,17 +139,6 @@ func firstRunNextAction(queryMissing []string, templates []any) string {
 		return "create_business_template"
 	}
 	return "select_business_template"
-}
-
-func integerDefault(value any, fallback int) (int, error) {
-	if value == nil {
-		return fallback, nil
-	}
-	parsed, err := configuration.Integer(value)
-	if err != nil {
-		return 0, err
-	}
-	return parsed, nil
 }
 
 func mergeMap(left, right map[string]any) map[string]any {

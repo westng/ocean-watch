@@ -95,7 +95,6 @@ type preflightOwnerHintMetrics struct {
 	Eligible                   int `json:"eligible"`
 	Verified                   int `json:"verified"`
 	Stale                      int `json:"stale"`
-	BroadScanWorkCount         int `json:"broad_scan_work_count"`
 	AuthorizedHintQueryCount   int `json:"authorized_hint_query_count"`
 	AuthorizedHintFailureCount int `json:"authorized_hint_failure_count"`
 	OfficialVideoQueryCount    int `json:"official_video_query_count"`
@@ -369,7 +368,7 @@ func presentPreflightPerformance(value applicationqianchuan.BatchPerformance) pr
 		PlanReconciliationSeconds:   value.PlanReconciliationSeconds, TotalSeconds: value.TotalSeconds,
 		OwnerHintCache: preflightOwnerHintMetrics{
 			Supplied: cache.Supplied, Eligible: cache.Eligible, Verified: cache.Verified, Stale: cache.Stale,
-			BroadScanWorkCount: cache.BroadScanWorkCount, AuthorizedHintQueryCount: cache.AuthorizedHintQueryCount,
+			AuthorizedHintQueryCount:   cache.AuthorizedHintQueryCount,
 			AuthorizedHintFailureCount: cache.AuthorizedHintFailureCount, OfficialVideoQueryCount: cache.OfficialVideoQueryCount,
 			Loaded: cache.Loaded, LoadedFromCache: cache.LoadedFromCache,
 			LoadedFromLinkMetadata: cache.LoadedFromLinkMetadata, Stored: cache.Stored,
@@ -398,7 +397,7 @@ func mapQianchuanPreflightError(err error) toolFailure {
 	var domainError *domain.Error
 	if errors.As(err, &domainError) {
 		switch domainError.Code {
-		case "authorization_not_found", "authorization_ambiguous", "legacy_authorization_pending_sync", "reauthorization_required":
+		case "authorization_not_found", "authorization_ambiguous", "authorization_pending_sync", "reauthorization_required":
 			return toolFailure{Code: "AUTHORIZATION_UNAVAILABLE", Message: "Qianchuan authorization is unavailable", Details: map[string]any{}}
 		}
 	}

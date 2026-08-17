@@ -43,22 +43,26 @@ func defaultQianchuanLiveTemplate() map[string]any {
 
 func ensureQianchuanLiveConfig(config map[string]any) (map[string]any, error) {
 	normalized := cloneMap(config)
-	version, err := parseVersion(normalized[qianchuanLiveSchemaVersionKey], 1, qianchuanLiveSchemaVersionKey)
-	if err != nil {
+	_, hasVersion := normalized[qianchuanLiveSchemaVersionKey]
+	_, hasDefault := normalized[qianchuanLiveDefaultKey]
+	_, hasTemplates := normalized[qianchuanLiveTemplatesKey]
+	if !hasVersion && !hasDefault && !hasTemplates {
+		normalized[qianchuanLiveSchemaVersionKey] = qianchuanLiveSchemaVersion
+		normalized[qianchuanLiveDefaultKey] = defaultQianchuanLiveTemplate()
+		normalized[qianchuanLiveTemplatesKey] = map[string]any{}
+	}
+	if err := requireTemplateSchema(normalized, qianchuanLiveSchemaVersionKey, qianchuanLiveSchemaVersion, "Qianchuan live"); err != nil {
 		return nil, err
 	}
-	if version > qianchuanLiveSchemaVersion {
-		return nil, configurationError(fmt.Sprintf(
-			"Qianchuan live template schema %d is newer than supported %d",
-			version, qianchuanLiveSchemaVersion,
-		), nil)
-	}
-	normalized[qianchuanLiveSchemaVersionKey] = qianchuanLiveSchemaVersion
 	if _, exists := normalized[qianchuanLiveDefaultKey]; !exists {
 		normalized[qianchuanLiveDefaultKey] = defaultQianchuanLiveTemplate()
+	} else if _, ok := normalized[qianchuanLiveDefaultKey].(map[string]any); !ok {
+		return nil, configurationError("default_qianchuan_live_template must be an object", nil)
 	}
 	if _, exists := normalized[qianchuanLiveTemplatesKey]; !exists {
 		normalized[qianchuanLiveTemplatesKey] = map[string]any{}
+	} else if _, ok := normalized[qianchuanLiveTemplatesKey].(map[string]any); !ok {
+		return nil, configurationError("qianchuan_live_templates must be an object", nil)
 	}
 	return normalized, nil
 }

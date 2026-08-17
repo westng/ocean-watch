@@ -26,7 +26,7 @@ Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 
 
 Go 切换已经完成。源码中的本地 stdio MCP 共注册 16 个任务型工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、巨量营销授权/素材/报表查询 5 个。它们直接调用共享 Go Application Service，不启动 CLI，也不解析 CLI stdout；Skill 对已工具化请求禁止静默回退 CLI。千川预检会读取官方接口、必要时刷新授权并保存短期本地快照，但不会创建或修改计划；确认后的提交、自定义报表和其他高级业务继续由 `run`/`run.cmd` 进入同一套 Application Service。
 
-当前 `.mcp.json` 的固定可执行文件只对既有模板工具完成过 macOS Apple Silicon Gate 0；本地源码新增的 9 个千川工具和 5 个巨量营销工具尚未构建、安装或完成全新任务 Host 验收，不能描述为当前已安装可用。五个平台 Go CLI 仍作为现有 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除；历史设计不再作为运行或回退路径。
+当前 `.mcp.json` 固定启动内置 macOS Apple Silicon Go Runtime；MCP 工具清单与真实子进程协议已通过本机安装验收。五个平台 Go CLI 仍作为 CLI 分发目标，但不得把交叉构建成功描述为五个平台 MCP 已完成安装验收。旧 Python 业务实现、Prototype、Shadow、运行时策略文件和迁移候选资产已从当前分发中删除，分发校验会拒绝旧 Python 业务源码或控制台入口重新出现；历史设计不再作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 

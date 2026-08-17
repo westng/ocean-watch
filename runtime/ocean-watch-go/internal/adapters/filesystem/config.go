@@ -115,30 +115,6 @@ func (store ConfigStore) CompareAndSwap(
 	return atomicWriteJSON(store.Path, updated)
 }
 
-func (store ConfigStore) CommitMigration(
-	ctx context.Context,
-	expectedRevision string,
-	updated map[string]any,
-) error {
-	lock, err := AcquireLock(ctx, lockPath(store.Path), store.LockTimeout)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = lock.Release() }()
-	current, err := readJSON(store.Path)
-	if err != nil {
-		return err
-	}
-	revision, err := JSONRevision(current)
-	if err != nil {
-		return err
-	}
-	if revision != expectedRevision {
-		return errors.New("configuration changed while this operation was running; reload and retry")
-	}
-	return atomicWriteJSONWithoutBackup(store.Path, updated)
-}
-
 func JSONRevision(value map[string]any) (string, error) {
 	buffer := new(bytes.Buffer)
 	encoder := json.NewEncoder(buffer)
@@ -190,19 +166,6 @@ func atomicWriteJSON(path string, value map[string]any) error {
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return fmt.Errorf("read config for backup: %w", readErr)
 	}
-	return atomicWriteBytes(path, payload)
-}
-
-func atomicWriteJSONWithoutBackup(path string, value map[string]any) error {
-	payload, err := encodeJSON(value)
-	if err != nil {
-		return err
-	}
-	parent := filepath.Dir(path)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-	_ = os.Chmod(parent, 0o700)
 	return atomicWriteBytes(path, payload)
 }
 

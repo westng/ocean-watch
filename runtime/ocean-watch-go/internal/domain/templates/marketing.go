@@ -2,7 +2,6 @@ package templates
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -77,21 +76,25 @@ func compactMarketingTemplate(row map[string]any) map[string]any {
 }
 
 func listMarketingTemplates(config map[string]any) ([]map[string]any, error) {
-	rawTemplates := mapOrEmpty(config["plan_templates"])
+	normalizedConfig, err := ensureCurrentMarketingTemplateConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	rawTemplates := mapOrEmpty(normalizedConfig["plan_templates"])
 	rows := make([]map[string]any, 0, len(rawTemplates))
 	for _, name := range sortedKeys(rawTemplates) {
 		template, ok := rawTemplates[name].(map[string]any)
 		if !ok {
 			return nil, configurationError("Marketing plan template must be an object", map[string]any{"template": name})
 		}
-		normalized, err := normalizeMarketingTemplate(config, name, template)
+		normalized, err := normalizeMarketingTemplate(normalizedConfig, name, template)
 		if err != nil {
 			return nil, err
 		}
 		bindings := mapOrEmpty(normalized["bindings"])
 		strategy := mapOrEmpty(normalized["material_strategy"])
 		overrides := mapOrEmpty(normalized["overrides"])
-		base := marketingDefaultBundle(config)
+		base := marketingDefaultBundle(normalizedConfig)
 		effectiveDefaults := deepMerge(mapOrEmpty(base["defaults"]), mapOrEmpty(overrides["defaults"]))
 		productInfo := mapOrEmpty(effectiveDefaults["product_info"])
 		copyMaterials := mapOrEmpty(normalized["copy_materials"])
@@ -132,7 +135,6 @@ func listMarketingTemplates(config map[string]any) ([]map[string]any, error) {
 				"copied_from_template": copyMaterials["copied_from_template"],
 			},
 			"bindings":      clone(bindings),
-			"legacy":        normalized["legacy"],
 			"binding_error": marketingBindingError(bindings),
 		}
 		rows = append(rows, row)
@@ -174,144 +176,85 @@ func nullableMarketingStrategyError(value any) any {
 }
 
 func normalizeMarketingTemplate(config map[string]any, name string, template map[string]any) (map[string]any, error) {
-	schemaVersion, err := parseVersion(config["plan_template_schema_version"], 1, "plan_template_schema_version")
-	if err != nil {
+	if _, err := currentMarketingTemplateConfig(config); err != nil {
 		return nil, err
 	}
-	_, hasBindings := template["bindings"]
-	_, hasOverrides := template["overrides"]
-	if hasBindings || hasOverrides {
-		overrides := cloneMap(mapOrEmpty(template["overrides"]))
-		legacyTitles, hasLegacyTitles := overrides["titles"]
-		delete(overrides, "titles")
-		copyMaterials := cloneMap(mapOrEmpty(template["copy_materials"]))
-		if _, exists := copyMaterials["titles"]; hasLegacyTitles && !exists {
-			copyMaterials["titles"] = clone(legacyTitles)
-		}
-		bindings := cloneMap(mapOrEmpty(template["bindings"]))
-		if _, exists := bindings["channel"]; !exists {
-			channel := mapOrEmpty(config["account"])["channel"]
-			if !hasValue(channel) {
-				channel = config["default_channel"]
-			}
-			if !hasValue(channel) {
-				channel = "marketing"
-			}
-			bindings["channel"] = channel
-		}
-		strategy := cloneMap(mapOrEmpty(template["material_strategy"]))
-		if len(strategy) == 0 && schemaVersion < 3 {
-			strategy, err = legacyMarketingMaterialStrategy(config, template)
-			if err != nil {
-				return nil, err
-			}
-		}
-		displayName := any(name)
-		if value, exists := template["display_name"]; exists {
-			displayName = value
-		}
-		return map[string]any{
-			"name":              name,
-			"display_name":      displayName,
-			"bindings":          bindings,
-			"copy_materials":    copyMaterials,
-			"material_strategy": strategy,
-			"created_from":      clone(template["created_from"]),
-			"overrides":         overrides,
-			"legacy":            false,
-		}, nil
+	bindings, ok := template["bindings"].(map[string]any)
+	if !ok {
+		return nil, configurationError("Marketing template bindings must be an object", map[string]any{"template": name})
 	}
-	overrides := map[string]any{}
-	for _, section := range marketingTemplateSections {
-		if value, exists := template[section]; exists {
-			overrides[section] = clone(value)
-		}
+	if bindings["channel"] != "marketing" {
+		return nil, configurationError("Marketing template channel must be marketing", map[string]any{"template": name})
 	}
-	if value, exists := template["titles"]; exists {
-		overrides["titles"] = clone(value)
+	overrides, ok := template["overrides"].(map[string]any)
+	if !ok {
+		return nil, configurationError("Marketing template overrides must be an object", map[string]any{"template": name})
 	}
-	strategy, err := legacyMarketingMaterialStrategy(config, map[string]any{"overrides": overrides})
-	if err != nil {
-		return nil, err
+	copyMaterials, ok := template["copy_materials"].(map[string]any)
+	if !ok {
+		return nil, configurationError("Marketing template copy_materials must be an object", map[string]any{"template": name})
 	}
-	displayName := any(name)
-	if value, exists := template["display_name"]; exists {
-		displayName = value
+	strategy, ok := template["material_strategy"].(map[string]any)
+	if !ok {
+		return nil, configurationError("Marketing template material_strategy must be an object", map[string]any{"template": name})
+	}
+	displayName := stringValue(template["display_name"])
+	if displayName == "" {
+		return nil, configurationError("Marketing template display_name is required", map[string]any{"template": name})
 	}
 	return map[string]any{
 		"name":              name,
 		"display_name":      displayName,
-		"bindings":          legacyMarketingBindings(config, template),
-		"copy_materials":    map[string]any{"titles": clone(listOrEmpty(template["titles"]))},
+		"bindings":          cloneMap(bindings),
+		"copy_materials":    cloneMap(copyMaterials),
 		"material_strategy": strategy,
 		"created_from":      clone(template["created_from"]),
-		"overrides":         overrides,
-		"legacy":            true,
+		"overrides":         cloneMap(overrides),
 	}, nil
-}
-
-func legacyMarketingMaterialStrategy(config, template map[string]any) (map[string]any, error) {
-	overrides := mapOrEmpty(template["overrides"])
-	maximum := mapOrEmpty(overrides["defaults"])["max_videos_per_project"]
-	if maximum == nil {
-		maximum = mapOrEmpty(mapOrEmpty(config["default_plan_template"])["defaults"])["max_videos_per_project"]
-	}
-	if maximum == nil {
-		defaults := mapOrEmpty(config["defaults"])
-		if value, exists := defaults["max_videos_per_project"]; exists {
-			maximum = value
-		} else {
-			maximum = 5
-		}
-	}
-	if !hasValue(maximum) {
-		maximum = 5
-	}
-	parsed, err := strconv.Atoi(strings.TrimSpace(stringValue(maximum)))
-	if err != nil {
-		return nil, configurationError("max_videos_per_project must be an integer", nil)
-	}
-	return map[string]any{
-		"source_type":            "ACCOUNT_UPLOAD",
-		"selection_mode":         "MANUAL",
-		"max_materials_per_unit": parsed,
-	}, nil
-}
-
-func legacyMarketingBindings(config, template map[string]any) map[string]any {
-	defaults := mapOrEmpty(template["defaults"])
-	channel := mapOrEmpty(config["account"])["channel"]
-	if !hasValue(channel) {
-		channel = "marketing"
-	}
-	productID := template["product_id"]
-	if !hasValue(productID) {
-		productID = defaults["product_id"]
-	}
-	productName := defaults["product_name"]
-	if !hasValue(productName) {
-		productName = template["product_label"]
-	}
-	return map[string]any{
-		"channel":        channel,
-		"advertiser_id":  mapOrEmpty(config["account"])["advertiser_id"],
-		"platform":       template["platform"],
-		"traffic_source": template["traffic_source"],
-		"product_id":     productID,
-		"product_name":   productName,
-	}
 }
 
 func marketingDefaultBundle(config map[string]any) map[string]any {
 	if configured, ok := config["default_plan_template"].(map[string]any); ok {
 		return cloneMap(configured)
 	}
-	bundle := map[string]any{}
-	for _, section := range marketingTemplateSections {
-		bundle[section] = cloneMap(mapOrEmpty(config[section]))
+	return map[string]any{}
+}
+
+func currentMarketingTemplateConfig(config map[string]any) (map[string]any, error) {
+	normalized, err := ensureCurrentMarketingTemplateConfig(config)
+	if err != nil {
+		return nil, err
 	}
-	bundle["titles"] = clone(listOrEmpty(config["titles"]))
-	return bundle
+	return mapOrEmpty(normalized["plan_templates"]), nil
+}
+
+func ensureCurrentMarketingTemplateConfig(config map[string]any) (map[string]any, error) {
+	normalized := cloneMap(config)
+	_, hasVersion := normalized["plan_template_schema_version"]
+	_, hasDefault := normalized["default_plan_template"]
+	_, hasTemplates := normalized["plan_templates"]
+	if !hasVersion && !hasDefault && !hasTemplates {
+		normalized["plan_template_schema_version"] = marketingSchemaVersion
+		normalized["default_plan_template"] = map[string]any{}
+		normalized["plan_templates"] = map[string]any{}
+	}
+	if err := requireTemplateSchema(normalized, "plan_template_schema_version", marketingSchemaVersion, "Marketing"); err != nil {
+		return nil, err
+	}
+	if _, exists := normalized["active_plan_template"]; exists {
+		return nil, configurationError("active_plan_template is unsupported", nil)
+	}
+	if _, exists := normalized["default_plan_template"]; !exists {
+		normalized["default_plan_template"] = map[string]any{}
+	} else if _, ok := normalized["default_plan_template"].(map[string]any); !ok {
+		return nil, configurationError("default_plan_template must be an object", nil)
+	}
+	if _, exists := normalized["plan_templates"]; !exists {
+		normalized["plan_templates"] = map[string]any{}
+	} else if _, ok := normalized["plan_templates"].(map[string]any); !ok {
+		return nil, configurationError("plan_templates must be an object", nil)
+	}
+	return normalized, nil
 }
 
 func marketingDefaultTemplateSummary(config map[string]any) map[string]any {

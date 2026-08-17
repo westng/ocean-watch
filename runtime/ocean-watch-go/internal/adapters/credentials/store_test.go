@@ -9,9 +9,9 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 )
 
-func TestCredentialCompatibilityIdentifiers(t *testing.T) {
-	if Service != "ads-plan-monitor" || LegacyAccount != "oceanengine-oauth" {
-		t.Fatalf("legacy credential identity changed: service=%q account=%q", Service, LegacyAccount)
+func TestCredentialIdentifiers(t *testing.T) {
+	if Service != "ads-plan-monitor" {
+		t.Fatalf("credential service identity changed: service=%q", Service)
 	}
 	for _, test := range []struct {
 		channel, authorizationID string
@@ -101,8 +101,5 @@ func TestCredentialBackendsUseStableServiceAndAccountNames(t *testing.T) {
 	store := Store{Root: "/fixture/root"}
 	if got := store.filePath(account, ".dpapi"); got != filepath.Join("/fixture/root", account+".dpapi") {
 		t.Fatalf("Windows credential path = %q", got)
-	}
-	if got := store.filePath(LegacyAccount, ".json"); got != filepath.Join("/fixture/root", "credentials.json") {
-		t.Fatalf("legacy fallback path = %q", got)
 	}
 }

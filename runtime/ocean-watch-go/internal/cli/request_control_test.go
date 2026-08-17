@@ -31,7 +31,7 @@ func TestLocalCommandFamiliesHaveZeroNetworkBudget(t *testing.T) {
 	for _, name := range []string{
 		"setup doctor", "accounts list", "accounts add", "accounts remove",
 		"accounts enable", "accounts disable", "runs list", "runs show",
-		"templates list", "templates show", "qc-templates list", "auth migrate",
+		"templates list", "templates show", "qc-templates list",
 	} {
 		command, ok := commandByName(name)
 		if !ok {

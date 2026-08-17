@@ -18,7 +18,6 @@ import (
 
 const (
 	Service                   = "ads-plan-monitor"
-	LegacyAccount             = "oceanengine-oauth"
 	InsecureFileFallbackEnv   = "ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK"
 	BackendMacOSKeychain      = "macos-keychain"
 	BackendWindowsDPAPI       = "windows-dpapi"
@@ -224,9 +223,6 @@ func (store Store) writeFile(account string, value map[string]any) error {
 
 func (store Store) filePath(account, extension string) string {
 	suffix := strings.ReplaceAll(account, "/", "-")
-	if account == LegacyAccount {
-		suffix = "credentials"
-	}
 	return filepath.Join(store.Root, suffix+extension)
 }
 

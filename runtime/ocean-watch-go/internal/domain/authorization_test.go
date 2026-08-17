@@ -52,7 +52,7 @@ func TestResolveAuthorizationRejectsAmbiguousPendingAndInvalidRevision(t *testin
 	metadata := state["authorizations"].(map[string]any)["auth_one"].(map[string]any)
 	metadata["pending_account_sync"] = true
 	state["advertiser_index"].(map[string]any)["1000000000000001"] = []any{"auth_one"}
-	if _, err := ResolveAuthorization("marketing", state, "1000000000000001", "", "", false); err == nil || err.Code != "legacy_authorization_pending_sync" {
+	if _, err := ResolveAuthorization("marketing", state, "1000000000000001", "", "", false); err == nil || err.Code != "authorization_pending_sync" {
 		t.Fatalf("expected pending failure, got %#v", err)
 	}
 	if _, err := ResolveAuthorization("marketing", state, "1000000000000001", "", "", true); err != nil {

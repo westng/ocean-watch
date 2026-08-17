@@ -75,6 +75,40 @@ func TestAuthorizationStoreRejectsCrossChannelAndCorruptPointer(t *testing.T) {
 	}
 }
 
+func TestAuthorizationStoreIgnoresRemovedAggregateState(t *testing.T) {
+	root := t.TempDir()
+	store := AuthorizationStore{Root: root}
+	if err := AtomicWritePrivateJSON(filepath.Join(root, "authorizations.json"), map[string]any{
+		"schema_version": 2,
+		"channels": map[string]any{
+			"qianchuan": map[string]any{"generation": 99},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.LoadChannel(context.Background(), "qianchuan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("removed aggregate authorization state was loaded: %#v", loaded)
+	}
+}
+
+func TestAuthorizationStoreRejectsUnsupportedCurrentSchema(t *testing.T) {
+	root := t.TempDir()
+	store := AuthorizationStore{Root: root}
+	currentRoot := filepath.Join(root, "channels", "marketing")
+	if err := AtomicWritePrivateJSON(filepath.Join(currentRoot, "current.json"), map[string]any{
+		"schema_version": 1, "generation": 1, "sha256": "unused",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LoadChannel(context.Background(), "marketing"); err == nil {
+		t.Fatal("expected unsupported current authorization schema to fail")
+	}
+}
+
 func TestAuthorizationStoreReturnsSanitizedRevisionSummaryWithoutCredentials(t *testing.T) {
 	root := t.TempDir()
 	store := AuthorizationStore{Root: root}

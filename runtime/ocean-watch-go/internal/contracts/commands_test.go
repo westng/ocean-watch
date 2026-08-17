@@ -11,12 +11,16 @@ func TestCommandsAreUniqueAndExcludeRemovedCompatibilityDomains(t *testing.T) {
 		if command.Domain == "mcp" {
 			t.Fatalf("removed MCP compatibility command remains: %s", command.Name())
 		}
+		if command.Name() == "auth migrate" || command.Name() == "templates migrate" ||
+			command.Name() == "qc-templates migrate" || command.Name() == "qc-templates migrate-live" {
+			t.Fatalf("removed migration command remains: %s", command.Name())
+		}
 		if seen[command.Name()] {
 			t.Fatalf("duplicate command: %s", command.Name())
 		}
 		seen[command.Name()] = true
 	}
-	if len(Commands) != 78 {
-		t.Fatalf("command count = %d, want 78", len(Commands))
+	if len(Commands) != 74 {
+		t.Fatalf("command count = %d, want 74", len(Commands))
 	}
 }

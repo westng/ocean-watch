@@ -137,10 +137,10 @@ const preflightSuccessSchema = `{
         "link_resolution_seconds":{"type":"number","minimum":0},"credential_resolution_seconds":{"type":"number","minimum":0},
         "material_resolution_seconds":{"type":"number","minimum":0},"plan_reconciliation_seconds":{"type":"number","minimum":0},"total_seconds":{"type":"number","minimum":0},
         "owner_hint_cache":{"type":"object","additionalProperties":false,
-          "required":["supplied","eligible","verified","stale","broad_scan_work_count","authorized_hint_query_count","authorized_hint_failure_count","official_video_query_count","loaded","loaded_from_cache","loaded_from_link_metadata","stored"],
+          "required":["supplied","eligible","verified","stale","authorized_hint_query_count","authorized_hint_failure_count","official_video_query_count","loaded","loaded_from_cache","loaded_from_link_metadata","stored"],
           "properties":{
             "supplied":{"type":"integer","minimum":0},"eligible":{"type":"integer","minimum":0},"verified":{"type":"integer","minimum":0},"stale":{"type":"integer","minimum":0},
-            "broad_scan_work_count":{"type":"integer","minimum":0},"authorized_hint_query_count":{"type":"integer","minimum":0},"authorized_hint_failure_count":{"type":"integer","minimum":0},
+            "authorized_hint_query_count":{"type":"integer","minimum":0},"authorized_hint_failure_count":{"type":"integer","minimum":0},
             "official_video_query_count":{"type":"integer","minimum":0},"loaded":{"type":"integer","minimum":0},"loaded_from_cache":{"type":"integer","minimum":0},
             "loaded_from_link_metadata":{"type":"integer","minimum":0},"stored":{"type":"integer","minimum":0}
           }

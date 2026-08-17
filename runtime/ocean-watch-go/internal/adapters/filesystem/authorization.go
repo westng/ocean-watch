@@ -51,7 +51,7 @@ func (store AuthorizationStore) LoadChannel(ctx context.Context, channel string)
 	currentPath := filepath.Join(store.Root, "channels", channel, "current.json")
 	channelState, err := store.readCurrent(currentPath, channel)
 	if errors.Is(err, os.ErrNotExist) {
-		channelState, err = store.readLegacy(channel)
+		return map[string]any{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -173,6 +173,10 @@ func (store AuthorizationStore) readCurrent(path, channel string) (map[string]an
 	if err != nil {
 		return nil, err
 	}
+	version, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(current["schema_version"])))
+	if err != nil || version != authorizationStateSchemaVersion {
+		return nil, fmt.Errorf("unsupported authorization state schema for %s", channel)
+	}
 	generation, err := positiveGeneration(current["generation"])
 	if err != nil {
 		return nil, fmt.Errorf("authorization state incomplete for %s: %w", channel, err)
@@ -193,30 +197,6 @@ func (store AuthorizationStore) readCurrent(path, channel string) (map[string]an
 		return nil, fmt.Errorf("authorization state corrupt for %s: manifest checksum mismatch", channel)
 	}
 	return manifest, nil
-}
-
-func (store AuthorizationStore) readLegacy(channel string) (map[string]any, error) {
-	path := filepath.Join(store.Root, "authorizations.json")
-	state, err := readJSONObject(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return map[string]any{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	version, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(state["schema_version"])))
-	if err != nil || version != authorizationStateSchemaVersion {
-		return nil, errors.New("unsupported authorization state schema")
-	}
-	channels, _ := state["channels"].(map[string]any)
-	if channels == nil {
-		return map[string]any{}, nil
-	}
-	result, _ := channels[channel].(map[string]any)
-	if result == nil {
-		return map[string]any{}, nil
-	}
-	return result, nil
 }
 
 func readJSONObject(path string) (map[string]any, error) {

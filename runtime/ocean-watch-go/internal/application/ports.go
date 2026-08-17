@@ -27,19 +27,3 @@ type CredentialStore interface {
 	Read(context.Context, string) (map[string]any, error)
 	Write(context.Context, string, map[string]any) (string, error)
 }
-
-type MigrationConfigStore interface {
-	ReadWithRevision(context.Context) (map[string]any, string, error)
-	CommitMigration(context.Context, string, map[string]any) error
-}
-
-type AuthorizationMigrationStore interface {
-	LoadChannel(context.Context, string) (map[string]any, error)
-	CommitChannel(context.Context, string, map[string]any) error
-}
-
-type MigrationJournalStore interface {
-	Acquire(context.Context) (func() error, error)
-	Read(context.Context) (map[string]any, bool, error)
-	Write(context.Context, map[string]any) error
-}

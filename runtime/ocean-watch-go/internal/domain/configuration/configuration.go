@@ -16,13 +16,6 @@ const (
 )
 
 var (
-	legacyCredentialKeys = map[string]bool{
-		"app_id": true, "developer_id": true, "secret": true, "auth_code": true,
-		"access_token": true, "refresh_token": true,
-		"access_token_expires_at": true, "refresh_token_expires_at": true,
-		"last_token_update_at": true, "last_authorized_account_sync_at": true,
-		"oauth_authorized_accounts": true, "authorized_advertiser_ids": true,
-	}
 	sensitiveKeys = map[string]bool{
 		"app_id": true, "developer_id": true, "secret": true,
 		"auth_code":    true,
@@ -35,33 +28,30 @@ var (
 )
 
 type Channel struct {
-	ID                    string
-	DisplayName           string
-	BusinessBaseURL       string
-	LegacyBusinessBaseURL string
-	AuthorizeURL          string
-	TokenBaseURL          string
-	RedirectURI           string
-	Capabilities          map[string]bool
+	ID              string
+	DisplayName     string
+	BusinessBaseURL string
+	AuthorizeURL    string
+	TokenBaseURL    string
+	RedirectURI     string
+	Capabilities    map[string]bool
 }
 
 var Channels = map[string]Channel{
 	"marketing": {
 		ID: "marketing", DisplayName: "巨量营销",
-		BusinessBaseURL:       "https://api.oceanengine.com/open_api",
-		LegacyBusinessBaseURL: "https://ad.oceanengine.com/open_api",
-		AuthorizeURL:          "https://ad.oceanengine.com/openapi/audit/oauth.html",
-		TokenBaseURL:          "https://ad.oceanengine.com/open_api",
-		RedirectURI:           "http://127.0.0.1:8787/oauth/callback",
-		Capabilities:          map[string]bool{"oauth": true, "accounts": true, "create": true, "query": true, "report": true},
+		BusinessBaseURL: "https://api.oceanengine.com/open_api",
+		AuthorizeURL:    "https://ad.oceanengine.com/openapi/audit/oauth.html",
+		TokenBaseURL:    "https://ad.oceanengine.com/open_api",
+		RedirectURI:     "http://127.0.0.1:8787/oauth/callback",
+		Capabilities:    map[string]bool{"oauth": true, "accounts": true, "create": true, "query": true, "report": true},
 	},
 	"qianchuan": {
 		ID: "qianchuan", DisplayName: "巨量千川",
-		BusinessBaseURL:       "https://api.oceanengine.com/open_api",
-		LegacyBusinessBaseURL: "https://ad.oceanengine.com/open_api",
-		AuthorizeURL:          "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
-		TokenBaseURL:          "https://ad.oceanengine.com/open_api",
-		RedirectURI:           "http://127.0.0.1:8787/oauth/callback",
+		BusinessBaseURL: "https://api.oceanengine.com/open_api",
+		AuthorizeURL:    "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
+		TokenBaseURL:    "https://ad.oceanengine.com/open_api",
+		RedirectURI:     "http://127.0.0.1:8787/oauth/callback",
 		Capabilities: map[string]bool{
 			"oauth": true, "accounts": true, "qianchuan_create": true,
 			"qianchuan_materials": true, "qianchuan_report": true,
@@ -77,119 +67,71 @@ type ChannelError struct {
 
 func (err *ChannelError) Error() string { return err.Message }
 
-func MigrateChannels(raw map[string]any) (map[string]any, error) {
-	migrated := CloneMap(raw)
-	if version, exists := migrated["config_schema_version"]; exists {
-		parsed, err := Integer(version)
-		if err != nil {
-			return nil, errors.New("config_schema_version must be an integer")
-		}
-		if parsed > SchemaVersion {
-			return nil, fmt.Errorf("config schema %d is newer than supported %d", parsed, SchemaVersion)
-		}
+func Current(raw map[string]any) (map[string]any, error) {
+	current := CloneMap(raw)
+	version, exists := current["config_schema_version"]
+	if !exists {
+		return nil, errors.New("config_schema_version is required; only schema 2 is supported")
 	}
-
-	channels, err := objectOrCreate(migrated, "channels")
+	parsed, err := Integer(version)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("config_schema_version must be an integer")
 	}
-	marketing, err := objectOrCreate(channels, "marketing")
-	if err != nil {
-		return nil, err
+	if parsed != SchemaVersion {
+		return nil, fmt.Errorf("config schema %d is unsupported; only schema %d is supported", parsed, SchemaVersion)
 	}
-	legacyAPI := Object(migrated["api"])
-	marketingAPI, err := objectOrCreate(marketing, "api")
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range legacyAPI {
-		if legacyCredentialKeys[key] {
-			continue
-		}
-		if existing, exists := marketingAPI[key]; exists && !Equal(existing, value) {
-			return nil, fmt.Errorf("conflicting marketing API config field: %s", key)
-		}
-		if _, exists := marketingAPI[key]; !exists {
-			marketingAPI[key] = Clone(value)
+	for _, key := range []string{"api", "oauth"} {
+		if _, removedRoot := current[key]; removedRoot {
+			return nil, fmt.Errorf("root-level %s configuration is unsupported; use channels.<channel>.%s", key, key)
 		}
 	}
-	for _, value := range channels {
-		channel, ok := value.(map[string]any)
+	channels, ok := current["channels"].(map[string]any)
+	if !ok {
+		return nil, errors.New("channels must be an object")
+	}
+	for channelID, rawChannel := range channels {
+		channel, ok := rawChannel.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("channels.%s must be an object", channelID)
 		}
-		api, ok := channel["api"].(map[string]any)
-		if !ok {
-			continue
-		}
-		for key := range legacyCredentialKeys {
-			delete(api, key)
-		}
-	}
-
-	legacyOAuth := Object(migrated["oauth"])
-	marketingOAuth, err := objectOrCreate(marketing, "oauth")
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range legacyOAuth {
-		if existing, exists := marketingOAuth[key]; exists && !Equal(existing, value) {
-			return nil, fmt.Errorf("conflicting marketing OAuth config field: %s", key)
-		}
-		if _, exists := marketingOAuth[key]; !exists {
-			marketingOAuth[key] = Clone(value)
+		for _, key := range []string{"api", "oauth"} {
+			if value, exists := channel[key]; exists && value != nil {
+				if _, ok := value.(map[string]any); !ok {
+					return nil, fmt.Errorf("channels.%s.%s must be an object", channelID, key)
+				}
+			}
 		}
 	}
-
-	qianchuan, err := objectOrCreate(channels, "qianchuan")
-	if err != nil {
-		return nil, err
-	}
-	if qianchuan["status"] == "not_implemented" {
-		delete(qianchuan, "status")
-	}
-	if Missing(migrated["default_channel"]) {
-		migrated["default_channel"] = DefaultChannel
-	}
-	account, err := objectOrCreate(migrated, "account")
-	if err != nil {
-		return nil, err
-	}
-	if Missing(account["channel"]) {
-		account["channel"] = DefaultChannel
-	}
-	for _, value := range Object(migrated["plan_templates"]) {
-		template, ok := value.(map[string]any)
-		if !ok {
-			continue
-		}
-		bindings, ok := template["bindings"].(map[string]any)
-		if ok && Missing(bindings["channel"]) {
-			bindings["channel"] = DefaultChannel
+	if account, exists := current["account"]; exists && account != nil {
+		if _, ok := account.(map[string]any); !ok {
+			return nil, errors.New("account must be an object")
 		}
 	}
-	migrated["config_schema_version"] = SchemaVersion
-	delete(migrated, "api")
-	delete(migrated, "oauth")
-	return migrated, nil
+	if fields := SensitiveFields(current); len(fields) != 0 {
+		return nil, fmt.Errorf("credentials are unsupported in project configuration: %s", strings.Join(fields, ", "))
+	}
+	return current, nil
 }
 
 func Runtime(raw map[string]any, explicit, capability string) (map[string]any, Channel, error) {
-	migrated, err := MigrateChannels(raw)
+	current, err := Current(raw)
 	if err != nil {
 		return nil, Channel{}, err
 	}
-	selected := SelectedChannel(migrated, explicit)
+	selected := SelectedChannel(current, explicit)
 	definition, err := GetChannel(selected, capability)
 	if err != nil {
 		return nil, Channel{}, err
 	}
-	configured := Object(Object(migrated["channels"])[selected])
-	runtimeConfig := CloneMap(migrated)
+	configuredRaw, exists := Object(current["channels"])[selected]
+	if !exists {
+		return nil, Channel{}, fmt.Errorf("channel configuration is missing: %s", selected)
+	}
+	configured := Object(configuredRaw)
+	runtimeConfig := CloneMap(current)
 	runtimeAPI := CloneMap(Object(configured["api"]))
 	runtimeOAuth := CloneMap(Object(configured["oauth"]))
 	setDefault(runtimeAPI, "base_url", definition.BusinessBaseURL)
-	setDefault(runtimeAPI, "legacy_base_url", definition.LegacyBusinessBaseURL)
 	setDefault(runtimeOAuth, "authorize_url", definition.AuthorizeURL)
 	setDefault(runtimeOAuth, "token_base_url", definition.TokenBaseURL)
 	setDefault(runtimeOAuth, "redirect_uri", definition.RedirectURI)
@@ -230,26 +172,6 @@ func SelectedChannel(config map[string]any, explicit string) string {
 		}
 	}
 	return DefaultChannel
-}
-
-func ExtractLegacyCredentials(config map[string]any, channel string) (map[string]any, error) {
-	sources := []map[string]any{Object(config["api"])}
-	configured := Object(Object(config["channels"])[channel])
-	sources = append(sources, Object(configured["api"]))
-	result := map[string]any{}
-	for _, source := range sources {
-		for key := range sensitiveKeys {
-			value, exists := source[key]
-			if !exists || Missing(value) {
-				continue
-			}
-			if existing, exists := result[key]; exists && !Equal(existing, value) {
-				return nil, fmt.Errorf("conflicting %s credential field: %s", channel, key)
-			}
-			result[key] = Clone(value)
-		}
-	}
-	return result, nil
 }
 
 func SensitiveFields(config map[string]any) []string {

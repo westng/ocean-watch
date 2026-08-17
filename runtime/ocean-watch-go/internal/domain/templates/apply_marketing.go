@@ -57,31 +57,19 @@ func ApplyMarketingPlanTemplate(
 	if err != nil {
 		return nil, err
 	}
-	schemaVersion, err := parseVersion(
-		config["plan_template_schema_version"],
-		1,
-		"plan_template_schema_version",
-	)
-	if err != nil {
-		return nil, err
-	}
 	bindings := mapOrEmpty(template["bindings"])
-	if schemaVersion >= 2 {
-		if bindingError := marketingBindingError(bindings); bindingError != nil {
-			return nil, configurationError(fmt.Sprint(bindingError), nil)
-		}
+	if bindingError := marketingBindingError(bindings); bindingError != nil {
+		return nil, configurationError(fmt.Sprint(bindingError), nil)
 	}
 	strategy := mapOrEmpty(template["material_strategy"])
-	if schemaVersion >= 3 {
-		if strategyError := marketingMaterialStrategyError(strategy); strategyError != "" {
-			return nil, configurationError(strategyError, nil)
-		}
-		if fixedFields := marketingFixedMaterialFields(template); len(fixedFields) != 0 {
-			return nil, configurationError(
-				"plan templates cannot store runtime material IDs: "+strings.Join(fixedFields, ", "),
-				map[string]any{"fields": anyStrings(fixedFields)},
-			)
-		}
+	if strategyError := marketingMaterialStrategyError(strategy); strategyError != "" {
+		return nil, configurationError(strategyError, nil)
+	}
+	if fixedFields := marketingFixedMaterialFields(template); len(fixedFields) != 0 {
+		return nil, configurationError(
+			"plan templates cannot store runtime material IDs: "+strings.Join(fixedFields, ", "),
+			map[string]any{"fields": anyStrings(fixedFields)},
+		)
 	}
 
 	boundChannel := stringValue(bindings["channel"])
@@ -163,7 +151,6 @@ func ApplyMarketingPlanTemplate(
 		"display_name":      clone(template["display_name"]),
 		"bindings":          cloneMap(bindings),
 		"material_strategy": cloneMap(strategy),
-		"legacy":            template["legacy"],
 	}
 	return effective, nil
 }

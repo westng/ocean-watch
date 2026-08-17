@@ -8,8 +8,8 @@ import (
 )
 
 // ServiceAnchor compiles the exact official generated services used by the
-// first migration slices. It is never called in production; concrete adapters
-// build requests from these same service methods and map SDK types immediately.
+// concrete adapters. It is never called in production; adapters build requests
+// from these service methods and map SDK types immediately.
 func ServiceAnchor(ctx context.Context, client *Client) error {
 	if ctx == nil || client == nil {
 		return errors.New("SDK service anchor requires context and client")
