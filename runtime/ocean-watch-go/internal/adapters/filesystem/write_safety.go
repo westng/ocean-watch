@@ -150,7 +150,9 @@ func (store OperationJournalStore) Save(
 		return errors.New("operation journal contains a forbidden credential field")
 	}
 	var value map[string]any
-	if err := json.Unmarshal(payload, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return err
 	}
 	root, name, err := store.openRunsRoot(runID, true)

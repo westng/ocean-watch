@@ -61,7 +61,7 @@ func TestOperationJournalPreservesLegacyExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(runs, "creator-batch-python.json")
-	payload := `{"schema_version":1,"fingerprint":"fixture","created_at":"2026-07-26T00:00:00Z","batch_note":{"owner":"python"},"jobs":{"creator-1":{"status":"promotion_failed","advertiser_id":"123","project_id":"456","failure_stage":"promotion_create","last_response":{"code":40000,"message":"fixture rejection","request_id":"request-1"},"aweme_id":"789","item_ids":["9007199254740993"]}}}`
+	payload := `{"schema_version":1,"fingerprint":"fixture","created_at":"2026-07-26T00:00:00Z","batch_note":{"owner":"python","product_id":3798276423861534804},"jobs":{"creator-1":{"status":"promotion_failed","advertiser_id":"123","project_id":"456","failure_stage":"promotion_create","last_response":{"code":40000,"message":"fixture rejection","request_id":"request-1"},"aweme_id":"789","item_ids":["9007199254740993"]}}}`
 	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,8 @@ func TestOperationJournalPreservesLegacyExtensions(t *testing.T) {
 	if err := decoder.Decode(&decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded["batch_note"].(map[string]any)["owner"] != "python" {
+	batchNote := decoded["batch_note"].(map[string]any)
+	if batchNote["owner"] != "python" || batchNote["product_id"] != json.Number("3798276423861534804") {
 		t.Fatalf("top-level extension was lost: %s", written)
 	}
 	decodedJob := decoded["jobs"].(map[string]any)["creator-1"].(map[string]any)

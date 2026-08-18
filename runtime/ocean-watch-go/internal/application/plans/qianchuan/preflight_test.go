@@ -209,6 +209,13 @@ func TestBatchTemplateDigestUsesCanonicalJSONNumbers(t *testing.T) {
 	if batchTemplateDigest(first) != batchTemplateDigest(second) {
 		t.Fatal("semantically identical template JSON produced different digests")
 	}
+	firstSnapshot := preparedBatchSnapshot{TemplatePayload: first.TemplatePayload}
+	secondSnapshot := preparedBatchSnapshot{TemplatePayload: second.TemplatePayload}
+	firstFingerprint, firstErr := batchSnapshotFingerprint(firstSnapshot)
+	secondFingerprint, secondErr := batchSnapshotFingerprint(secondSnapshot)
+	if firstErr != nil || secondErr != nil || firstFingerprint != secondFingerprint {
+		t.Fatalf("semantically identical template JSON produced different snapshot fingerprints: %v %v", firstErr, secondErr)
+	}
 }
 
 func TestBatchSubmitIsolatesChangedPreflightCreator(t *testing.T) {

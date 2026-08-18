@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -269,12 +270,33 @@ func batchTemplateDigest(request BatchRequest) string {
 }
 
 func batchSnapshotFingerprint(snapshot preparedBatchSnapshot) (string, error) {
+	canonicalPayload, err := canonicalJSON(snapshot.TemplatePayload)
+	if err != nil {
+		return "", err
+	}
+	snapshot.TemplatePayload = canonicalPayload
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
 		return "", err
 	}
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func canonicalJSON(payload json.RawMessage) (json.RawMessage, error) {
+	decoder := json.NewDecoder(strings.NewReader(string(payload)))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err == nil {
+		return nil, errors.New("JSON contains multiple values")
+	} else if !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return json.Marshal(value)
 }
 
 func batchPreflightJournal(snapshot preparedBatchSnapshot, now time.Time) (domainplans.Journal, error) {
