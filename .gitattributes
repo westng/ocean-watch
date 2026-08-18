@@ -1,5 +1,5 @@
 * text=auto eol=lf
 
 *.bat text eol=crlf
-*.cmd text eol=crlf
+*.cmd text eol=lf
 *.exe binary

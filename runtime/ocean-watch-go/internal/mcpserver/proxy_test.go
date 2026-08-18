@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +120,12 @@ func TestProxySwitchesRuntimeInsideOneOuterSessionAndRejectsContractChanges(t *t
 
 func assertProxyHostVersion(t *testing.T, hostRoot, version string) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		if _, err := os.Lstat(hostRoot); !os.IsNotExist(err) {
+			t.Fatalf("Windows unexpectedly published a Host symlink: %v", err)
+		}
+		return
+	}
 	payload, err := os.ReadFile(filepath.Join(hostRoot, ".codex-plugin", "plugin.json"))
 	if err != nil {
 		t.Fatal(err)
