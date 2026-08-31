@@ -173,8 +173,12 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		return fmt.Errorf("tools/list: %w", err)
 	}
 	names := make([]string, 0, len(tools.Tools))
+	var preflightTool *mcp.Tool
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
+		if tool.Name == "preflight_qianchuan_works" {
+			preflightTool = tool
+		}
 	}
 	sort.Strings(names)
 	expectedNames := []string{
@@ -199,6 +203,10 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	if strings.Join(names, ",") != strings.Join(expectedNames, ",") {
 		_ = session.Close()
 		return fmt.Errorf("unexpected tools: %v", names)
+	}
+	if err := validatePreflightInputSchema(preflightTool); err != nil {
+		_ = session.Close()
+		return err
 	}
 	if preflightTemplate != "" && !switchProbe {
 		if err := callReadOnlyPreflight(ctx, session, preflightTemplate, preflightWorkURLs); err != nil {
@@ -300,8 +308,12 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 }
 
 func callReadOnlyPreflight(ctx context.Context, session *mcp.ClientSession, template string, workURLs []string) error {
+	items := make([]map[string]any, len(workURLs))
+	for index, workURL := range workURLs {
+		items[index] = map[string]any{"work_url": workURL, "plan_type": "", "business": ""}
+	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "preflight_qianchuan_works", Arguments: map[string]any{
-		"plan_template": template, "work_urls": append([]string(nil), workURLs...), "concurrency": min(8, len(workURLs)),
+		"plan_template": template, "items": items, "concurrency": min(8, len(workURLs)),
 	}})
 	if err != nil {
 		return fmt.Errorf("preflight_qianchuan_works: %w", err)
@@ -312,6 +324,57 @@ func callReadOnlyPreflight(ctx context.Context, session *mcp.ClientSession, temp
 	}
 	fmt.Printf("MCP read-only preflight result: %s\n", payload)
 	return nil
+}
+
+func validatePreflightInputSchema(tool *mcp.Tool) error {
+	if tool == nil {
+		return errors.New("preflight_qianchuan_works is missing from tools/list")
+	}
+	payload, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		return fmt.Errorf("encode preflight input schema: %w", err)
+	}
+	var top struct {
+		Required   []string                   `json:"required"`
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(payload, &top); err != nil {
+		return fmt.Errorf("decode preflight input schema: %w", err)
+	}
+	if !sameStrings(top.Required, []string{"items", "plan_template"}) {
+		return fmt.Errorf("preflight input schema has unexpected required fields: %v", top.Required)
+	}
+	for _, legacy := range []string{"work_urls", "plan_type", "business"} {
+		if _, exists := top.Properties[legacy]; exists {
+			return fmt.Errorf("preflight input schema still exposes legacy top-level field %q", legacy)
+		}
+	}
+	var items struct {
+		Items struct {
+			Required   []string                   `json:"required"`
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(top.Properties["items"], &items); err != nil {
+		return fmt.Errorf("decode preflight items schema: %w", err)
+	}
+	if !sameStrings(items.Items.Required, []string{"work_url"}) {
+		return fmt.Errorf("preflight item schema has unexpected required fields: %v", items.Items.Required)
+	}
+	for _, field := range []string{"work_url", "plan_type", "business"} {
+		if _, exists := items.Items.Properties[field]; !exists {
+			return fmt.Errorf("preflight item schema is missing %q", field)
+		}
+	}
+	return nil
+}
+
+func sameStrings(actual, expected []string) bool {
+	actual = append([]string(nil), actual...)
+	expected = append([]string(nil), expected...)
+	sort.Strings(actual)
+	sort.Strings(expected)
+	return strings.Join(actual, "\x00") == strings.Join(expected, "\x00")
 }
 
 func runtimeVersion(ctx context.Context, session *mcp.ClientSession) (string, error) {

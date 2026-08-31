@@ -28,6 +28,7 @@ type QianchuanOptions struct {
 	CredentialStore      authapplication.CredentialStore
 	Links                applicationqianchuan.WorkLinkResolver
 	OwnerHints           applicationqianchuan.OwnerHintCache
+	Bindings             applicationqianchuan.PlanBindingStore
 	Authorizations       authapplication.AuthorizationStore
 	RefreshLocker        authapplication.RefreshLocker
 	OAuth                authapplication.OAuthAdapter
@@ -96,7 +97,7 @@ func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
 	if batchReader == nil {
 		readFactory := factory
 		if options.BatchReadConcurrency > 0 {
-			readFactory, err = newQianchuanBatchReadFactory(options.BatchReadConcurrency)
+			readFactory, err = newQianchuanBatchReadFactory(options.BatchReadConcurrency, options.StateRoot)
 			if err != nil {
 				return QianchuanRuntime{}, err
 			}
@@ -133,13 +134,14 @@ func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
 	}, nil
 }
 
-func newQianchuanBatchReadFactory(concurrency int) (*oceanengine.ClientFactory, error) {
+func newQianchuanBatchReadFactory(concurrency int, stateRoot string) (*oceanengine.ClientFactory, error) {
 	return oceanengine.NewClientFactory(oceanengine.FactoryOptions{
 		RequestLimits: requestcontrol.Limits{
 			AuthorizationConcurrency:          concurrency,
 			EndpointConcurrency:               concurrency,
 			QianchuanAuthorizationConcurrency: concurrency,
 		},
+		SharedQianchuanControl: filesystem.QianchuanRequestController{Root: stateRoot},
 	})
 }
 
@@ -163,7 +165,7 @@ func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.
 		}
 		readFactory = factory
 		if options.BatchReadConcurrency > 0 {
-			readFactory, err = newQianchuanBatchReadFactory(options.BatchReadConcurrency)
+			readFactory, err = newQianchuanBatchReadFactory(options.BatchReadConcurrency, options.StateRoot)
 			if err != nil {
 				return applicationqianchuan.CommandService{}, err
 			}
@@ -221,11 +223,15 @@ func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.
 	}
 	service.Verifier = applicationqianchuan.WorkVerifier{Reader: reader}
 	service.Locks = locker
-	reconciler := applicationqianchuan.CurrentDayReconciler{Reader: reader, Now: options.Now}
+	bindings := options.Bindings
+	if bindings == nil {
+		bindings = filesystem.QianchuanPlanBindingStore{Root: options.StateRoot}
+	}
+	reconciler := applicationqianchuan.CurrentDayReconciler{Reader: reader, Bindings: bindings, Now: options.Now}
 	guard := sharedplans.GuardedExecutor{Credentials: credentials, Locks: locker, Now: options.Now}
 	service.Create = applicationqianchuan.CreateExecutor{Guard: guard, Writer: writer, Reconciler: reconciler}
 	service.Batch = applicationqianchuan.BatchService{
-		Guard: guard, Reader: reader, Writer: writer, Reconciler: reconciler, Now: options.Now,
+		Guard: guard, Reader: reader, Writer: writer, Reconciler: reconciler, Bindings: bindings, Now: options.Now,
 	}
 	service.Remove = applicationqianchuan.RemoveExecutor{Guard: guard, Reader: reader, Writer: writer}
 	return service, nil

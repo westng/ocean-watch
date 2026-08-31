@@ -75,8 +75,10 @@ python3 scripts/version_tag.py check
 python3 scripts/validate_distribution.py
 skills/ads-plan-monitor/run --version
 skills/qc-plan-monitor/run --help
-git diff --check
+git diff --check -- . ':(exclude).codex-plugin/bin/**'
 ```
+
+五个平台 Runtime 是 30MB 以上的二进制文件，文本 whitespace 检查必须排除该目录，避免 Git 为大对象差异分配无意义的文本比较内存。二进制完整性不因此降低：前面的 `build-runtime --all --verify` 会逐字节重建并比较全部五个平台产物和 Runtime manifest。
 
 日常 CI 在 Linux、macOS、Windows 验证 Go 运行时和当前平台启动器，在 Python 3.10/3.12 验证 F2 包装层，并验证 Plugin/Skill/二进制分发合同。
 

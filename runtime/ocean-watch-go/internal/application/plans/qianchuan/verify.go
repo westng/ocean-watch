@@ -100,7 +100,10 @@ func (verifier WorkVerifier) Verify(
 	if err != nil {
 		return WorkVerificationResult{}, err
 	}
-	works, skipped := normalizeWorkInputs(request.Works)
+	works, skipped, err := normalizeWorkInputs(request.Works)
+	if err != nil {
+		return WorkVerificationResult{}, err
+	}
 	result := WorkVerificationResult{
 		Matched: []VerifiedWork{}, Skipped: skipped, QueryFailures: []WorkQueryFailure{},
 		Creators:           []domainqianchuan.AuthorizedCreator{},
@@ -448,10 +451,10 @@ func (verifier WorkVerifier) queryWorks(
 	return result.Rows, nil
 }
 
-func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork) {
+func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork, error) {
 	result := make([]WorkInput, 0, len(values))
 	skipped := make([]SkippedWork, 0)
-	seen := map[string]struct{}{}
+	seen := map[string]WorkInput{}
 	for index, value := range values {
 		value.InputURL = strings.TrimSpace(value.InputURL)
 		value.AwemeItemID = strings.TrimSpace(value.AwemeItemID)
@@ -465,14 +468,17 @@ func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork) {
 			skipped = append(skipped, skippedFromWork(value, "invalid_work_id", "作品链接未解析出有效作品 ID", nil))
 			continue
 		}
-		if _, duplicate := seen[value.AwemeItemID]; duplicate {
+		if previous, duplicate := seen[value.AwemeItemID]; duplicate {
+			if previous.PlanType != value.PlanType || previous.Business != value.Business {
+				return nil, nil, domainqianchuan.ErrDuplicateItemConflict
+			}
 			skipped = append(skipped, skippedFromWork(value, "duplicate_input", "同一作品在本批次中重复出现", nil))
 			continue
 		}
-		seen[value.AwemeItemID] = struct{}{}
+		seen[value.AwemeItemID] = value
 		result = append(result, value)
 	}
-	return result, skipped
+	return result, skipped, nil
 }
 
 func creatorUsable(creator domainqianchuan.AuthorizedCreator) bool {

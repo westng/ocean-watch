@@ -18,12 +18,13 @@ const capabilitiesOutputSchema = `{
   "properties":{
     "ok":{"const":true},"runtime_version":{"type":"string","minLength":1,"maxLength":128},
     "commands":{"type":"array","items":{"type":"object","additionalProperties":false,
-      "required":["domain","action","channel","effect","requires_submit","description"],
+      "required":["id","channel","effect","requires_submit","description","primary_surface","route"],
       "properties":{
-        "domain":{"type":"string","minLength":1,"maxLength":64},"action":{"type":"string","minLength":1,"maxLength":64},
-        "channel":{"type":"string","enum":["marketing","qianchuan","shared"]},
+		"id":{"type":"string","minLength":1,"maxLength":128},"domain":{"type":"string","minLength":1,"maxLength":64},"action":{"type":"string","minLength":1,"maxLength":64},
+		"channel":{"type":"string","enum":["marketing","qianchuan","shared"]},
 		"effect":{"type":"string","enum":["local_read","local_write","public_read","authorization_write","official_read","online_write"]},
-        "requires_submit":{"type":"boolean"},"description":{"type":"string","minLength":1,"maxLength":256}
+		"requires_submit":{"type":"boolean"},"description":{"type":"string","minLength":1,"maxLength":256},
+		"primary_surface":{"type":"string","enum":["cli","mcp"]},"route":{"type":"string","minLength":1,"maxLength":256}
       }
     }}
   }
@@ -36,12 +37,15 @@ type capabilityOutput struct {
 }
 
 type capabilityItem struct {
+	ID             string `json:"id"`
 	Domain         string `json:"domain"`
 	Action         string `json:"action"`
 	Channel        string `json:"channel"`
 	Effect         string `json:"effect"`
 	RequiresSubmit bool   `json:"requires_submit"`
 	Description    string `json:"description"`
+	PrimarySurface string `json:"primary_surface"`
+	Route          string `json:"route"`
 }
 
 func capabilitiesHandler(version string) mcp.ToolHandler {
@@ -58,9 +62,9 @@ func capabilitiesHandler(version string) mcp.ToolHandler {
 				channel = input.Channel
 			}
 		}
-		items := make([]capabilityItem, 0, len(contracts.Commands))
-		for _, command := range contracts.Commands {
-			item := commandCapability(command)
+		items := make([]capabilityItem, 0, len(contracts.DefaultCapabilityRegistry.All()))
+		for _, spec := range contracts.DefaultCapabilityRegistry.All() {
+			item := capabilitySpecOutput(spec)
 			if channel == "all" || item.Channel == channel || item.Channel == "shared" {
 				items = append(items, item)
 			}
@@ -70,11 +74,17 @@ func capabilitiesHandler(version string) mcp.ToolHandler {
 	}
 }
 
-func commandCapability(command contracts.Command) capabilityItem {
-	capability := contracts.CapabilityFor(command)
-	return capabilityItem{
-		Domain: command.Domain, Action: command.Action, Channel: capability.Channel,
-		Effect: string(capability.Effect), RequiresSubmit: capability.RequiresSubmit,
-		Description: command.Description,
+func capabilitySpecOutput(spec contracts.CapabilitySpec) capabilityItem {
+	item := capabilityItem{
+		ID: spec.ID, Channel: spec.Channel, Effect: string(spec.Effect), RequiresSubmit: spec.RequiresSubmit,
+		Description: spec.CommandDescription, PrimarySurface: string(spec.PrimarySurface), Route: spec.Route(),
 	}
+	if item.Description == "" {
+		item.Description = "Invoke " + spec.MCPTool
+	}
+	if spec.CLICommand != "" {
+		parts := strings.SplitN(spec.CLICommand, " ", 2)
+		item.Domain, item.Action = parts[0], parts[1]
+	}
+	return item
 }

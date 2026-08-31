@@ -27,6 +27,7 @@ import (
 	applicationreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
@@ -290,21 +291,21 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	}
 	listAnnotations := *annotations
 	listAnnotations.Title = "列出投放模板"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "shared.template_list", &mcp.Tool{
 		Name: "list_templates", Annotations: &listAnnotations,
 		Description: "当用户想查找、浏览或选择本地巨量营销或巨量千川投放模板时调用。返回可供 get_template 使用的稳定字符串 ID；不读取官方账户数据。",
 		InputSchema: json.RawMessage(listInputSchema), OutputSchema: json.RawMessage(listOutputSchema),
 	}, runtime.handler(runtime.listTemplates))
 	getAnnotations := *annotations
 	getAnnotations.Title = "查看投放模板详情"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "shared.template_get", &mcp.Tool{
 		Name: "get_template", Annotations: &getAnnotations,
 		Description: "当用户已经给出或在当前会话中选中了一个本地投放模板，并需要查看安全详情或创建计划前的就绪状态时调用。必须使用渠道和精确模板 ID。",
 		InputSchema: json.RawMessage(getInputSchema), OutputSchema: json.RawMessage(getOutputSchema),
 	}, runtime.handler(runtime.getTemplate))
 	capabilityAnnotations := *annotations
 	capabilityAnnotations.Title = "查询 Ocean Watch 能力"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "shared.capability_list", &mcp.Tool{
 		Name: "get_capabilities", Annotations: &capabilityAnnotations,
 		Description: "仅当用户目标未命中已知高频工具，或需要了解 Ocean Watch 当前完整能力时调用。只返回当前本地 Runtime 的命令、渠道和副作用等级，不读取业务数据、不执行操作。",
 		InputSchema: json.RawMessage(capabilitiesInputSchema), OutputSchema: json.RawMessage(capabilitiesOutputSchema),
@@ -314,28 +315,28 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Title: "预检千川作品计划", DestructiveHint: &readOnly, IdempotentHint: false,
 		OpenWorldHint: &openWorld, ReadOnlyHint: preflightReadOnly,
 	}
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.work_preflight", &mcp.Tool{
 		Name: "preflight_qianchuan_works", Annotations: preflightAnnotations,
 		Description: "当用户给出千川商品全域模板和抖音作品链接，需要校验授权、归属、商品匹配并决定新建或追加计划时调用。不会创建或修改计划，但会读取官方接口、必要时刷新授权并保存短期本地预检快照。",
 		InputSchema: json.RawMessage(preflightInputSchema), OutputSchema: json.RawMessage(preflightOutputSchema),
 	}, runtime.handler(withUnboundedRequestBudget(runtime.preflightQianchuanWorks)))
 	getPreflightAnnotations := *annotations
 	getPreflightAnnotations.Title = "查看千川预检快照"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.preflight_get", &mcp.Tool{
 		Name: "get_qianchuan_preflight", Annotations: &getPreflightAnnotations,
 		Description: "当用户已经有精确的千川预检 ID，并需要确认其有效期、模板、商品和新建或追加决策时调用。只读本地快照，不刷新授权且不访问官方接口。",
 		InputSchema: json.RawMessage(getPreflightInputSchema), OutputSchema: json.RawMessage(getPreflightOutputSchema),
 	}, runtime.handler(runtime.getQianchuanPreflight))
 	accountAnnotations := *annotations
 	accountAnnotations.Title = "列出负责账户"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "shared.managed_account_list", &mcp.Tool{
 		Name: "list_managed_accounts", Annotations: &accountAnnotations,
 		Description: "当用户询问自己负责、常用或日常投放范围内的账户时调用。只读取本地负责账户清单，不读取凭据、不刷新 Token，也不访问官方接口。",
 		InputSchema: json.RawMessage(managedAccountsInputSchema), OutputSchema: json.RawMessage(managedAccountsOutputSchema),
 	}, runtime.handler(runtime.listManagedAccounts))
 	authAnnotations := *annotations
 	authAnnotations.Title = "查看千川授权状态"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.authorization_inspect", &mcp.Tool{
 		Name: "get_qianchuan_authorization", Annotations: &authAnnotations,
 		Description: "当用户需要确认本机千川应用、Token 存在状态或广告主到授权的映射时调用。只读取本地授权与凭据存在性，不刷新 Token、不访问官方接口，也不返回凭据值。",
 		InputSchema: json.RawMessage(qianchuanAuthorizationInputSchema), OutputSchema: json.RawMessage(qianchuanAuthorizationOutputSchema),
@@ -346,75 +347,86 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	}
 	productAnnotations := *officialReadAnnotations
 	productAnnotations.Title = "搜索千川商品"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.product_search", &mcp.Tool{
 		Name: "search_qianchuan_products", Annotations: &productAnnotations,
 		Description: "当用户需要查找千川可投商品、商品 ID、名称、类目、渠道、销量或库存时调用。读取官方接口，必要时会刷新本地 Token；不用于查询商品消耗或 ROI。",
 		InputSchema: json.RawMessage(qianchuanProductsInputSchema), OutputSchema: json.RawMessage(qianchuanProductsOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.searchQianchuanProducts)))
 	planListAnnotations := *officialReadAnnotations
 	planListAnnotations.Title = "列出千川计划"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.plan_list", &mcp.Tool{
 		Name: "list_qianchuan_plans", Annotations: &planListAnnotations,
 		Description: "当用户需要按广告主、日期和状态列出千川商品全域计划时调用。读取官方计划列表，必要时会刷新本地 Token；不把列表统计字段当成报表金额。",
 		InputSchema: json.RawMessage(qianchuanPlansInputSchema), OutputSchema: json.RawMessage(qianchuanPlansOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.listQianchuanPlans)))
 	planDetailAnnotations := *officialReadAnnotations
 	planDetailAnnotations.Title = "查看千川计划详情"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.plan_get", &mcp.Tool{
 		Name: "get_qianchuan_plan", Annotations: &planDetailAnnotations,
 		Description: "当用户给出精确千川计划 ID，需要查看计划设置、达人、商品及可选素材成员时调用。读取官方详情和可选素材接口，必要时会刷新本地 Token。",
 		InputSchema: json.RawMessage(qianchuanPlanInputSchema), OutputSchema: json.RawMessage(qianchuanPlanOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.getQianchuanPlan)))
 	accountReportAnnotations := *officialReadAnnotations
 	accountReportAnnotations.Title = "查询千川账户报表"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.account_report_fixed", &mcp.Tool{
 		Name: "report_qianchuan_account", Annotations: &accountReportAnnotations,
 		Description: "当用户需要一个千川广告主的账户汇总消耗、订单、GMV 或 ROI 时调用。scope=overall 包含乘方，scope=uni 仅全域；使用固定官方指标集。",
 		InputSchema: json.RawMessage(qianchuanAccountReportInputSchema), OutputSchema: json.RawMessage(qianchuanAccountReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportQianchuanAccount)))
 	planReportAnnotations := *officialReadAnnotations
 	planReportAnnotations.Title = "查询千川计划报表"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "qianchuan.plan_report", &mcp.Tool{
 		Name: "report_qianchuan_plans", Annotations: &planReportAnnotations,
 		Description: "当用户需要千川商品全域计划级消耗、订单、GMV、ROI、预算和成本保障信息时调用。保留应用服务生成的完整 Markdown 表格。",
 		InputSchema: json.RawMessage(qianchuanPlanReportInputSchema), OutputSchema: json.RawMessage(qianchuanPlanReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportQianchuanPlans)))
 	marketingAuthAnnotations := *annotations
 	marketingAuthAnnotations.Title = "查看营销授权状态"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "marketing.authorization_inspect", &mcp.Tool{
 		Name: "get_marketing_authorization", Annotations: &marketingAuthAnnotations,
 		Description: "当用户需要确认本机巨量营销应用、Token 存在状态或广告主到授权的映射时调用。只读取本地授权与凭据存在性，不刷新 Token、不访问官方接口，也不返回凭据值。",
 		InputSchema: json.RawMessage(marketingAuthorizationInputSchema), OutputSchema: json.RawMessage(marketingAuthorizationOutputSchema),
 	}, runtime.handler(runtime.getMarketingAuthorization))
 	marketingVideoAnnotations := *officialReadAnnotations
 	marketingVideoAnnotations.Title = "搜索营销视频素材"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "marketing.video_search", &mcp.Tool{
 		Name: "search_marketing_videos", Annotations: &marketingVideoAnnotations,
 		Description: "当用户需要按巨量营销广告主、素材标识、文件名或日期查找账户视频素材时调用。只查询账户素材库，不返回视频或封面 URL。",
 		InputSchema: json.RawMessage(marketingVideosInputSchema), OutputSchema: json.RawMessage(marketingVideosOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.searchMarketingVideos)))
 	marketingCreatorAnnotations := *officialReadAnnotations
 	marketingCreatorAnnotations.Title = "搜索营销达人素材"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "marketing.creator_material_search", &mcp.Tool{
 		Name: "search_marketing_creator_materials", Annotations: &marketingCreatorAnnotations,
 		Description: "当用户需要查询巨量营销达人授权素材或一个达人主页素材时调用。返回授权和可用性白名单字段，不返回播放或封面 URL。",
 		InputSchema: json.RawMessage(marketingCreatorInputSchema), OutputSchema: json.RawMessage(marketingCreatorOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.searchMarketingCreatorMaterials)))
 	marketingMaterialReportAnnotations := *officialReadAnnotations
 	marketingMaterialReportAnnotations.Title = "查询营销素材报表"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "marketing.material_report", &mcp.Tool{
 		Name: "report_marketing_materials", Annotations: &marketingMaterialReportAnnotations,
 		Description: "当用户需要巨量营销项目或单元下的素材级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定 MATERIAL_DATA 指标集。",
 		InputSchema: json.RawMessage(marketingMaterialReportInputSchema), OutputSchema: json.RawMessage(marketingMaterialReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportMarketingMaterials)))
 	marketingPlanReportAnnotations := *officialReadAnnotations
 	marketingPlanReportAnnotations.Title = "查询营销项目报表"
-	server.AddTool(&mcp.Tool{
+	addCapabilityTool(server, "marketing.plan_report", &mcp.Tool{
 		Name: "report_marketing_plans", Annotations: &marketingPlanReportAnnotations,
 		Description: "当用户需要巨量营销项目级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定指标集并保留应用服务生成的完整 Markdown 表格。",
 		InputSchema: json.RawMessage(marketingPlanReportInputSchema), OutputSchema: json.RawMessage(marketingPlanReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportMarketingPlans)))
 	return server
+}
+
+func addCapabilityTool(server *mcp.Server, capabilityID string, tool *mcp.Tool, handler mcp.ToolHandler) {
+	spec, ok := contracts.DefaultCapabilityRegistry.ByID(capabilityID)
+	if !ok {
+		panic("MCP tool references unknown capability: " + capabilityID)
+	}
+	if spec.MCPTool != tool.Name {
+		panic(fmt.Sprintf("MCP tool %s does not match capability %s", tool.Name, capabilityID))
+	}
+	server.AddTool(tool, handler)
 }
 
 func (runtime Runtime) handler(local mcp.ToolHandler) mcp.ToolHandler {

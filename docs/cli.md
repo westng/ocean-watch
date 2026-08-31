@@ -32,7 +32,7 @@ skills/qc-plan-monitor/run plans batch-qianchuan-works --help
 | `qc-materials` | 千川达人、作品和公开作品链接检查 |
 | `qc-products` | 千川可投商品列表与搜索 |
 | `plans` | 营销创建/批量/参数更新与千川创建/作品批处理/素材删除 |
-| `qc-plans` | 千川计划列表、详情、素材和参数更新 |
+| `qc-plans` | 千川计划列表、详情、素材、参数更新和当日计划绑定审计/绑定 |
 | `reports` | 营销素材、项目、自定义报表与字段发现 |
 | `qc-reports` | 千川计划、素材、账户、商品、直播间、达人和自定义报表 |
 | `discover` | 营销项目、广告、DPA、事件、目标与地域资产反查 |
@@ -55,6 +55,7 @@ Skill 必须原样展示 `rendered_markdown`，保留列顺序、日期范围、
 - 名单、模板查询、素材查询、报表和计划详情为只读。
 - 模板创建/删除、计划创建/追加/删除和预算/ROI/状态调整默认 dry-run。
 - 在线写入必须显式 `--submit`；千川计划删除还要求 `--confirm-delete`。
+- `qc-plans bind` 只写本地绑定、不调用官方写接口，但会改变后续在线计划选择，因此同样要求显式 `--submit` 和精确 `--group-id` / `--ad-id`；`qc-plans binding-audit` 为只读。
 - 先展示广告主、对象 ID、端点、载荷摘要和阻断项，再接受提交确认。
 - 写入结果不确定时先回读官方状态对账，不跨端点盲目重试。
 
@@ -88,5 +89,7 @@ skills/qc-plan-monitor/run qc-reports products --advertiser-id ADVERTISER_ID --r
 ## 千川作品链接
 
 `qc-materials inspect-work` 和 `plans batch-qianchuan-works` 接受普通链接、Markdown 链接或带口令片段的文本。包装层规范化短链并批量调用 F2；F2 只提供公开身份和商品提示。创建前仍以可见抖音号定向查询官方授权达人，校验数字 UID，再按同一达人和模板商品验证作品。
+
+CLI 的批量入口继续接受旧的逐行 `--work-url` 参数作为兼容层，并输出弃用提示；新 MCP 入口只接受结构化 `items[]`，不保留旧顶层批次类型或商务字段。CLI 和 MCP 最终都调用同一个批次 Application Service，输入顺序、分组身份、预检快照和安全边界保持一致。
 
 批量成功结果固定展示 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`。跳过、官方查询不完整和失败原因放在表外，空结果也保留表头。

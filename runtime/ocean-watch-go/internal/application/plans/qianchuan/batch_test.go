@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +33,120 @@ func TestBatchWorkIdempotencyAndPresentation(t *testing.T) {
 	t.Run("owner hints require targeted verification without broad fallback", testBatchOwnerHintVerification)
 	t.Run("multiple creator plans are filtered by verified work products", testBatchPlanProductDisambiguation)
 	t.Run("unknown append reconciles and rerun writes nothing", testBatchAppendIdempotency)
+}
+
+func TestBatchApplicationDecisionsAreStableAcrossBatchingAndInputOrder(t *testing.T) {
+	payload, err := os.ReadFile("../../../domain/qianchuan/testdata/batch-items-25.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture []domainqianchuan.VerifiedBatchItem
+	if err := json.Unmarshal(payload, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	works := make([]VerifiedWork, 0, len(fixture))
+	for _, item := range fixture {
+		works = append(works, VerifiedWork{
+			InputIndex: item.InputIndex, InputURL: item.WorkURL, AwemeItemID: item.WorkID,
+			CreatorName: "fixture-creator", PlanType: item.PlanType, Business: item.Business,
+			Creator: domainqianchuan.AuthorizedCreator{
+				AwemeID: item.CreatorID, VisibleID: batchVisibleID, Name: "fixture-creator",
+			},
+			Material: domainqianchuan.CreatorVideo{
+				AwemeItemID: item.WorkID, ImageMode: "VIDEO_LARGE", MaterialID: "material-" + item.WorkID,
+			},
+			MatchedProductIDs: append([]string(nil), item.ProductIDs...),
+		})
+	}
+	writer := &commandWriter{}
+	execute := func(input []VerifiedWork) BatchResult {
+		t.Helper()
+		pool, poolErr := NewReadPool(4)
+		if poolErr != nil {
+			t.Fatal(poolErr)
+		}
+		result, executeErr := (BatchService{
+			Reader: &batchStateReader{materials: map[string]domainqianchuan.PlanMaterial{}},
+			Writer: writer, Reconciler: commandNoPlanFinder{},
+			Now: func() time.Time { return time.Date(2026, 8, 18, 4, 0, 0, 0, time.UTC) },
+		}).Execute(context.Background(), BatchRequest{
+			AdvertiserID: batchAdvertiserID, ReadAccessToken: batchToken,
+			TemplateID: "qcpt_fixture", TemplateName: "fixture-template", ProductName: "fixture-product",
+			TemplatePayload: json.RawMessage(`{"advertiser_id":1000000000000001,"marketing_goal":"VIDEO_PROM_GOODS","product_ids":[8000000000000001],"delivery_setting":{"smart_bid_type":"SMART_BID_CUSTOM","roi2_goal":1.75,"budget":5000,"video_schedule_type":"SCHEDULE_FROM_NOW"}}`),
+			Works:           append([]VerifiedWork(nil), input...), ReadPool: pool,
+		})
+		if executeErr != nil {
+			t.Fatal(executeErr)
+		}
+		return result
+	}
+	decisionSet := func(results ...BatchResult) map[string]string {
+		set := map[string]string{}
+		for _, result := range results {
+			for _, group := range result.Results {
+				set[group.GroupID] = fmt.Sprintf("%s|%s|%s|%d", group.Status, group.PlanType, group.Business, len(group.InputItemIDs))
+			}
+		}
+		return set
+	}
+
+	all := execute(works)
+	byType := map[string][]VerifiedWork{}
+	for _, work := range works {
+		byType[work.PlanType] = append(byType[work.PlanType], work)
+	}
+	split := decisionSet(execute(byType["随手po"]), execute(byType["真人口播营销"]))
+	reversed := append([]VerifiedWork(nil), works...)
+	for left, right := 0, len(reversed)-1; left < right; left, right = left+1, right-1 {
+		reversed[left], reversed[right] = reversed[right], reversed[left]
+	}
+	reversedSet := decisionSet(execute(reversed))
+	if got := decisionSet(all); !reflect.DeepEqual(got, split) || !reflect.DeepEqual(got, reversedSet) {
+		t.Fatalf("batching or input order changed group decisions: all=%v split=%v reversed=%v", got, split, reversedSet)
+	}
+	counts := map[string]int{}
+	for _, group := range all.Results {
+		counts[group.PlanType] = len(group.InputItemIDs)
+	}
+	if len(all.Results) != 2 || counts["随手po"] != 22 || counts["真人口播营销"] != 3 {
+		t.Fatalf("25-row application batch crossed plan types: groups=%#v", all.Results)
+	}
+	if writer.createCalls != 0 {
+		t.Fatalf("preflight called the writer %d times", writer.createCalls)
+	}
+}
+
+func TestBatchMaterialReadsAreDeduplicatedByPlan(t *testing.T) {
+	works := batchVerifiedWorks(2)
+	works[0].PlanType = "随手po"
+	works[1].PlanType = "真人口播营销"
+	reader := &batchStateReader{materials: map[string]domainqianchuan.PlanMaterial{}}
+	pool, err := NewReadPool(4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := (BatchService{
+		Reader: reader, Reconciler: batchExistingPlanFinder{},
+	}).Execute(context.Background(), BatchRequest{
+		AdvertiserID: batchAdvertiserID, ReadAccessToken: batchToken,
+		TemplateID: "fixture-template", TemplateName: "fixture-template-name", ProductName: "fixture-product",
+		TemplatePayload: batchTemplatePayload(), Works: works, ReadPool: pool,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Results) != 2 || reader.materialCalls.Load() != 1 {
+		t.Fatalf("same-plan material reads were not deduplicated: results=%#v calls=%d", result.Results, reader.materialCalls.Load())
+	}
+}
+
+func TestBatchOperationKeyIncludesBusinessDateAndStableItemSet(t *testing.T) {
+	first := batchOperationKey("2026-08-18", "qcg_fixture", "append", batchPlanID, []string{"6002", "6001"})
+	second := batchOperationKey("2026-08-18", "qcg_fixture", "append", batchPlanID, []string{"6001", "6002"})
+	otherDay := batchOperationKey("2026-08-19", "qcg_fixture", "append", batchPlanID, []string{"6001", "6002"})
+	if first != second || first == otherDay || !strings.HasPrefix(first, "qianchuan-batch-") {
+		t.Fatalf("batch operation key is not stable or date-scoped: first=%s second=%s other_day=%s", first, second, otherDay)
+	}
 }
 
 func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
@@ -522,7 +638,8 @@ func (reader *batchVerificationReader) FetchCreatorVideos(
 }
 
 type batchStateReader struct {
-	materials map[string]domainqianchuan.PlanMaterial
+	materials     map[string]domainqianchuan.PlanMaterial
+	materialCalls atomic.Int32
 }
 
 func (*batchStateReader) FetchProducts(context.Context, portqianchuan.ProductPageRequest) (domainqianchuan.ProductPage, error) {
@@ -541,6 +658,7 @@ func (reader *batchStateReader) FetchPlanMaterials(
 	context.Context,
 	portqianchuan.MaterialPageRequest,
 ) (domainqianchuan.MaterialPage, error) {
+	reader.materialCalls.Add(1)
 	rows := make([]domainqianchuan.PlanMaterial, 0, len(reader.materials))
 	for index := 1; index <= 101; index++ {
 		if row, ok := reader.materials[batchWorkID(index)]; ok {
@@ -625,12 +743,16 @@ func (batchExistingPlanFinder) FindCurrentPlans(
 	_ context.Context,
 	request CurrentPlanRequest,
 ) (CurrentPlanResult, error) {
-	return CurrentPlanResult{Matches: map[string][]ExistingPlan{
-		batchCreatorID: {{
+	result := CurrentPlanResult{Matches: map[string][]ExistingPlan{}, Policies: map[string]PlanMatchPolicy{}}
+	for _, target := range request.Targets {
+		matches := []ExistingPlan{{
 			AdID: batchPlanID, Name: "fixture-plan", Status: "DISABLE",
 			AwemeID: batchCreatorID, ProductIDs: []string{batchProductID},
-		}},
-	}}, nil
+		}}
+		result.Matches[target.GroupID] = matches
+		result.Policies[target.GroupID] = PlanMatchPolicy{Status: "bound", Candidates: matches}
+	}
+	return result, nil
 }
 
 type batchMultiplePlanFinder struct {
@@ -642,8 +764,9 @@ func (finder *batchMultiplePlanFinder) FindCurrentPlans(
 	request CurrentPlanRequest,
 ) (CurrentPlanResult, error) {
 	finder.targets = append([]CreatorTarget(nil), request.Targets...)
-	return CurrentPlanResult{Matches: map[string][]ExistingPlan{
-		batchCreatorID: {
+	result := CurrentPlanResult{Matches: map[string][]ExistingPlan{}, Policies: map[string]PlanMatchPolicy{}}
+	for _, target := range request.Targets {
+		matches := []ExistingPlan{
 			{
 				AdID: batchPlanID, Name: "matching-plan", Status: "DISABLE",
 				AwemeID: batchCreatorID, ProductIDs: []string{batchProductID},
@@ -652,8 +775,11 @@ func (finder *batchMultiplePlanFinder) FindCurrentPlans(
 				AdID: "2000000000000002", Name: "other-product-plan", Status: "DISABLE",
 				AwemeID: batchCreatorID, ProductIDs: []string{"5000000000000002"},
 			},
-		},
-	}}, nil
+		}
+		result.Matches[target.GroupID] = matches[:1]
+		result.Policies[target.GroupID] = PlanMatchPolicy{Status: "bound", Candidates: matches}
+	}
+	return result, nil
 }
 
 type batchCredentialProvider struct {

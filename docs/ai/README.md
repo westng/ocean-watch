@@ -12,11 +12,23 @@
 ## 分类
 
 - [`designs/`](designs/)：目标架构、方案比较和设计决策；
-- `plans/`：已获准实施工作的分步计划；
+- [`plans/`](plans/)：分步实施与整改计划；是否进入实施以各文档状态和当前任务授权为准；
 - `research/`：调研、诊断和证据记录；
 - `reviews/`：评审与审计快照；
 - `handoffs/`：跨会话或跨人员交接。
 
 ## 当前设计
 
-- [千川计划创建快速工作流设计](designs/qianchuan-plan-creation-workflow-v2.md)
+- [Ocean Watch Plugin 目标架构 V3](designs/ocean-watch-plugin-target-architecture-v3.md)：W0–W7 已完成；W8 候选已构建安装，等待新任务 Host 加载检查；W9–W10 尚未执行
+
+## 当前计划
+
+- [Ocean Watch Plugin V3 架构整改实施计划](plans/ocean-watch-plugin-architecture-remediation-plan.md)：实施中；下一步是在新任务完成 W8 Host 加载检查
+
+## 当前审计
+
+- [Ocean Watch Plugin 当前架构审计](research/ocean-watch-plugin-current-architecture-audit.md)：2026-08-18 现状基线
+
+## 历史设计
+
+- [千川计划创建快速工作流设计（历史 V2）](designs/qianchuan-plan-creation-workflow-v2.md)：已被 V3 取代，不再作为实施依据

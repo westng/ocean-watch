@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ var supportedWorkImageModes = map[string]struct{}{
 type BatchRequest struct {
 	AdvertiserID     string
 	AuthAccountID    string
+	BusinessDate     string
 	ReadAccessToken  string
 	Submit           bool
 	TemplateID       string
@@ -48,7 +50,7 @@ type BatchRequest struct {
 	QueryFailures    []WorkQueryFailure
 	ReadPool         *ReadPool
 	PlanInventory    *CurrentPlanInventory
-	Expected         map[string]batchExpectedDecision
+	PreparedGroups   map[string]PreparedGroup
 }
 
 type BatchTemplateSummary struct {
@@ -70,24 +72,31 @@ type BatchWrite struct {
 }
 
 type BatchGroupResult struct {
-	AwemeID          string       `json:"aweme_id"`
-	DouyinID         string       `json:"douyin_id,omitempty"`
-	CreatorName      string       `json:"creator_name,omitempty"`
-	AdID             string       `json:"ad_id,omitempty"`
-	PlanName         string       `json:"plan_name,omitempty"`
-	PlanStatus       string       `json:"plan_status,omitempty"`
-	ProductIDs       []string     `json:"product_ids"`
-	InputItemIDs     []string     `json:"input_item_ids"`
-	AlreadyPresent   []string     `json:"already_present_item_ids"`
-	CompletedItemIDs []string     `json:"completed_item_ids"`
-	Status           string       `json:"status"`
-	Writes           []BatchWrite `json:"writes"`
-	Error            string       `json:"error,omitempty"`
+	GroupID          string         `json:"group_id"`
+	AwemeID          string         `json:"aweme_id"`
+	DouyinID         string         `json:"douyin_id,omitempty"`
+	CreatorName      string         `json:"creator_name,omitempty"`
+	AdID             string         `json:"ad_id,omitempty"`
+	PlanName         string         `json:"plan_name,omitempty"`
+	PlanStatus       string         `json:"plan_status,omitempty"`
+	CandidatePlans   []ExistingPlan `json:"candidate_plans,omitempty"`
+	ProductIDs       []string       `json:"product_ids"`
+	PlanType         string         `json:"plan_type"`
+	Business         string         `json:"business"`
+	InputItemIDs     []string       `json:"input_item_ids"`
+	AlreadyPresent   []string       `json:"already_present_item_ids"`
+	CompletedItemIDs []string       `json:"completed_item_ids"`
+	Status           string         `json:"status"`
+	Writes           []BatchWrite   `json:"writes"`
+	Error            string         `json:"error,omitempty"`
+	ErrorCode        string         `json:"error_code,omitempty"`
+	BindingDigest    string         `json:"-"`
 }
 
 type BatchResult struct {
 	Mode          string               `json:"mode"`
 	Channel       string               `json:"channel"`
+	BusinessDate  string               `json:"business_date"`
 	Template      BatchTemplateSummary `json:"template"`
 	Counts        map[string]int       `json:"counts"`
 	Results       []BatchGroupResult   `json:"results"`
@@ -103,7 +112,30 @@ type BatchService struct {
 	Reader     portqianchuan.Reader
 	Writer     portqianchuan.Writer
 	Reconciler CurrentPlanFinder
+	Bindings   PlanBindingWriter
 	Now        func() time.Time
+}
+
+type BatchTiming struct {
+	GroupReconciliationSeconds float64
+	MaterialDiffSeconds        float64
+}
+
+type batchTimingContextKey struct{}
+
+func WithBatchTiming(ctx context.Context, timing *BatchTiming) context.Context {
+	if ctx == nil || timing == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, batchTimingContextKey{}, timing)
+}
+
+func batchTimingFrom(ctx context.Context) *BatchTiming {
+	if ctx == nil {
+		return nil
+	}
+	timing, _ := ctx.Value(batchTimingContextKey{}).(*BatchTiming)
+	return timing
 }
 
 type normalizedBatchRequest struct {
@@ -111,11 +143,14 @@ type normalizedBatchRequest struct {
 	payloadObject map[string]any
 	productIDs    []string
 	groups        []batchGroup
+	businessDate  string
 }
 
 type batchGroup struct {
-	creator domainqianchuan.AuthorizedCreator
-	works   []VerifiedWork
+	groupID  string
+	identity domainqianchuan.PlanGroupIdentity
+	creator  domainqianchuan.AuthorizedCreator
+	works    []VerifiedWork
 }
 
 type materialSnapshot struct {
@@ -127,6 +162,17 @@ func (service BatchService) Execute(ctx context.Context, request BatchRequest) (
 	normalized, err := normalizeBatchRequest(request)
 	if err != nil {
 		return BatchResult{}, err
+	}
+	if strings.TrimSpace(normalized.BusinessDate) != "" {
+		normalized.businessDate = strings.TrimSpace(normalized.BusinessDate)
+		if err := ValidateBusinessDate(normalized.businessDate); err != nil {
+			return BatchResult{}, err
+		}
+	} else {
+		normalized.businessDate, err = ShanghaiBusinessDate(service.now())
+		if err != nil {
+			return BatchResult{}, err
+		}
 	}
 	if !normalized.Submit {
 		if len(normalized.groups) == 0 {
@@ -186,9 +232,11 @@ func (service BatchService) execute(
 	for _, group := range request.groups {
 		targets = append(targets, CreatorTarget{
 			AwemeID: group.creator.AwemeID, VisibleID: group.creator.VisibleID,
-			ProductIDs: matchedProductIDs(group.works),
+			ProductIDs: append([]string(nil), group.identity.ProductIDs...),
+			GroupID:    group.groupID, BusinessDate: request.businessDate, Identity: group.identity,
 		})
 	}
+	reconcileStarted := service.now()
 	discovery, err := service.Reconciler.FindCurrentPlans(ctx, CurrentPlanRequest{
 		AdvertiserID: request.AdvertiserID, AccessToken: accessToken, Targets: targets,
 		ReadPool: request.ReadPool, Inventory: request.PlanInventory,
@@ -196,34 +244,74 @@ func (service BatchService) execute(
 	if err != nil {
 		return BatchResult{}, fmt.Errorf("reconcile Qianchuan batch plans: %w", err)
 	}
+	if timing := batchTimingFrom(ctx); timing != nil {
+		timing.GroupReconciliationSeconds += durationSeconds(reconcileStarted, service.now())
+	}
 	presentationRows := make([]map[string]any, 0)
 	type groupPreparation struct {
 		plans    []ExistingPlan
+		policy   PlanMatchPolicy
 		material *materialSnapshot
 		err      error
 	}
+	materialStarted := service.now()
 	preparations := parallelOrdered(ctx, request.ReadPool, len(request.groups), func(ctx context.Context, index int) groupPreparation {
 		group := request.groups[index]
-		plans := filterExistingPlansForProducts(
-			discovery.Matches[group.creator.AwemeID], matchedProductIDs(group.works),
-		)
-		if request.preflightDecisionChanged(group.creator.AwemeID, plans) {
-			return groupPreparation{plans: plans}
+		policy, exists := discovery.Policies[group.groupID]
+		if !exists {
+			return groupPreparation{err: errors.New("Qianchuan reconciliation omitted a group policy")}
 		}
-		if len(plans) != 1 || len(filterWorksForProducts(group.works, plans[0].ProductIDs)) == 0 {
-			return groupPreparation{plans: plans}
+		plans := discovery.Matches[group.groupID]
+		if request.preflightDecisionChanged(group.groupID, plans, policy) {
+			return groupPreparation{plans: plans, policy: policy}
+		}
+		if policy.Status != "bound" || len(plans) != 1 || len(filterWorksForProducts(group.works, plans[0].ProductIDs)) == 0 {
+			return groupPreparation{plans: plans, policy: policy}
 		}
 		snapshot, prepareErr := service.planMaterialsWithPool(
 			ctx, request.AdvertiserID, accessToken, plans[0].AdID, request.ReadPool,
 		)
-		return groupPreparation{plans: plans, material: &snapshot, err: prepareErr}
+		return groupPreparation{plans: plans, policy: policy, material: &snapshot, err: prepareErr}
 	})
+	if timing := batchTimingFrom(ctx); timing != nil {
+		timing.MaterialDiffSeconds += durationSeconds(materialStarted, service.now())
+	}
+	if request.Submit && len(request.PreparedGroups) != 0 {
+		var preparationErr error
+		for _, preparation := range preparations {
+			if preparation.err != nil {
+				preparationErr = preparation.err
+				break
+			}
+		}
+		if preparationErr != nil {
+			for index, group := range request.groups {
+				groupResult := newBatchGroupResult(group, group.identity.ProductIDs)
+				if preparations[index].err != nil {
+					groupResult.Status, groupResult.Error = "failed", preparations[index].err.Error()
+				} else {
+					groupResult.Status = "preflight_blocked"
+					groupResult.Error = "another group could not complete submit revalidation"
+				}
+				result.Results = append(result.Results, groupResult)
+				result.Counts[groupResult.Status]++
+				result.FailedResults = append(result.FailedResults, groupResult)
+			}
+			result.Counts["creator_groups"] = len(result.Results)
+			result.Counts["matched_works"] = len(request.Works)
+			result.Counts["skipped_works"] = len(result.Skipped)
+			result.ExitCode = 1
+			return result, preparationErr
+		}
+	}
 	for index, group := range request.groups {
-		groupResult := newBatchGroupResult(group, request.productIDs)
+		groupResult := newBatchGroupResult(group, group.identity.ProductIDs)
 		preparation := preparations[index]
+		groupResult.BindingDigest = preparation.policy.BindingDigest
 		plans := preparation.plans
-		if request.preflightDecisionChanged(group.creator.AwemeID, plans) {
+		if request.preflightDecisionChanged(group.groupID, plans, preparation.policy) {
 			groupResult.Status = "preflight_changed"
+			groupResult.ErrorCode = "PREFLIGHT_CHANGED"
 			groupResult.Error = "current plan target changed after preflight; run preflight again"
 			result.Results = append(result.Results, groupResult)
 			result.Counts[groupResult.Status]++
@@ -232,13 +320,16 @@ func (service BatchService) execute(
 			presentationRows = append(presentationRows, batchPresentationRows(group, groupResult)...)
 			continue
 		}
-		switch len(plans) {
-		case 0:
+		switch preparation.policy.Status {
+		case "would_create":
 			groupResult, err = service.executeNewGroup(
 				ctx, request, group, groupResult, accessToken, dispatcher, capability,
 			)
-		case 1:
-			if preparation.err != nil {
+		case "bound":
+			if preparation.err != nil || len(plans) != 1 {
+				if preparation.err == nil {
+					preparation.err = errors.New("bound Qianchuan plan is unavailable")
+				}
 				groupResult.Status, groupResult.Error = "failed", preparation.err.Error()
 				err = preparation.err
 			} else {
@@ -247,9 +338,23 @@ func (service BatchService) execute(
 					accessToken, dispatcher, capability,
 				)
 			}
+		case "legacy_binding_required":
+			groupResult.Status = "legacy_binding_required"
+			groupResult.ErrorCode = "LEGACY_BINDING_REQUIRED"
+			groupResult.Error = "matching historical plan requires an explicit daily binding"
+			groupResult.CandidatePlans = append([]ExistingPlan(nil), preparation.policy.Candidates...)
+		case "binding_drift":
+			groupResult.Status = "binding_drift"
+			groupResult.ErrorCode = "BINDING_DRIFT"
+			groupResult.Error = "bound Qianchuan plan no longer matches the complete group identity"
+			groupResult.CandidatePlans = append([]ExistingPlan(nil), preparation.policy.Candidates...)
 		default:
 			groupResult.Status = "failed"
-			groupResult.Error = "multiple current Qianchuan plans match the creator and products"
+			if preparation.err != nil {
+				groupResult.Error = preparation.err.Error()
+			} else {
+				groupResult.Error = "Qianchuan reconciliation returned an unsupported group policy"
+			}
 			err = errors.New(groupResult.Error)
 		}
 		result.Results = append(result.Results, groupResult)
@@ -313,6 +418,16 @@ func (service BatchService) executeExistingGroup(
 		}
 		newWorks = append(newWorks, work)
 	}
+	if request.Submit {
+		if prepared, exists := request.PreparedGroups[group.groupID]; exists &&
+			(!sameStringSet(result.AlreadyPresent, prepared.ExpectedPresentItemIDs) ||
+				!sameStringSet(verifiedWorkIDs(newWorks), prepared.ExpectedWriteItemIDs)) {
+			result.Status = "preflight_changed"
+			result.ErrorCode = "PREFLIGHT_CHANGED"
+			result.Error = "current plan materials changed after preflight; run preflight again"
+			return result, nil
+		}
+	}
 	if len(newWorks) == 0 {
 		result.Status = "already_present"
 		return result, nil
@@ -341,7 +456,7 @@ func (service BatchService) executeExistingGroup(
 		return result, nil
 	}
 	return service.appendWorks(
-		ctx, request, result, plan.AdID, plan.ProductIDs, newWorks,
+		ctx, request, result, group.groupID, plan.AdID, plan.ProductIDs, newWorks,
 		accessToken, dispatcher, capability,
 	)
 }
@@ -387,6 +502,9 @@ func (service BatchService) executeNewGroup(
 	normalizedCreate, err := normalizeCreateRequest(CreateRequest{
 		AdvertiserID: request.AdvertiserID, AuthAccountID: request.AuthAccountID,
 		Submit: true, Payload: payload, VisibleID: group.creator.VisibleID,
+		OperationKey: batchOperationKey(
+			request.businessDate, group.groupID, "create", "new", verifiedWorkIDs(group.works),
+		),
 	})
 	if err != nil {
 		result.Status, result.Error = "failed", err.Error()
@@ -417,21 +535,72 @@ func (service BatchService) executeNewGroup(
 	result.Writes = append(result.Writes, createWrite)
 	result.AdID = created.AdID
 	result.CompletedItemIDs = append(result.CompletedItemIDs, verifiedWorkIDs(first)...)
+	if err := service.verifyCreatedPlan(ctx, request, group, planName, created.AdID, accessToken); err != nil {
+		result.Status, result.Error = "create_unverified", err.Error()
+		return result, err
+	}
+	if service.Bindings == nil {
+		result.Status, result.Error = "binding_failed", "Qianchuan plan binding writer is required"
+		return result, errors.New(result.Error)
+	}
+	binding, bindingErr := NewPlanBinding(group.identity, group.groupID, request.businessDate, created.AdID, service.now())
+	if bindingErr == nil {
+		bindingErr = service.Bindings.Put(ctx, binding)
+	}
+	if bindingErr != nil {
+		result.Status, result.Error = "binding_failed", bindingErr.Error()
+		return result, bindingErr
+	}
 	if len(remaining) == 0 {
 		result.Status = "created"
 		return result, nil
 	}
 	result.Status = "created"
 	return service.appendWorks(
-		ctx, request, result, created.AdID, request.productIDs, remaining,
+		ctx, request, result, group.groupID, created.AdID, group.identity.ProductIDs, remaining,
 		accessToken, dispatcher, capability,
 	)
+}
+
+func (service BatchService) verifyCreatedPlan(
+	ctx context.Context,
+	request normalizedBatchRequest,
+	group batchGroup,
+	planName string,
+	adID string,
+	accessToken string,
+) error {
+	if service.Reader == nil {
+		return errors.New("Qianchuan plan reader is required for post-create verification")
+	}
+	detail, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.PlanDetail, error) {
+		return service.Reader.FetchPlanDetail(ctx, portqianchuan.PlanDetailRequest{
+			AdvertiserID: request.AdvertiserID, AccessToken: accessToken, AdID: adID,
+		})
+	})
+	if err != nil {
+		return fmt.Errorf("verify created Qianchuan plan: %w", err)
+	}
+	if detail.AdID != adID || detail.AwemeID != group.identity.CreatorID || detail.Name != planName ||
+		isDeletedPlan(detail.Status, detail.OptStatus) ||
+		!sameStringSet(planProductIDs(detail.Products), group.identity.ProductIDs) {
+		return errors.New("created Qianchuan plan did not match the complete verified target")
+	}
+	return nil
+}
+
+func (service BatchService) now() time.Time {
+	if service.Now != nil {
+		return service.Now()
+	}
+	return time.Now()
 }
 
 func (service BatchService) appendWorks(
 	ctx context.Context,
 	request normalizedBatchRequest,
 	result BatchGroupResult,
+	groupID string,
 	adID string,
 	productIDs []string,
 	works []VerifiedWork,
@@ -446,11 +615,15 @@ func (service BatchService) appendWorks(
 			return result, err
 		}
 		itemIDs := verifiedWorkIDs(batch)
-		receipt := dispatcher.Dispatch(ctx, capability, materialOperationKey(adID, itemIDs), func(ctx context.Context) (any, error) {
-			return service.Writer.AddMaterials(ctx, portqianchuan.MaterialWriteRequest{
-				AdvertiserID: request.AdvertiserID, AccessToken: accessToken, AdID: adID, Payload: payload,
-			})
-		})
+		receipt := dispatcher.Dispatch(
+			ctx, capability,
+			batchOperationKey(request.businessDate, groupID, "append", adID, itemIDs),
+			func(ctx context.Context) (any, error) {
+				return service.Writer.AddMaterials(ctx, portqianchuan.MaterialWriteRequest{
+					AdvertiserID: request.AdvertiserID, AccessToken: accessToken, AdID: adID, Payload: payload,
+				})
+			},
+		)
 		write := BatchWrite{
 			Endpoint: AddMaterialsEndpoint, ItemIDs: itemIDs, DispatchState: receipt.State,
 		}
@@ -478,7 +651,7 @@ func (service BatchService) appendWorks(
 			result.Status, result.Error = "append_failed", receipt.Error.Error()
 			return result, receipt.Error
 		}
-		snapshot, readErr := service.planMaterialsWithPool(
+		snapshot, readErr := service.refreshPlanMaterialsWithPool(
 			ctx, request.AdvertiserID, accessToken, adID, request.ReadPool,
 		)
 		if readErr != nil {
@@ -530,6 +703,32 @@ func (service BatchService) planMaterialsWithPool(
 	adID string,
 	pool *ReadPool,
 ) (materialSnapshot, error) {
+	return runReadOnce(
+		ctx, pool, planMaterialsReadKey(advertiserID, adID),
+		func(ctx context.Context) (materialSnapshot, error) {
+			return service.fetchPlanMaterialsSnapshot(ctx, advertiserID, accessToken, adID, pool)
+		},
+	)
+}
+
+func (service BatchService) refreshPlanMaterialsWithPool(
+	ctx context.Context,
+	advertiserID string,
+	accessToken string,
+	adID string,
+	pool *ReadPool,
+) (materialSnapshot, error) {
+	pool.forgetRead(planMaterialsReadKey(advertiserID, adID))
+	return service.planMaterialsWithPool(ctx, advertiserID, accessToken, adID, pool)
+}
+
+func (service BatchService) fetchPlanMaterialsSnapshot(
+	ctx context.Context,
+	advertiserID string,
+	accessToken string,
+	adID string,
+	pool *ReadPool,
+) (materialSnapshot, error) {
 	rows, err := fetchAllPlanMaterialsWithPool(ctx, service.Reader, advertiserID, accessToken, adID, pool)
 	if err != nil {
 		return materialSnapshot{}, err
@@ -549,6 +748,10 @@ func (service BatchService) planMaterialsWithPool(
 	return snapshot, nil
 }
 
+func planMaterialsReadKey(advertiserID, adID string) string {
+	return "plan-materials\x00" + advertiserID + "\x00" + adID
+}
+
 func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error) {
 	request.AdvertiserID = strings.TrimSpace(request.AdvertiserID)
 	request.AuthAccountID = strings.TrimSpace(request.AuthAccountID)
@@ -562,7 +765,7 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 	}
 	request.PlanType = strings.TrimSpace(request.PlanType)
 	request.Business = strings.TrimSpace(request.Business)
-	request.Expected = cloneBatchExpected(request.Expected)
+	request.PreparedGroups = clonePreparedGroups(request.PreparedGroups)
 	if !validPositiveID(request.AdvertiserID) {
 		return normalizedBatchRequest{}, errors.New("advertiser_id must be a positive decimal ID")
 	}
@@ -636,38 +839,57 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 			})
 			continue
 		}
-		work.MatchedProductIDs = matched
+		products, productErr := domainqianchuan.NormalizeProductIDs(matched)
+		if productErr != nil {
+			return normalizedBatchRequest{}, productErr
+		}
+		work.MatchedProductIDs = products
 		normalizedWorks = append(normalizedWorks, work)
-		index, exists := groupIndex[work.Creator.AwemeID]
+		identity, identityErr := domainqianchuan.NewPlanGroupIdentity(
+			request.AdvertiserID, request.TemplateID, work.Creator.AwemeID,
+			work.MatchedProductIDs, work.PlanType, work.Business,
+		)
+		if identityErr != nil {
+			return normalizedBatchRequest{}, identityErr
+		}
+		groupID, groupErr := domainqianchuan.GroupID(identity)
+		if groupErr != nil {
+			return normalizedBatchRequest{}, groupErr
+		}
+		index, exists := groupIndex[groupID]
 		if !exists {
 			index = len(groups)
-			groupIndex[work.Creator.AwemeID] = index
-			groups = append(groups, batchGroup{creator: work.Creator, works: []VerifiedWork{}})
-		} else if groups[index].creator.VisibleID != work.Creator.VisibleID || groups[index].creator.Name != work.Creator.Name {
-			return normalizedBatchRequest{}, errors.New("verified Qianchuan works disagree on creator identity")
+			groupIndex[groupID] = index
+			groups = append(groups, batchGroup{
+				groupID: groupID, identity: identity, creator: work.Creator, works: []VerifiedWork{},
+			})
 		}
 		groups[index].works = append(groups[index].works, work)
 	}
 	request.Works = normalizedWorks
-	if len(request.Expected) != 0 {
+	if len(request.PreparedGroups) != 0 {
 		if !request.Submit {
 			return normalizedBatchRequest{}, errors.New("Qianchuan preflight decisions are valid only for submit")
 		}
-		if len(request.Expected) != len(groups) {
+		if len(request.PreparedGroups) != len(groups) {
 			return normalizedBatchRequest{}, errors.New("Qianchuan preflight decisions do not match verified creator groups")
 		}
 		for _, group := range groups {
-			expected, exists := request.Expected[group.creator.AwemeID]
+			expected, exists := request.PreparedGroups[group.groupID]
 			if !exists {
-				return normalizedBatchRequest{}, errors.New("Qianchuan preflight decision is missing a verified creator group")
+				return normalizedBatchRequest{}, errors.New("Qianchuan preflight decision is missing a verified plan group")
 			}
-			switch expected.Action {
-			case "create":
-				if strings.TrimSpace(expected.AdID) != "" {
+			if canonicalID, identityErr := domainqianchuan.GroupID(expected.Identity); identityErr != nil ||
+				canonicalID != group.groupID || canonicalID != expected.GroupID {
+				return normalizedBatchRequest{}, errors.New("Qianchuan preflight group identity changed")
+			}
+			switch expected.ExpectedAction {
+			case "would_create":
+				if strings.TrimSpace(expected.ExpectedAdID) != "" {
 					return normalizedBatchRequest{}, errors.New("Qianchuan create preflight decision contains an ad_id")
 				}
-			case "append":
-				if !validPositiveID(expected.AdID) {
+			case "would_append", "noop":
+				if !validPositiveID(expected.ExpectedAdID) {
 					return normalizedBatchRequest{}, errors.New("Qianchuan append preflight decision requires a valid ad_id")
 				}
 			default:
@@ -681,20 +903,27 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 	}, nil
 }
 
-func (request normalizedBatchRequest) preflightDecisionChanged(awemeID string, plans []ExistingPlan) bool {
-	if len(request.Expected) == 0 {
+func (request normalizedBatchRequest) preflightDecisionChanged(
+	groupID string,
+	plans []ExistingPlan,
+	policy PlanMatchPolicy,
+) bool {
+	if len(request.PreparedGroups) == 0 {
 		return false
 	}
-	expected := request.Expected[awemeID]
-	if expected.Action == "create" {
-		return len(plans) != 0
+	expected := request.PreparedGroups[groupID]
+	if expected.BindingDigest == "" || expected.BindingDigest != policy.BindingDigest {
+		return true
 	}
-	return len(plans) != 1 || plans[0].AdID != expected.AdID
+	if expected.ExpectedAction == "would_create" {
+		return policy.Status != "would_create" || len(plans) != 0
+	}
+	return policy.Status != "bound" || len(plans) != 1 || plans[0].AdID != expected.ExpectedAdID
 }
 
 func (request normalizedBatchRequest) emptyResult(mode string) BatchResult {
 	return BatchResult{
-		Mode: mode, Channel: "qianchuan",
+		Mode: mode, Channel: "qianchuan", BusinessDate: request.businessDate,
 		Template: BatchTemplateSummary{
 			TemplateID: request.TemplateID, Name: request.TemplateName,
 			AdvertiserID: request.AdvertiserID, ProductIDs: append([]string(nil), request.productIDs...),
@@ -718,8 +947,9 @@ func newBatchGroupResult(group batchGroup, productIDs []string) BatchGroupResult
 		}
 	}
 	return BatchGroupResult{
-		AwemeID: group.creator.AwemeID, DouyinID: group.creator.VisibleID,
+		GroupID: group.groupID, AwemeID: group.creator.AwemeID, DouyinID: group.creator.VisibleID,
 		CreatorName: creatorName, ProductIDs: append([]string(nil), productIDs...),
+		PlanType: group.identity.PlanType, Business: group.identity.Business,
 		InputItemIDs: verifiedWorkIDs(group.works), CompletedItemIDs: []string{},
 		AlreadyPresent: []string{}, Writes: []BatchWrite{}, Status: "ready",
 	}
@@ -976,21 +1206,6 @@ func filterWorksForProducts(works []VerifiedWork, productIDs []string) []Verifie
 	return result
 }
 
-func matchedProductIDs(works []VerifiedWork) []string {
-	result := make([]string, 0)
-	seen := map[string]struct{}{}
-	for _, work := range works {
-		for _, productID := range work.MatchedProductIDs {
-			if _, duplicate := seen[productID]; duplicate {
-				continue
-			}
-			seen[productID] = struct{}{}
-			result = append(result, productID)
-		}
-	}
-	return result
-}
-
 func filterExistingPlansForProducts(plans []ExistingPlan, productIDs []string) []ExistingPlan {
 	allowed := stringSetFrom(productIDs)
 	result := make([]ExistingPlan, 0, len(plans))
@@ -1041,9 +1256,13 @@ func appendUniqueStrings(target []string, values ...string) []string {
 	return target
 }
 
-func materialOperationKey(adID string, itemIDs []string) string {
-	digest := sha256.Sum256([]byte(adID + "\x00" + strings.Join(itemIDs, "\x00")))
-	return "qianchuan-material-add-" + hex.EncodeToString(digest[:16])
+func batchOperationKey(businessDate, groupID, action, target string, itemIDs []string) string {
+	items := append([]string(nil), itemIDs...)
+	sort.Strings(items)
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		businessDate, groupID, action, target, strings.Join(items, "\x00"),
+	}, "\x01")))
+	return "qianchuan-batch-" + hex.EncodeToString(digest[:16])
 }
 
 func weightedTruncate(value string, maximum int) string {

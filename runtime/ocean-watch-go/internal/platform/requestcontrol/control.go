@@ -185,6 +185,7 @@ func (budget *Budget) Snapshot() BudgetSnapshot {
 
 type Metrics struct {
 	attempts             atomic.Int64
+	retries              atomic.Int64
 	limiterAcquisitions  atomic.Int64
 	limiterWaits         atomic.Int64
 	limiterWaitNanos     atomic.Int64
@@ -193,6 +194,7 @@ type Metrics struct {
 
 type MetricsSnapshot struct {
 	Attempts             int64         `json:"attempts"`
+	Retries              int64         `json:"retries"`
 	LimiterAcquisitions  int64         `json:"limiter_acquisitions"`
 	LimiterWaits         int64         `json:"limiter_waits"`
 	LimiterWaitDuration  time.Duration `json:"limiter_wait_duration"`
@@ -222,11 +224,18 @@ func (metrics *Metrics) Snapshot() MetricsSnapshot {
 		return MetricsSnapshot{}
 	}
 	return MetricsSnapshot{
-		Attempts:             metrics.attempts.Load(),
+		Attempts: metrics.attempts.Load(), Retries: metrics.retries.Load(),
 		LimiterAcquisitions:  metrics.limiterAcquisitions.Load(),
 		LimiterWaits:         metrics.limiterWaits.Load(),
 		LimiterWaitDuration:  time.Duration(metrics.limiterWaitNanos.Load()),
 		LimiterCancellations: metrics.limiterCancellations.Load(),
+	}
+}
+
+// RecordRetry records a retry scheduled by a read policy.
+func RecordRetry(ctx context.Context) {
+	if metrics, ok := MetricsFrom(ctx); ok {
+		metrics.retries.Add(1)
 	}
 }
 

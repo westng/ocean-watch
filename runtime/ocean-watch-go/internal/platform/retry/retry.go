@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 type Classifier func(error) (bool, time.Duration)
@@ -57,6 +59,7 @@ func Do[T any](
 		if delay < 0 {
 			delay = 0
 		}
+		requestcontrol.RecordRetry(ctx)
 		if err := sleep(ctx, delay, policy.Sleep); err != nil {
 			return zero, err
 		}

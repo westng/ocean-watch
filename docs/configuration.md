@@ -57,7 +57,9 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 `list_templates` 返回可继续传给 `get_template` 的字符串 `template_id`。详情查询必须同时传入精确渠道与 ID；千川显示名不能代替模板 ID。分页游标绑定本地状态版本，状态变化后应丢弃旧游标并从第一页重查，不能拼接不同版本的结果。
 
-千川作品批量预检使用 MCP `preflight_qianchuan_works`，输入精确 `plan_template` 和 1–100 条 `work_urls`，可选 `concurrency` 为 1–10、默认 8。该工具不接受配置路径、`submit` 或 payload 输出开关；它不会写入官方业务数据，但会访问官方只读接口、必要时刷新当前广告主授权、更新非敏感作品身份提示缓存，并保存最长 30 分钟且不跨上海业务日的本地预检快照。
+千川作品批量预检使用 MCP `preflight_qianchuan_works`，输入精确 `plan_template` 和 1–100 条结构化 `items[]`；每行可携带自己的 `work_url`、`plan_type` 与 `business`，不会把不同类型或商务的作品强行合并。可选 `concurrency` 为 1–10、默认 8。该工具不接受顶层 `work_urls`、顶层 `plan_type/business`、配置路径、`submit` 或 payload 输出开关；它不会写入官方业务数据，但会访问官方只读接口、必要时刷新当前广告主授权、更新非敏感作品身份提示缓存，并保存最长 30 分钟且不跨上海业务日的本地预检快照。
+
+预检先解析短链，再读取广告主与作品 ID 绑定的 owner hint。热缓存可以跳过该作品的 F2，但不能跳过当前官方授权、作品归属、商品匹配、计划和素材复核；冷缓存或缓存损坏只让缺失项回到 F2，缓存错误默认降级并记录指标。只读预检不持有广告主写锁，批量读取与普通千川读取共用跨调用限流和 `Retry-After` 冷却。
 
 `get_qianchuan_preflight` 只接受严格的 `preflight_id`，只读本地 Operation Journal，不读取凭据、不刷新 Token、不调用官方 API。工具只返回模板、商品、有效期、可提交作品数量和稳定排序的新建/追加决策，不返回原始作品链接、模板 payload、授权选择器或快照指纹。确认提交仍使用 `plans batch-qianchuan-works --submit --preflight-id ID`，MCP 不会自动提交。
 

@@ -67,7 +67,21 @@ func acquireLockAt(
 	displayPath string,
 	timeout time.Duration,
 ) (*FileLock, error) {
-	file, err := root.OpenFile(name, os.O_RDWR|os.O_CREATE, 0o600)
+	var file *os.File
+	var err error
+	for attempt := 0; attempt < 8; attempt++ {
+		file, err = root.OpenFile(name, os.O_RDWR|os.O_CREATE, 0o600)
+		if err == nil || !os.IsNotExist(err) {
+			break
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("open process lock: %w", err)
 	}

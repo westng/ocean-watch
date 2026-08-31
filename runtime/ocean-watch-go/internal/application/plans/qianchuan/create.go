@@ -24,6 +24,7 @@ type CreateRequest struct {
 	Submit        bool
 	Payload       json.RawMessage
 	VisibleID     string
+	OperationKey  string
 }
 
 type CreateResult struct {
@@ -179,6 +180,7 @@ func normalizeCreateRequest(request CreateRequest) (normalizedCreateRequest, err
 	request.AdvertiserID = strings.TrimSpace(request.AdvertiserID)
 	request.AuthAccountID = strings.TrimSpace(request.AuthAccountID)
 	request.VisibleID = strings.TrimSpace(request.VisibleID)
+	request.OperationKey = strings.TrimSpace(request.OperationKey)
 	if !validPositiveID(request.AdvertiserID) {
 		return normalizedCreateRequest{}, errors.New("advertiser_id must be a positive decimal ID")
 	}
@@ -237,10 +239,16 @@ func normalizeCreateRequest(request CreateRequest) (normalizedCreateRequest, err
 	}
 	request.Payload = normalizedPayload
 	digest := sha256.Sum256(normalizedPayload)
+	operationKey := request.OperationKey
+	if operationKey == "" {
+		operationKey = "qianchuan-plan-" + hex.EncodeToString(digest[:16])
+	} else if len(operationKey) > 256 {
+		return normalizedCreateRequest{}, errors.New("Qianchuan create operation key is invalid")
+	}
 	return normalizedCreateRequest{
 		CreateRequest: request, payloadObject: object, goal: goal, planName: name,
 		awemeID: awemeID, productIDs: productIDs,
-		operationKey: "qianchuan-plan-" + hex.EncodeToString(digest[:16]),
+		operationKey: operationKey,
 	}, nil
 }
 

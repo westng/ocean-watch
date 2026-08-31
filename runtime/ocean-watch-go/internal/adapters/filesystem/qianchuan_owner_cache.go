@@ -47,6 +47,15 @@ func (cache QianchuanOwnerHintCache) Load(
 	if !positiveCacheID(advertiserID) {
 		return nil, errors.New("owner hint cache advertiser_id is invalid")
 	}
+	path, err := cache.path()
+	if err != nil {
+		return nil, err
+	}
+	lock, err := AcquireSharedLock(ctx, path+".lock", cache.LockTimeout)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = lock.Release() }()
 	document, err := cache.read()
 	if err != nil {
 		return nil, err

@@ -170,7 +170,8 @@ func TestQianchuanPreflightToolsUseApplicationServiceAndSanitizeOutput(t *testin
 				},
 				Counts: map[string]int{"matched_works": 1},
 				Results: []applicationqianchuan.BatchGroupResult{{
-					AwemeID: "4000000000000001", CreatorName: "fixture", Status: "would_create",
+					GroupID: "qcg_0000000000000000000000000000000000000000000000000000000000000000",
+					AwemeID: "4000000000000001", CreatorName: "fixture", PlanType: "随手po", Business: "刘岛", Status: "would_create",
 					ProductIDs: []string{"8000000000000001"}, InputItemIDs: []string{"6000000000000001"},
 				}},
 				Skipped: []applicationqianchuan.SkippedWork{{
@@ -190,11 +191,15 @@ func TestQianchuanPreflightToolsUseApplicationServiceAndSanitizeOutput(t *testin
 			ExpiresAt:   "2026-08-16T04:30:00Z",
 		},
 		summary: applicationqianchuan.BatchPreflightSummary{
-			PreflightID: "qianchuan-preflight-20260816t040000-abcdef123456",
-			CreatedAt:   "2026-08-16T04:00:00Z", ExpiresAt: "2026-08-16T04:30:00Z",
+			SchemaVersion: 2,
+			PreflightID:   "qianchuan-preflight-20260816t040000-abcdef123456",
+			CreatedAt:     "2026-08-16T04:00:00Z", ExpiresAt: "2026-08-16T04:30:00Z",
 			AdvertiserID: "2000000000000001", TemplateID: "qcpt_test", TemplateName: "fixture",
 			ProductName: "product", ProductShortName: "short", ProductIDs: []string{"8000000000000001"},
-			EligibleWorks: 1, Decisions: []applicationqianchuan.BatchPreflightDecision{{CreatorID: "4000000000000001", Action: "create"}},
+			BusinessDate: "2026-08-16", EligibleWorks: 1, Decisions: []applicationqianchuan.BatchPreflightDecision{{
+				GroupID:   "qcg_0000000000000000000000000000000000000000000000000000000000000000",
+				CreatorID: "4000000000000001", PlanType: "随手po", Business: "刘岛", Action: "would_create",
+			}},
 			ReadyForSubmit: true,
 		},
 	}
@@ -208,7 +213,7 @@ func TestQianchuanPreflightToolsUseApplicationServiceAndSanitizeOutput(t *testin
 
 	preflight, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "preflight_qianchuan_works", Arguments: map[string]any{
-			"plan_template": "qcpt_test", "work_urls": []string{"https://v.douyin.com/input/"},
+			"plan_template": "qcpt_test", "items": []map[string]any{{"work_url": "https://v.douyin.com/input/", "plan_type": "随手po", "business": "刘岛"}},
 		},
 	})
 	if err != nil || preflight.IsError {
@@ -234,7 +239,7 @@ func TestQianchuanPreflightToolsUseApplicationServiceAndSanitizeOutput(t *testin
 	if err != nil || get.IsError {
 		t.Fatalf("get preflight result=%#v err=%v", get, err)
 	}
-	if service.getCalls != 1 || decodeStructured[getPreflightOutput](t, get).Preflight.Decisions[0].Action != "create" {
+	if service.getCalls != 1 || decodeStructured[getPreflightOutput](t, get).Preflight.Decisions[0].Action != "would_create" {
 		t.Fatalf("get preflight contract changed: service=%#v result=%#v", service, get)
 	}
 	getOutput := decodeStructured[getPreflightOutput](t, get)

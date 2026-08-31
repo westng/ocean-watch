@@ -14,19 +14,14 @@ import (
 	applicationworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/workmetadata"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domainplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/plans"
+	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 const DefaultBatchConcurrency = 8
 
-var qianchuanMarkdownLinkPattern = regexp.MustCompile(`(?i)\]\((https://[^)[:space:]]+)\)`)
 var batchPreflightIDPattern = regexp.MustCompile(`^qianchuan-preflight-[0-9]{8}t[0-9]{6}-[0-9a-f]{12}$`)
-
-type batchWorkEntry struct {
-	URL      string
-	PlanType string
-	Business string
-}
 
 type CommandConfigReader interface {
 	Read(context.Context) (map[string]any, error)
@@ -34,6 +29,14 @@ type CommandConfigReader interface {
 
 type WorkLinkResolver interface {
 	Resolve(context.Context, applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error)
+}
+
+// StagedWorkLinkResolver is implemented by the production resolver. The
+// staged form lets the application read the advertiser-scoped owner cache
+// after short-link resolution and before invoking F2 for cache misses.
+type StagedWorkLinkResolver interface {
+	ResolveLinks(context.Context, applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error)
+	ResolveMetadata(context.Context, applicationworkmetadata.ResolveResult, int) (applicationworkmetadata.ResolveResult, error)
 }
 
 type CreatePlanCommand struct {
@@ -93,12 +96,10 @@ type CreateCommandResult struct {
 type BatchWorksCommand struct {
 	PreflightID     string
 	PlanTemplate    string
-	WorkURLs        []string
+	Items           []domainqianchuan.BatchItem
 	Concurrency     int
 	AuthAccountID   string
 	IncludePayloads bool
-	PlanType        string
-	Business        string
 	Submit          bool
 }
 
@@ -137,13 +138,43 @@ type LinkMetadataPerformance struct {
 }
 
 type BatchPerformance struct {
-	LinkResolutionSeconds       float64                   `json:"link_resolution_seconds"`
-	CredentialResolutionSeconds float64                   `json:"credential_resolution_seconds"`
-	MaterialResolutionSeconds   float64                   `json:"material_resolution_seconds"`
-	PlanReconciliationSeconds   float64                   `json:"plan_reconciliation_seconds"`
-	TotalSeconds                float64                   `json:"total_seconds"`
-	OwnerHintCache              OwnerHintCachePerformance `json:"owner_hint_cache"`
-	LinkMetadata                LinkMetadataPerformance   `json:"link_metadata"`
+	OwnerHintCache OwnerHintCachePerformance `json:"owner_hint_cache"`
+	LinkMetadata   LinkMetadataPerformance   `json:"link_metadata"`
+	Stages         BatchStagePerformance     `json:"stages"`
+	Requests       BatchRequestCounts        `json:"requests"`
+}
+
+type BatchStagePerformance struct {
+	InputNormalizationSeconds   float64 `json:"input_normalization_seconds"`
+	LinkResolutionSeconds       float64 `json:"link_resolution_seconds"`
+	F2ResolutionSeconds         float64 `json:"f2_resolution_seconds"`
+	CredentialResolutionSeconds float64 `json:"credential_resolution_seconds"`
+	OfficialVerificationSeconds float64 `json:"official_verification_seconds"`
+	PlanInventorySeconds        float64 `json:"plan_inventory_seconds"`
+	GroupReconciliationSeconds  float64 `json:"group_reconciliation_seconds"`
+	MaterialDiffSeconds         float64 `json:"material_diff_seconds"`
+	SnapshotPersistenceSeconds  float64 `json:"snapshot_persistence_seconds"`
+	TotalRuntimeSeconds         float64 `json:"total_runtime_seconds"`
+}
+
+type BatchRequestCounts struct {
+	ShortLinkCount       int     `json:"short_link_count"`
+	F2Count              int     `json:"f2_count"`
+	OfficialRequestCount int64   `json:"official_request_count"`
+	RetryCount           int64   `json:"retry_count"`
+	CacheHitCount        int     `json:"cache_hit_count"`
+	CacheMissCount       int     `json:"cache_miss_count"`
+	BindingHitCount      int     `json:"binding_hit_count"`
+	BindingDriftCount    int     `json:"binding_drift_count"`
+	LockWaitMilliseconds float64 `json:"lock_wait_milliseconds"`
+}
+
+type batchLinkPerformance struct {
+	LinkSeconds float64
+	F2Seconds   float64
+	F2Count     int
+	CacheHits   int
+	CacheMisses int
 }
 
 type BatchCommandResult struct {
@@ -151,6 +182,7 @@ type BatchCommandResult struct {
 	Performance BatchPerformance `json:"performance"`
 	PreflightID string           `json:"preflight_id,omitempty"`
 	ExpiresAt   string           `json:"expires_at,omitempty"`
+	Warnings    []string         `json:"warnings,omitempty"`
 }
 
 type RemoveWorksCommand struct {
@@ -228,14 +260,17 @@ func (service CommandService) BatchWorks(
 	if concurrency < 1 || concurrency > applicationworkmetadata.MaxConcurrency {
 		return BatchCommandResult{}, errors.New("concurrency must be between 1 and 10")
 	}
-	if len(command.WorkURLs) == 0 {
+	command.Items = domainqianchuan.NormalizeBatchItems(command.Items)
+	if len(command.Items) == 0 {
 		return BatchCommandResult{}, errors.New("at least one work URL is required")
+	}
+	if err := validateBatchCommandItems(command.Items); err != nil {
+		return BatchCommandResult{}, err
 	}
 	readPool, err := NewReadPool(concurrency)
 	if err != nil {
 		return BatchCommandResult{}, err
 	}
-	entries := parseBatchWorkEntries(command.WorkURLs, command.PlanType, command.Business)
 	config, err := service.Config.Read(ctx)
 	if err != nil {
 		return BatchCommandResult{}, preflightStageError("configuration", err)
@@ -261,13 +296,13 @@ func (service CommandService) BatchWorks(
 		ProductName: exported.ProductName, ProductShortName: exported.ProductShortName,
 		TemplatePayload:  exported.Payload,
 		PlanNameTemplate: exported.PlanNameTemplate,
-		PlanType:         strings.TrimSpace(command.PlanType), Business: strings.TrimSpace(command.Business),
-		IncludePayloads: command.IncludePayloads, ReadPool: readPool,
+		IncludePayloads:  command.IncludePayloads, ReadPool: readPool,
 	}
 	type linkOutcome struct {
-		result   applicationworkmetadata.ResolveResult
-		err      error
-		finished time.Time
+		result           applicationworkmetadata.ResolveResult
+		cachePerformance OwnerHintCachePerformance
+		linkPerformance  batchLinkPerformance
+		err              error
 	}
 	type leaseOutcome struct {
 		lease    authapplication.TokenLease
@@ -279,29 +314,31 @@ func (service CommandService) BatchWorks(
 	leaseChannel := make(chan leaseOutcome, 1)
 	parallelContext, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
+	inputFinished := service.now()
 	go func() {
-		resolved, resolveErr := linkResolver.Resolve(parallelContext, applicationworkmetadata.ResolveRequest{
-			URLs: batchWorkEntryURLs(entries), Concurrency: concurrency,
-		})
-		linkChannel <- linkOutcome{result: resolved, err: resolveErr, finished: service.now()}
+		resolved, cache, linkPerf, resolveErr := resolveBatchLinks(parallelContext, linkResolver, applicationworkmetadata.ResolveRequest{
+			URLs: batchItemURLs(command.Items), Concurrency: concurrency,
+		}, exported.AdvertiserID, service.OwnerHints, service.now)
+		linkChannel <- linkOutcome{result: resolved, cachePerformance: cache, linkPerformance: linkPerf, err: resolveErr}
 	}()
 	go func() {
 		lease, scopedContext, leaseErr := service.readLease(parallelContext, exported.AdvertiserID, command.AuthAccountID)
 		leaseChannel <- leaseOutcome{lease: lease, ctx: scopedContext, err: leaseErr, finished: service.now()}
 	}()
-	linksFinished := started
 	linksReady := false
+	linkPerformance := batchLinkPerformance{}
 	linksResult := linkOutcome{}
 	leaseResult := leaseOutcome{}
 	select {
 	case linksResult = <-linkChannel:
 		linksReady = true
-		linksFinished = linksResult.finished
 		if linksResult.err != nil {
 			cancelParallel()
 			return BatchCommandResult{}, preflightStageError("work_metadata", linksResult.err)
 		}
-		baseRequest.Skipped = qianchuanSkippedLinks(linksResult.result.Skipped)
+		baseRequest.Skipped = qianchuanBatchSkippedLinks(linksResult.result.Skipped, command.Items)
+		cachePerformance = linksResult.cachePerformance
+		linkPerformance = linksResult.linkPerformance
 		if len(linksResult.result.Resolved) == 0 {
 			cancelParallel()
 			result, executeErr := service.Batch.Execute(ctx, baseRequest)
@@ -309,7 +346,9 @@ func (service CommandService) BatchWorks(
 			return BatchCommandResult{
 				BatchResult: result,
 				Performance: batchPerformance(
-					started, linksFinished, linksFinished, linksFinished, finished, metadata, cachePerformance,
+					started, finished, metadata, cachePerformance,
+					BatchStagePerformance{InputNormalizationSeconds: durationSeconds(started, inputFinished), LinkResolutionSeconds: linksResult.linkPerformance.LinkSeconds, F2ResolutionSeconds: linksResult.linkPerformance.F2Seconds, TotalRuntimeSeconds: durationSeconds(started, finished)},
+					BatchRequestCounts{ShortLinkCount: len(command.Items), F2Count: linksResult.linkPerformance.F2Count, CacheHitCount: linksResult.linkPerformance.CacheHits, CacheMissCount: linksResult.linkPerformance.CacheMisses},
 				),
 			}, executeErr
 		}
@@ -322,23 +361,29 @@ func (service CommandService) BatchWorks(
 	}
 	lease, scopedContext := leaseResult.lease, leaseResult.ctx
 	credentialsFinished := leaseResult.finished
-	if service.Locks == nil {
+	cachePerformance = linksResult.cachePerformance
+	if command.Submit && service.Locks == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch advertiser lock is required")
 	}
 	var result BatchResult
 	var executeErr error
-	materialsFinished := credentialsFinished
+	verificationSeconds := 0.0
+	inventorySeconds := 0.0
+	batchTiming := &BatchTiming{}
 	scope := domainplans.WriteScope{
 		Channel: domainplans.ChannelQianchuan, AdvertiserID: exported.AdvertiserID,
 		LockFamily: domainplans.LockQianchuanWorks,
 	}
-	err = sharedplans.WithAdvertiserLock(scopedContext, service.Locks, scope, func(lockedContext context.Context) error {
+	coordinate := func(lockedContext context.Context) error {
 		inventoryChannel := make(chan struct {
 			inventory CurrentPlanInventory
 			err       error
+			finished  time.Time
 		}, 1)
 		scanner, canScan := service.Batch.Reconciler.(CurrentPlanScanner)
+		inventoryStarted := time.Time{}
 		if canScan {
+			inventoryStarted = service.now()
 			go func() {
 				inventory, scanErr := scanner.ScanCurrentPlans(lockedContext, CurrentPlanScanRequest{
 					AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken, ReadPool: readPool,
@@ -346,12 +391,14 @@ func (service CommandService) BatchWorks(
 				inventoryChannel <- struct {
 					inventory CurrentPlanInventory
 					err       error
-				}{inventory: inventory, err: scanErr}
+					finished  time.Time
+				}{inventory: inventory, err: scanErr, finished: service.now()}
 			}()
 		}
 		if !linksReady {
 			linksResult = <-linkChannel
-			linksFinished = linksResult.finished
+			cachePerformance = linksResult.cachePerformance
+			linkPerformance = linksResult.linkPerformance
 		}
 		if linksResult.err != nil {
 			cancelParallel()
@@ -361,7 +408,7 @@ func (service CommandService) BatchWorks(
 			return preflightStageError("work_metadata", linksResult.err)
 		}
 		links := linksResult.result
-		baseRequest.Skipped = qianchuanSkippedLinks(links.Skipped)
+		baseRequest.Skipped = qianchuanBatchSkippedLinks(links.Skipped, command.Items)
 		if len(links.Resolved) == 0 {
 			if canScan {
 				<-inventoryChannel
@@ -369,24 +416,14 @@ func (service CommandService) BatchWorks(
 			result, executeErr = service.Batch.Execute(lockedContext, baseRequest)
 			return executeErr
 		}
-		cachedHints := map[string]OwnerHint{}
-		if service.OwnerHints != nil {
-			cachedHints, err = service.OwnerHints.Load(lockedContext, exported.AdvertiserID, resolvedWorkIDs(links.Resolved))
-			if err != nil {
-				cachedHints = map[string]OwnerHint{}
-				cachePerformance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
-			}
-		}
-		linkHints := ownerHintsFromResolvedLinks(links.Resolved)
-		ownerHints := mergeOwnerHints(cachedHints, linkHints)
-		cachePerformance.Loaded = len(ownerHints)
-		cachePerformance.LoadedFromCache = len(cachedHints)
-		cachePerformance.LoadedFromLinkMetadata = len(linkHints)
+		ownerHints := ownerHintsFromResolvedLinks(links.Resolved)
+		verificationStarted := service.now()
 		verification, verifyErr := service.Verifier.Verify(lockedContext, WorkVerificationRequest{
 			AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
-			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints, entries),
+			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints, command.Items),
 			ReadPool: readPool,
 		})
+		verificationSeconds = durationSeconds(verificationStarted, service.now())
 		if verifyErr != nil {
 			cancelParallel()
 			if canScan {
@@ -396,6 +433,7 @@ func (service CommandService) BatchWorks(
 		}
 		if canScan {
 			inventoryResult := <-inventoryChannel
+			inventorySeconds = durationSeconds(inventoryStarted, inventoryResult.finished)
 			if inventoryResult.err != nil {
 				return preflightStageError("plan_inventory", inventoryResult.err)
 			}
@@ -412,7 +450,6 @@ func (service CommandService) BatchWorks(
 				cachePerformance.Stored = stored
 			}
 		}
-		materialsFinished = service.now()
 		baseRequest.ReadAccessToken = lease.AccessToken
 		baseRequest.Works = verification.Matched
 		baseRequest.Skipped = append(baseRequest.Skipped, verification.Skipped...)
@@ -421,9 +458,14 @@ func (service CommandService) BatchWorks(
 		if command.Submit {
 			batch.Guard.Credentials = commandLeaseCredentials{lease: lease, advertiserID: exported.AdvertiserID}
 		}
-		result, executeErr = batch.Execute(lockedContext, baseRequest)
+		result, executeErr = batch.Execute(WithBatchTiming(lockedContext, batchTiming), baseRequest)
 		return executeErr
-	})
+	}
+	if command.Submit {
+		err = sharedplans.WithAdvertiserLock(scopedContext, service.Locks, scope, coordinate)
+	} else {
+		err = coordinate(scopedContext)
+	}
 	if err != nil && executeErr == nil {
 		var stageError *PreflightStageError
 		if errors.As(err, &stageError) {
@@ -434,7 +476,17 @@ func (service CommandService) BatchWorks(
 	finished := service.now()
 	commandResult := BatchCommandResult{
 		BatchResult: result,
-		Performance: batchPerformance(started, linksFinished, credentialsFinished, materialsFinished, finished, metadata, cachePerformance),
+		Performance: batchPerformance(
+			started, finished, metadata, cachePerformance,
+			BatchStagePerformance{
+				InputNormalizationSeconds: durationSeconds(started, inputFinished), LinkResolutionSeconds: linkPerformance.LinkSeconds,
+				F2ResolutionSeconds: linkPerformance.F2Seconds, CredentialResolutionSeconds: durationSeconds(inputFinished, credentialsFinished),
+				OfficialVerificationSeconds: verificationSeconds, PlanInventorySeconds: inventorySeconds,
+				GroupReconciliationSeconds: batchTiming.GroupReconciliationSeconds, MaterialDiffSeconds: batchTiming.MaterialDiffSeconds,
+				TotalRuntimeSeconds: durationSeconds(started, finished),
+			},
+			batchRequestCounts(ctx, result, command.Items, linkPerformance),
+		),
 	}
 	if executeErr != nil || command.Submit {
 		return commandResult, preflightStageError("plan_reconciliation", executeErr)
@@ -461,10 +513,14 @@ func (service CommandService) BatchWorks(
 	if snapshotErr != nil {
 		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
+	snapshotStarted := service.now()
 	if snapshotErr = service.Journals.Save(ctx, preflightID, journal); snapshotErr != nil {
 		return BatchCommandResult{}, preflightStageError("snapshot", snapshotErr)
 	}
+	completed := service.now()
 	commandResult.PreflightID, commandResult.ExpiresAt = preflightID, snapshot.ExpiresAt
+	commandResult.Performance.Stages.SnapshotPersistenceSeconds = durationSeconds(snapshotStarted, completed)
+	commandResult.Performance.Stages.TotalRuntimeSeconds = durationSeconds(started, completed)
 	return commandResult, nil
 }
 
@@ -476,9 +532,8 @@ func (service CommandService) submitBatchPreflight(
 	if !command.Submit {
 		return BatchCommandResult{}, errors.New("preflight_id requires submit")
 	}
-	if strings.TrimSpace(command.PlanTemplate) != "" || len(command.WorkURLs) != 0 ||
-		strings.TrimSpace(command.PlanType) != "" || strings.TrimSpace(command.Business) != "" {
-		return BatchCommandResult{}, errors.New("preflight_id cannot be combined with template, work URL, plan type, or business")
+	if strings.TrimSpace(command.PlanTemplate) != "" || len(command.Items) != 0 {
+		return BatchCommandResult{}, errors.New("preflight_id cannot be combined with template or work items")
 	}
 	if service.Config == nil || service.Journals == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch preflight dependencies are incomplete")
@@ -501,6 +556,10 @@ func (service CommandService) submitBatchPreflight(
 	snapshot, err := decodeBatchPreflight(journal, started)
 	if err != nil {
 		return BatchCommandResult{}, err
+	}
+	currentBusinessDate, dateErr := ShanghaiBusinessDate(started)
+	if dateErr != nil || currentBusinessDate != snapshot.BusinessDate {
+		return BatchCommandResult{}, errors.New("Qianchuan batch preflight business date changed; run preflight again")
 	}
 	config, err := service.Config.Read(ctx)
 	if err != nil {
@@ -545,12 +604,16 @@ func (service CommandService) submitBatchPreflight(
 			return errors.New("Qianchuan batch current-plan scanner is required")
 		}
 		inventory, scanErr := scanner.ScanCurrentPlans(lockedContext, CurrentPlanScanRequest{
-			AdvertiserID: snapshot.AdvertiserID, AccessToken: lease.AccessToken, ReadPool: readPool,
+			AdvertiserID: snapshot.AdvertiserID, AccessToken: lease.AccessToken,
+			BusinessDate: snapshot.BusinessDate, ReadPool: readPool,
 		})
 		if scanErr != nil {
 			return scanErr
 		}
-		request := snapshot.batchRequest(authAccountID, readPool)
+		request, requestErr := snapshot.batchRequest(currentTemplate, authAccountID, readPool)
+		if requestErr != nil {
+			return requestErr
+		}
 		request.PlanInventory = &inventory
 		batch := service.Batch
 		batch.Guard.Credentials = commandLeaseCredentials{lease: lease, advertiserID: snapshot.AdvertiserID}
@@ -564,8 +627,10 @@ func (service CommandService) submitBatchPreflight(
 	return BatchCommandResult{
 		BatchResult: result,
 		Performance: batchPerformance(
-			started, started, credentialsFinished, credentialsFinished, finished,
+			started, finished,
 			LinkMetadataPerformance{Provider: "preflight_snapshot", Enabled: false}, OwnerHintCachePerformance{},
+			BatchStagePerformance{CredentialResolutionSeconds: durationSeconds(started, credentialsFinished), TotalRuntimeSeconds: durationSeconds(started, finished)},
+			batchRequestCounts(ctx, result, nil, batchLinkPerformance{}),
 		),
 		PreflightID: command.PreflightID, ExpiresAt: snapshot.ExpiresAt,
 	}, executeErr
@@ -811,7 +876,7 @@ func anySliceLength(value any) int {
 func qianchuanWorkInputs(
 	values []domain.ResolvedWorkLink,
 	hints map[string]OwnerHint,
-	entries []batchWorkEntry,
+	items []domainqianchuan.BatchItem,
 ) []WorkInput {
 	result := make([]WorkInput, 0, len(values))
 	for _, value := range values {
@@ -820,58 +885,43 @@ func qianchuanWorkInputs(
 			copy := selected
 			hint = &copy
 		}
+		item := batchItemAt(items, value.InputIndex)
 		result = append(result, WorkInput{
-			InputIndex: value.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
+			InputIndex: item.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
 			CreatorName: strings.TrimSpace(value.CreatorName),
-			PlanType:    batchWorkEntryAt(entries, value.InputIndex).PlanType,
-			Business:    batchWorkEntryAt(entries, value.InputIndex).Business,
-			OwnerHint:   hint,
+			PlanType:    item.PlanType, Business: item.Business, OwnerHint: hint,
 		})
 	}
 	return result
 }
 
-func parseBatchWorkEntries(values []string, planType, business string) []batchWorkEntry {
-	result := make([]batchWorkEntry, 0, len(values))
-	planType, business = strings.TrimSpace(planType), strings.TrimSpace(business)
-	for _, value := range values {
-		columns := strings.Split(value, "\t")
-		for index := range columns {
-			columns[index] = strings.TrimSpace(columns[index])
-		}
-		entry := batchWorkEntry{URL: columns[0], PlanType: planType, Business: business}
-		if match := qianchuanMarkdownLinkPattern.FindStringSubmatch(entry.URL); len(match) == 2 {
-			entry.URL = match[1]
-		}
-		if len(columns) == 2 && columns[1] != "" {
-			entry.PlanType = columns[1]
-		}
-		if len(columns) >= 3 {
-			if columns[len(columns)-2] != "" {
-				entry.PlanType = columns[len(columns)-2]
-			}
-			if columns[len(columns)-1] != "" {
-				entry.Business = columns[len(columns)-1]
-			}
-		}
-		result = append(result, entry)
+func batchItemURLs(items []domainqianchuan.BatchItem) []string {
+	result := make([]string, len(items))
+	for index, item := range items {
+		result[index] = item.WorkURL
 	}
 	return result
 }
 
-func batchWorkEntryURLs(entries []batchWorkEntry) []string {
-	result := make([]string, len(entries))
-	for index, entry := range entries {
-		result[index] = entry.URL
+func batchItemAt(items []domainqianchuan.BatchItem, index int) domainqianchuan.BatchItem {
+	if index < 0 || index >= len(items) {
+		return domainqianchuan.BatchItem{}
 	}
-	return result
+	return items[index]
 }
 
-func batchWorkEntryAt(entries []batchWorkEntry, index int) batchWorkEntry {
-	if index < 0 || index >= len(entries) {
-		return batchWorkEntry{}
+func validateBatchCommandItems(items []domainqianchuan.BatchItem) error {
+	seenIndexes := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		if item.InputIndex < 0 || strings.TrimSpace(item.WorkURL) == "" {
+			return errors.New("Qianchuan batch item identity is invalid")
+		}
+		if _, duplicate := seenIndexes[item.InputIndex]; duplicate {
+			return errors.New("Qianchuan batch item input_index must be unique")
+		}
+		seenIndexes[item.InputIndex] = struct{}{}
 	}
-	return entries[index]
+	return nil
 }
 
 func resolvedWorkIDs(values []domain.ResolvedWorkLink) []string {
@@ -918,6 +968,147 @@ func ownerHintCacheWarning(code string, err error) map[string]string {
 	return map[string]string{"code": code, "message": message}
 }
 
+func resolveBatchLinks(
+	ctx context.Context,
+	resolver WorkLinkResolver,
+	request applicationworkmetadata.ResolveRequest,
+	advertiserID string,
+	cache OwnerHintCache,
+	now func() time.Time,
+) (applicationworkmetadata.ResolveResult, OwnerHintCachePerformance, batchLinkPerformance, error) {
+	started := time.Now()
+	if now != nil {
+		started = now()
+	}
+	performance := OwnerHintCachePerformance{}
+	linkPerformance := batchLinkPerformance{}
+	loadHints := func(itemIDs []string) map[string]OwnerHint {
+		if cache == nil || len(itemIDs) == 0 {
+			return map[string]OwnerHint{}
+		}
+		loaded, err := cache.Load(ctx, advertiserID, itemIDs)
+		if err != nil {
+			performance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
+			return map[string]OwnerHint{}
+		}
+		performance.LoadedFromCache = len(loaded)
+		return loaded
+	}
+	applyHints := func(rows []domain.ResolvedWorkLink, hints map[string]OwnerHint) {
+		for index := range rows {
+			if hint, ok := hints[rows[index].AwemeItemID]; ok {
+				value := hint
+				rows[index].OwnerHint = &domain.WorkOwnerHint{AwemeID: value.AwemeID, AwemeShowID: value.AwemeShowID}
+			}
+		}
+	}
+
+	staged, isStaged := resolver.(StagedWorkLinkResolver)
+	if !isStaged {
+		result, err := resolver.Resolve(ctx, request)
+		if err != nil {
+			return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
+		}
+		result = cloneResolveResult(result)
+		cached := loadHints(resolvedWorkIDs(result.Resolved))
+		linkHints := ownerHintsFromResolvedLinks(result.Resolved)
+		merged := mergeOwnerHints(cached, linkHints)
+		applyHints(result.Resolved, merged)
+		performance.Loaded = len(merged)
+		performance.LoadedFromLinkMetadata = len(linkHints)
+		linkPerformance.LinkSeconds = durationSeconds(started, clockNow(now))
+		linkPerformance.F2Count = len(result.Resolved)
+		linkPerformance.CacheHits = len(cached)
+		linkPerformance.CacheMisses = len(result.Resolved) - len(cached)
+		return result, performance, linkPerformance, nil
+	}
+
+	result, err := staged.ResolveLinks(ctx, request)
+	if err != nil {
+		return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
+	}
+	result = cloneResolveResult(result)
+	cached := loadHints(resolvedWorkIDs(result.Resolved))
+	linkHints := ownerHintsFromResolvedLinks(result.Resolved)
+	merged := mergeOwnerHints(cached, linkHints)
+	performance.Loaded = len(merged)
+	performance.LoadedFromLinkMetadata = len(linkHints)
+	linkPerformance.CacheHits = len(cached)
+	applyHints(result.Resolved, merged)
+
+	missing := make([]domain.ResolvedWorkLink, 0, len(result.Resolved))
+	for _, row := range result.Resolved {
+		if _, ok := merged[row.AwemeItemID]; !ok {
+			missing = append(missing, row)
+		}
+	}
+	linkPerformance.CacheMisses = len(missing)
+	if len(missing) == 0 {
+		linkPerformance.LinkSeconds = durationSeconds(started, clockNow(now))
+		return result, performance, linkPerformance, nil
+	}
+	f2Started := clockNow(now)
+	linkPerformance.LinkSeconds = durationSeconds(started, f2Started)
+	enriched, err := staged.ResolveMetadata(ctx, applicationworkmetadata.ResolveResult{Resolved: missing}, request.Concurrency)
+	if err != nil {
+		return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
+	}
+	linkPerformance.F2Seconds = durationSeconds(f2Started, clockNow(now))
+	linkPerformance.F2Count = len(missing)
+	enrichedByID := map[string]domain.ResolvedWorkLink{}
+	for _, row := range enriched.Resolved {
+		enrichedByID[row.AwemeItemID] = row
+	}
+	failedByID := map[string]domain.SkippedWorkLink{}
+	for _, row := range enriched.Skipped {
+		if row.AwemeItemID != "" {
+			failedByID[row.AwemeItemID] = row
+		}
+	}
+	resolved := make([]domain.ResolvedWorkLink, 0, len(result.Resolved))
+	for _, row := range result.Resolved {
+		if enrichedRow, ok := enrichedByID[row.AwemeItemID]; ok {
+			resolved = append(resolved, enrichedRow)
+			continue
+		}
+		if _, ok := merged[row.AwemeItemID]; ok {
+			resolved = append(resolved, row)
+			continue
+		}
+		if skipped, ok := failedByID[row.AwemeItemID]; ok {
+			result.Skipped = append(result.Skipped, skipped)
+		}
+	}
+	result.Resolved = resolved
+	result.MetadataPerformance = enriched.MetadataPerformance
+	return result, performance, linkPerformance, nil
+}
+
+func clockNow(now func() time.Time) time.Time {
+	if now != nil {
+		return now()
+	}
+	return time.Now()
+}
+
+func cloneResolveResult(value applicationworkmetadata.ResolveResult) applicationworkmetadata.ResolveResult {
+	value.Resolved = append([]domain.ResolvedWorkLink(nil), value.Resolved...)
+	value.Skipped = append([]domain.SkippedWorkLink(nil), value.Skipped...)
+	value.MetadataPerformance = cloneMetadataPerformance(value.MetadataPerformance)
+	return value
+}
+
+func cloneMetadataPerformance(value map[string]any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	result := make(map[string]any, len(value))
+	for key, item := range value {
+		result[key] = item
+	}
+	return result
+}
+
 func qianchuanSkippedLinks(values []domain.SkippedWorkLink) []SkippedWork {
 	result := make([]SkippedWork, 0, len(values))
 	for _, value := range values {
@@ -929,24 +1120,56 @@ func qianchuanSkippedLinks(values []domain.SkippedWorkLink) []SkippedWork {
 	return result
 }
 
+func qianchuanBatchSkippedLinks(values []domain.SkippedWorkLink, items []domainqianchuan.BatchItem) []SkippedWork {
+	result := qianchuanSkippedLinks(values)
+	for index := range result {
+		result[index].InputIndex = batchItemAt(items, values[index].InputIndex).InputIndex
+	}
+	return result
+}
+
 func batchPerformance(
 	started time.Time,
-	linksFinished time.Time,
-	credentialsFinished time.Time,
-	materialsFinished time.Time,
 	finished time.Time,
 	metadata LinkMetadataPerformance,
 	cache OwnerHintCachePerformance,
+	stages BatchStagePerformance,
+	counts BatchRequestCounts,
 ) BatchPerformance {
-	return BatchPerformance{
-		LinkResolutionSeconds:       durationSeconds(started, linksFinished),
-		CredentialResolutionSeconds: durationSeconds(started, credentialsFinished),
-		MaterialResolutionSeconds:   durationSeconds(credentialsFinished, materialsFinished),
-		PlanReconciliationSeconds:   durationSeconds(materialsFinished, finished),
-		TotalSeconds:                durationSeconds(started, finished),
-		OwnerHintCache:              cache,
-		LinkMetadata:                metadata,
+	if stages.TotalRuntimeSeconds == 0 {
+		stages.TotalRuntimeSeconds = durationSeconds(started, finished)
 	}
+	return BatchPerformance{
+		OwnerHintCache: cache,
+		LinkMetadata:   metadata,
+		Stages:         stages,
+		Requests:       counts,
+	}
+}
+
+func batchRequestCounts(
+	ctx context.Context,
+	result BatchResult,
+	items []domainqianchuan.BatchItem,
+	link batchLinkPerformance,
+) BatchRequestCounts {
+	counts := BatchRequestCounts{
+		ShortLinkCount: len(items), F2Count: link.F2Count,
+		CacheHitCount: link.CacheHits, CacheMissCount: link.CacheMisses,
+	}
+	if metrics, ok := requestcontrol.MetricsFrom(ctx); ok {
+		snapshot := metrics.Snapshot()
+		counts.OfficialRequestCount, counts.RetryCount = snapshot.Attempts, snapshot.Retries
+	}
+	for _, row := range result.Results {
+		if strings.TrimSpace(row.AdID) != "" {
+			counts.BindingHitCount++
+		}
+		if row.ErrorCode == "BINDING_DRIFT" {
+			counts.BindingDriftCount++
+		}
+	}
+	return counts
 }
 
 func durationSeconds(start, end time.Time) float64 {

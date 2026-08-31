@@ -6,8 +6,9 @@
 
 ### 新增
 
+- 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，Host 工具合同仍为 17 个。
 - 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。
-- MCP 新增只读 `get_capabilities`，从 74 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
+- MCP 新增只读 `get_capabilities`，从 76 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
 - MCP 代理新增初始化、Runtime 切换、拒绝回滚和业务调用阶段计时日志，并在工具结果 `_meta.ocean_watch` 返回实际 Runtime 版本与代理内业务调用耗时。
 
 - Plugin 新增内置本地 stdio MCP，并首批提供 `list_templates`、`get_template` 两个模板只读工具；工具与 CLI 共享 Go Application Service，使用严格 Schema、字符串 ID、状态版本游标、稳定错误码、只读安全注解和独立脱敏 Presenter，不启动或解析 CLI。
@@ -24,6 +25,10 @@
 - 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
 
 - 千川作品批量预检改为命令级共享有界读取并发（默认 8、最大 10），让链接/F2、凭据和当天计划扫描重叠，并并发执行计划分页、候选详情、素材及作品核验；dry-run 对可提交结果返回最长 30 分钟且不跨上海业务日的 `preflight_id`，确认提交复用最小快照，只重扫当前计划和必要素材差集。单个创建的零网络 dry-run 保持不变，广告主锁、串行写入、操作键、单次派发和未知写入读回对账继续保留。
+- 千川当日计划匹配改为只认本地绑定，不再按模板或达人特征推断历史计划：无绑定且无候选返回 `would_create`，无绑定但存在候选返回 `legacy_binding_required` 并阻断自动追加，绑定存在但身份不符或候选中找不到绑定的 `ad_id` 返回 `binding_drift`，只有 `bound` 才产生可追加的唯一匹配。绑定缺失的历史计划必须先经 `qc-plans binding-audit` 人工核对并用 `qc-plans bind --submit` 显式绑定，预检结果同时返回绑定指纹便于核查。
+- 千川批量预检输入升级为逐行结构化 `items[]`，`plan_type` 与 `business` 纳入稳定 `group_id` 和 Snapshot V2；MCP 删除旧顶层批次字段，CLI 仅保留带弃用提示的兼容解析，避免混合类型作品跨组或跨商务合并。
+- 千川 owner hint 读取前移到短链解析之后：热缓存只跳过对应作品的 F2，官方授权、归属、商品、计划和素材核验不减少；缓存损坏只读降级并保留指标。只读预检不再全程占用广告主写锁，提交、删除和计划设置继续共享写锁。
+- 批量与普通千川读取统一使用广告主级跨调用请求控制，批量读取工厂不再绕过共享 `Retry-After` 冷却；预检结果改为独立组件耗时和短链/F2/官方请求/重试/缓存/绑定计数，删除会重复累计并行时间的旧窗口字段，以端到端 Runtime 墙钟作为唯一总耗时。
 - 完善中英文项目首页定位文案，明确 Ocean Watch 覆盖巨量营销与巨量千川的一体化投放管理、数据报表和监控分析能力。
 - 调整中英文项目首页技术徽章：移除动态 Git Tag 展示，补充 Go、MCP、JSON-RPC、JSON Schema、OAuth、巨量引擎官方 API/Go SDK、Python/F2、多平台 CLI 与安全存储等当前技术栈入口。
 - 重写中英文项目首页，以产品定位、核心能力、可信边界、快速开始、自然语言场景、运行支持和按受众文档导航组织对外信息；保留 README、Contributing、MIT license 与 Security 一级入口，并将完整操作、架构和发布细节归入对应长期文档。

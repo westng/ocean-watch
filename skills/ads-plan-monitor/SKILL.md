@@ -9,6 +9,7 @@ description: Dedicated 巨量营销 skill for first-run setup, local OAuth, curr
 
 Classify the user's outcome once, then use the first matching route. Do not search the repository, inspect plugin cache paths, read memory, or run setup probes before a normal business request. Do not call an equivalent CLI route when this table names an MCP tool.
 
+<!-- capability-routes:start -->
 | User outcome | Exact route |
 | --- | --- |
 | List local Marketing or Qianchuan templates | MCP `list_templates` |
@@ -21,6 +22,10 @@ Classify the user's outcome once, then use the first matching route. Do not sear
 | Fixed Marketing material report | MCP `report_marketing_materials` |
 | Fixed Marketing project report | MCP `report_marketing_plans` |
 | Make current OAuth user's advertiser coverage match official access | `./run auth sync-accounts --channel marketing` |
+<!-- capability-routes:end -->
+
+| User outcome | Exact route |
+| --- | --- |
 | Confirmed Ocean Watch goal not matched above | MCP `get_capabilities` once with `channel=marketing`, then use its unique command |
 | Initialize, authorize, mutate local accounts/templates, create/update plans, custom reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
 

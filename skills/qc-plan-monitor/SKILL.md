@@ -9,6 +9,7 @@ description: Dedicated 巨量千川 skill for first-run setup, local OAuth and T
 
 Classify the user's outcome once, then use the first matching route. Do not search the repository, inspect plugin cache paths, read memory, or run setup probes before a normal business request. Do not call an equivalent CLI route when this table names an MCP tool.
 
+<!-- capability-routes:start -->
 | User outcome | Exact route |
 | --- | --- |
 | List local Marketing or Qianchuan templates | MCP `list_templates` |
@@ -23,6 +24,10 @@ Classify the user's outcome once, then use the first matching route. Do not sear
 | Fixed plan report | MCP `report_qianchuan_plans` |
 | Preflight Douyin works without creating or changing a plan | MCP `preflight_qianchuan_works` |
 | Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
+<!-- capability-routes:end -->
+
+| User outcome | Exact route |
+| --- | --- |
 | Confirmed Ocean Watch goal not matched above | MCP `get_capabilities` once with `channel=qianchuan`, then use its unique command |
 | Initialize, authorize, mutate templates/accounts/plans/materials, custom reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
 

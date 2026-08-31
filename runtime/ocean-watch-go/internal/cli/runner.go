@@ -191,7 +191,8 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		authorizations := filesystem.AuthorizationStore{Root: filepath.Join(filesystem.CodexHome(getenv, userHome), "ads-plan-monitor", "state")}
 		return RunQianchuanTemplatesInteractive(ctx, invocation.Command.Action, invocation.Arguments, store, authorizations, configPath, stdin, stdout)
 	case "qc-materials", "qc-products", "qc-plans":
-		if invocation.Command.Domain == "qc-plans" && isQianchuanMutationAction(invocation.Command.Action) {
+		if invocation.Command.Domain == "qc-plans" &&
+			(isQianchuanMutationAction(invocation.Command.Action) || isQianchuanBindingAction(invocation.Command.Action)) {
 			stateRoot := filepath.Join(codexRoot, "ads-plan-monitor", "state")
 			return runner.runQianchuanPlan(
 				ctx, invocation.Command.Domain, invocation.Command.Action, invocation.Arguments,
@@ -237,6 +238,10 @@ func isQianchuanMutationAction(action string) bool {
 	default:
 		return false
 	}
+}
+
+func isQianchuanBindingAction(action string) bool {
+	return action == "binding-audit" || action == "bind"
 }
 
 func (runner Runner) runSetup(

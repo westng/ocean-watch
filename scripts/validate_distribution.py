@@ -138,6 +138,52 @@ def validate_skill(name):
         fail(f"{name} Unix launcher is missing or not executable")
 
 
+def validate_capability_routes():
+    fixture_path = ROOT / "runtime" / "ocean-watch-go" / "internal" / "contracts" / "testdata" / "skill-fast-routes.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    expected_by_skill = {name: [] for name in ("ads-plan-monitor", "qc-plan-monitor")}
+    seen = set()
+    for item in fixture:
+        required = ("skill", "outcome", "capability_id", "surface", "route")
+        if any(not str(item.get(key) or "").strip() for key in required):
+            fail(f"capability route fixture has incomplete item: {item}")
+        key = (item["skill"], item["outcome"])
+        if key in seen:
+            fail(f"capability route fixture has duplicate outcome: {key}")
+        seen.add(key)
+        if item["skill"] not in expected_by_skill or item["surface"] not in ("cli", "mcp"):
+            fail(f"capability route fixture has invalid item: {item}")
+        expected_by_skill[item["skill"]].append(item)
+
+    for name, expected in expected_by_skill.items():
+        content = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        start_marker = "<!-- capability-routes:start -->"
+        end_marker = "<!-- capability-routes:end -->"
+        start = content.find(start_marker)
+        end = content.find(end_marker)
+        if start < 0 or end <= start:
+            fail(f"{name} lacks a valid controlled capability route block")
+        rows = []
+        for line in content[start:end].splitlines():
+            line = line.strip()
+            if not line.startswith("|") or "User outcome" in line or line == "| --- | --- |":
+                continue
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if len(cells) != 2:
+                fail(f"{name} has malformed capability route row: {line}")
+            outcome, route_cell = cells
+            if route_cell.startswith("MCP `") and route_cell.endswith("`"):
+                surface, route = "mcp", route_cell[5:-1]
+            elif route_cell.startswith("`") and route_cell.endswith("`"):
+                surface, route = "cli", route_cell[1:-1]
+            else:
+                fail(f"{name} has unsupported capability route: {route_cell}")
+            rows.append({"skill": name, "outcome": outcome, "surface": surface, "route": route})
+        projected = [{key: item[key] for key in ("skill", "outcome", "surface", "route")} for item in expected]
+        if rows != projected:
+            fail(f"{name} capability routes do not match the checked-in registry fixture")
+
+
 def validate_binaries():
     binary_root = ROOT / ".codex-plugin" / "bin"
     actual = sorted(path.name for path in binary_root.iterdir() if path.is_file())
@@ -241,6 +287,7 @@ def main():
         validate_mcp()
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")
+        validate_capability_routes()
         validate_binaries()
         validate_runtime_manifest()
         validate_fast_routing_has_no_legacy_conflicts()

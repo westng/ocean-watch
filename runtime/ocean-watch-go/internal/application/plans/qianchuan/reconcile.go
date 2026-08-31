@@ -17,10 +17,13 @@ const (
 )
 
 type CreatorTarget struct {
-	AwemeID    string
-	VisibleID  string
-	ProductIDs []string
-	PlanName   string
+	AwemeID      string
+	VisibleID    string
+	ProductIDs   []string
+	PlanName     string
+	GroupID      string
+	BusinessDate string
+	Identity     domainqianchuan.PlanGroupIdentity
 }
 
 type CurrentPlanRequest struct {
@@ -34,6 +37,7 @@ type CurrentPlanRequest struct {
 type CurrentPlanScanRequest struct {
 	AdvertiserID string
 	AccessToken  string
+	BusinessDate string
 	ReadPool     *ReadPool
 }
 
@@ -55,11 +59,18 @@ type ExistingPlan struct {
 }
 
 type CurrentPlanResult struct {
-	StartTime  string                    `json:"start_time"`
-	EndTime    string                    `json:"end_time"`
-	PageCount  int                       `json:"page_count"`
-	RequestIDs []string                  `json:"request_ids"`
-	Matches    map[string][]ExistingPlan `json:"matches"`
+	StartTime  string                     `json:"start_time"`
+	EndTime    string                     `json:"end_time"`
+	PageCount  int                        `json:"page_count"`
+	RequestIDs []string                   `json:"request_ids"`
+	Matches    map[string][]ExistingPlan  `json:"matches"`
+	Policies   map[string]PlanMatchPolicy `json:"policies,omitempty"`
+}
+
+type PlanMatchPolicy struct {
+	Status        string         `json:"status"`
+	Candidates    []ExistingPlan `json:"candidates"`
+	BindingDigest string         `json:"binding_digest"`
 }
 
 type CurrentPlanFinder interface {
@@ -89,6 +100,7 @@ func planInventoryError(reason string, err error) error {
 
 type CurrentDayReconciler struct {
 	Reader   portqianchuan.Reader
+	Bindings PlanBindingReader
 	Now      func() time.Time
 	MaxPages int
 }
@@ -117,8 +129,19 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 	}
 	inventory := request.Inventory
 	if inventory == nil {
+		businessDate := ""
+		for _, target := range targets {
+			if target.GroupID == "" {
+				continue
+			}
+			if businessDate != "" && businessDate != target.BusinessDate {
+				return CurrentPlanResult{}, errors.New("Qianchuan reconciliation targets span multiple business dates")
+			}
+			businessDate = target.BusinessDate
+		}
 		scanned, scanErr := reconciler.ScanCurrentPlans(ctx, CurrentPlanScanRequest{
-			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, ReadPool: request.ReadPool,
+			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+			BusinessDate: businessDate, ReadPool: request.ReadPool,
 		})
 		if scanErr != nil {
 			return CurrentPlanResult{}, scanErr
@@ -130,8 +153,13 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 		return CurrentPlanResult{}, errors.New("Qianchuan current-plan inventory is incomplete")
 	}
 	matches := make(map[string][]ExistingPlan, len(targets))
+	rawMatches := make(map[string][]ExistingPlan, len(targets))
 	for _, target := range targets {
-		matches[target.AwemeID] = []ExistingPlan{}
+		matches[target.key] = []ExistingPlan{}
+		rawMatches[target.key] = []ExistingPlan{}
+		if target.GroupID != "" && target.Identity.AdvertiserID != request.AdvertiserID {
+			return CurrentPlanResult{}, errors.New("Qianchuan reconciliation group advertiser does not match request")
+		}
 	}
 	candidates := selectListCandidates(inventory.Plans, targets)
 	type candidateDetail struct {
@@ -140,11 +168,16 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 	}
 	details := parallelOrdered(ctx, request.ReadPool, len(candidates), func(ctx context.Context, index int) candidateDetail {
 		candidate := candidates[index]
-		detail, fetchErr := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.PlanDetail, error) {
-			return reconciler.Reader.FetchPlanDetail(ctx, portqianchuan.PlanDetailRequest{
-				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, AdID: candidate.plan.AdID,
-			})
-		})
+		detail, fetchErr := runReadOnce(
+			ctx, request.ReadPool, planDetailReadKey(request.AdvertiserID, candidate.plan.AdID),
+			func(ctx context.Context) (domainqianchuan.PlanDetail, error) {
+				return runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.PlanDetail, error) {
+					return reconciler.Reader.FetchPlanDetail(ctx, portqianchuan.PlanDetailRequest{
+						AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken, AdID: candidate.plan.AdID,
+					})
+				})
+			},
+		)
 		return candidateDetail{detail: detail, err: fetchErr}
 	})
 	for index, candidate := range candidates {
@@ -159,22 +192,76 @@ func (reconciler CurrentDayReconciler) FindCurrentPlans(
 			continue
 		}
 		for _, target := range candidate.targets {
+			products := planProductIDs(detail.Products)
+			productMatch := hasProductIntersection(detail.Products, target.ProductIDs)
+			if target.GroupID != "" {
+				productMatch = sameStringSet(products, target.ProductIDs)
+			}
 			if detail.AwemeID != target.AwemeID ||
-				(target.PlanName != "" && detail.Name != target.PlanName) ||
-				!hasProductIntersection(detail.Products, target.ProductIDs) {
+				(target.PlanName != "" && detail.Name != target.PlanName) || !productMatch {
 				continue
 			}
-			matches[target.AwemeID] = append(matches[target.AwemeID], ExistingPlan{
+			rawMatches[target.key] = append(rawMatches[target.key], ExistingPlan{
 				AdID: detail.AdID, Name: detail.Name, Status: detail.Status,
 				OptStatus: detail.OptStatus, AwemeID: detail.AwemeID,
-				ProductIDs: planProductIDs(detail.Products),
+				ProductIDs: products,
 			})
 		}
 	}
+	policies := map[string]PlanMatchPolicy{}
+	for _, target := range targets {
+		candidates := rawMatches[target.key]
+		if target.GroupID == "" {
+			matches[target.key] = candidates
+			continue
+		}
+		if reconciler.Bindings == nil {
+			return CurrentPlanResult{}, errors.New("Qianchuan plan binding reader is required")
+		}
+		binding, exists, bindingErr := reconciler.Bindings.Get(ctx, target.BusinessDate, target.GroupID)
+		if bindingErr != nil {
+			return CurrentPlanResult{}, fmt.Errorf("read Qianchuan plan binding: %w", bindingErr)
+		}
+		if !exists {
+			bindingDigest, digestErr := PlanBindingDigest(nil)
+			if digestErr != nil {
+				return CurrentPlanResult{}, fmt.Errorf("digest absent Qianchuan plan binding: %w", digestErr)
+			}
+			status := "would_create"
+			if len(candidates) != 0 {
+				status = "legacy_binding_required"
+			}
+			policies[target.key] = PlanMatchPolicy{
+				Status: status, Candidates: append([]ExistingPlan(nil), candidates...), BindingDigest: bindingDigest,
+			}
+			continue
+		}
+		bindingDigest, digestErr := PlanBindingDigest(&binding)
+		if digestErr != nil {
+			return CurrentPlanResult{}, fmt.Errorf("digest Qianchuan plan binding: %w", digestErr)
+		}
+		policy := PlanMatchPolicy{
+			Status: "binding_drift", Candidates: append([]ExistingPlan(nil), candidates...), BindingDigest: bindingDigest,
+		}
+		if BindingMatchesIdentity(binding, target.Identity, target.BusinessDate) {
+			for _, candidate := range candidates {
+				if candidate.AdID == binding.AdID {
+					matches[target.key] = []ExistingPlan{candidate}
+					policy.Status = "bound"
+					break
+				}
+			}
+		}
+		policies[target.key] = policy
+	}
 	return CurrentPlanResult{
 		StartTime: inventory.StartTime, EndTime: inventory.EndTime, PageCount: inventory.PageCount,
-		RequestIDs: append([]string(nil), inventory.RequestIDs...), Matches: matches,
+		RequestIDs: append([]string(nil), inventory.RequestIDs...), Matches: matches, Policies: policies,
 	}, nil
+}
+
+func planDetailReadKey(advertiserID, adID string) string {
+	return "plan-detail\x00" + advertiserID + "\x00" + adID
 }
 
 func (reconciler CurrentDayReconciler) ScanCurrentPlans(
@@ -199,11 +286,18 @@ func (reconciler CurrentDayReconciler) ScanCurrentPlans(
 	if err != nil {
 		return CurrentPlanInventory{}, fmt.Errorf("load Asia/Shanghai timezone: %w", err)
 	}
-	now := time.Now()
-	if reconciler.Now != nil {
-		now = reconciler.Now()
+	day := strings.TrimSpace(request.BusinessDate)
+	if day != "" {
+		if err := ValidateBusinessDate(day); err != nil {
+			return CurrentPlanInventory{}, err
+		}
+	} else {
+		now := time.Now()
+		if reconciler.Now != nil {
+			now = reconciler.Now()
+		}
+		day = now.In(location).Format("2006-01-02")
 	}
-	day := now.In(location).Format("2006-01-02")
 	startTime, endTime := day+" 00:00:00", day+" 23:59:59"
 	maxPages := reconciler.MaxPages
 	if maxPages == 0 {
@@ -301,6 +395,7 @@ func validateCurrentPlanPage(page domainqianchuan.PlanPage, number, totalPages, 
 
 type normalizedCreatorTarget struct {
 	CreatorTarget
+	key      string
 	aliases  map[string]struct{}
 	products map[string]struct{}
 }
@@ -318,10 +413,23 @@ func normalizeCreatorTargets(values []CreatorTarget) ([]normalizedCreatorTarget,
 		if !validPositiveID(value.AwemeID) {
 			return nil, errors.New("aweme_id must be a positive decimal ID")
 		}
-		if _, duplicate := seen[value.AwemeID]; duplicate {
+		key := value.AwemeID
+		if strings.TrimSpace(value.GroupID) != "" {
+			value.GroupID = strings.TrimSpace(value.GroupID)
+			value.BusinessDate = strings.TrimSpace(value.BusinessDate)
+			canonicalID, groupErr := domainqianchuan.GroupID(value.Identity)
+			if groupErr != nil || canonicalID != value.GroupID || value.Identity.CreatorID != value.AwemeID {
+				return nil, errors.New("Qianchuan reconciliation group identity is invalid")
+			}
+			if _, dateErr := BindingKey(value.GroupID, value.BusinessDate); dateErr != nil {
+				return nil, dateErr
+			}
+			key = value.GroupID
+		}
+		if _, duplicate := seen[key]; duplicate {
 			return nil, errors.New("Qianchuan reconciliation creator targets must be unique")
 		}
-		seen[value.AwemeID] = struct{}{}
+		seen[key] = struct{}{}
 		products, productIDs, err := normalizeIDSet(value.ProductIDs, "product_id", 30)
 		if err != nil {
 			return nil, err
@@ -332,7 +440,7 @@ func normalizeCreatorTargets(values []CreatorTarget) ([]normalizedCreatorTarget,
 			aliases[value.VisibleID] = struct{}{}
 		}
 		result = append(result, normalizedCreatorTarget{
-			CreatorTarget: value, aliases: aliases, products: products,
+			CreatorTarget: value, key: key, aliases: aliases, products: products,
 		})
 	}
 	return result, nil
@@ -406,6 +514,25 @@ func planProductIDs(products []domainqianchuan.PlanProduct) []string {
 		result = append(result, product.ProductID)
 	}
 	return result
+}
+
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(left))
+	for _, value := range left {
+		seen[value] = struct{}{}
+	}
+	if len(seen) != len(right) {
+		return false
+	}
+	for _, value := range right {
+		if _, exists := seen[value]; !exists {
+			return false
+		}
+	}
+	return true
 }
 
 func isDeletedPlan(status, optStatus string) bool {

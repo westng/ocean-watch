@@ -3,3 +3,4 @@
 *.bat text eol=crlf
 *.cmd text eol=lf
 *.exe binary
+.codex-plugin/bin/* binary

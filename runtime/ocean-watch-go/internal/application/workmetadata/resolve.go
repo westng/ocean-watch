@@ -32,6 +32,17 @@ type Resolver struct {
 }
 
 func (resolver Resolver) Resolve(ctx context.Context, request ResolveRequest) (ResolveResult, error) {
+	result, err := resolver.ResolveLinks(ctx, request)
+	if err != nil {
+		return ResolveResult{}, err
+	}
+	return resolver.ResolveMetadata(ctx, result, request.Concurrency)
+}
+
+// ResolveLinks performs only URL normalization/redirect resolution. Keeping
+// this stage separate lets callers consult a scoped hint cache before invoking
+// the comparatively expensive metadata resolver.
+func (resolver Resolver) ResolveLinks(ctx context.Context, request ResolveRequest) (ResolveResult, error) {
 	if ctx == nil {
 		return ResolveResult{}, errors.New("work-link context is required")
 	}
@@ -97,6 +108,22 @@ func (resolver Resolver) Resolve(ctx context.Context, request ResolveRequest) (R
 		}
 		seen[row.value.AwemeItemID] = struct{}{}
 		result.Resolved = append(result.Resolved, row.value)
+	}
+	return result, nil
+}
+
+// ResolveMetadata enriches only the resolved rows in result. Callers can pass
+// a subset of rows to resolve just cache misses while retaining original input
+// indexes for deterministic skipped-row reporting.
+func (resolver Resolver) ResolveMetadata(ctx context.Context, result ResolveResult, concurrency int) (ResolveResult, error) {
+	if ctx == nil {
+		return ResolveResult{}, errors.New("work-link context is required")
+	}
+	if concurrency == 0 {
+		concurrency = DefaultConcurrency
+	}
+	if concurrency < 1 || concurrency > MaxConcurrency {
+		return ResolveResult{}, errors.New("concurrency must be between 1 and 10")
 	}
 	if resolver.Metadata == nil || len(result.Resolved) == 0 {
 		return result, nil

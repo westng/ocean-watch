@@ -98,7 +98,7 @@ Codex → Skill → 本地 stdio MCP ─┐
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
 - 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
 - 稳定代理保持 17 个 MCP 工具合同不变，并在同一外层会话内监控已安装快照、校验版本/哈希/插件身份/F2 资源和工具 Schema，再切换本机私有 Runtime；坏版本自动回滚且只拒绝该次清单，后续修复版仍可自动升级。
-- `get_capabilities` 只读返回 74 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
+- `get_capabilities` 只读返回 76 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
 - MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
 - macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前 Codex Plugin/MCP 清单没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。

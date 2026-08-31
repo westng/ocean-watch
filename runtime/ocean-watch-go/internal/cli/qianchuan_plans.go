@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,12 +23,15 @@ import (
 	applicationworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/workmetadata"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
+	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 	platformretry "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/retry"
 	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
 )
 
 const qianchuanPayloadLimit = int64(8 << 20)
+
+var qianchuanMarkdownLinkPattern = regexp.MustCompile(`(?i)\]\((https://[^)[:space:]]+)\)`)
 
 type QianchuanPlanCommandService interface {
 	CreatePlan(context.Context, applicationqianchuan.CreatePlanCommand) (applicationqianchuan.CreateCommandResult, error)
@@ -39,9 +43,16 @@ type QianchuanPlanMutationService interface {
 	Execute(context.Context, applicationqianchuan.MutationCommand) (applicationqianchuan.MutationResult, error)
 }
 
+type QianchuanPlanBindingService interface {
+	Audit(context.Context, applicationqianchuan.BindingAuditCommand) (applicationqianchuan.BindingAuditResult, error)
+	Bind(context.Context, applicationqianchuan.BindPlanCommand) (applicationqianchuan.BindPlanResult, error)
+}
+
 type QianchuanPlanRuntime struct {
 	Commands       QianchuanPlanCommandService
 	Mutations      QianchuanPlanMutationService
+	PlanBindings   QianchuanPlanBindingService
+	Bindings       applicationqianchuan.PlanBindingStore
 	Reader         portqianchuan.Reader
 	Writer         portqianchuan.Writer
 	Credentials    sharedplans.CredentialProvider
@@ -83,6 +94,7 @@ type qianchuanBatchOptions struct {
 	business        string
 	submit          bool
 	out             string
+	legacyInput     bool
 }
 
 type qianchuanRemoveOptions struct {
@@ -207,14 +219,44 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	if options.concurrency < 1 || options.concurrency > applicationworkmetadata.MaxConcurrency {
 		return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("concurrency must be between 1 and 10")
 	}
+	options.legacyInput = options.preflightID == "" && len(options.workURLs) != 0
 	return options, applicationqianchuan.BatchWorksCommand{
 		PreflightID:  options.preflightID,
-		PlanTemplate: options.planTemplate, WorkURLs: append([]string(nil), options.workURLs...),
+		PlanTemplate: options.planTemplate, Items: parseQianchuanBatchItems(options.workURLs, options.planType, options.business),
 		Concurrency: options.concurrency, AuthAccountID: options.authAccountID,
 		IncludePayloads: options.includePayloads,
-		PlanType:        options.planType, Business: options.business,
-		Submit: options.submit,
+		Submit:          options.submit,
 	}, nil
+}
+
+func parseQianchuanBatchItems(values []string, planType, business string) []domainqianchuan.BatchItem {
+	result := make([]domainqianchuan.BatchItem, 0, len(values))
+	planType, business = strings.TrimSpace(planType), strings.TrimSpace(business)
+	for inputIndex, value := range values {
+		columns := strings.Split(value, "\t")
+		for index := range columns {
+			columns[index] = strings.TrimSpace(columns[index])
+		}
+		item := domainqianchuan.BatchItem{
+			InputIndex: inputIndex, WorkURL: columns[0], PlanType: planType, Business: business,
+		}
+		if match := qianchuanMarkdownLinkPattern.FindStringSubmatch(item.WorkURL); len(match) == 2 {
+			item.WorkURL = match[1]
+		}
+		if len(columns) == 2 && columns[1] != "" {
+			item.PlanType = columns[1]
+		}
+		if len(columns) >= 3 {
+			if columns[len(columns)-2] != "" {
+				item.PlanType = columns[len(columns)-2]
+			}
+			if columns[len(columns)-1] != "" {
+				item.Business = columns[len(columns)-1]
+			}
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func parseQianchuanRemoveOptions(args []string) (qianchuanRemoveOptions, applicationqianchuan.RemoveWorksCommand, error) {
@@ -324,6 +366,9 @@ func (runner Runner) runQianchuanPlan(
 			return runner.runQianchuanRemoveWorks(ctx, args, cwd, userHome, stateRoot, getenv, credentialsStore, stdout)
 		}
 	case "qc-plans":
+		if isQianchuanBindingAction(action) {
+			return runner.runQianchuanBinding(ctx, action, args, stateRoot, credentialsStore, stdout)
+		}
 		return runner.runQianchuanMutation(ctx, action, args, stateRoot, credentialsStore, stdout)
 	}
 	WriteDomainError(stdout, domain.NewError("invalid_arguments", "unsupported Qianchuan plan command", 2, nil))
@@ -396,6 +441,9 @@ func (runner Runner) runQianchuanBatchWorks(
 	}
 	result, executionErr := service.BatchWorks(ctx, command)
 	if result.Mode != "" {
+		if options.legacyInput && command.PreflightID == "" {
+			result.Warnings = append(result.Warnings, "legacy --work-url/--plan-type/--business input is deprecated; use structured batch items")
+		}
 		if err := WriteJSONDestination(stdout, result, options.out); err != nil {
 			return writeQianchuanOutputError(stdout, err)
 		}

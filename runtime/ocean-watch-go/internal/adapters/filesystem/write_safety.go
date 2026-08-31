@@ -461,9 +461,11 @@ func openManagedStateSubdirectory(
 	}
 	info, err := state.Lstat(name)
 	if errors.Is(err, os.ErrNotExist) && create {
-		err = state.Mkdir(name, 0o700)
-		if err == nil {
+		mkdirErr := state.Mkdir(name, 0o700)
+		if mkdirErr == nil || errors.Is(mkdirErr, os.ErrExist) {
 			info, err = state.Lstat(name)
+		} else {
+			err = mkdirErr
 		}
 	}
 	if err != nil {

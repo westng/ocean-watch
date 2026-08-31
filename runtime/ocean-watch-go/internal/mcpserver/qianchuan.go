@@ -11,17 +11,22 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
+	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 )
 
 var qianchuanPreflightIDPattern = regexp.MustCompile(`^qianchuan-preflight-[0-9]{8}t[0-9]{6}-[0-9a-f]{12}$`)
 
 type preflightInput struct {
-	PlanTemplate  string   `json:"plan_template"`
-	WorkURLs      []string `json:"work_urls"`
-	Concurrency   int      `json:"concurrency"`
-	AuthAccountID string   `json:"auth_account_id"`
-	PlanType      string   `json:"plan_type"`
-	Business      string   `json:"business"`
+	PlanTemplate  string          `json:"plan_template"`
+	Items         []preflightItem `json:"items"`
+	Concurrency   int             `json:"concurrency"`
+	AuthAccountID string          `json:"auth_account_id"`
+}
+
+type preflightItem struct {
+	WorkURL  string `json:"work_url"`
+	PlanType string `json:"plan_type"`
+	Business string `json:"business"`
 }
 
 type getPreflightInput struct {
@@ -53,6 +58,7 @@ type preflightTemplate struct {
 }
 
 type preflightGroup struct {
+	GroupID          string   `json:"group_id"`
 	CreatorID        string   `json:"creator_id"`
 	DouyinID         string   `json:"douyin_id,omitempty"`
 	CreatorName      string   `json:"creator_name,omitempty"`
@@ -64,6 +70,9 @@ type preflightGroup struct {
 	AlreadyPresent   []string `json:"already_present_item_ids"`
 	CompletedItemIDs []string `json:"completed_item_ids"`
 	Status           string   `json:"status"`
+	PlanType         string   `json:"plan_type"`
+	Business         string   `json:"business"`
+	ErrorCode        string   `json:"error_code,omitempty"`
 	Error            string   `json:"error,omitempty"`
 }
 
@@ -81,13 +90,35 @@ type preflightQueryFail struct {
 }
 
 type preflightPerformance struct {
-	LinkResolutionSeconds       float64                   `json:"link_resolution_seconds"`
-	CredentialResolutionSeconds float64                   `json:"credential_resolution_seconds"`
-	MaterialResolutionSeconds   float64                   `json:"material_resolution_seconds"`
-	PlanReconciliationSeconds   float64                   `json:"plan_reconciliation_seconds"`
-	TotalSeconds                float64                   `json:"total_seconds"`
-	OwnerHintCache              preflightOwnerHintMetrics `json:"owner_hint_cache"`
-	LinkMetadata                preflightLinkMetadata     `json:"link_metadata"`
+	OwnerHintCache preflightOwnerHintMetrics `json:"owner_hint_cache"`
+	LinkMetadata   preflightLinkMetadata     `json:"link_metadata"`
+	Stages         preflightStages           `json:"stages"`
+	Requests       preflightRequestCounts    `json:"requests"`
+}
+
+type preflightStages struct {
+	InputNormalizationSeconds   float64 `json:"input_normalization_seconds"`
+	LinkResolutionSeconds       float64 `json:"link_resolution_seconds"`
+	F2ResolutionSeconds         float64 `json:"f2_resolution_seconds"`
+	CredentialResolutionSeconds float64 `json:"credential_resolution_seconds"`
+	OfficialVerificationSeconds float64 `json:"official_verification_seconds"`
+	PlanInventorySeconds        float64 `json:"plan_inventory_seconds"`
+	GroupReconciliationSeconds  float64 `json:"group_reconciliation_seconds"`
+	MaterialDiffSeconds         float64 `json:"material_diff_seconds"`
+	SnapshotPersistenceSeconds  float64 `json:"snapshot_persistence_seconds"`
+	TotalRuntimeSeconds         float64 `json:"total_runtime_seconds"`
+}
+
+type preflightRequestCounts struct {
+	ShortLinkCount       int     `json:"short_link_count"`
+	F2Count              int     `json:"f2_count"`
+	OfficialRequestCount int64   `json:"official_request_count"`
+	RetryCount           int64   `json:"retry_count"`
+	CacheHitCount        int     `json:"cache_hit_count"`
+	CacheMissCount       int     `json:"cache_miss_count"`
+	BindingHitCount      int     `json:"binding_hit_count"`
+	BindingDriftCount    int     `json:"binding_drift_count"`
+	LockWaitMilliseconds float64 `json:"lock_wait_milliseconds"`
 }
 
 type preflightOwnerHintMetrics struct {
@@ -135,12 +166,16 @@ type preflightPresentation struct {
 }
 
 type getPreflightDecision struct {
+	GroupID        string `json:"group_id"`
 	CreatorID      string `json:"creator_id"`
+	PlanType       string `json:"plan_type"`
+	Business       string `json:"business"`
 	Action         string `json:"action"`
 	ExistingPlanID string `json:"existing_plan_id,omitempty"`
 }
 
 type getPreflightSnapshot struct {
+	SchemaVersion    int                    `json:"schema_version"`
 	PreflightID      string                 `json:"preflight_id"`
 	CreatedAt        string                 `json:"created_at"`
 	ExpiresAt        string                 `json:"expires_at"`
@@ -150,6 +185,7 @@ type getPreflightSnapshot struct {
 	ProductName      string                 `json:"product_name"`
 	ProductShortName string                 `json:"product_short_name"`
 	ProductIDs       []string               `json:"product_ids"`
+	BusinessDate     string                 `json:"business_date,omitempty"`
 	EligibleWorks    int                    `json:"eligible_works"`
 	SkippedWorks     int                    `json:"skipped_works"`
 	Decisions        []getPreflightDecision `json:"decisions"`
@@ -175,15 +211,25 @@ func (runtime Runtime) preflightQianchuanWorks(
 		return runtime.failureResult(started, requestID, "preflight_qianchuan_works", internalFailure()), nil
 	}
 	result, err := runtime.QianchuanPreflights.BatchWorks(ctx, applicationqianchuan.BatchWorksCommand{
-		PlanTemplate: input.PlanTemplate, WorkURLs: append([]string(nil), input.WorkURLs...),
+		PlanTemplate: input.PlanTemplate, Items: preflightBatchItems(input),
 		Concurrency: input.Concurrency, AuthAccountID: input.AuthAccountID,
-		PlanType: input.PlanType, Business: input.Business, Submit: false, IncludePayloads: false,
+		Submit: false, IncludePayloads: false,
 	})
 	if err != nil {
 		return runtime.failureResult(started, requestID, "preflight_qianchuan_works", mapQianchuanPreflightError(err)), nil
 	}
 	output := presentPreflightOutput(requestID, result)
 	return runtime.successResult(started, requestID, "preflight_qianchuan_works", output), nil
+}
+
+func preflightBatchItems(input preflightInput) []domainqianchuan.BatchItem {
+	items := make([]domainqianchuan.BatchItem, len(input.Items))
+	for index, item := range input.Items {
+		items[index] = domainqianchuan.BatchItem{
+			InputIndex: index, WorkURL: item.WorkURL, PlanType: item.PlanType, Business: item.Business,
+		}
+	}
+	return items
 }
 
 func (runtime Runtime) getQianchuanPreflight(
@@ -210,15 +256,13 @@ func (runtime Runtime) getQianchuanPreflight(
 func decodePreflightInput(raw json.RawMessage) (preflightInput, *toolFailure) {
 	input := preflightInput{Concurrency: applicationqianchuan.DefaultBatchConcurrency}
 	if err := decodeStrict(raw, &input); err != nil ||
-		!validText(input.PlanTemplate, 256, true) || len(input.WorkURLs) < 1 || len(input.WorkURLs) > 100 ||
-		input.Concurrency < 1 || input.Concurrency > 10 ||
-		!validText(input.AuthAccountID, 256, false) || !validText(input.PlanType, 128, false) ||
-		!validText(input.Business, 128, false) {
+		!validText(input.PlanTemplate, 256, true) || len(input.Items) < 1 || len(input.Items) > 100 ||
+		input.Concurrency < 1 || input.Concurrency > 10 || !validText(input.AuthAccountID, 256, false) {
 		failure := invalidArgumentFailure()
 		return preflightInput{}, &failure
 	}
-	for _, value := range input.WorkURLs {
-		if !validText(value, 2048, true) {
+	for _, item := range input.Items {
+		if !validText(item.WorkURL, 2048, true) || !validText(item.PlanType, 128, false) || !validText(item.Business, 128, false) {
 			failure := invalidArgumentFailure()
 			return preflightInput{}, &failure
 		}
@@ -329,14 +373,15 @@ func presentGetPreflightSnapshot(summary applicationqianchuan.BatchPreflightSumm
 	decisions := make([]getPreflightDecision, 0, len(summary.Decisions))
 	for _, decision := range summary.Decisions {
 		decisions = append(decisions, getPreflightDecision{
-			CreatorID: decision.CreatorID, Action: decision.Action, ExistingPlanID: decision.ExistingPlanID,
+			GroupID: decision.GroupID, CreatorID: decision.CreatorID, PlanType: decision.PlanType,
+			Business: decision.Business, Action: decision.Action, ExistingPlanID: decision.ExistingPlanID,
 		})
 	}
 	return getPreflightSnapshot{
-		PreflightID: summary.PreflightID, CreatedAt: summary.CreatedAt, ExpiresAt: summary.ExpiresAt,
+		SchemaVersion: summary.SchemaVersion, PreflightID: summary.PreflightID, CreatedAt: summary.CreatedAt, ExpiresAt: summary.ExpiresAt,
 		AdvertiserID: summary.AdvertiserID, TemplateID: summary.TemplateID, TemplateName: summary.TemplateName,
 		ProductName: summary.ProductName, ProductShortName: summary.ProductShortName,
-		ProductIDs: append([]string(nil), summary.ProductIDs...), EligibleWorks: summary.EligibleWorks,
+		ProductIDs: append([]string(nil), summary.ProductIDs...), BusinessDate: summary.BusinessDate, EligibleWorks: summary.EligibleWorks,
 		SkippedWorks: summary.SkippedWorks, Decisions: decisions, ReadyForSubmit: summary.ReadyForSubmit,
 	}
 }
@@ -349,11 +394,12 @@ func presentPreflightGroups(rows []applicationqianchuan.BatchGroupResult, failed
 			failure = "creator preflight did not complete"
 		}
 		result = append(result, preflightGroup{
-			CreatorID: row.AwemeID, DouyinID: row.DouyinID, CreatorName: row.CreatorName,
+			GroupID: row.GroupID, CreatorID: row.AwemeID, DouyinID: row.DouyinID, CreatorName: row.CreatorName,
 			ExistingPlanID: row.AdID, PlanName: row.PlanName, PlanStatus: row.PlanStatus,
 			ProductIDs: append([]string(nil), row.ProductIDs...), InputItemIDs: append([]string(nil), row.InputItemIDs...),
 			AlreadyPresent:   append([]string(nil), row.AlreadyPresent...),
-			CompletedItemIDs: append([]string(nil), row.CompletedItemIDs...), Status: row.Status, Error: failure,
+			CompletedItemIDs: append([]string(nil), row.CompletedItemIDs...), Status: row.Status,
+			PlanType: row.PlanType, Business: row.Business, ErrorCode: row.ErrorCode, Error: failure,
 		})
 	}
 	return result
@@ -362,10 +408,6 @@ func presentPreflightGroups(rows []applicationqianchuan.BatchGroupResult, failed
 func presentPreflightPerformance(value applicationqianchuan.BatchPerformance) preflightPerformance {
 	cache := value.OwnerHintCache
 	return preflightPerformance{
-		LinkResolutionSeconds:       value.LinkResolutionSeconds,
-		CredentialResolutionSeconds: value.CredentialResolutionSeconds,
-		MaterialResolutionSeconds:   value.MaterialResolutionSeconds,
-		PlanReconciliationSeconds:   value.PlanReconciliationSeconds, TotalSeconds: value.TotalSeconds,
 		OwnerHintCache: preflightOwnerHintMetrics{
 			Supplied: cache.Supplied, Eligible: cache.Eligible, Verified: cache.Verified, Stale: cache.Stale,
 			AuthorizedHintQueryCount:   cache.AuthorizedHintQueryCount,
@@ -374,6 +416,20 @@ func presentPreflightPerformance(value applicationqianchuan.BatchPerformance) pr
 			LoadedFromLinkMetadata: cache.LoadedFromLinkMetadata, Stored: cache.Stored,
 		},
 		LinkMetadata: preflightLinkMetadata{Provider: value.LinkMetadata.Provider, Enabled: value.LinkMetadata.Enabled},
+		Stages: preflightStages{
+			InputNormalizationSeconds: value.Stages.InputNormalizationSeconds, LinkResolutionSeconds: value.Stages.LinkResolutionSeconds,
+			F2ResolutionSeconds: value.Stages.F2ResolutionSeconds, CredentialResolutionSeconds: value.Stages.CredentialResolutionSeconds,
+			OfficialVerificationSeconds: value.Stages.OfficialVerificationSeconds, PlanInventorySeconds: value.Stages.PlanInventorySeconds,
+			GroupReconciliationSeconds: value.Stages.GroupReconciliationSeconds, MaterialDiffSeconds: value.Stages.MaterialDiffSeconds,
+			SnapshotPersistenceSeconds: value.Stages.SnapshotPersistenceSeconds, TotalRuntimeSeconds: value.Stages.TotalRuntimeSeconds,
+		},
+		Requests: preflightRequestCounts{
+			ShortLinkCount: value.Requests.ShortLinkCount, F2Count: value.Requests.F2Count,
+			OfficialRequestCount: value.Requests.OfficialRequestCount, RetryCount: value.Requests.RetryCount,
+			CacheHitCount: value.Requests.CacheHitCount, CacheMissCount: value.Requests.CacheMissCount,
+			BindingHitCount: value.Requests.BindingHitCount, BindingDriftCount: value.Requests.BindingDriftCount,
+			LockWaitMilliseconds: value.Requests.LockWaitMilliseconds,
+		},
 	}
 }
 

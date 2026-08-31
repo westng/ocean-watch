@@ -42,9 +42,23 @@ func TestParseQianchuanBatchReadsRuntimePlanNameFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if options.planType != "随手po" || options.business != "刘研" ||
-		command.PlanType != "随手po" || command.Business != "刘研" {
+	if options.planType != "随手po" || options.business != "刘研" || len(command.Items) != 1 ||
+		command.Items[0].PlanType != "随手po" || command.Items[0].Business != "刘研" {
 		t.Fatalf("runtime plan-name fields changed: options=%#v command=%#v", options, command)
+	}
+}
+
+func TestParseQianchuanBatchRowsProducesStructuredItems(t *testing.T) {
+	items := parseQianchuanBatchItems([]string{
+		"[https://v.douyin.com/bad/:code](https://v.douyin.com/abc/)\t真人口播营销\t测试负责人",
+		"4.87 口令 https://v.douyin.com/xyz/ 复制打开\t9386\t暖身,口播\t刘研",
+		"https://v.douyin.com/only/",
+	}, "", "")
+	if len(items) != 3 || items[0].InputIndex != 0 || items[0].WorkURL != "https://v.douyin.com/abc/" ||
+		items[0].PlanType != "真人口播营销" || items[0].Business != "测试负责人" ||
+		items[1].PlanType != "暖身,口播" || items[1].Business != "刘研" ||
+		items[2].PlanType != "" || items[2].Business != "" {
+		t.Fatalf("batch row parsing changed: %#v", items)
 	}
 }
 
