@@ -56,8 +56,8 @@ python3 scripts/version_tag.py release-check --latest-tag "${latest_tag}"
 准备和可复现核对：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
 python3 scripts/validate_distribution.py
 ```
 
@@ -68,8 +68,8 @@ python3 scripts/validate_distribution.py
 ## 质量门
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./...
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go vet ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go vet ./...
 python3 -m unittest discover -s f2 -p 'test_resolve.py' -v
 python3 scripts/version_tag.py check
 python3 scripts/validate_distribution.py

@@ -309,7 +309,7 @@ func build(moduleRoot, destination, version, distribution string, value target) 
 	command.Dir = moduleRoot
 	environment := append([]string(nil), os.Environ()...)
 	environment = setEnvironment(environment, "CGO_ENABLED", "0")
-	environment = setEnvironment(environment, "GOTOOLCHAIN", "go1.26.5")
+	environment = setEnvironment(environment, "GOTOOLCHAIN", "go1.27.0")
 	environment = setEnvironment(environment, "GOOS", value.GOOS)
 	environment = setEnvironment(environment, "GOARCH", value.GOARCH)
 	environment = setEnvironment(environment, "TZ", "UTC")

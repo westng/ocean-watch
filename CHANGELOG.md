@@ -23,6 +23,7 @@
 
 ### 变更
 
+- Go 工具链从 `1.26.5` 升级到 `1.27.0`，全仓库保持单一版本：`go.mod` 的 `go` 指令、`cmd/build-runtime` 内层用于保证产物逐字节复现的 `GOTOOLCHAIN`、两个 GitHub Actions workflow 的 `go-version` 以及全部文档命令示例同步对齐。`go` 指令是最低版本要求，因此从源码构建现在需要 Go `1.27.0` 及以上；编译器变化使五平台二进制与 `runtime-manifest.json` 哈希一并更新，本次不改变任何运行时行为或 Host 工具合同。
 - 全部 17 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；两个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
 - 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，因为 Claude 下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
 - 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。

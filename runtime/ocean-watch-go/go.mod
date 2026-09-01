@@ -1,6 +1,6 @@
 module github.com/westng/ocean-watch/runtime/ocean-watch-go
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0

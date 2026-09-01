@@ -25,13 +25,13 @@ Python discovery under `internal/adapters/python` exists solely to run pinned F2
 ## Development
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go test ./...
-GOTOOLCHAIN=go1.26.5 go vet ./...
-GOTOOLCHAIN=go1.26.5 go run ./cmd/ocean-watch --help
-GOTOOLCHAIN=go1.26.5 go run ./cmd/mcp-probe
-GOTOOLCHAIN=go1.26.5 go run ./cmd/mcp-probe --binary ../../bin/ocean-watch-launcher --proxy-root ../..
-GOTOOLCHAIN=go1.26.5 go run ./cmd/build-runtime --all
-GOTOOLCHAIN=go1.26.5 go run ./cmd/build-runtime --all --verify
+GOTOOLCHAIN=go1.27.0 go test ./...
+GOTOOLCHAIN=go1.27.0 go vet ./...
+GOTOOLCHAIN=go1.27.0 go run ./cmd/ocean-watch --help
+GOTOOLCHAIN=go1.27.0 go run ./cmd/mcp-probe
+GOTOOLCHAIN=go1.27.0 go run ./cmd/mcp-probe --binary ../../bin/ocean-watch-launcher --proxy-root ../..
+GOTOOLCHAIN=go1.27.0 go run ./cmd/build-runtime --all
+GOTOOLCHAIN=go1.27.0 go run ./cmd/build-runtime --all --verify
 ```
 
 Tests use synthetic fixtures and must not read real credentials, business configuration, or online APIs.

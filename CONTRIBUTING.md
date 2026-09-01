@@ -4,7 +4,7 @@
 
 ## 开发环境
 
-- Go `1.26.5`
+- Go `1.27.0`
 - Python `3.10+`，仅用于 F2 包装层、版本和分发工具
 - F2 `0.0.1.7`
 
@@ -34,8 +34,8 @@ python3 -m pip install -e ".[dev]"
 ## 验证
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./...
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go vet ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go vet ./...
 python3 -m unittest discover -s f2 -p 'test_resolve.py' -v
 python3 scripts/version_tag.py check
 python3 scripts/validate_distribution.py
