@@ -32,10 +32,10 @@
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "7450176e663c791a7d5357137e1396485ab661fcaedf2be5f5ea5ed2f9ef4619",
-    "ocean-watch_darwin_arm64": "8c7fcf37336a272295dab6b61d9f3ae86be4f5cdc9c4066122efacc7bea26bdb",
-    "ocean-watch_linux_amd64": "d4b6e409425c4fe56b3c86753d638e05b306e371f1feb10f2851d6b420b4e11e",
-    "ocean-watch_linux_arm64": "537c5a85fc7df9bb78695732741fee5ba9cb671642eb10261b90cea3613364e2",
-    "ocean-watch_windows_amd64.exe": "178524b32ef7ddfc01c5204f4f3176ee5b2b041444eac74191fdbed0d5719f26"
+    "ocean-watch_darwin_amd64": "7acfdbecbcb8e3499000ac6e1de36cf2a27e08d6ff831d3d59ae2786ab232e98",
+    "ocean-watch_darwin_arm64": "0e7d52fed68e148c2de8c0ddcdc1e2faf87ffa3fa89c8b82f213ccab7e96d679",
+    "ocean-watch_linux_amd64": "57646496f992597397f1e4dd0d7ef46b5d2add97915f653b9ec97ae6595928c0",
+    "ocean-watch_linux_arm64": "736a5a16200011bd1cbf9c9c8afc433e9f11a61945e39661a1686acb180fa3fd",
+    "ocean-watch_windows_amd64.exe": "03f9219e49b5a6e307c49ae09972dc1c445199af6892f9d590110f6880f1db27"
   }
 }

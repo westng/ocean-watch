@@ -89,7 +89,7 @@ func TestQianchuanUnifiedGeneratedServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope.StartTime, scope.EndTime, scope.Fields = "2026-08-01", "2026-08-02", []string{"stat_cost"}
+	scope.Fields = []string{"stat_cost"}
 	uni, err := adapter.FetchUniPromotion(ctx, scope)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,8 @@ func TestQianchuanUnifiedGeneratedServices(t *testing.T) {
 		allCall.Query.Get("start_time") != "2026-08-01 00:00:00" ||
 		allCall.Query.Get("adlab_scene") != "OVERALL_PROJECT" || allCall.Query.Get("data_period") != "ALL_DATA" ||
 		uniCall.Path != "/open_api/v1.0/qianchuan/report/uni_promotion/get/" ||
-		uniCall.Query.Get("start_date") != "2026-08-01" ||
+		uniCall.Query.Get("start_date") != "2026-08-01 00:00:00" ||
+		uniCall.Query.Get("end_date") != "2026-08-02 23:59:59" ||
 		roomCall.Query.Get("room_id") != "3000000000000001" || roomCall.Query.Get("dimension") != "TIME_GRANULARITY_HOURLY" ||
 		!strings.Contains(roomCall.Query.Get("filtering"), "ECP_AWEME") || !strings.Contains(roomCall.Query.Get("filtering"), "SMART_BID_CUSTOM") ||
 		authorCall.Query.Get("aweme_id") != "4000000000000001" || authorCall.Query.Get("marketing_goal") != "ALL" {

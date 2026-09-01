@@ -48,6 +48,7 @@
 
 ### 修复
 
+- 修复千川全域账户维度报表把 `start_date` 与 `end_date` 按裸日期发送、被官方按参数不合规拒绝的问题；`/v1.0/qianchuan/report/uni_promotion/get/` 要求 `YYYY-MM-DD HH:MM:SS`，现在与 `all_promotion` 一致补齐 `00:00:00` 与 `23:59:59`。原先只有 `all_promotion` 分支补时间后缀，因此 `report_qianchuan_account` 的 `scope=uni`（以及 CLI `qc-reports uni-account`）对任何账户都恒定失败，并被上游错误映射笼统报成官方查询故障。适配器与应用层测试此前把裸日期断言固化为契约，现在改为锁定带时间格式，并补充 `end_date`、`marketing_goal` 与 `order_platform` 的默认值断言。
 - 修复千川预检快照保存时把模板中的大整数商品 ID 经 `float64` 重编码而改变精度、同时让模板 JSON 字段顺序参与快照指纹，导致预检成功后用精确 `preflight_id` 立即读取仍返回 `PREFLIGHT_INVALID` 的问题；Operation Journal 现在保留任意长度 JSON 数字，快照指纹按模板 JSON 语义规范化。
 - 修复干净 Git checkout 中 Unix 稳定启动器丢失执行位、Windows 启动脚本被行尾转换后与签名清单哈希不一致，以及代理热切换测试在 Windows 上错误断言仅 Unix 支持的 Host 软链接，导致三平台 CI 阻断的问题。
 - 修复桌面客户端在运行期间通过 CLI 重装 Plugin 后仍缓存已删除的旧版本目录，导致新任务无法加载 Skill 与 MCP、错误报告工具缺失的问题；稳定代理在新版完整 Host 资源通过清单哈希且 MCP 可初始化后，为被安装器删除的旧缓存路径建立受限兼容别名。兼容工具合同可在当前任务切换 Runtime；不兼容工具/Skill 合同仅让当前任务保留旧 Runtime，不再把新版全局标记为坏候选，由新任务加载新版 Host，均无需退出或重启客户端。两个 Skill 同时禁止通过首屏工具枚举、缓存或 Memory 判断工具缺失，命中高频意图后必须直接调用对应 MCP。

@@ -312,7 +312,12 @@ func TestQianchuanUnifiedReportRoutingAndPagination(t *testing.T) {
 	if len(reader.allRequests) != 1 || len(reader.uniRequests) != 1 ||
 		reader.allRequests[0].StartTime != "2026-08-01 00:00:00" ||
 		reader.allRequests[0].AdlabScene != "OVERALL_PROJECT" || reader.allRequests[0].DataPeriod != "ALL_DATA" ||
-		reader.uniRequests[0].StartTime != "2026-08-01" || all.Endpoint != QianchuanAllPromotionEndpoint ||
+		reader.allRequests[0].EndTime != "2026-08-02 23:59:59" ||
+		reader.uniRequests[0].StartTime != "2026-08-01 00:00:00" ||
+		reader.uniRequests[0].EndTime != "2026-08-02 23:59:59" ||
+		reader.uniRequests[0].MarketingGoal != "ALL" ||
+		reader.uniRequests[0].OrderPlatform != "QIANCHUAN" ||
+		all.Endpoint != QianchuanAllPromotionEndpoint ||
 		uni.Endpoint != QianchuanUniPromotionEndpoint {
 		t.Fatalf("aggregate report routing changed: all=%#v uni=%#v", reader.allRequests, reader.uniRequests)
 	}

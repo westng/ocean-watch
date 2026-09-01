@@ -218,14 +218,13 @@ func (service Service) qianchuanAggregate(ctx context.Context, query QianchuanAg
 	endpoint, mode := QianchuanUniPromotionEndpoint, "qianchuan_uni_account_report"
 	request := portreports.AggregateRequest{
 		AdvertiserID: query.AdvertiserID, AccessToken: lease.AccessToken,
-		StartTime: start, EndTime: end, Fields: query.Fields,
+		StartTime: start + " 00:00:00", EndTime: end + " 23:59:59", Fields: query.Fields,
 		AdlabScene: query.AdlabScene, DataPeriod: query.DataPeriod,
 		MarketingGoal: query.MarketingGoal, OrderPlatform: query.OrderPlatform,
 	}
 	var aggregate domainreports.QianchuanAggregate
 	if all {
 		endpoint, mode = QianchuanAllPromotionEndpoint, "qianchuan_all_promotion_account_report"
-		request.StartTime, request.EndTime = start+" 00:00:00", end+" 23:59:59"
 		aggregate, err = reader.FetchAllPromotion(ctx, request)
 	} else {
 		aggregate, err = reader.FetchUniPromotion(ctx, request)
