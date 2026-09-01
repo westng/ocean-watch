@@ -7,7 +7,7 @@
     "sha256": "84e5f34b2e2cd05ac7d31cbc76861f753af3fdbc5b9731e816faa220ce4fca26"
   },
   "resources": {
-    ".claude-plugin/plugin.json": "adda3be223dc20fea63bef08eef9e7bd0e8b0f340d7bf849cfa9c1566eb29d0b",
+    ".claude-plugin/plugin.json": "bf88988696f228ce3913c6285a1c08a67c8e8848a54e17f82cf689d91a7a0e2a",
     ".mcp.json": "f80bd432bd313c11e965290d6c8bdb1be515f26c361288e8fe0922109738d475",
     "bin/ocean-watch-launcher": "02dc307e25750bb94ac39d45b1a328d9592aee160cf546d71404e4eaaa4c5a15",
     "f2/resolve.py": "d2229d4a64fdd90cd58bd5c53610352d8eec64fb40deaca658be99e3862968fb",

@@ -47,8 +47,18 @@ def validate_claude_manifest():
         r"[0-9]+\.[0-9]+\.[0-9]+(?:\+codex\.[A-Za-z0-9.-]+)?", str(manifest.get("version") or "")
     ) is None:
         fail("Claude plugin manifest version is invalid")
-    if "mcpServers" in manifest:
-        fail("Claude plugin manifest must inherit the default ./.mcp.json server")
+    servers = manifest.get("mcpServers")
+    if not isinstance(servers, dict) or set(servers) != {"ocean-watch"}:
+        fail("Claude plugin manifest must declare only the ocean-watch server")
+    server = servers["ocean-watch"]
+    root = "${CLAUDE_PLUGIN_ROOT}"
+    if server != {
+        "command": f"{root}/bin/ocean-watch-launcher",
+        "args": ["mcp", "proxy", "--stdio", "--plugin-root", root],
+    }:
+        fail("Claude MCP server must resolve the stable proxy from the plugin root")
+    if server["command"].lower() in {"sh", "bash", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"}:
+        fail("Claude MCP server must not start through a shell")
     marketplace_path = directory / "marketplace.json"
     marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
     if marketplace.get("name") != "ocean-watch":

@@ -6,7 +6,7 @@
 
 ### 新增
 
-- 同一仓库现在同时作为 Codex 插件和 Claude Code 插件分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单故意不声明 `mcpServers` 以继承默认 `./.mcp.json`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、禁止内联 `mcpServers`、组/其他写位）。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
+- 同一仓库现在同时作为 Codex 插件和 Claude Code 插件分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
 - 新增 Host 中立状态根 `OCEAN_WATCH_HOME`，优先级为 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。默认值不变，已有 Codex 安装零迁移；两个 Host 共用同一个根，因此 OAuth 只需授权一次——官方刷新响应会替换已存储的 refresh token，各存一份会互相作废凭据。
 - 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，Host 工具合同仍为 17 个。
 - 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。

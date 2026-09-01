@@ -102,7 +102,8 @@ Marketplace 安装直接消费 Git 快照中的 `.codex-plugin/bin/`。Release �
 同一个仓库同时作为 Codex 插件和 Claude Code 插件分发，两边共用一套 Go Runtime、一份状态和同一组 Skill：
 
 - Codex 读 `.codex-plugin/plugin.json`，其中 `mcpServers` 显式指向 `./.mcp.json`。
-- Claude Code 读 `.claude-plugin/plugin.json`。该清单**故意不写** `mcpServers`，以继承默认的 `./.mcp.json`；两处同时声明同名 server 会重复注册。`.claude-plugin/marketplace.json` 的 `source` 为 `"./"`，使插件指向 marketplace 自身那一份克隆，而不是再克隆一次仓库。
+- Claude Code 读 `.claude-plugin/plugin.json`。该清单**必须内联** `mcpServers`，并用 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`：Claude 虽然会在缺省时继承插件根的 `./.mcp.json`，但不把其中的相对路径重写到插件根，而是相对用户工作目录解析，因此普通用户在仓库外一律 `ENOENT` 而连不上。内联同名 server 是**替换**而非叠加该缺省发现，只注册一次。`.claude-plugin/marketplace.json` 的 `source` 为 `"./"`，使插件指向 marketplace 自身那一份克隆，而不是再克隆一次仓库。
+- 在本仓库内开发时，项目级 `./.mcp.json` 会与插件级注册并存，形成项目和插件两个作用域的同名 server。这只影响仓库内的开发会话，不影响任何仓库外的普通用户安装；验收插件级路径必须在仓库目录之外进行。
 - `.claude-plugin/plugin.json` 与 `.mcp.json`、启动器和两套 Skill 一样纳入 `runtime-manifest.json` 的 SHA-256 绑定。
 - 工具 `outputSchema` 必须在顶层声明 `"type":"object"`，且 `"#/$defs/..."` 引用必须能从该顶层解析。MCP 规范和 Go SDK 都接受裸 `oneOf`，但 Claude Code 客户端会拒绝，因此两个 Host 共用的载荷取更严的那一侧。
 - Claude Code 的安装布局是 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`（版本目录里的 `+` 被改写为 `-`）。版本化槽位、完整性校验、拒绝与原子切换在两个 Host 上都照常生效，但候选发现只扫描 `$CODEX_HOME/plugins/cache/`，不扫描 Claude 的缓存；Claude 侧安装因此走已验证的 `PluginRoot` 回退路径，升级插件后需要新任务而不是同一会话热切换。

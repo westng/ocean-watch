@@ -15,5 +15,11 @@
     "advertising",
     "campaign-monitoring"
   ],
-  "skills": "./skills"
+  "skills": "./skills",
+  "mcpServers": {
+    "ocean-watch": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/ocean-watch-launcher",
+      "args": ["mcp", "proxy", "--stdio", "--plugin-root", "${CLAUDE_PLUGIN_ROOT}"]
+    }
+  }
 }
