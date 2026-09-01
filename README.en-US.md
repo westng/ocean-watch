@@ -4,10 +4,11 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex</p>
+<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex and Claude Code</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
+  <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-Plugin-D97757" alt="Claude Code Plugin"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-Runtime-00ADD8?logo=go&amp;logoColor=white" alt="Go Runtime"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-5A67D8" alt="MCP stdio"></a>
   <a href="https://www.jsonrpc.org/"><img src="https://img.shields.io/badge/JSON--RPC-Protocol-6B7280" alt="JSON-RPC Protocol"></a>
@@ -34,7 +35,7 @@
 
 [中文](README.md) | English
 
-Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation.
+Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex or Claude Code in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for both Hosts, sharing a single Go runtime, one local state root, and the same Skills.
 
 ## What It Does
 
@@ -73,7 +74,7 @@ claude plugin install ocean-watch@ocean-watch
 
 Both hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
 
-After the first installation, start a task and describe the desired outcome. Later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting Codex. Only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
+After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
 
 ## Ask It Naturally
 
@@ -100,10 +101,11 @@ See [Configuration](docs/configuration.md) and [Security](SECURITY.md) for detai
 ## Runtime and Support
 
 ```text
-Codex → Skill → local stdio MCP ─┐
-             └→ run/run.cmd ─────┴→ Go Application Service → official Ocean Engine API
-                                                        └→ Python 3.10+ → F2 0.0.1.7
-                                                           Douyin public metadata only
+Codex ───────┐
+Claude Code ─┴→ Skill → local stdio MCP ─┐
+                    └→ run/run.cmd ─────┴→ Go Application Service → official Ocean Engine API
+                                                                └→ Python 3.10+ → F2 0.0.1.7
+                                                                   Douyin public metadata only
 ```
 
 - Advertising logic has one Go Application/Domain implementation. MCP and CLI are two transports over that implementation, not separate business runtimes or silent fallback paths.
@@ -112,7 +114,8 @@ Codex → Skill → local stdio MCP ─┐
 - Read-only `get_capabilities` exposes all 76 CLI capabilities with channel, side-effect, and submit-gate metadata. Each Skill routes common intent directly and queries this catalog only once for an uncommon already-confirmed Ocean Watch goal; it does not scan the repository or plugin caches.
 - MCP shortens the natural-language-to-preflight path and stabilizes structured results. It does not bypass official authorization, ownership, product-match, or plan-reconciliation reads, whose real latency remains part of preflight.
 - The Plugin bundles CLI binaries for macOS Intel and Apple Silicon, Linux x86_64 and ARM64, and Windows x86_64. Ordinary users do not need Go.
-- macOS and Linux MCP use the stable POSIX launcher. The current Codex Plugin/MCP manifest has no operating-system command branch, so Windows is declared as CLI support only rather than falsely claiming Windows MCP acceptance.
+- macOS and Linux MCP use the stable POSIX launcher. Neither Host's Plugin/MCP manifest has an operating-system command branch, so Windows is declared as CLI support only rather than falsely claiming Windows MCP acceptance.
+- Versioned runtime hot upgrades in the stable proxy rely on Codex's version-directory layout. Claude Code installs a single repository snapshot, so integrity verification and signed slots still apply but there is no automatic hot upgrade: start a new task after updating the plugin.
 - Python participates only in public metadata resolution for Qianchuan work links. It does not own authorization, accounts, templates, plans, or reports.
 
 See [Architecture](docs/architecture.md) for current implementation boundaries.

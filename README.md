@@ -4,10 +4,11 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">面向 Codex 的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
+<p align="center">面向 Codex 与 Claude Code 的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
+  <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-Plugin-D97757" alt="Claude Code Plugin"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-Runtime-00ADD8?logo=go&amp;logoColor=white" alt="Go Runtime"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-5A67D8" alt="MCP stdio"></a>
   <a href="https://www.jsonrpc.org/"><img src="https://img.shields.io/badge/JSON--RPC-Protocol-6B7280" alt="JSON-RPC Protocol"></a>
@@ -34,7 +35,7 @@
 
 中文 | [English](README.en-US.md)
 
-Ocean Watch 让投放人员直接在 Codex 中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。
+Ocean Watch 让投放人员直接在 Codex 或 Claude Code 中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为两个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
 
 ## 能做什么
 
@@ -73,7 +74,7 @@ claude plugin install ocean-watch@ocean-watch
 
 两个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
 
-首次安装后新建任务并描述目标。后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启 Codex；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
+首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
 
 ## 可以直接这样问
 
@@ -100,10 +101,11 @@ claude plugin install ocean-watch@ocean-watch
 ## 运行方式与支持范围
 
 ```text
-Codex → Skill → 本地 stdio MCP ─┐
-             └→ run/run.cmd ────┴→ Go Application Service → 巨量引擎官方 API
-                                                       └→ Python 3.10+ → F2 0.0.1.7
-                                                          仅解析抖音公开作品元数据
+Codex ───────┐
+Claude Code ─┴→ Skill → 本地 stdio MCP ─┐
+                    └→ run/run.cmd ────┴→ Go Application Service → 巨量引擎官方 API
+                                                              └→ Python 3.10+ → F2 0.0.1.7
+                                                                 仅解析抖音公开作品元数据
 ```
 
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
@@ -112,7 +114,8 @@ Codex → Skill → 本地 stdio MCP ─┐
 - `get_capabilities` 只读返回 76 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
 - MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
-- macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前 Codex Plugin/MCP 清单没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。
+- macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前两个 Host 的 Plugin/MCP 清单都没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。
+- 稳定代理的版本化 Runtime 热升级依赖 Codex 的版本目录布局。Claude Code 安装的是单个仓库快照，因此完整性校验与签名槽位仍生效，但没有自动热升级：更新插件后重开任务即可。
 - Python 只参与千川作品链接的公开元数据解析，不承载授权、账户、模板、计划或报表逻辑。
 
 技术边界与当前实现见[架构说明](docs/architecture.md)。
