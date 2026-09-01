@@ -1,16 +1,16 @@
 # Ocean Watch Plugin V3 架构整改实施计划
 
-> 文档状态：实施中；W0–W7 已完成；W8 候选构建安装已完成且等待新任务 Host 加载检查；W9 提交推送与 CI 已完成（`7ab830b`，六个 job 全绿）；W10 真实验收仍待执行
+> 文档状态：实施中；W0–W7 代码与文档已落地；W8 与 W10 的验收推迟，待双 Host 改动提交推送且 CI 全绿后按本文门禁统一重做
 >
 > 文档属性：AI 辅助实施计划与交付 Gate
 >
 > 权威边界：本文规定 V3 的实施顺序和验收门禁，不代表功能已经实现；目标合同以 [`../designs/ocean-watch-plugin-target-architecture-v3.md`](../designs/ocean-watch-plugin-target-architecture-v3.md) 为准，当前行为以代码、测试、Plugin 清单、Skill 和正式文档为准
 >
-> 证据核实日期：2026-08-18
+> 证据约定：本文不保留日期化核验记录。验收结论必须在验收当时重新执行门禁得出，不得引用历史记录
 >
 > 分支约束：仅使用现有 `main`，不创建其他分支
 >
-> 当前授权：W0–W7 代码与文档、W8 候选构建和本地安装、W9 提交与推送已获授权并执行；不创建其他分支。真实业务验收、Tag、Release 和 Marketplace 发布仍分别需要明确授权
+> 当前授权：W0–W7 代码与文档、W8 候选构建与本地安装已获授权；不创建其他分支。提交、推送、真实业务验收、Tag、Release 和 Marketplace 发布仍分别需要明确授权，不得相互推定
 
 ## 1. 实施准入结论
 
@@ -81,7 +81,7 @@ W0–W7 是代码实现；W8 需要构建和本地安装授权；W9 需要分别
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/contracts ./internal/mcpserver
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/contracts ./internal/mcpserver
 python3 scripts/validate_distribution.py
 ```
 
@@ -116,7 +116,7 @@ python3 scripts/validate_distribution.py
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/domain/qianchuan ./internal/application/plans/qianchuan
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/domain/qianchuan ./internal/application/plans/qianchuan
 ```
 
 ### 5.3 Gate
@@ -157,7 +157,7 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/domain/qianchu
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/adapters/filesystem ./internal/application/plans/qianchuan ./internal/bootstrap ./internal/cli ./internal/contracts
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/adapters/filesystem ./internal/application/plans/qianchuan ./internal/bootstrap ./internal/cli ./internal/contracts
 ```
 
 ### 6.4 Gate
@@ -190,7 +190,7 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/adapters/files
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan
 ```
 
 ### 7.3 Gate
@@ -228,7 +228,7 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/pl
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan ./internal/domain/plans ./internal/adapters/filesystem
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan ./internal/domain/plans ./internal/adapters/filesystem
 ```
 
 ### 8.3 Gate
@@ -265,8 +265,8 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/pl
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/mcpserver ./internal/cli
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/mcp-probe
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/mcpserver ./internal/cli
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/mcp-probe
 ```
 
 ### 9.4 Gate
@@ -314,7 +314,7 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/mcp-probe
 聚焦验证命令：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan ./internal/adapters/filesystem ./internal/platform/requestcontrol ./internal/performance
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/application/plans/qianchuan ./internal/adapters/filesystem ./internal/platform/requestcontrol ./internal/performance
 ```
 
 ### 10.6 Gate
@@ -322,13 +322,6 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/pl
 - 正确性测试先通过，再看速度；
 - 性能改动没有放宽官方校验；
 - 无重复缓存、锁或请求控制实现。
-
-### 10.7 当前核验记录（2026-08-18）
-
-- owner hint 分层解析已先完成短链解析和缓存读取，热缓存跳过对应 F2，冷缓存/缓存错误只对缺失项回退 F2；官方核验路径保持不变。
-- dry-run 不再调用广告主写锁；submit、删除和计划设置仍使用同一广告主锁族。批量读取工厂已注入与普通千川读取相同的跨调用请求控制和 `Retry-After` 冷却。
-- 结果新增独立组件 `stages` 与 `requests` 观测；并行组件允许重叠且不相加伪造总墙钟。解析结果进入缓存/F2 分层前复制切片，定向 race 已覆盖并通过。
-- 本地验证已通过：`go test ./...`、`go vet ./...`、MCP stdio probe、分发校验和定向 `go test -race`。尚未执行构建、安装、提交、推送或远端 CI。
 
 ## 11. W7：Skill、正式文档与旧路径退役
 
@@ -369,17 +362,11 @@ GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./internal/application/pl
 - import boundary、全量 Go 测试、静态检查和文档链接检查通过；
 - Skill 语义路由 fixture 覆盖营销/千川全部高频意图。
 
-### 11.5 当前核验记录（2026-08-18）
-
-- MCP 预检只接受结构化 `items[]`；CLI 旧参数仅保留带弃用提示的 Transport 兼容层；Snapshot v1 只读摘要、禁止提交。
-- 旧累计窗口性能字段已从 Application、MCP 输出和 JSON Schema 删除；`stages` 记录允许并行重叠的独立组件耗时，`total_runtime_seconds` 保持唯一端到端 Runtime 墙钟。
-- 正式文档、Skill、`CHANGELOG.md` 和 AI 文档状态已同步；完整本地验证结果以本次重新执行的 W7 Gate 为准。
-
-工作包总验证命令：
+### 11.5 工作包总验证命令
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go test ./...
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go vet ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go vet ./...
 python3 scripts/version_tag.py check
 python3 scripts/validate_distribution.py
 python3 -m unittest discover -s f2 -p "test_resolve.py" -v
@@ -387,15 +374,7 @@ python3 -m unittest discover -s f2 -p "test_resolve.py" -v
 
 ## 12. W8：候选构建、安装与本地冒烟
 
-此工作包的构建和安装已获用户单独授权；新任务 Host 加载检查仍待执行。
-
-### 12.0 当前核验记录（2026-08-18）
-
-- 已用标准 cachebuster 生成候选并完成五平台构建；`build-runtime --all --verify` 对五个平台产物及 Runtime manifest 逐字节验证通过。
-- repo-local Marketplace 已注册，候选已通过 Skill、Plugin、版本、分发、launcher 和 MCP stdio probe 后安装；Codex 不需要退出或重启。
-- 安装命令已自动清理旧 Plugin 缓存槽；另一个指向历史仓库的全局 `ads-plan-monitor` Skill 符号链接已移入废纸篓，目标仓库未删除。
-- 当前安装前任务按预期不热加载新的 Host 工具合同；仍需在新任务中确认 namespaced Skill 和 `items[]` Schema 的 Host 加载，之后才能完成 W8。
-- MCP probe 已增加输入 Schema 断言并移除内部旧 `work_urls` 调用，安装冒烟现在会阻止旧顶层预检字段回归。
+此工作包的构建和安装已获用户单独授权。
 
 ### 12.1 构建门禁
 
@@ -408,8 +387,8 @@ python3 -m unittest discover -s f2 -p "test_resolve.py" -v
 执行命令以 `docs/releasing.md` 当前规则为准，至少包括：
 
 ```bash
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
-GOTOOLCHAIN=go1.26.5 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
 python3 scripts/validate_distribution.py
 ```
 
@@ -519,13 +498,13 @@ V3 整改完成必须同时具备：
 
 ## 17. 当前下一步
 
-W9 已完成：提交 `7ab830b`、推送 `06f529f..7ab830b` 到 `origin/main`、该精确 SHA 的六个 CI job 全部 success（Go 三平台、F2 Python 3.10/3.12、Plugin contracts）。推送前核对的线上最新非草稿非预发布 Release 为 v1.0.9（2026-08-12，Tag `v1.0.9`），本次不升级正式版本，全部改动归入 `CHANGELOG.md` 的 `## 未发布`。
+本节只记录待办与边界，不保留历史核验记录。任何「已通过」结论都必须在验收当时重新执行门禁得出，不得引用本文档过去的日期化记录。
 
-已安装快照 `1.0.9+codex.20260818123547` 与仓库当前状态逐项一致（五平台二进制、`runtime-manifest.json`、两个 `SKILL.md`、`.mcp.json`），因此 W8 的 Host 加载检查不需要重装或重建候选。
+W8 与 W10 的验收推迟，待双 Host 改动提交推送且 CI 全绿后统一重做。届时的验收面同时包含 V3 改动与双 Host 分发改动：
 
-剩余两项都需要用户在新任务中参与，实施者在当前任务内无法完成：
+1. W8：按 12.1 构建门禁与 12.2 本地升级冒烟重新执行，并在新建 Codex 任务中确认 Host 加载当前工具合同与两个 Skill。
+2. W10：按 14.1 与 14.2 执行，需用户提供原 25 条真实链接作为现场输入，全程只读、禁止创建或修改计划；真实链接不写入日志、fixture 或 Git。
 
-1. W8 收尾：在新建 Codex 任务中确认 namespaced Skill 与 `items[]` Schema 的 Host 加载。Host 工具合同在任务启动时固定，当前任务无法观察新合同。
-2. W10 真实验收：前置条件（精确 SHA CI 全绿）已满足，需用户提供原 25 条真实链接作为现场输入，全程只读、禁止创建或修改计划。
+已知未修缺陷（需单独授权后处理）：当记录槽位的工具合同与发起方代理不一致时，代理在首次连接即硬失败，且不把该槽位标记为 rejected——契约比较发生在 manager 返回候选之后，`internal/mcpserver/proxy.go` 的恢复分支要求已存在会话，因此重试恒定失败。触发条件是两个不同 build 声明同一版本字符串并共用一个状态根；正常发布两个 Host 安装同一 build，不受影响。
 
-Tag、GitHub Release 和 Marketplace 发布仍各自需要明确授权，不得由 W9 完成推定。
+提交、推送、真实业务验收、Tag、GitHub Release 和 Marketplace 发布仍各自需要明确授权，不得相互推定。

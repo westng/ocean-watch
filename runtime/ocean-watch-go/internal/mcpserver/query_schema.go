@@ -25,7 +25,7 @@ const managedAccountsSuccessSchema = `{
   }
 }`
 
-const managedAccountsOutputSchema = `{"oneOf":[` + managedAccountsSuccessSchema + `,` + errorOutputSchema + `]}`
+const managedAccountsOutputSchema = objectOneOf +managedAccountsSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanAuthorizationInputSchema = `{
   "type":"object","additionalProperties":false,
@@ -63,7 +63,7 @@ const qianchuanAuthorizationSuccessSchema = `{
   }
 }`
 
-const qianchuanAuthorizationOutputSchema = `{"oneOf":[` + qianchuanAuthorizationSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanAuthorizationOutputSchema = objectOneOf +qianchuanAuthorizationSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanProductsInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -94,7 +94,7 @@ const qianchuanProductsSuccessSchema = `{
   }
 }`
 
-const qianchuanProductsOutputSchema = `{"oneOf":[` + qianchuanProductsSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanProductsOutputSchema = objectOneOf +qianchuanProductsSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanPlansInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -130,7 +130,7 @@ const qianchuanPlansSuccessSchema = `{
   }
 }`
 
-const qianchuanPlansOutputSchema = `{"oneOf":[` + qianchuanPlansSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanPlansOutputSchema = objectOneOf +qianchuanPlansSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanPlanInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id","ad_id"],
@@ -175,7 +175,7 @@ const qianchuanPlanSuccessSchema = `{
   }
 }`
 
-const qianchuanPlanOutputSchema = `{"oneOf":[` + qianchuanPlanSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanPlanOutputSchema = objectOneOf +qianchuanPlanSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanAccountReportInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -206,7 +206,7 @@ const qianchuanAccountReportSuccessSchema = `{
   }
 }`
 
-const qianchuanAccountReportOutputSchema = `{"oneOf":[` + qianchuanAccountReportSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanAccountReportOutputSchema = objectOneOf +qianchuanAccountReportSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const qianchuanPlanReportInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -246,4 +246,4 @@ const qianchuanPlanReportSuccessSchema = `{
   }
 }`
 
-const qianchuanPlanReportOutputSchema = `{"oneOf":[` + qianchuanPlanReportSuccessSchema + `,` + errorOutputSchema + `]}`
+const qianchuanPlanReportOutputSchema = objectOneOf +qianchuanPlanReportSuccessSchema + `,` + errorOutputSchema + `]}`

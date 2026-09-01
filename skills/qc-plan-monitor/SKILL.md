@@ -9,6 +9,8 @@ description: Dedicated 巨量千川 skill for first-run setup, local OAuth and T
 
 Classify the user's outcome once, then use the first matching route. Do not search the repository, inspect plugin cache paths, read memory, or run setup probes before a normal business request. Do not call an equivalent CLI route when this table names an MCP tool.
 
+Every `./run` below is this skill's own launcher. On Codex invoke it as written. On Claude Code invoke `${CLAUDE_PLUGIN_ROOT}/skills/qc-plan-monitor/run` with the same arguments, because the working directory is the user's project rather than this skill directory. Do not search for the launcher anywhere else.
+
 <!-- capability-routes:start -->
 | User outcome | Exact route |
 | --- | --- |

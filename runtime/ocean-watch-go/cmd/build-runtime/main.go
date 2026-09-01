@@ -217,6 +217,7 @@ func buildRuntimeManifest(root, binaryRoot, version string) ([]byte, error) {
 	}
 	resourcePaths := []string{
 		".mcp.json",
+		filepath.Join(".claude-plugin", "plugin.json"),
 		filepath.Join("f2", "resolve.py"),
 		filepath.Join("bin", "ocean-watch-launcher"),
 	}

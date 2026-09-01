@@ -1,0 +1,19 @@
+{
+  "name": "ocean-watch",
+  "version": "1.0.9+codex.20260818123547",
+  "description": "Claude Code plugin for Ocean Engine OAuth, responsible-account reporting, plan operations, performance reporting, and monitoring analysis.",
+  "author": {
+    "name": "westng",
+    "url": "https://github.com/westng"
+  },
+  "homepage": "https://github.com/westng/ocean-watch",
+  "repository": "https://github.com/westng/ocean-watch",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "ocean-engine",
+    "advertising",
+    "campaign-monitoring"
+  ],
+  "skills": "./skills"
+}

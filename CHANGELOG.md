@@ -6,6 +6,8 @@
 
 ### 新增
 
+- 同一仓库现在同时作为 Codex 插件和 Claude Code 插件分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单故意不声明 `mcpServers` 以继承默认 `./.mcp.json`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、禁止内联 `mcpServers`、组/其他写位）。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
+- 新增 Host 中立状态根 `OCEAN_WATCH_HOME`，优先级为 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。默认值不变，已有 Codex 安装零迁移；两个 Host 共用同一个根，因此 OAuth 只需授权一次——官方刷新响应会替换已存储的 refresh token，各存一份会互相作废凭据。
 - 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，Host 工具合同仍为 17 个。
 - 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。
 - MCP 新增只读 `get_capabilities`，从 76 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
@@ -21,6 +23,8 @@
 
 ### 变更
 
+- 全部 17 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；两个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
+- 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，因为 Claude 下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
 - 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。
 - 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
 

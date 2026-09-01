@@ -9,6 +9,13 @@ const listInputSchema = `{
   }
 }`
 
+// objectOneOf opens a two-branch tool output schema. Claude Code's MCP client
+// rejects an outputSchema that has no top-level "type", even though the MCP
+// spec and the Go SDK both accept a bare "oneOf". Every branch below is already
+// an object schema, so declaring the type here adds no constraint and keeps a
+// single payload valid on both Codex and Claude Code.
+const objectOneOf = `{"type":"object","oneOf":[`
+
 const errorOutputSchema = `{
   "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
   "required":["ok","request_id","error"],
@@ -46,7 +53,7 @@ const listSuccessSchema = `{
   }
 }`
 
-const listOutputSchema = `{"oneOf":[` + listSuccessSchema + `,` + errorOutputSchema + `]}`
+const listOutputSchema = objectOneOf +listSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const getInputSchema = `{
   "type":"object","additionalProperties":false,"required":["channel","template_id"],
@@ -89,7 +96,7 @@ const getSuccessSchema = `{
   }
 }`
 
-const getOutputSchema = `{"oneOf":[` + getSuccessSchema + `,` + errorOutputSchema + `]}`
+const getOutputSchema = objectOneOf +getSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const preflightInputSchema = `{
   "type":"object","additionalProperties":false,"required":["plan_template","items"],
@@ -178,8 +185,15 @@ const preflightSuccessSchema = `{
     },
     "preflight_id":{"type":"string","maxLength":128,"pattern":"^(?:|qianchuan-preflight-[0-9]{8}t[0-9]{6}-[0-9a-f]{12})$"},
     "expires_at":{"type":"string","maxLength":64}
-  },
-  "$defs":{
+  }
+}`
+
+// preflightDefs holds the shared subschemas that preflightSuccessSchema targets
+// with "#/$defs/..." references. A "#" reference resolves against the root of
+// the whole output schema, not the branch it appears in, so these definitions
+// are composed at that root by preflightOutputSchema rather than nested inside
+// the success branch.
+const preflightDefs = `"$defs":{
     "group":{"type":"object","additionalProperties":false,
         "required":["group_id","creator_id","plan_type","business","product_ids","input_item_ids","already_present_item_ids","completed_item_ids","status"],
       "properties":{
@@ -196,10 +210,10 @@ const preflightSuccessSchema = `{
     },
     "presentation_column":{"type":"object","additionalProperties":false,"required":["field","label"],
       "properties":{"field":{"type":"string","enum":["plan_id","creator_nickname","product_id","material_id","material_title","skipped","query_failures","failed_results"]},"label":{"type":"string","minLength":1,"maxLength":32}}}
-  }
-}`
+  }`
 
-const preflightOutputSchema = `{"oneOf":[` + preflightSuccessSchema + `,` + errorOutputSchema + `]}`
+const preflightOutputSchema = `{"type":"object",` + preflightDefs + `,"oneOf":[` +
+	preflightSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const getPreflightInputSchema = `{
   "type":"object","additionalProperties":false,"required":["preflight_id"],
@@ -234,4 +248,4 @@ const getPreflightSuccessSchema = `{
   }
 }`
 
-const getPreflightOutputSchema = `{"oneOf":[` + getPreflightSuccessSchema + `,` + errorOutputSchema + `]}`
+const getPreflightOutputSchema = objectOneOf +getPreflightSuccessSchema + `,` + errorOutputSchema + `]}`

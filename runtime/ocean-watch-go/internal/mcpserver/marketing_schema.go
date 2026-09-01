@@ -37,7 +37,7 @@ const marketingVideosSuccessSchema = `{
   }
 }`
 
-const marketingVideosOutputSchema = `{"oneOf":[` + marketingVideosSuccessSchema + `,` + errorOutputSchema + `]}`
+const marketingVideosOutputSchema = objectOneOf +marketingVideosSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const marketingCreatorInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -75,7 +75,7 @@ const marketingCreatorSuccessSchema = `{
   }
 }`
 
-const marketingCreatorOutputSchema = `{"oneOf":[` + marketingCreatorSuccessSchema + `,` + errorOutputSchema + `]}`
+const marketingCreatorOutputSchema = objectOneOf +marketingCreatorSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const marketingPlanReportInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -115,7 +115,7 @@ const marketingPlanReportSuccessSchema = `{
   }
 }`
 
-const marketingPlanReportOutputSchema = `{"oneOf":[` + marketingPlanReportSuccessSchema + `,` + errorOutputSchema + `]}`
+const marketingPlanReportOutputSchema = objectOneOf +marketingPlanReportSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const marketingMaterialReportInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
@@ -159,4 +159,4 @@ const marketingMaterialReportSuccessSchema = `{
   }
 }`
 
-const marketingMaterialReportOutputSchema = `{"oneOf":[` + marketingMaterialReportSuccessSchema + `,` + errorOutputSchema + `]}`
+const marketingMaterialReportOutputSchema = objectOneOf +marketingMaterialReportSuccessSchema + `,` + errorOutputSchema + `]}`

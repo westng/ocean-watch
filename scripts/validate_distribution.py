@@ -34,6 +34,38 @@ def validate_manifest():
         fail("plugin manifest version is invalid")
 
 
+def validate_claude_manifest():
+    directory = ROOT / ".claude-plugin"
+    manifest_path = directory / "plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    if manifest.get("name") != "ocean-watch" or manifest.get("skills") != "./skills":
+        fail("Claude plugin manifest identity is invalid")
+    if manifest.get("version") != codex.get("version"):
+        fail("Claude plugin manifest version must match the Codex manifest")
+    if re.fullmatch(
+        r"[0-9]+\.[0-9]+\.[0-9]+(?:\+codex\.[A-Za-z0-9.-]+)?", str(manifest.get("version") or "")
+    ) is None:
+        fail("Claude plugin manifest version is invalid")
+    if "mcpServers" in manifest:
+        fail("Claude plugin manifest must inherit the default ./.mcp.json server")
+    marketplace_path = directory / "marketplace.json"
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    if marketplace.get("name") != "ocean-watch":
+        fail("Claude marketplace identity is invalid")
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list) or len(plugins) != 1:
+        fail("Claude marketplace must publish exactly one plugin")
+    entry = plugins[0]
+    if entry.get("name") != "ocean-watch" or entry.get("source") != "./":
+        fail("Claude marketplace entry must point at this repository root")
+    if entry.get("version") != codex.get("version"):
+        fail("Claude marketplace version must match the Codex manifest")
+    for path in (manifest_path, marketplace_path):
+        if path.stat().st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            fail(f"Claude manifest file is writable by group or other: {path.name}")
+
+
 def validate_mcp():
     payload = json.loads((ROOT / ".mcp.json").read_text(encoding="utf-8"))
     if set(payload) != {"mcpServers"}:
@@ -219,6 +251,7 @@ def validate_runtime_manifest():
         fail("runtime manifest plugin identity is invalid")
     resources = {
         ".mcp.json": ROOT / ".mcp.json",
+        ".claude-plugin/plugin.json": ROOT / ".claude-plugin" / "plugin.json",
         "f2/resolve.py": ROOT / "f2" / "resolve.py",
         "bin/ocean-watch-launcher": ROOT / "bin" / "ocean-watch-launcher",
     }
@@ -284,6 +317,7 @@ def validate_removed_compatibility_paths():
 def main():
     try:
         validate_manifest()
+        validate_claude_manifest()
         validate_mcp()
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")

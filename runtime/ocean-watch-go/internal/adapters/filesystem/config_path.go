@@ -7,15 +7,29 @@ import (
 
 const (
 	ConfigEnv         = "ADS_PLAN_MONITOR_CONFIG"
+	StateHomeEnv      = "OCEAN_WATCH_HOME"
 	CodexHomeEnv      = "CODEX_HOME"
 	ManagedRuntimeEnv = "OCEAN_WATCH_MANAGED_RUNTIME"
 )
 
-func CodexHome(getenv func(string) string, userHome string) string {
+// StateHome resolves the single local state root shared by every supported
+// plugin host. Codex and Claude Code deliberately read and write the same
+// root so one OAuth authorization serves both: an official refresh response
+// replaces the stored refresh token, so per-host roots would let each host
+// invalidate the other's credential.
+func StateHome(getenv func(string) string, userHome string) string {
+	if value := getenv(StateHomeEnv); value != "" {
+		return value
+	}
 	if value := getenv(CodexHomeEnv); value != "" {
 		return value
 	}
 	return filepath.Join(userHome, ".codex")
+}
+
+// CodexHome preserves the original name used by existing call sites.
+func CodexHome(getenv func(string) string, userHome string) string {
+	return StateHome(getenv, userHome)
 }
 
 func ResolveConfigPath(explicit, cwd string, getenv func(string) string, userHome string) string {

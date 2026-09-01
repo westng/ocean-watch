@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "ocean-watch",
+  "description": "Ocean Engine advertising authorization, plan operations, reporting, and monitoring for Claude Code.",
+  "owner": {
+    "name": "westng",
+    "url": "https://github.com/westng"
+  },
+  "plugins": [
+    {
+      "name": "ocean-watch",
+      "version": "1.0.9+codex.20260818123547",
+      "source": "./",
+      "description": "Ocean Engine OAuth, responsible-account reporting, Marketing and Qianchuan plan operations, performance reporting, and monitoring analysis over one shared Go runtime.",
+      "homepage": "https://github.com/westng/ocean-watch",
+      "license": "MIT",
+      "keywords": [
+        "ocean-engine",
+        "advertising",
+        "qianchuan",
+        "campaign-monitoring",
+        "reporting"
+      ]
+    }
+  ]
+}

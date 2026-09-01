@@ -55,14 +55,25 @@ The two Skills share one Go business implementation while strictly isolating cha
 
 ## Quick Start
 
-Requires Codex CLI `0.144.1+`. Standard Marketing and Qianchuan workflows use the Plugin's bundled runtime. Only Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`.
+Requires Codex CLI `0.144.1+` or Claude Code. Standard Marketing and Qianchuan workflows use the Plugin's bundled runtime. Only Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`.
+
+Codex:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-After the first installation, start a Codex task and describe the desired outcome. Later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting Codex. Only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
+Claude Code:
+
+```bash
+claude plugin marketplace add westng/ocean-watch
+claude plugin install ocean-watch@ocean-watch
+```
+
+Both hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
+
+After the first installation, start a task and describe the desired outcome. Later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting Codex. Only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
 
 ## Ask It Naturally
 

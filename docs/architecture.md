@@ -4,8 +4,8 @@
 
 ```mermaid
 flowchart LR
-    User["用户自然语言"] --> Codex["Codex 意图理解"]
-    Codex --> Skill["ads-plan-monitor / qc-plan-monitor"]
+    User["用户自然语言"] --> Host["Codex / Claude Code 意图理解"]
+    Host --> Skill["ads-plan-monitor / qc-plan-monitor"]
     Skill --> MCP["稳定本地 stdio MCP 代理"]
     MCP --> Runtime["版本化私有业务 Runtime"]
     Runtime --> MCPPresenter["MCP Schema / Presenter"]
@@ -67,6 +67,8 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 17 个�
 
 ## 状态与凭据
 
+状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。这不是历史包袱：官方刷新响应会替换已存储的 refresh token，若每个 Host 各存一份，任一侧刷新都会作废另一侧的凭据，因此授权只做一次、两个 Host 共享。下文的 `$CODEX_HOME` 均指这个解析结果。
+
 CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
 
 MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
@@ -96,6 +98,14 @@ CLI stdout 只输出一个 UTF-8 JSON 文档。MCP stdout 只输出换行分隔�
 `cmd/build-runtime` 使用固定 Go 工具链、`CGO_ENABLED=0`、`-trimpath` 与清空 build ID 构建五个平台二进制，并从 Plugin 基础版本注入 CLI 版本。`--all --verify` 在临时位置重建并逐字节对比仓库内产物。
 
 Marketplace 安装直接消费 Git 快照中的 `.codex-plugin/bin/`。Release 工作流不修改文件或回推 `main`，只验证固定提交、测试、重建产物并创建不可变 Tag/Release。
+
+同一个仓库同时作为 Codex 插件和 Claude Code 插件分发，两边共用一套 Go Runtime、一份状态和同一组 Skill：
+
+- Codex 读 `.codex-plugin/plugin.json`，其中 `mcpServers` 显式指向 `./.mcp.json`。
+- Claude Code 读 `.claude-plugin/plugin.json`。该清单**故意不写** `mcpServers`，以继承默认的 `./.mcp.json`；两处同时声明同名 server 会重复注册。`.claude-plugin/marketplace.json` 的 `source` 为 `"./"`，使插件指向 marketplace 自身那一份克隆，而不是再克隆一次仓库。
+- `.claude-plugin/plugin.json` 与 `.mcp.json`、启动器和两套 Skill 一样纳入 `runtime-manifest.json` 的 SHA-256 绑定。
+- 工具 `outputSchema` 必须在顶层声明 `"type":"object"`，且 `"#/$defs/..."` 引用必须能从该顶层解析。MCP 规范和 Go SDK 都接受裸 `oneOf`，但 Claude Code 客户端会拒绝，因此两个 Host 共用的载荷取更严的那一侧。
+- Claude Code 的安装布局是 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`（版本目录里的 `+` 被改写为 `-`）。版本化槽位、完整性校验、拒绝与原子切换在两个 Host 上都照常生效，但候选发现只扫描 `$CODEX_HOME/plugins/cache/`，不扫描 Claude 的缓存；Claude 侧安装因此走已验证的 `PluginRoot` 回退路径，升级插件后需要新任务而不是同一会话热切换。
 
 ## 升级与耗时证据
 

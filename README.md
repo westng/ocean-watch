@@ -55,14 +55,25 @@ Ocean Watch 让投放人员直接在 Codex 中用自然语言管理巨量营销�
 
 ## 快速开始
 
-需要 Codex CLI `0.144.1+`。普通营销和千川流程直接使用 Plugin 内置运行时；只有千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。
+需要 Codex CLI `0.144.1+` 或 Claude Code。普通营销和千川流程直接使用 Plugin 内置运行时；只有千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。
+
+Codex：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-首次安装后新建 Codex 任务并描述目标。后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启 Codex；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
+Claude Code：
+
+```bash
+claude plugin marketplace add westng/ocean-watch
+claude plugin install ocean-watch@ocean-watch
+```
+
+两个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
+
+首次安装后新建任务并描述目标。后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启 Codex；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
 
 ## 可以直接这样问
 

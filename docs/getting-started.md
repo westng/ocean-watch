@@ -2,14 +2,25 @@
 
 ## 1. 安装
 
-需要 Codex CLI `0.144.1+`。普通营销和千川命令直接使用 Plugin 内置 Go CLI；千川抖音作品链接流程另需 Python `3.10+` 和 F2 `0.0.1.7`。
+需要 Codex CLI `0.144.1+` 或 Claude Code。普通营销和千川命令直接使用 Plugin 内置 Go CLI；千川抖音作品链接流程另需 Python `3.10+` 和 F2 `0.0.1.7`。
+
+Codex：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-首次安装后新建 Codex 任务。普通用户直接说“帮我初始化巨量引擎盯盘”即可，不必记忆命令。兼容升级只替换本机业务 Runtime，已加载的稳定 MCP 代理会在同一任务内自动切换，不要求退出或重启客户端；若升级增加/删除工具、修改 Schema 或 Skill 触发合同，则属于 Host 合同升级，需要新任务加载新的工具清单。
+Claude Code：
+
+```bash
+claude plugin marketplace add westng/ocean-watch
+claude plugin install ocean-watch@ocean-watch
+```
+
+两个 Host 共用同一份本地状态，授权只需完成一次。
+
+首次安装后新建任务。普通用户直接说“帮我初始化巨量引擎盯盘”即可，不必记忆命令。兼容升级只替换本机业务 Runtime，已加载的稳定 MCP 代理会在同一任务内自动切换，不要求退出或重启客户端；若升级增加/删除工具、修改 Schema 或 Skill 触发合同，则属于 Host 合同升级，需要新任务加载新的工具清单。
 
 ## 2. 环境与配置
 
@@ -22,7 +33,7 @@ skills/ads-plan-monitor/run setup init --home-config
 
 Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、Codex CLI、安全凭据后端和 OAuth 回调端口；它不会安装依赖、修改系统设置或发起 OAuth。
 
-默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`；未设置 `CODEX_HOME` 时使用 `~/.codex/ads-plan-monitor/config.json`。配置不包含 Secret 或 Token。
+默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`。状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。配置不包含 Secret 或 Token。
 
 ## 3. 分渠道授权
 
