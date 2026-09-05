@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">面向 Codex 与 Claude Code 的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
+<p align="center">面向 Codex、Claude Code 与豆包工作的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
@@ -35,7 +35,7 @@
 
 中文 | [English](README.en-US.md)
 
-Ocean Watch 让投放人员直接在 Codex 或 Claude Code 中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为两个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
+Ocean Watch 让投放人员直接在 Codex、Claude Code 或豆包工作中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为三个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
 
 ## 能做什么
 

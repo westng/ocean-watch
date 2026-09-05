@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex and Claude Code</p>
+<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex, Claude Code, and Doubao Work</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
@@ -35,7 +35,7 @@
 
 [中文](README.md) | English
 
-Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex or Claude Code in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for both Hosts, sharing a single Go runtime, one local state root, and the same Skills.
+Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex, Claude Code, or Doubao Work in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for all three Hosts, sharing a single Go runtime, one local state root, and the same Skills.
 
 ## What It Does
 
