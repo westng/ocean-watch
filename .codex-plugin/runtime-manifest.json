@@ -27,15 +27,15 @@
     "skills/qc-plan-monitor/assets/qianchuan-product-plan.example.json": "97fa77df8fdbf4279ea00c90a8aab8939740cdd1137f02d9777fe8902f2c2e46",
     "skills/qc-plan-monitor/references/official-api-notes.md": "2fdd75903844060135777df6b07149315ddf8b6eaf7df8086c82bd4e8b0abf61",
     "skills/qc-plan-monitor/references/unified-report-routing.md": "b88ca0a48dd3545b5ff0c43f7b5ea1afe47a899d10217c92f52d46ac3be29c5f",
-    "skills/qc-plan-monitor/references/workflow-reference.md": "bab0427fe79136e5dd9328f2148c7a5637b0d7cecf3e50bde45d086368788cd8",
+    "skills/qc-plan-monitor/references/workflow-reference.md": "1f81b3627cc5a1ce96d491c59b3346989ba05fc20f2a936ca1f16352523486ca",
     "skills/qc-plan-monitor/run": "4c3f9c23d8ffd65eaf6ebfe8caf0d8523a2841d2346831c670acbe6bf8762d56",
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "63b5c713de8401fad37e53dc9f1e67c0276bb36f286821bb843925b93518d14a",
-    "ocean-watch_darwin_arm64": "0aca01b2465a1159a9ce8426e43a8c1062f52007a267a6b881113b0cca311de4",
-    "ocean-watch_linux_amd64": "c4ef2b50b553695df9ceb2a7f007851eb6b02482b5957355bb5e5d8276d13a41",
-    "ocean-watch_linux_arm64": "e71ca7551abf9417d428af3dc0f20ef529d3ec303ac1c1100525766b2f30be64",
-    "ocean-watch_windows_amd64.exe": "e3c5876b5c97446e8b8da73451152e6d9b7ef75000a77347832835d4a82ae661"
+    "ocean-watch_darwin_amd64": "7d4688af8ca4fce150b83bfd8a0a7e188d890a7e293c2838786fd099bf9e2930",
+    "ocean-watch_darwin_arm64": "86f37c4a539d9153ac0bf56d2ad2af9c3d7b156701f5317f78874e3482e590dc",
+    "ocean-watch_linux_amd64": "8b4d787daa8ffdfdf4b90868f0b7414905b7856e4c9b6a1838748b49eff64954",
+    "ocean-watch_linux_arm64": "0c96261f7fe94d5f199cb2f706e2ab79610578a07d2d8645d07819489a634d66",
+    "ocean-watch_windows_amd64.exe": "0645e31308f673422284432d6d544f86dbf4d205e07ec95dd229d69338dff87c"
   }
 }

@@ -216,6 +216,7 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	cli("shared.template_delete", "shared", EffectLocalWrite, "templates delete", "Delete a business template"),
 	cli("qianchuan.template_list", "qianchuan", EffectLocalRead, "qc-templates list", "List Qianchuan product templates"),
 	cli("qianchuan.template_create", "qianchuan", EffectLocalWrite, "qc-templates create", "Create a Qianchuan product template"),
+	cli("qianchuan.template_update", "qianchuan", EffectLocalWrite, "qc-templates update", "Update a Qianchuan product template"),
 	cli("qianchuan.live_template_list", "qianchuan", EffectLocalRead, "qc-templates list-live", "List Qianchuan live templates"),
 	cli("qianchuan.live_template_create", "qianchuan", EffectLocalWrite, "qc-templates create-live", "Create a Qianchuan live template"),
 	cliMCP("marketing.video_search", "marketing", EffectOfficialRead, "materials videos", "Query uploaded videos", "search_marketing_videos"),

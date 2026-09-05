@@ -428,3 +428,150 @@ func stringsToAny(values []string) []any {
 	}
 	return result
 }
+
+type QianchuanProductTemplateUpdate struct {
+	ROI2Goal           *float64
+	Budget             *float64
+	SmartBidType       *string
+	QcpxMode           *string
+	VideoScheduleType  *string
+	DeepExternalAction *string
+	ProductName        *string
+	ProductShortName   *string
+	ProductIDs         []string
+	PlanNameTemplate   *string
+	DisplayName        *string
+	Status             *string
+}
+
+func UpdateQianchuanProductTemplate(
+	config map[string]any,
+	selector string,
+	update QianchuanProductTemplateUpdate,
+) (map[string]any, map[string]any, error) {
+	normalized, err := ensureQianchuanProductConfig(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	templates := mapOrEmpty(normalized[qianchuanProductTemplatesKey])
+	template, err := resolveQianchuanProductTemplate(normalized, selector)
+	if err != nil {
+		return nil, nil, err
+	}
+	templateID := stringValue(template["template_id"])
+	updated := cloneMap(template)
+	bindings := cloneMap(mapOrEmpty(updated["bindings"]))
+	delivery := cloneMap(mapOrEmpty(updated["delivery_setting"]))
+	changed := make([]string, 0)
+
+	if update.ROI2Goal != nil {
+		if *update.ROI2Goal <= 0 {
+			return nil, nil, configurationError("roi2_goal must be greater than zero", nil)
+		}
+		delivery["roi2_goal"] = *update.ROI2Goal
+		changed = append(changed, "roi2_goal")
+	}
+	if update.Budget != nil {
+		if *update.Budget <= 0 {
+			return nil, nil, configurationError("budget must be greater than zero", nil)
+		}
+		delivery["budget"] = *update.Budget
+		changed = append(changed, "budget")
+	}
+	if update.SmartBidType != nil {
+		if *update.SmartBidType != "SMART_BID_CUSTOM" {
+			return nil, nil, configurationError("smart_bid_type must be SMART_BID_CUSTOM", nil)
+		}
+		delivery["smart_bid_type"] = *update.SmartBidType
+		changed = append(changed, "smart_bid_type")
+	}
+	if update.QcpxMode != nil {
+		if *update.QcpxMode != "QCPX_MODE_ON" {
+			return nil, nil, configurationError("qcpx_mode must be QCPX_MODE_ON", nil)
+		}
+		delivery["qcpx_mode"] = *update.QcpxMode
+		changed = append(changed, "qcpx_mode")
+	}
+	if update.VideoScheduleType != nil {
+		if *update.VideoScheduleType != "SCHEDULE_FROM_NOW" {
+			return nil, nil, configurationError("video_schedule_type must be SCHEDULE_FROM_NOW", nil)
+		}
+		delivery["video_schedule_type"] = *update.VideoScheduleType
+		changed = append(changed, "video_schedule_type")
+	}
+	if update.DeepExternalAction != nil {
+		if *update.DeepExternalAction != "AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI" {
+			return nil, nil, configurationError("deep_external_action must be AD_CONVERT_TYPE_LIVE_PURE_PAY_ROI", nil)
+		}
+		delivery["deep_external_action"] = *update.DeepExternalAction
+		changed = append(changed, "deep_external_action")
+	}
+	if update.ProductName != nil {
+		productName, err := requiredText(*update.ProductName, "product_name")
+		if err != nil {
+			return nil, nil, err
+		}
+		bindings["product_name"] = productName
+		changed = append(changed, "product_name")
+	}
+	if update.ProductShortName != nil {
+		productShortName, err := requiredText(*update.ProductShortName, "product_short_name")
+		if err != nil {
+			return nil, nil, err
+		}
+		bindings["product_short_name"] = productShortName
+		changed = append(changed, "product_short_name")
+	}
+	if len(update.ProductIDs) > 0 {
+		productIDs, err := normalizeQianchuanProductIDs(stringsToAny(update.ProductIDs))
+		if err != nil {
+			return nil, nil, err
+		}
+		bindings["product_ids"] = productIDs
+		changed = append(changed, "product_ids")
+	}
+	if update.PlanNameTemplate != nil {
+		planNameTemplate, err := validateQianchuanPlanNameTemplate(*update.PlanNameTemplate)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated["plan_name_template"] = planNameTemplate
+		changed = append(changed, "plan_name_template")
+	}
+	if update.DisplayName != nil {
+		displayName, err := requiredText(*update.DisplayName, "display_name")
+		if err != nil {
+			return nil, nil, err
+		}
+		updated["display_name"] = displayName
+		changed = append(changed, "display_name")
+	}
+	if update.Status != nil {
+		if *update.Status != "active" && *update.Status != "inactive" {
+			return nil, nil, configurationError("status must be active or inactive", nil)
+		}
+		updated["status"] = *update.Status
+		changed = append(changed, "status")
+	}
+
+	updated["bindings"] = bindings
+	updated["delivery_setting"] = delivery
+
+	validated, err := validateQianchuanProductTemplate(updated)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	updatedTemplates := cloneMap(templates)
+	updatedTemplates[templateID] = validated
+	normalized[qianchuanProductTemplatesKey] = updatedTemplates
+
+	result := map[string]any{
+		"template_id":    templateID,
+		"display_name":   validated["display_name"],
+		"changed_fields": stringsToAny(changed),
+		"template":       validated,
+	}
+
+	return normalized, result, nil
+}

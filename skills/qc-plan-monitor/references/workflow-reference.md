@@ -66,6 +66,7 @@ The launcher selects and executes the bundled Go binary for the current platform
 | Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
 | Create product template | `qc-templates create` |
 | Create live template | `qc-templates create-live` |
+| Update product template parameters | `qc-templates update` |
 | Validate/delete templates | `templates validate` / `templates delete` |
 | Inspect public work link | `qc-materials inspect-work` |
 | List authorized creators | `qc-materials authorized-creators` |
@@ -193,6 +194,24 @@ If either MCP tool is unavailable, its dependency is not loaded, the local state
 - Defaults are custom bidding, ROI `1.7`, budget `5000`, smart coupon on, long-term delivery, and net payment ROI optimization.
 - Do not store `aweme_id`, product channel information, creator IDs, video IDs, image IDs, or creative lists.
 - `material_strategy.source_type` is `CREATOR_RUNTIME_QUERY`; creator information and materials belong to the creation run.
+
+Update an existing Qianchuan product template with `qc-templates update`:
+
+```bash
+ocean-watch qc-templates update \
+  --selector TEMPLATE_ID_OR_NAME \
+  [--roi2-goal VALUE] \
+  [--budget VALUE] \
+  [--product-name "Full Product Name"] \
+  [--product-short-name "Short Name"] \
+  [--product-ids "id1,id2,..."] \
+  [--plan-name-template "Pattern"] \
+  [--display-name "New Display Name"] \
+  [--status active|inactive] \
+  [--submit]
+```
+
+The selector accepts a template ID or display name. All parameters are optional; only supply the fields to change. Product IDs are comma-separated and replace the entire list when supplied. The command validates all changes and defaults to dry-run; add `--submit` to persist. Returns changed fields, the updated template, and `mode=dry_run|submit`. Template updates do not affect existing plans created from that template.
 
 Use `plans create-qianchuan --plan-template TEMPLATE_ID` to build a material-free base payload for low-level preflight. It reports `runtime_creator_materials` and blocks template-only submission. Use `plans batch-qianchuan-works` for the complete runtime work-query and material-injection workflow.
 

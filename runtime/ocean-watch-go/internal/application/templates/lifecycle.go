@@ -98,3 +98,36 @@ func (lifecycle Lifecycle) ListQianchuanLive(ctx context.Context) (map[string]an
 	result["config"] = lifecycle.Path
 	return result, nil
 }
+
+func (lifecycle Lifecycle) UpdateQianchuanProductTemplate(
+	ctx context.Context,
+	selector string,
+	update domaintemplates.QianchuanProductTemplateUpdate,
+	submit bool,
+) (map[string]any, error) {
+	config, revision, err := lifecycle.Store.ReadWithRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
+	updated, result, err := domaintemplates.UpdateQianchuanProductTemplate(config, selector, update)
+	if err != nil {
+		return nil, err
+	}
+	if submit {
+		if err := lifecycle.Store.CompareAndSwap(ctx, revision, updated); err != nil {
+			return nil, err
+		}
+	}
+	mode := "dry_run"
+	if submit {
+		mode = "submit"
+	}
+	return map[string]any{
+		"ok":        true,
+		"mode":      mode,
+		"operation": "qianchuan_product_template_update",
+		"config":    lifecycle.Path,
+		"changed":   submit,
+		"update":    result,
+	}, nil
+}
