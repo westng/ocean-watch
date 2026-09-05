@@ -251,6 +251,23 @@ type qianchuanAccountMetrics struct {
 	TotalSettledOverallROI2OneHour   any `json:"total_prepay_and_pay_settle_overall_roi2_1h"`
 }
 
+type qianchuanUniAccountReportInput struct {
+	AdvertiserID  string `json:"advertiser_id"`
+	AuthAccountID string `json:"auth_account_id"`
+	StartDate     string `json:"start_date"`
+	EndDate       string `json:"end_date"`
+}
+
+type qianchuanUniAccountReportOutput struct {
+	OK           bool                                 `json:"ok"`
+	RequestID    string                               `json:"request_id"`
+	Source       string                               `json:"source"`
+	AdvertiserID string                               `json:"advertiser_id"`
+	DateRange    applicationreports.DateRange         `json:"date_range"`
+	Data         map[string]any                       `json:"data"`
+	Meta         map[string]any                       `json:"_meta,omitempty"`
+}
+
 type qianchuanPlanReportInput struct {
 	AdvertiserID  string `json:"advertiser_id"`
 	AuthAccountID string `json:"auth_account_id"`
@@ -518,6 +535,34 @@ func (runtime Runtime) reportQianchuanAccount(ctx context.Context, request *mcp.
 		OK: true, RequestID: requestID, Source: "official_api", AdvertiserID: result.AdvertiserID,
 		Scope: input.Scope, DateRange: queryDateRange{StartDate: result.DateRange.StartDate, EndDate: result.DateRange.EndDate},
 		Metrics: metrics,
+	}), nil
+}
+
+func (runtime Runtime) reportQianchuanUniAccount(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	started, requestID := runtime.now(), runtime.requestID()
+	input := qianchuanUniAccountReportInput{}
+	if err := decodeStrict(request.Params.Arguments, &input); err != nil ||
+		!requiredDecimalID(input.AdvertiserID) || !optionalDecimalID(input.AuthAccountID) ||
+		!validOptionalDateRange(input.StartDate, input.EndDate) {
+		return runtime.failureResult(started, requestID, "report_qianchuan_uni_account", invalidArgumentFailure()), nil
+	}
+	if runtime.QianchuanReports == nil {
+		return runtime.failureResult(started, requestID, "report_qianchuan_uni_account", internalFailure()), nil
+	}
+	query := applicationreports.QianchuanAggregateQuery{
+		CredentialScope: applicationreports.CredentialScope{
+			AdvertiserID: input.AdvertiserID, AuthAccountID: input.AuthAccountID,
+		},
+		StartDate: input.StartDate, EndDate: input.EndDate,
+		Fields:    append([]string(nil), applicationreports.DefaultQianchuanUniPromotionFields...),
+	}
+	result, err := runtime.QianchuanReports.QianchuanUniPromotion(ctx, query)
+	if err != nil {
+		return runtime.failureResult(started, requestID, "report_qianchuan_uni_account", mapOfficialQueryError(err)), nil
+	}
+	return runtime.successResult(started, requestID, "report_qianchuan_uni_account", qianchuanUniAccountReportOutput{
+		OK: true, RequestID: requestID, Source: "official_api", AdvertiserID: result.AdvertiserID,
+		DateRange: result.DateRange, Data: result.Data,
 	}), nil
 }
 

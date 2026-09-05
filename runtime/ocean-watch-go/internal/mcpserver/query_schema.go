@@ -208,6 +208,28 @@ const qianchuanAccountReportSuccessSchema = `{
 
 const qianchuanAccountReportOutputSchema = objectOneOf +qianchuanAccountReportSuccessSchema + `,` + errorOutputSchema + `]}`
 
+const qianchuanUniAccountReportInputSchema = `{
+  "type":"object","additionalProperties":false,"required":["advertiser_id"],
+  "properties":{
+    "advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,18}$"},"auth_account_id":{"type":"string","pattern":"^[1-9][0-9]{0,18}$"},
+    "start_date":{"type":"string","format":"date"},"end_date":{"type":"string","format":"date"}
+  }
+}`
+
+const qianchuanUniAccountReportSuccessSchema = `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["ok","request_id","source","advertiser_id","date_range","data"],
+  "properties":{
+    "ok":{"const":true},"request_id":{"type":"string","minLength":1,"maxLength":128},"source":{"const":"official_api"},
+    "advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,18}$"},
+    "date_range":{"type":"object","additionalProperties":false,"required":["start_date","end_date"],"properties":{"start_date":{"type":"string","format":"date"},"end_date":{"type":"string","format":"date"}}},
+    "data":{"type":"object"},"_meta":{"type":"object"}
+  }
+}`
+
+const qianchuanUniAccountReportOutputSchema = objectOneOf +qianchuanUniAccountReportSuccessSchema + `,` + errorOutputSchema + `]}`
+
+
 const qianchuanPlanReportInputSchema = `{
   "type":"object","additionalProperties":false,"required":["advertiser_id"],
   "properties":{

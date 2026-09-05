@@ -373,6 +373,13 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Description: "当用户需要一个千川广告主的账户汇总消耗、订单、GMV 或 ROI 时调用。scope=overall 包含乘方，scope=uni 仅全域；使用固定官方指标集。",
 		InputSchema: json.RawMessage(qianchuanAccountReportInputSchema), OutputSchema: json.RawMessage(qianchuanAccountReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportQianchuanAccount)))
+	uniAccountReportAnnotations := *officialReadAnnotations
+	uniAccountReportAnnotations.Title = "查询千川全域账户报表"
+	addCapabilityTool(server, "qianchuan.uni_account_report", &mcp.Tool{
+		Name: "report_qianchuan_uni_account", Annotations: &uniAccountReportAnnotations,
+		Description: "当用户需要一个千川广告主的纯全域账户汇总消耗、订单、GMV 或 ROI 时调用。仅查询商品全域数据，不包含乘方指标，适用于任意日期范围。",
+		InputSchema: json.RawMessage(qianchuanUniAccountReportInputSchema), OutputSchema: json.RawMessage(qianchuanUniAccountReportOutputSchema),
+	}, runtime.handler(withBoundedRequestBudget(runtime.reportQianchuanUniAccount)))
 	planReportAnnotations := *officialReadAnnotations
 	planReportAnnotations.Title = "查询千川计划报表"
 	addCapabilityTool(server, "qianchuan.plan_report", &mcp.Tool{

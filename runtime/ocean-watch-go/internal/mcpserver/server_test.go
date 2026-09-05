@@ -60,7 +60,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listedTools.Tools) != 17 || listedTools.Tools[0].Annotations == nil {
+	if len(listedTools.Tools) != 18 || listedTools.Tools[0].Annotations == nil {
 		t.Fatalf("unexpected tools: %#v", listedTools.Tools)
 	}
 	wantAnnotations := map[string]struct {
@@ -77,6 +77,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 		"list_qianchuan_plans":               {readOnly: false, idempotent: false, openWorld: true},
 		"get_qianchuan_plan":                 {readOnly: false, idempotent: false, openWorld: true},
 		"report_qianchuan_account":           {readOnly: false, idempotent: false, openWorld: true},
+		"report_qianchuan_uni_account":       {readOnly: false, idempotent: false, openWorld: true},
 		"report_qianchuan_plans":             {readOnly: false, idempotent: false, openWorld: true},
 		"get_marketing_authorization":        {readOnly: true, idempotent: true},
 		"search_marketing_videos":            {readOnly: false, idempotent: false, openWorld: true},

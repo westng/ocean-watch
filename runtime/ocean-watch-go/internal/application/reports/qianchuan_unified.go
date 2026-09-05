@@ -27,10 +27,10 @@ const (
 var QianchuanUnifiedPageSizes = map[int]bool{10: true, 20: true, 50: true, 100: true, 200: true}
 
 var DefaultQianchuanAllPromotionFields = []string{
-	"stat_cost_for_roi2", "stat_cost_for_overall_roi2",
+	"stat_cost_for_roi2",
 	"total_pay_order_count_for_roi2", "total_pay_order_gmv_include_coupon_for_roi2",
 	"total_prepay_and_pay_order_roi2", "total_order_settle_amount_for_roi2_1h",
-	"total_prepay_and_pay_settle_roi2_1h", "total_prepay_and_pay_settle_overall_roi2_1h",
+	"total_prepay_and_pay_settle_roi2_1h",
 }
 
 var DefaultQianchuanUniPromotionFields = []string{
