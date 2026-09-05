@@ -196,6 +196,7 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		"report_marketing_plans",
 		"report_qianchuan_account",
 		"report_qianchuan_plans",
+		"report_qianchuan_uni_account",
 		"search_marketing_creator_materials",
 		"search_marketing_videos",
 		"search_qianchuan_products",
