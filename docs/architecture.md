@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    User["用户自然语言"] --> Host["Codex / Claude Code 意图理解"]
+    User["用户自然语言"] --> Host["Codex / Claude Code / 豆包工作意图理解"]
     Host --> Skill["ads-plan-monitor / qc-plan-monitor"]
     Skill --> MCP["稳定本地 stdio MCP 代理"]
     MCP --> Runtime["版本化私有业务 Runtime"]
