@@ -23,6 +23,7 @@ Every `./run` below is this skill's own launcher. On Codex invoke it as written.
 | List Qianchuan product all-domain plans | MCP `list_qianchuan_plans` |
 | Show one exact plan and optional materials | MCP `get_qianchuan_plan` |
 | Fixed account overall/uni report | MCP `report_qianchuan_account` |
+| All-domain account report | MCP `report_qianchuan_uni_account` |
 | Fixed plan report | MCP `report_qianchuan_plans` |
 | Preflight Douyin works without creating or changing a plan | MCP `preflight_qianchuan_works` |
 | Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
