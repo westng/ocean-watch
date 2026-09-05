@@ -18,6 +18,7 @@
   {"skill":"qc-plan-monitor","outcome":"List Qianchuan product all-domain plans","capability_id":"qianchuan.plan_list","surface":"mcp","route":"list_qianchuan_plans"},
   {"skill":"qc-plan-monitor","outcome":"Show one exact plan and optional materials","capability_id":"qianchuan.plan_get","surface":"mcp","route":"get_qianchuan_plan"},
   {"skill":"qc-plan-monitor","outcome":"Fixed account overall/uni report","capability_id":"qianchuan.account_report_fixed","surface":"mcp","route":"report_qianchuan_account"},
+  {"skill":"qc-plan-monitor","outcome":"All-domain account report","capability_id":"qianchuan.uni_account_report","surface":"mcp","route":"report_qianchuan_uni_account"},
   {"skill":"qc-plan-monitor","outcome":"Fixed plan report","capability_id":"qianchuan.plan_report","surface":"mcp","route":"report_qianchuan_plans"},
   {"skill":"qc-plan-monitor","outcome":"Preflight Douyin works without creating or changing a plan","capability_id":"qianchuan.work_preflight","surface":"mcp","route":"preflight_qianchuan_works"},
   {"skill":"qc-plan-monitor","outcome":"Inspect one exact preflight snapshot","capability_id":"qianchuan.preflight_get","surface":"mcp","route":"get_qianchuan_preflight"}

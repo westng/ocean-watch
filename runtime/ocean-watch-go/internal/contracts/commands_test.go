@@ -62,7 +62,7 @@ func TestCapabilityRegistryMapsEveryTransportExactlyOnce(t *testing.T) {
 			t.Fatalf("submit contract drift: %#v", spec)
 		}
 	}
-	if len(seenCommands) != 76 || len(seenTools) != 17 {
+	if len(seenCommands) != 76 || len(seenTools) != 18 {
 		t.Fatalf("transport inventory changed: commands=%d tools=%d", len(seenCommands), len(seenTools))
 	}
 }
