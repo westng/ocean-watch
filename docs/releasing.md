@@ -1,6 +1,6 @@
 # 发布指南
 
-Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex Marketplace 安装源。快照必须已经包含五个平台的 Go CLI；GitHub Release 说明来自 `CHANGELOG.md` 对应版本段。
+Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex 与 Claude Code Marketplace 安装源，豆包工作通过安装脚本使用已安装的插件。快照必须已经包含五个平台的 Go CLI；GitHub Release 说明来自 `CHANGELOG.md` 对应版本段。
 
 ## 日常推送
 

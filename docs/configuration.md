@@ -9,7 +9,7 @@
 3. 从当前目录向上找到 Plugin 根后读取 `config/ads-plan-monitor/config.json`
 4. `$CODEX_HOME/ads-plan-monitor/config.json`
 
-状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析；Codex 与 Claude Code 共用同一个根，因此授权只需完成一次。推荐普通用户运行 `setup init --home-config`；仓库内配置仅供本地开发且已被 Git 忽略。
+状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析；Codex、Claude Code 与豆包工作共用同一个根，因此授权只需完成一次。推荐普通用户运行 `setup init --home-config`；仓库内配置仅供本地开发且已被 Git 忽略。
 
 配置存储渠道端点、OAuth 回调、负责账户和业务模板，不存 App Secret、Access Token 或 Refresh Token。修改后运行：
 

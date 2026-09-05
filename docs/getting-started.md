@@ -46,7 +46,7 @@ skills/ads-plan-monitor/run setup doctor
 skills/ads-plan-monitor/run setup init --home-config
 ```
 
-Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、Codex CLI、安全凭据后端和 OAuth 回调端口；它不会安装依赖、修改系统设置或发起 OAuth。
+Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、CLI 环境、安全凭据后端和 OAuth 回调端口；它不会安装依赖、修改系统设置或发起 OAuth。
 
 默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`。状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。配置不包含 Secret 或 Token。
 
@@ -98,7 +98,7 @@ skills/qc-plan-monitor/run qc-products search --advertiser-id ADVERTISER_ID --ke
 skills/qc-plan-monitor/run plans batch-qianchuan-works --plan-template TEMPLATE_ID --work-url DOUYIN_WORK_URL
 ```
 
-在 Codex 中直接用自然语言查找或查看模板，Skill 会调用 Plugin 的 `list_templates` 与 `get_template`，不要求用户运行 CLI。营销模板区分账户上传与达人授权素材；千川模板区分商品全域与直播全域。默认模板只是创建骨架，实际投放必须选择绑定渠道、广告主和商品的业务模板。
+在 Codex、Claude Code 或豆包工作中直接用自然语言查找或查看模板，Skill 会调用 Plugin 的 `list_templates` 与 `get_template`，不要求用户运行 CLI。营销模板区分账户上传与达人授权素材；千川模板区分商品全域与直播全域。默认模板只是创建骨架，实际投放必须选择绑定渠道、广告主和商品的业务模板。
 
 千川作品链接先由 F2 批量补充公开达人/商品提示，再使用官方千川接口定向确认达人授权、作品归属和商品匹配。F2 不可用或身份缺失时只跳过无法验证的作品，不扫描全部授权达人。
 
@@ -111,6 +111,6 @@ skills/ads-plan-monitor/run reports materials --start-date YYYY-MM-DD --end-date
 skills/qc-plan-monitor/run qc-reports plans --advertiser-id ADVERTISER_ID --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 ```
 
-默认输出一个结构化 JSON 文档。只有显式 `--out PATH` 才写文件；当结果包含强制 Presentation 时，Codex 会按其中的 Markdown、列和指标口径展示。
+默认输出一个结构化 JSON 文档。只有显式 `--out PATH` 才写文件；当结果包含强制 Presentation 时，Codex、Claude Code 或豆包工作会按其中的 Markdown、列和指标口径展示。
 
 下一步可阅读[配置与授权](configuration.md)和[CLI 参考](cli.md)。

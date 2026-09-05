@@ -6,8 +6,8 @@
 
 ### 新增
 
-- 同一仓库现在同时作为 Codex 插件和 Claude Code 插件分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
-- 新增 Host 中立状态根 `OCEAN_WATCH_HOME`，优先级为 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。默认值不变，已有 Codex 安装零迁移；两个 Host 共用同一个根，因此 OAuth 只需授权一次——官方刷新响应会替换已存储的 refresh token，各存一份会互相作废凭据。
+- 同一仓库现在同时作为 Codex 插件、Claude Code 插件和豆包工作 Skills 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
+- 新增 Host 中立状态根 `OCEAN_WATCH_HOME`，优先级为 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。默认值不变，已有 Codex 安装零迁移；三个 Host 共用同一个根，因此 OAuth 只需授权一次——官方刷新响应会替换已存储的 refresh token，各存一份会互相作废凭据。
 - 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，Host 工具合同仍为 17 个。
 - 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。
 - MCP 新增只读 `get_capabilities`，从 76 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
@@ -24,7 +24,7 @@
 ### 变更
 
 - Go 工具链从 `1.26.5` 升级到 `1.27.0`，全仓库保持单一版本：`go.mod` 的 `go` 指令、`cmd/build-runtime` 内层用于保证产物逐字节复现的 `GOTOOLCHAIN`、两个 GitHub Actions workflow 的 `go-version` 以及全部文档命令示例同步对齐。`go` 指令是最低版本要求，因此从源码构建现在需要 Go `1.27.0` 及以上；编译器变化使五平台二进制与 `runtime-manifest.json` 哈希一并更新，本次不改变任何运行时行为或 Host 工具合同。
-- 全部 17 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；两个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
+- 全部 17 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；三个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
 - 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，因为 Claude 下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
 - 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。
 - 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
@@ -34,7 +34,7 @@
 - 千川批量预检输入升级为逐行结构化 `items[]`，`plan_type` 与 `business` 纳入稳定 `group_id` 和 Snapshot V2；MCP 删除旧顶层批次字段，CLI 仅保留带弃用提示的兼容解析，避免混合类型作品跨组或跨商务合并。
 - 千川 owner hint 读取前移到短链解析之后：热缓存只跳过对应作品的 F2，官方授权、归属、商品、计划和素材核验不减少；缓存损坏只读降级并保留指标。只读预检不再全程占用广告主写锁，提交、删除和计划设置继续共享写锁。
 - 批量与普通千川读取统一使用广告主级跨调用请求控制，批量读取工厂不再绕过共享 `Retry-After` 冷却；预检结果改为独立组件耗时和短链/F2/官方请求/重试/缓存/绑定计数，删除会重复累计并行时间的旧窗口字段，以端到端 Runtime 墙钟作为唯一总耗时。
-- 中英文项目首页补齐 Claude Code 支持：副标题与定位文案改为面向 Codex 与 Claude Code，新增指向 `.claude-plugin/plugin.json` 的 Plugin 徽章，架构图把两个 Host 汇入同一条 Skill 与 MCP/CLI 链路，Windows 表述改为两个 Host 的清单都没有操作系统命令分支，并明确升级语义差异——Codex 兼容升级在同一任务内热切换，Claude Code 更新插件后需新建任务，因为它安装的是单个仓库快照而非版本目录布局。
+- 中英文项目首页补齐 Claude Code 与豆包工作支持：副标题与定位文案改为面向 Codex、Claude Code 与豆包工作，新增指向 `.claude-plugin/plugin.json` 的 Plugin 徽章和指向 `skills/` 的豆包工作 Skills 徽章，架构图把三个 Host 汇入同一条 Skill 与 MCP/CLI 链路，Windows 表述改为当前 Plugin/MCP 清单都没有操作系统命令分支，并明确升级语义差异——Codex 兼容升级在同一任务内热切换，Claude Code 更新插件后需新建任务，因为它安装的是单个仓库快照而非版本目录布局，豆包工作使用已安装的插件 Runtime。
 - 完善中英文项目首页定位文案，明确 Ocean Watch 覆盖巨量营销与巨量千川的一体化投放管理、数据报表和监控分析能力。
 - 调整中英文项目首页技术徽章：移除动态 Git Tag 展示，补充 Go、MCP、JSON-RPC、JSON Schema、OAuth、巨量引擎官方 API/Go SDK、Python/F2、多平台 CLI 与安全存储等当前技术栈入口。
 - 重写中英文项目首页，以产品定位、核心能力、可信边界、快速开始、自然语言场景、运行支持和按受众文档导航组织对外信息；保留 README、Contributing、MIT license 与 Security 一级入口，并将完整操作、架构和发布细节归入对应长期文档。

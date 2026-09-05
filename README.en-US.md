@@ -136,6 +136,22 @@ Claude Code ─┴→ Skill → local stdio MCP ─┐
 
 See [Architecture](docs/architecture.md) for current implementation boundaries.
 
+## Feature Requests
+
+Want Ocean Watch to support more operations? Submit your ideas to [Issues](https://github.com/westng/ocean-watch/issues):
+
+- New Marketing or Qianchuan capabilities (plan types, targeting dimensions, report fields)
+- Batch operation improvements (concurrency control, resume support, conflict handling)
+- Data analysis enhancements (trend comparison, anomaly detection, optimization suggestions)
+- Workflow refinements (template management, material archiving, automation rules)
+
+When submitting an issue, please include:
+1. **Use case**: What problem you're solving and how you currently handle it
+2. **Expected behavior**: How you'd like Ocean Watch to help
+3. **Scope** (optional): Whether it involves official API limits, authorization changes, or cross-channel operations
+
+Every suggestion will be carefully evaluated. Valuable features may appear in the next release. Priority depends on demand frequency, technical feasibility, and consistency with existing capabilities.
+
 ## Documentation
 
 | Audience | Entry points |

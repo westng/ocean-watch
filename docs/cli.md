@@ -71,7 +71,7 @@ skills/qc-plan-monitor/run auth sync-accounts --channel qianchuan
 skills/ads-plan-monitor/run accounts list
 skills/ads-plan-monitor/run accounts report --start-date YYYY-MM-DD --end-date YYYY-MM-DD
 
-# 模板和素材（CLI 开发/诊断入口；Codex 普通模板读取使用 MCP）
+# 模板和素材（CLI 开发/诊断入口；Codex/Claude Code/豆包工作普通模板读取使用 MCP）
 skills/ads-plan-monitor/run templates list --channel marketing
 skills/qc-plan-monitor/run qc-materials inspect-work --work-url DOUYIN_WORK_URL
 

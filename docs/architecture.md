@@ -67,7 +67,7 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 17 个�
 
 ## 状态与凭据
 
-状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。这不是历史包袱：官方刷新响应会替换已存储的 refresh token，若每个 Host 各存一份，任一侧刷新都会作废另一侧的凭据，因此授权只做一次、两个 Host 共享。下文的 `$CODEX_HOME` 均指这个解析结果。
+状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，三个 Host 共用同一个根。这不是历史包袱：官方刷新响应会替换已存储的 refresh token，若每个 Host 各存一份，任一侧刷新都会作废另一侧的凭据，因此授权只做一次、三个 Host 共享。下文的 `$CODEX_HOME` 均指这个解析结果。
 
 CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
 
@@ -99,14 +99,15 @@ CLI stdout 只输出一个 UTF-8 JSON 文档。MCP stdout 只输出换行分隔�
 
 Marketplace 安装直接消费 Git 快照中的 `.codex-plugin/bin/`。Release 工作流不修改文件或回推 `main`，只验证固定提交、测试、重建产物并创建不可变 Tag/Release。
 
-同一个仓库同时作为 Codex 插件和 Claude Code 插件分发，两边共用一套 Go Runtime、一份状态和同一组 Skill：
+同一个仓库同时作为 Codex 插件、Claude Code 插件和豆包工作 Skills 分发，三者共用一套 Go Runtime、一份状态和同一组 Skill：
 
 - Codex 读 `.codex-plugin/plugin.json`，其中 `mcpServers` 显式指向 `./.mcp.json`。
 - Claude Code 读 `.claude-plugin/plugin.json`。该清单**必须内联** `mcpServers`，并用 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`：Claude 虽然会在缺省时继承插件根的 `./.mcp.json`，但不把其中的相对路径重写到插件根，而是相对用户工作目录解析，因此普通用户在仓库外一律 `ENOENT` 而连不上。内联同名 server 是**替换**而非叠加该缺省发现，只注册一次。`.claude-plugin/marketplace.json` 的 `source` 为 `"./"`，使插件指向 marketplace 自身那一份克隆，而不是再克隆一次仓库。
+- 豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录，共享同一份通过 Codex 或 Claude Code 安装的插件 Runtime 和本地状态。
 - 在本仓库内开发时，项目级 `./.mcp.json` 会与插件级注册并存，形成项目和插件两个作用域的同名 server。这只影响仓库内的开发会话，不影响任何仓库外的普通用户安装；验收插件级路径必须在仓库目录之外进行。
 - `.claude-plugin/plugin.json` 与 `.mcp.json`、启动器和两套 Skill 一样纳入 `runtime-manifest.json` 的 SHA-256 绑定。
-- 工具 `outputSchema` 必须在顶层声明 `"type":"object"`，且 `"#/$defs/..."` 引用必须能从该顶层解析。MCP 规范和 Go SDK 都接受裸 `oneOf`，但 Claude Code 客户端会拒绝，因此两个 Host 共用的载荷取更严的那一侧。
-- Claude Code 的安装布局是 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`（版本目录里的 `+` 被改写为 `-`）。版本化槽位、完整性校验、拒绝与原子切换在两个 Host 上都照常生效，但候选发现只扫描 `$CODEX_HOME/plugins/cache/`，不扫描 Claude 的缓存；Claude 侧安装因此走已验证的 `PluginRoot` 回退路径，升级插件后需要新任务而不是同一会话热切换。
+- 工具 `outputSchema` 必须在顶层声明 `"type":"object"`，且 `"#/$defs/..."` 引用必须能从该顶层解析。MCP 规范和 Go SDK 都接受裸 `oneOf`，但 Claude Code 客户端会拒绝，因此三个 Host 共用的载荷取更严的那一侧。
+- Claude Code 的安装布局是 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`（版本目录里的 `+` 被改写为 `-`）。版本化槽位、完整性校验、拒绝与原子切换在 Codex 和 Claude Code 上都照常生效，但候选发现只扫描 `$CODEX_HOME/plugins/cache/`，不扫描 Claude 的缓存；Claude 侧安装因此走已验证的 `PluginRoot` 回退路径，升级插件后需要新任务而不是同一会话热切换。豆包工作使用已安装的插件 Runtime，不参与版本化槽位管理。
 
 ## 升级与耗时证据
 
