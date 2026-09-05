@@ -72,7 +72,22 @@ claude plugin marketplace add westng/ocean-watch
 claude plugin install ocean-watch@ocean-watch
 ```
 
-两个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
+豆包工作 (Doubao Work)：
+
+```bash
+# 1. 安装插件（通过 Codex 或 Claude Code）
+codex plugin marketplace add westng/ocean-watch
+codex plugin add ocean-watch@ocean-watch
+
+# 2. 配置豆包工作 Skills
+cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
+./scripts/install-doubao.sh
+
+# 3. 完全退出并重启豆包工作
+# 4. 在对话中使用：@巨量千川计划助手 或 @巨量引擎盯盘助手
+```
+
+三个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
 
 首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
 

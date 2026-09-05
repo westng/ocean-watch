@@ -72,7 +72,22 @@ claude plugin marketplace add westng/ocean-watch
 claude plugin install ocean-watch@ocean-watch
 ```
 
-Both hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
+Doubao Work:
+
+```bash
+# 1. Install the plugin (via Codex or Claude Code)
+codex plugin marketplace add westng/ocean-watch
+codex plugin add ocean-watch@ocean-watch
+
+# 2. Configure Doubao Work Skills
+cd ~/.codex/plugins/ocean-watch  # or your plugin installation directory
+./scripts/install-doubao.sh
+
+# 3. Fully quit and restart Doubao Work
+# 4. Use in conversations: @巨量千川计划助手 or @巨量引擎盯盘助手
+```
+
+All three hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
 
 After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
 
