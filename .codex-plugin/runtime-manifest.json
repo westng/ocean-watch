@@ -13,7 +13,7 @@
     "f2/resolve.py": "d2229d4a64fdd90cd58bd5c53610352d8eec64fb40deaca658be99e3862968fb",
     "skills/ads-plan-monitor/SKILL.md": "2a9e46c663636b11963b04564efc367ce2cd76f4865ebd13774535afc4624389",
     "skills/ads-plan-monitor/agents/openai.yaml": "8d54d9d0712713352df716d13f9dd5826e896477b8d2f33edef9ace662b701d7",
-    "skills/ads-plan-monitor/assets/config.example.json": "381a24024e06acc99f691a3be93bbc1cfc2eb3e65d80d06d431841933c73096d",
+    "skills/ads-plan-monitor/assets/config.example.json": "f56cd5635e9432b33032eae566e72f40c3f2edbcdf4055834c1db347bf0a9647",
     "skills/ads-plan-monitor/assets/creator-batch-jobs.example.json": "8120e664528ab5c7238b695c9e9a804ce90a60ae6ea95b8e57003e7772fab614",
     "skills/ads-plan-monitor/references/creator-material-api-notes.md": "3fcaaf267c1e68b17d3e39fe7e32679c87d56d05276b759e67997fee46e66772",
     "skills/ads-plan-monitor/references/current-template-notes.md": "17ae98efc1d6b7f64226be46bcbbeb1efb189b3fd2476e94079b934ee9f8df74",
@@ -32,10 +32,10 @@
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "87ea7612ea9f355898383daca1e431f523e0b0fa68751a04230b6882e264624e",
-    "ocean-watch_darwin_arm64": "cd64b9825b08034ea8b34223a1815c489ea6a386326a6039eefdcf9c25317c31",
-    "ocean-watch_linux_amd64": "71189ea74b0e5dc708765b315faf971a16f6fea432ac9e0e43aa586de5d1bdf6",
-    "ocean-watch_linux_arm64": "6c762acfe0b68eff3690f20ef1d45e7807945bb80ea7ba33a861562e95d8b842",
-    "ocean-watch_windows_amd64.exe": "2a8a82006c69182c1cf65d574bede4500cf04aeeb6d447ac8a1be29934d2ef45"
+    "ocean-watch_darwin_amd64": "029c528350aeb097f2415821af167c122a2cad229bcadd1ae5759aa3e0a1daa0",
+    "ocean-watch_darwin_arm64": "7c5cfd2357d0f52f43e5482f3a614cffd93e9a31538ad25ecbac964cb70710e6",
+    "ocean-watch_linux_amd64": "e36d2c57671a043a98afe9b647539b66d8f47985fb60920823d84feee65f5166",
+    "ocean-watch_linux_arm64": "8714662352ff859fcbf47ff0781fabfa7c747f339e689160848dc00d55dcf186",
+    "ocean-watch_windows_amd64.exe": "d434b266f46c9139070084de879033fa70caa7890bd54ee97210b9303ecb1e4b"
   }
 }

@@ -73,7 +73,7 @@ func mustCapabilityRegistry(specs []CapabilitySpec, fastRoutes []FastRouteSpec) 
 		fastRoutes: append([]FastRouteSpec(nil), fastRoutes...),
 	}
 	for _, spec := range registry.specs {
-		if spec.ID == "" || (spec.Channel != "shared" && spec.Channel != "marketing" && spec.Channel != "qianchuan") {
+		if spec.ID == "" || (spec.Channel != "shared" && spec.Channel != "marketing" && spec.Channel != "qianchuan" && spec.Channel != "star_map") {
 			panic(fmt.Sprintf("invalid capability identity: %#v", spec))
 		}
 		if spec.Effect == "" || spec.Effect == EffectOnlineWrite && !spec.RequiresSubmit {

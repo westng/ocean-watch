@@ -9,6 +9,7 @@ func TestOAuthStateContract(t *testing.T) {
 	}{
 		{channel: "marketing", state: "AD.fixture_nonce"},
 		{channel: "qianchuan", state: "QC.fixture_nonce"},
+		{channel: "star_map", state: "ST.fixture_nonce"},
 	}
 	for _, test := range tests {
 		state, err := BuildOAuthState(test.channel, "fixture_nonce")

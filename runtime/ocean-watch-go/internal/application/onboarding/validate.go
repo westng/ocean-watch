@@ -31,6 +31,8 @@ func (validator Validator) Validate(
 	capability := "query"
 	if channel == "qianchuan" {
 		capability = "qianchuan_materials"
+	} else if channel == "star_map" {
+		capability = "accounts"
 	}
 	runtimeConfig, _, err := configuration.Runtime(raw, channel, capability)
 	if err != nil {

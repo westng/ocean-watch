@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 )
 
 type RefreshLocker struct {
@@ -14,7 +16,7 @@ type RefreshLocker struct {
 }
 
 func (locker RefreshLocker) Acquire(ctx context.Context, channel, authorizationID string) (func() error, error) {
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := domain.ParseChannel(channel); err != nil {
 		return nil, errors.New("unsupported refresh lock channel")
 	}
 	if strings.TrimSpace(authorizationID) == "" || strings.ContainsAny(authorizationID, "/\\\x00\r\n") {

@@ -109,7 +109,7 @@ func decodeAccountBook(raw map[string]any) (domain.AccountBook, error) {
 func encodeAccountBook(raw map[string]any, after domain.AccountBook) error {
 	raw["managed_account_schema_version"] = after.SchemaVersion
 	groups := map[string]any{}
-	for _, channel := range []domain.Channel{domain.Marketing, domain.Qianchuan} {
+	for _, channel := range []domain.Channel{domain.Marketing, domain.Qianchuan, domain.StarMap} {
 		oldRecords := rawRecords(raw, channel)
 		oldByID := map[string]map[string]any{}
 		for _, record := range oldRecords {

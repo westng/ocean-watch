@@ -10,7 +10,7 @@ import (
 
 const capabilitiesInputSchema = `{
   "type":"object","additionalProperties":false,
-  "properties":{"channel":{"type":"string","enum":["all","marketing","qianchuan","shared"]}}
+	"properties":{"channel":{"type":"string","enum":["all","marketing","qianchuan","star_map","shared"]}}
 }`
 
 const capabilitiesOutputSchema = `{
@@ -21,7 +21,7 @@ const capabilitiesOutputSchema = `{
       "required":["id","channel","effect","requires_submit","description","primary_surface","route"],
       "properties":{
 		"id":{"type":"string","minLength":1,"maxLength":128},"domain":{"type":"string","minLength":1,"maxLength":64},"action":{"type":"string","minLength":1,"maxLength":64},
-		"channel":{"type":"string","enum":["marketing","qianchuan","shared"]},
+		"channel":{"type":"string","enum":["marketing","qianchuan","star_map","shared"]},
 		"effect":{"type":"string","enum":["local_read","local_write","public_read","authorization_write","official_read","online_write"]},
 		"requires_submit":{"type":"boolean"},"description":{"type":"string","minLength":1,"maxLength":256},
 		"primary_surface":{"type":"string","enum":["cli","mcp"]},"route":{"type":"string","minLength":1,"maxLength":256}

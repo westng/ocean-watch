@@ -44,8 +44,8 @@ func parseDoctorOptions(args []string) (doctorOptions, error) {
 	if len(flags.Args()) != 0 {
 		return doctorOptions{}, errors.New("unexpected positional setup arguments")
 	}
-	if options.channel != "marketing" && options.channel != "qianchuan" {
-		return doctorOptions{}, errors.New("--channel must be marketing or qianchuan")
+	if options.channel != "marketing" && options.channel != "qianchuan" && options.channel != "star_map" {
+		return doctorOptions{}, errors.New("--channel must be marketing, qianchuan, or star_map")
 	}
 	return options, nil
 }

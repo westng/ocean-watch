@@ -25,7 +25,7 @@ Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 
 
 ## 当前状态
 
-Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、负责账户查询 1 个、巨量营销授权/素材/报表查询 5 个，以及只读能力目录 `get_capabilities`。前 17 个业务工具直接转发到当前版本化 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout；能力目录返回 77 条 CLI 能力、渠道、副作用和提交门禁。Skill 对高频目标直接选择唯一工具，只在未知但已确认属于 Ocean Watch 的目标上查询一次能力目录。
+Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、负责账户查询 1 个、巨量营销授权/素材/报表查询 5 个，以及只读能力目录 `get_capabilities`。前 17 个业务工具直接转发到当前版本化 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout；能力目录返回 76 条 CLI 能力、渠道、副作用和提交门禁。Skill 对高频目标直接选择唯一工具，只在未知但已确认属于 Ocean Watch 的目标上查询一次能力目录。
 
 `.mcp.json` 在 macOS/Linux 启动固定本地代理。代理监控 `$CODEX_HOME/plugins/cache/ocean-watch/ocean-watch/` 的本地安装版本目录，不调用可能阻塞的 `codex plugin list`；目录名只用于发现候选，不能证明候选可信。代理随后校验 Plugin 名称/版本、Runtime 清单、MCP 配置、两套 Skill 及其资源、全部签名平台二进制 SHA-256 与最多 2 秒的当前平台自报版本探针，再把完整五平台产物复制到 `$CODEX_HOME/ocean-watch/runtime/versions/<manifest-sha256>` 私有只读槽位。槽位身份只由版本、清单哈希和槽位根确定，arm64/x64 进程从同一槽位选择各自二进制。若桌面客户端仍缓存被安装器删除的旧版本目录，代理只在该路径确属 Ocean Watch 缓存且不存在时建立指向已验证新 Host 的兼容别名，使随后新任务加载新版 Skill/MCP。同一外层 MCP 会话只在工具合同兼容时建立新内层会话并原子切换；工具名、Schema 或注解变化时，当前任务保留上一 Runtime，新任务别名仍发布新版 Host，因此只需新任务、不需退出客户端。真正无法初始化或校验身份的候选不会发布；候选握手失败时自动恢复上一 Runtime，成功切换后则清除瞬时回退状态，并通过跨进程共享租约删除不再使用的历史签名槽位。私有 Runtime 状态只提供启动解析与只读诊断，不再提供长期固定或人工回退入口。
 
@@ -73,7 +73,7 @@ CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plu
 
 MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
 
-营销与千川拥有独立 App、OAuth state、Token 和广告主索引。官方广告主发现只有在完整分页和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。
+营销、千川和星图拥有独立 App、OAuth state、Token 和账户索引。官方账户发现只有在完整读取和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。星图当前仅开放授权、账户同步和本地授权状态，计划与报表不复用营销或千川实现。
 
 凭据使用 macOS Keychain、Windows DPAPI 或 Linux Secret Service。明文文件只在开发者显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` 时启用。
 

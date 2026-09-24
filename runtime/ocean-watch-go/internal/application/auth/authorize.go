@@ -46,7 +46,7 @@ func (authorizer Authorizer) Authorize(
 	if authorizer.Credentials == nil || authorizer.Authorizations == nil || authorizer.Discovery == nil {
 		return AuthorizationResult{}, errors.New("authorization dependencies are incomplete")
 	}
-	if request.Channel != "marketing" && request.Channel != "qianchuan" {
+	if _, err := domain.ParseChannel(request.Channel); err != nil {
 		return AuthorizationResult{}, fmt.Errorf("unsupported authorization channel %q", request.Channel)
 	}
 	now := time.Now().UTC()

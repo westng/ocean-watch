@@ -3,7 +3,7 @@ package mcpserver
 const managedAccountsInputSchema = `{
   "type":"object","additionalProperties":false,
   "properties":{
-    "channel":{"type":"string","enum":["all","marketing","qianchuan"],"default":"all"},
+    "channel":{"type":"string","enum":["all","marketing","qianchuan","star_map"],"default":"all"},
     "include_disabled":{"type":"boolean","default":false}
   }
 }`
@@ -16,7 +16,7 @@ const managedAccountsSuccessSchema = `{
     "total_count":{"type":"integer","minimum":0},
     "accounts":{"type":"array","maxItems":10000,"items":{"type":"object","additionalProperties":false,
       "required":["channel","name","advertiser_id","enabled"],"properties":{
-        "channel":{"type":"string","enum":["marketing","qianchuan"]},"name":{"type":"string","minLength":1,"maxLength":100},
+        "channel":{"type":"string","enum":["marketing","qianchuan","star_map"]},"name":{"type":"string","minLength":1,"maxLength":100},
         "advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,18}$"},"enabled":{"type":"boolean"}
       }}},
     "presentation":{"type":"object","additionalProperties":false,"required":["required","rendered_markdown"],"properties":{

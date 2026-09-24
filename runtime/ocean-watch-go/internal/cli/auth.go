@@ -77,8 +77,8 @@ func parseAuthOptions(action string, args []string) (authOptions, error) {
 	if len(flags.Args()) != 0 {
 		return authOptions{}, errors.New("unexpected positional authorization arguments")
 	}
-	if options.channel != "marketing" && options.channel != "qianchuan" {
-		return authOptions{}, errors.New("channel must be marketing or qianchuan")
+	if options.channel != "marketing" && options.channel != "qianchuan" && options.channel != "star_map" {
+		return authOptions{}, errors.New("channel must be marketing, qianchuan, or star_map")
 	}
 	if options.timeout <= 0 || options.timeout > 30*time.Minute {
 		return authOptions{}, errors.New("timeout must be between 1ns and 30m")
@@ -468,6 +468,8 @@ func writeOAuthSetupPage(writer http.ResponseWriter, channel, token, message str
 	title := "巨量营销"
 	if channel == "qianchuan" {
 		title = "巨量千川"
+	} else if channel == "star_map" {
+		title = "巨量星图"
 	}
 	_ = oauthSetupTemplate.Execute(writer, map[string]string{"Title": title, "Token": token, "Error": message})
 }

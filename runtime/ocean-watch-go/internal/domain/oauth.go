@@ -43,6 +43,8 @@ func ChannelFromOAuthState(state string) (string, error) {
 		return "marketing", nil
 	case "QC":
 		return "qianchuan", nil
+	case "ST":
+		return "star_map", nil
 	default:
 		return "", fmt.Errorf("unknown OAuth state channel code: %s", code)
 	}
@@ -73,6 +75,8 @@ func oauthStateCode(channel string) (string, error) {
 		return "AD", nil
 	case "qianchuan":
 		return "QC", nil
+	case "star_map":
+		return "ST", nil
 	default:
 		return "", fmt.Errorf("unknown channel: %s", channel)
 	}

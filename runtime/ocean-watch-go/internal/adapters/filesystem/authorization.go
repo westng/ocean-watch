@@ -29,7 +29,7 @@ func (store AuthorizationStore) ReadChannel(ctx context.Context, channel string)
 		return domain.AuthorizationState{}, ctx.Err()
 	default:
 	}
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := domain.ParseChannel(channel); err != nil {
 		return domain.AuthorizationState{}, fmt.Errorf("unsupported authorization channel: %s", channel)
 	}
 	channelState, err := store.LoadChannel(ctx, channel)
@@ -45,7 +45,7 @@ func (store AuthorizationStore) LoadChannel(ctx context.Context, channel string)
 		return nil, ctx.Err()
 	default:
 	}
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := domain.ParseChannel(channel); err != nil {
 		return nil, fmt.Errorf("unsupported authorization channel: %s", channel)
 	}
 	currentPath := filepath.Join(store.Root, "channels", channel, "current.json")
@@ -63,7 +63,7 @@ func (store AuthorizationStore) LoadChannel(ctx context.Context, channel string)
 }
 
 func (store AuthorizationStore) CommitChannel(ctx context.Context, channel string, state map[string]any) error {
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := domain.ParseChannel(channel); err != nil {
 		return fmt.Errorf("unsupported authorization channel: %s", channel)
 	}
 	lock, err := AcquireLock(ctx, filepath.Join(store.Root, "authorizations.json."+channel+".lock"), 0)
@@ -79,7 +79,7 @@ func (store AuthorizationStore) UpdateChannel(
 	channel string,
 	update func(map[string]any) error,
 ) error {
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := domain.ParseChannel(channel); err != nil {
 		return fmt.Errorf("unsupported authorization channel: %s", channel)
 	}
 	if update == nil {

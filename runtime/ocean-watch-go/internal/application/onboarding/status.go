@@ -141,9 +141,9 @@ func (state LocalState) ChannelRows(
 	config map[string]any,
 	advertiserID string,
 ) ([]any, error) {
-	rows := make([]any, 0, 2)
+	rows := make([]any, 0, 3)
 	configuredChannels := configuration.Object(config["channels"])
-	for _, channel := range []string{"marketing", "qianchuan"} {
+	for _, channel := range []string{"marketing", "qianchuan", "star_map"} {
 		definition := configuration.Channels[channel]
 		configured := configuration.Object(configuredChannels[channel])
 		snapshot, err := state.Snapshot(ctx, channel, advertiserID, config)

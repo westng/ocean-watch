@@ -57,6 +57,14 @@ var Channels = map[string]Channel{
 			"qianchuan_materials": true, "qianchuan_report": true,
 		},
 	},
+	"star_map": {
+		ID: "star_map", DisplayName: "巨量星图",
+		BusinessBaseURL: "https://api.oceanengine.com/open_api",
+		AuthorizeURL:    "https://ad.oceanengine.com/openapi/audit/oauth.html",
+		TokenBaseURL:    "https://ad.oceanengine.com/open_api",
+		RedirectURI:     "http://127.0.0.1:8787/oauth/callback",
+		Capabilities:    map[string]bool{"oauth": true, "accounts": true},
+	},
 }
 
 type ChannelError struct {

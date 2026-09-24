@@ -139,7 +139,7 @@ func (factory *ClientFactory) Client(
 	hostProfile HostProfile,
 	timeoutProfile TimeoutProfile,
 ) (*Client, error) {
-	if channel != "marketing" && channel != "qianchuan" {
+	if channel != "marketing" && channel != "qianchuan" && channel != "star_map" {
 		return nil, fmt.Errorf("unsupported Ocean Engine channel %q", channel)
 	}
 	definition, err := resolveHostProfile(hostProfile)

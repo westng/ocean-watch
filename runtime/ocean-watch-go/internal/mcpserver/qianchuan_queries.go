@@ -304,7 +304,7 @@ func (runtime Runtime) listManagedAccounts(ctx context.Context, request *mcp.Cal
 	started, requestID := runtime.now(), runtime.requestID()
 	input := managedAccountsInput{Channel: "all"}
 	if err := decodeStrict(request.Params.Arguments, &input); err != nil ||
-		input.Channel != "all" && input.Channel != "marketing" && input.Channel != "qianchuan" {
+		input.Channel != "all" && input.Channel != "marketing" && input.Channel != "qianchuan" && input.Channel != "star_map" {
 		return runtime.failureResult(started, requestID, "list_managed_accounts", invalidArgumentFailure()), nil
 	}
 	if runtime.ManagedAccounts == nil {

@@ -78,7 +78,7 @@ func TestAccountStorePreservesUnknownFieldsAndBackup(t *testing.T) {
 func TestAccountStoreRejectsNonBooleanEnabledValues(t *testing.T) {
 	for _, value := range []string{`"false"`, `null`, `0`} {
 		path := filepath.Join(t.TempDir(), "config.json")
-		payload := `{"managed_accounts":{"marketing":[{"advertiser_id":"1000000000000001","name":"account","enabled":` + value + `}],"qianchuan":[]}}`
+		payload := `{"managed_accounts":{"marketing":[{"advertiser_id":"1000000000000001","name":"account","enabled":` + value + `}],"qianchuan":[],"star_map":[]}}`
 		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
 			t.Fatal(err)
 		}

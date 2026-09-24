@@ -183,7 +183,7 @@ func ResolveAuthorization(
 }
 
 func validateAuthorizationChannel(channel string) error {
-	if channel != "marketing" && channel != "qianchuan" {
+	if _, err := ParseChannel(channel); err != nil {
 		return fmt.Errorf("unsupported authorization channel: %s", channel)
 	}
 	return nil

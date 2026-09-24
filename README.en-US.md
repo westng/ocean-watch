@@ -44,6 +44,7 @@ Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from
 | --- | --- | --- |
 | `ads-plan-monitor` | Ocean Engine Marketing | OAuth, authorized-advertiser sync, responsible accounts, uploaded and creator-authorized materials, templates, plans, reports, and strategy |
 | `qc-plan-monitor` | Qianchuan | OAuth, authorized-advertiser sync, responsible accounts, product and live templates, creator works, all-domain plans, and all-domain/Multiplication reports |
+| Runtime `star_map` channel | 巨量星图 | OAuth, Star account authorization sync, and local authorization state; Star plans and reports are not enabled yet |
 
 The two Skills share one Go business implementation while strictly isolating channel credentials, authorized users, advertisers, templates, materials, and write transactions.
 
@@ -95,6 +96,7 @@ After the first installation, start a task and describe the desired outcome. On 
 ## Ask It Naturally
 
 - **Set up authorization:** “Check my environment and guide me through Ocean Engine Marketing authorization.”
+- **Authorize Star:** `auth authorize --channel star_map`
 - **Refresh access:** “This authorized user received new advertisers. Update the local access snapshot to match the official account.”
 - **Review business data:** “Show today's spend for the Marketing and Qianchuan accounts I manage, summarize by channel, and identify failures.”
 - **Create Marketing plans:** “Find today's uploaded videos, group five per unit, and create plans with my template. Let me review them first.”
@@ -127,7 +129,7 @@ Claude Code ─┴→ Skill → local stdio MCP ─┐
 - Advertising logic has one Go Application/Domain implementation. MCP and CLI are two transports over that implementation, not separate business runtimes or silent fallback paths.
 - Local template lists and exact details use MCP's `list_templates` and `get_template`; Qianchuan work-batch preflight and snapshot inspection use `preflight_qianchuan_works` and `get_qianchuan_preflight`. Confirmed online submission still uses the bundled Go CLI and requires explicit write permission.
 - The stable proxy keeps a fixed 18-tool MCP contract and switches a validated private Runtime inside the same outer session. It checks version, hashes, plugin identity, the F2 resource, and the tool schema before switching; same-version content changes are also revalidated through the manifest fingerprint. A bad Runtime rolls back automatically without blocking a later fixed release.
-- Read-only `get_capabilities` exposes all 77 CLI capabilities with channel, side-effect, and submit-gate metadata. Each Skill routes common intent directly and queries this catalog only once for an uncommon already-confirmed Ocean Watch goal; it does not scan the repository or plugin caches.
+- Read-only `get_capabilities` exposes all 76 CLI capabilities with channel, side-effect, and submit-gate metadata. Each Skill routes common intent directly and queries this catalog only once for an uncommon already-confirmed Ocean Watch goal; it does not scan the repository or plugin caches.
 - MCP shortens the natural-language-to-preflight path and stabilizes structured results. It does not bypass official authorization, ownership, product-match, or plan-reconciliation reads, whose real latency remains part of preflight.
 - The Plugin bundles CLI binaries for macOS Intel and Apple Silicon, Linux x86_64 and ARM64, and Windows x86_64. Ordinary users do not need Go.
 - macOS and Linux MCP use the stable POSIX launcher. Neither Host's Plugin/MCP manifest has an operating-system command branch, so Windows is declared as CLI support only rather than falsely claiming Windows MCP acceptance.

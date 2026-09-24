@@ -20,13 +20,14 @@ type Channel string
 const (
 	Marketing Channel = "marketing"
 	Qianchuan Channel = "qianchuan"
+	StarMap   Channel = "star_map"
 )
 
-var channelOrder = []Channel{Marketing, Qianchuan}
+var channelOrder = []Channel{Marketing, Qianchuan, StarMap}
 
 func ParseChannel(value string) (Channel, error) {
 	channel := Channel(strings.ToLower(strings.TrimSpace(value)))
-	if channel != Marketing && channel != Qianchuan {
+	if channel != Marketing && channel != Qianchuan && channel != StarMap {
 		return "", fmt.Errorf("unknown channel: %s", value)
 	}
 	return channel, nil
@@ -35,6 +36,9 @@ func ParseChannel(value string) (Channel, error) {
 func (c Channel) DisplayName() string {
 	if c == Qianchuan {
 		return "巨量千川"
+	}
+	if c == StarMap {
+		return "巨量星图"
 	}
 	return "巨量营销"
 }
@@ -58,6 +62,7 @@ func NewAccountBook() AccountBook {
 		Accounts: map[Channel][]ManagedAccount{
 			Marketing: {},
 			Qianchuan: {},
+			StarMap:   {},
 		},
 	}
 }

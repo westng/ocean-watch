@@ -44,6 +44,7 @@ Ocean Watch 让投放人员直接在 Codex、Claude Code 或豆包工作中用�
 | --- | --- | --- |
 | `ads-plan-monitor` | 巨量营销 | OAuth、授权广告主同步、负责账户、上传与达人授权素材、模板、计划、报表和策略分析 |
 | `qc-plan-monitor` | 巨量千川 | OAuth、授权广告主同步、负责账户、商品与直播模板、达人作品、全域计划、全域与乘方报表 |
+| Runtime `star_map` 渠道 | 巨量星图 | OAuth、星图账户授权同步和本地授权状态；星图计划与报表 API 尚未接入 |
 
 两个 Skill 共用一套 Go 业务实现，但渠道凭据、授权用户、广告主、模板、素材和写入事务严格隔离。
 
@@ -95,6 +96,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 ## 可以直接这样问
 
 - **初始化授权**：“帮我检查环境并完成巨量营销授权。”
+- **星图授权**：`auth authorize --channel star_map`
 - **同步权限**：“这个授权账号新增了广告主，把本地权限更新到官方最新状态。”
 - **查看经营数据**：“查询我负责的营销和千川账户今天消耗，按渠道汇总并标出失败账户。”
 - **创建营销计划**：“查询今天上传的视频，每 5 条组成一个单元，用现有模板创建计划，先让我确认。”
@@ -127,7 +129,7 @@ Claude Code ─┴→ Skill → 本地 stdio MCP ─┐
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
 - 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
 - 稳定代理保持 18 个 MCP 工具合同不变，并在同一外层会话内监控已安装快照、校验版本/哈希/插件身份/F2 资源和工具 Schema，再切换本机私有 Runtime；同版本内容变化也通过 manifest 指纹触发重新验证。坏版本自动回滚且只拒绝该次清单，后续修复版仍可自动升级。
-- `get_capabilities` 只读返回 77 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
+- `get_capabilities` 只读返回 76 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
 - MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
 - macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前两个 Host 的 Plugin/MCP 清单都没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。

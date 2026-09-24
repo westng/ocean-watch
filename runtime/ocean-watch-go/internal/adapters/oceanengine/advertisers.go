@@ -28,7 +28,7 @@ func (adapter AdvertiserDiscoveryAdapter) Discover(
 	if ctx == nil || adapter.Factory == nil {
 		return domain.AdvertiserSnapshot{}, errors.New("advertiser discovery adapter is incomplete")
 	}
-	if channel != "marketing" && channel != "qianchuan" {
+	if channel != "marketing" && channel != "qianchuan" && channel != "star_map" {
 		return domain.AdvertiserSnapshot{}, fmt.Errorf("unsupported advertiser discovery channel %q", channel)
 	}
 	if strings.TrimSpace(accessToken) == "" {
@@ -37,6 +37,9 @@ func (adapter AdvertiserDiscoveryAdapter) Discover(
 	accounts, err := adapter.listAuthorizedAccounts(ctx, channel, accessToken)
 	if err != nil {
 		return domain.AdvertiserSnapshot{}, err
+	}
+	if channel == "star_map" {
+		accounts = filterStarMapAccounts(accounts)
 	}
 	candidates := []string{}
 	issues := []domain.AccountDiscoveryIssue{}
@@ -135,6 +138,13 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 			advertiserID = account.AdvertiserIDs[0]
 		}
 		return []string{advertiserID}, nil, nil
+	case "PLATFORM_ROLE_STAR":
+		return []string{account.AccountID}, nil, nil
+	case "PLATFORM_ROLE_STAR_AGENT", "PLATFORM_ROLE_STAR_MCN", "PLATFORM_ROLE_STAR_ISV":
+		return []string{}, &domain.AccountDiscoveryIssue{
+			AccountID: account.AccountID, Role: role,
+			Code: "star_account_expansion_not_supported", Reason: "star_account_role_requires_explicit_account_selection",
+		}, nil
 	case "CUSTOMER_ADMIN", "CUSTOMER_OPERATOR":
 		rows, err := adapter.listCustomerCenter(ctx, channel, accessToken, sourceID)
 		return rows, nil, err
@@ -339,6 +349,9 @@ func (adapter AdvertiserDiscoveryAdapter) verifyAdvertisers(
 	if len(candidates) == 0 {
 		return []string{}, nil
 	}
+	if channel == "star_map" {
+		return adapter.verifyStarAccounts(ctx, accessToken, candidates)
+	}
 	client, err := adapter.Factory.Client(channel, ProfileBusiness, TimeoutStandard)
 	if err != nil {
 		return nil, err
@@ -393,6 +406,64 @@ func (adapter AdvertiserDiscoveryAdapter) verifyAdvertisers(
 	for _, candidate := range candidates {
 		if _, exists := seen[candidate]; !exists {
 			return nil, fmt.Errorf("advertiser verification omitted %s", candidate)
+		}
+	}
+	return candidates, nil
+}
+
+func (adapter AdvertiserDiscoveryAdapter) verifyStarAccounts(
+	ctx context.Context,
+	accessToken string,
+	candidates []string,
+) ([]string, error) {
+	client, err := adapter.Factory.Client("star_map", ProfileBusiness, TimeoutStandard)
+	if err != nil {
+		return nil, err
+	}
+	verified := []string{}
+	seen := map[string]struct{}{}
+	for start := 0; start < len(candidates); start += 50 {
+		end := start + 50
+		if end > len(candidates) {
+			end = len(candidates)
+		}
+		chunk := candidates[start:end]
+		ids := make([]int64, len(chunk))
+		for index, candidate := range chunk {
+			ids[index], err = parsePositiveID(candidate, "star_id")
+			if err != nil {
+				return nil, err
+			}
+		}
+		response, httpResponse, sdkErr := client.sdk.StarInfoV2Api().Get(ctx).
+			AccessToken(accessToken).StarIds(ids).Execute()
+		if response == nil {
+			return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+		}
+		if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
+			return nil, err
+		}
+		if response.Data == nil {
+			return nil, errors.New("star info response is missing data")
+		}
+		for _, row := range response.Data.InfoList {
+			if row == nil || row.StartId <= 0 {
+				return nil, errors.New("star info response contains an invalid star ID")
+			}
+			value := strconv.FormatInt(row.StartId, 10)
+			if _, duplicate := seen[value]; duplicate {
+				return nil, fmt.Errorf("star info response duplicated %s", value)
+			}
+			seen[value] = struct{}{}
+			verified = append(verified, value)
+		}
+	}
+	if len(verified) != len(candidates) {
+		return nil, fmt.Errorf("star account verification returned %d of %d candidates", len(verified), len(candidates))
+	}
+	for _, candidate := range candidates {
+		if _, exists := seen[candidate]; !exists {
+			return nil, fmt.Errorf("star account verification omitted %s", candidate)
 		}
 	}
 	return candidates, nil
@@ -491,6 +562,21 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func filterStarMapAccounts(accounts []domain.AuthorizedAccount) []domain.AuthorizedAccount {
+	result := make([]domain.AuthorizedAccount, 0, len(accounts))
+	for _, account := range accounts {
+		role := account.AccountRole
+		if role == "" {
+			role = account.AccountType
+		}
+		if role == "PLATFORM_ROLE_STAR" || role == "PLATFORM_ROLE_STAR_AGENT" ||
+			role == "PLATFORM_ROLE_STAR_MCN" || role == "PLATFORM_ROLE_STAR_ISV" {
+			result = append(result, account)
+		}
+	}
+	return result
 }
 
 func identityString(value string) string { return value }

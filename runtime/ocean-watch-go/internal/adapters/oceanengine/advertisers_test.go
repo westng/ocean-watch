@@ -115,6 +115,42 @@ func TestAdvertiserDiscoveryUsesGeneratedRoleServicesAndRetriesCurrentPage(t *te
 	}
 }
 
+func TestStarMapDiscoveryFiltersStarAccountsAndVerifiesStarIDs(t *testing.T) {
+	transport := &discoveryTransport{perRoute: map[string]int{}}
+	transport.respond = func(request *http.Request, _ int) (int, string) {
+		switch request.URL.Path {
+		case "/open_api/oauth2/advertiser/get/":
+			return 200, `{"code":0,"data":{"list":[
+				{"account_id":3001,"account_type":"PLATFORM_ROLE_STAR","account_name":"星图账户","is_valid":true},
+				{"account_id":3002,"account_type":"ADVERTISER","is_valid":true}
+			]}}`
+		case "/open_api/2/star/info/":
+			return 200, `{"code":0,"data":{"info_list":[{"start_id":3001,"start_name":"星图账户","status":"ENABLE"}]}}`
+		default:
+			return 404, `{}`
+		}
+	}
+	factory, err := NewClientFactory(FactoryOptions{
+		TransportFactory: func(HostProfile) http.RoundTripper { return transport },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := (AdvertiserDiscoveryAdapter{Factory: factory}).Discover(
+		testRequestContext(t, "star_map"), "star_map", "fixture-access",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(snapshot.AdvertiserIDs, []string{"3001"}) || len(snapshot.Accounts) != 1 {
+		t.Fatalf("unexpected star map snapshot: %#v", snapshot)
+	}
+	if len(transport.calls) != 2 || transport.calls[1].Host != BusinessHost ||
+		transport.calls[1].Path != "/open_api/2/star/info/" {
+		t.Fatalf("unexpected star map request sequence: %#v", transport.calls)
+	}
+}
+
 func TestAdvertiserDiscoveryUsesAgentAndShopProfiles(t *testing.T) {
 	transport := &discoveryTransport{perRoute: map[string]int{}}
 	transport.respond = func(request *http.Request, _ int) (int, string) {

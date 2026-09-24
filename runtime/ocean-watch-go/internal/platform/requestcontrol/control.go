@@ -75,8 +75,8 @@ func WithAuthorization(
 		Channel:         strings.TrimSpace(channel),
 		AuthorizationID: strings.TrimSpace(authorizationID),
 	}
-	if scope.Channel != "marketing" && scope.Channel != "qianchuan" {
-		return nil, errors.New("request channel must be marketing or qianchuan")
+	if scope.Channel != "marketing" && scope.Channel != "qianchuan" && scope.Channel != "star_map" {
+		return nil, errors.New("request channel must be marketing, qianchuan, or star_map")
 	}
 	if scope.AuthorizationID == "" || len(scope.AuthorizationID) > 256 {
 		return nil, errors.New("request authorization identity is invalid")
@@ -365,7 +365,7 @@ func (governor *Governor) Acquire(
 	if ctx == nil {
 		return nil, errors.New("request context is required")
 	}
-	if scope.Channel != "marketing" && scope.Channel != "qianchuan" ||
+	if scope.Channel != "marketing" && scope.Channel != "qianchuan" && scope.Channel != "star_map" ||
 		strings.TrimSpace(scope.AuthorizationID) == "" {
 		return nil, errors.New("request authorization scope is invalid")
 	}

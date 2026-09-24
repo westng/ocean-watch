@@ -21,6 +21,16 @@
         "authorize_url": "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html",
         "token_base_url": "https://ad.oceanengine.com/open_api"
       }
+    },
+    "star_map": {
+      "api": {
+        "base_url": "https://api.oceanengine.com/open_api"
+      },
+      "oauth": {
+        "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+        "authorize_url": "https://ad.oceanengine.com/openapi/audit/oauth.html",
+        "token_base_url": "https://ad.oceanengine.com/open_api"
+      }
     }
   },
   "account": {
