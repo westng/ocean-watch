@@ -18,6 +18,9 @@ dist/
 release-notes/
 *.whl
 
+# Local unstripped Go binaries produced during development.
+runtime/ocean-watch-go/ocean-watch
+
 # Local credential fallback/cache files. Real tokens should live in the OS
 # credential store, not in this project.
 credentials.json

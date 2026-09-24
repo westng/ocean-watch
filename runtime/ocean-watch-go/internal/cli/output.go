@@ -36,6 +36,8 @@ type AccountMutationEnvelope struct {
 type AccountReference struct {
 	Channel      domain.Channel `json:"channel"`
 	AdvertiserID string         `json:"advertiser_id"`
+	SubjectID    string         `json:"subject_id"`
+	SubjectKind  string         `json:"subject_kind"`
 }
 
 type AccountRemovalEnvelope struct {

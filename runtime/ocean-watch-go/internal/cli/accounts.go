@@ -122,9 +122,13 @@ func RunAccounts(ctx context.Context, action string, args []string, store applic
 		return 2
 	}
 	if action == "remove" {
+		subject := result.Subject()
 		_ = WriteJSON(stdout, AccountRemovalEnvelope{
 			OK: true, Action: operation,
-			Account: AccountReference{Channel: result.Channel, AdvertiserID: result.AdvertiserID},
+			Account: AccountReference{
+				Channel: result.Channel, AdvertiserID: result.AdvertiserID,
+				SubjectID: subject.ID, SubjectKind: subject.Kind,
+			},
 		})
 		return 0
 	}

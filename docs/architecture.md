@@ -75,6 +75,8 @@ MCP 启动后只保留执行官方查询与预检所需的最小运行环境，�
 
 营销、千川和星图拥有独立 App、OAuth state、Token 和账户索引。官方账户发现只有在完整读取和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。星图当前仅开放授权、账户同步和本地授权状态，计划与报表不复用营销或千川实现。
 
+负责账户的持久化仍兼容历史 `advertiser_id` 字段；运行时同时暴露 channel-neutral 的 `subject_id` 与 `subject_kind`。营销和千川的 subject kind 为 `advertiser`，星图为 `star_account`，展示层使用“账号 ID”及对应账号类型，避免把星图账号误称为广告主。
+
 凭据使用 macOS Keychain、Windows DPAPI 或 Linux Secret Service。明文文件只在开发者显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` 时启用。
 
 ## F2 边界

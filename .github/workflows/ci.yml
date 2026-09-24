@@ -30,9 +30,24 @@ jobs:
         with:
           go-version: "1.27.0"
           cache-dependency-path: runtime/ocean-watch-go/go.sum
+      - name: Check Go formatting
+        working-directory: runtime/ocean-watch-go
+        shell: bash
+        run: |
+          files=$(find . -name '*.go' -not -path './vendor/*')
+          unformatted=$(gofmt -l ${files})
+          if [[ -n "${unformatted}" ]]; then
+            echo "Go files are not gofmt-formatted:" >&2
+            echo "${unformatted}" >&2
+            exit 1
+          fi
       - name: Test Go runtime
         working-directory: runtime/ocean-watch-go
         run: go test ./...
+      - name: Test Go runtime with race detector
+        if: runner.os == 'Linux'
+        working-directory: runtime/ocean-watch-go
+        run: go test -race ./internal/...
       - name: Vet Go runtime
         working-directory: runtime/ocean-watch-go
         run: go vet ./...
@@ -46,6 +61,17 @@ jobs:
         if: runner.os != 'Windows'
         working-directory: runtime/ocean-watch-go
         run: go run ./cmd/mcp-probe --binary ../../bin/ocean-watch-launcher --proxy-root ../..
+      - name: Probe staged plugin layout
+        if: runner.os != 'Windows'
+        working-directory: runtime/ocean-watch-go
+        shell: bash
+        run: |
+          staged="${RUNNER_TEMP}/ocean-watch-staged"
+          mkdir -p "${staged}"
+          cp -R ../../. "${staged}/"
+          go run ./cmd/mcp-probe \
+            --binary "${staged}/bin/ocean-watch-launcher" \
+            --proxy-root "${staged}"
       - name: Verify built runtime version injection
         if: runner.os == 'Linux'
         working-directory: runtime/ocean-watch-go
@@ -82,12 +108,13 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install F2 boundary
-        run: python -m pip install --disable-pip-version-check "f2==0.0.1.7" "socksio>=1,<2" "tomli>=2,<3; python_version < '3.11'" PyYAML
+        run: python -m pip install --disable-pip-version-check "f2==0.0.1.7" "socksio>=1,<2" "tomli>=2,<3; python_version < '3.11'" PyYAML "ruff>=0.11,<1"
       - name: Validate metadata and F2 wrapper
         run: |
           python scripts/version_tag.py check
           python -m unittest discover -s f2 -p "test_resolve.py" -v
           python -m compileall -q f2 scripts
+          python -m ruff check f2 scripts
 
   plugin:
     name: Plugin contracts

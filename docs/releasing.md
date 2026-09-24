@@ -69,8 +69,11 @@ python3 scripts/validate_distribution.py
 
 ```bash
 GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./...
+test -z "$(gofmt -l $(find runtime/ocean-watch-go -name '*.go'))"
 GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go vet ./...
+GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test -race ./internal/...
 python3 -m unittest discover -s f2 -p 'test_resolve.py' -v
+python3 -m ruff check f2 scripts
 python3 scripts/version_tag.py check
 python3 scripts/validate_distribution.py
 skills/ads-plan-monitor/run --version

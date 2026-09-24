@@ -130,7 +130,7 @@ func TestAccountListUsesGoRuntime(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.OK || len(result.Accounts) != 1 || len(result.Presentation.Columns) != 4 {
+	if !result.OK || len(result.Accounts) != 1 || len(result.Presentation.Columns) != 5 {
 		t.Fatalf("unexpected account list envelope: %#v", result)
 	}
 }
@@ -426,7 +426,10 @@ func TestAccountRemoveMatchesStableResponseShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing account result: %#v", result)
 	}
-	want := map[string]any{"channel": "marketing", "advertiser_id": "1000000000000001"}
+	want := map[string]any{
+		"channel": "marketing", "advertiser_id": "1000000000000001",
+		"subject_id": "1000000000000001", "subject_kind": "advertiser",
+	}
 	if !reflect.DeepEqual(account, want) {
 		t.Fatalf("remove account = %#v, want %#v", account, want)
 	}

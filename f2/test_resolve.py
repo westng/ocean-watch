@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-
 SPEC = importlib.util.spec_from_file_location("ocean_watch_f2_resolve", Path(__file__).with_name("resolve.py"))
 resolve = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(resolve)

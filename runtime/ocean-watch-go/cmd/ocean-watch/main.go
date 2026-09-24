@@ -21,13 +21,11 @@ import (
 
 var (
 	gitCommit      = "UNSET"
-	sdkVersion     = "v1.1.92"
 	runtimeVersion = "UNSET"
 )
 
 func main() {
 	_ = gitCommit
-	_ = sdkVersion
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if len(os.Args) > 1 && os.Args[1] == "runtime" {

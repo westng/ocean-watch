@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -81,9 +82,9 @@ func TestCredentialBackendsUseStableServiceAndAccountNames(t *testing.T) {
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("macOS delete = %v, want %v", got, want)
 	}
-	if got, want := macOSWriteArguments(account, "fixture-payload"), []string{
+	if got, want := macOSWriteArguments(account), []string{
 		"add-generic-password", "-U", "-s", "ads-plan-monitor", "-a", account,
-		"-w", "fixture-payload",
+		"-w",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("macOS write = %v, want %v", got, want)
 	}
@@ -101,5 +102,14 @@ func TestCredentialBackendsUseStableServiceAndAccountNames(t *testing.T) {
 	store := Store{Root: "/fixture/root"}
 	if got := store.filePath(account, ".dpapi"); got != filepath.Join("/fixture/root", account+".dpapi") {
 		t.Fatalf("Windows credential path = %q", got)
+	}
+}
+
+func TestCredentialAccountNamesRejectPathSyntax(t *testing.T) {
+	store := Store{Root: t.TempDir()}
+	for _, account := range []string{"../escape", `..\escape`, "account/name", "account:name", "account secret"} {
+		if _, err := store.Read(context.Background(), account); err == nil {
+			t.Fatalf("account %q was accepted", account)
+		}
 	}
 }

@@ -130,6 +130,7 @@ func TestQianchuanQueryToolsUseTaskServicesAndWhitelistOutputs(t *testing.T) {
 	managed := callTestTool(t, session, "list_managed_accounts", map[string]any{"channel": "qianchuan"})
 	managedOutput := decodeStructured[managedAccountsOutput](t, managed)
 	if accounts.calls != 1 || len(managedOutput.Accounts) != 1 || managedOutput.Accounts[0].Name != "fixture account" ||
+		managedOutput.Accounts[0].SubjectID != "2000000000000001" || managedOutput.Accounts[0].SubjectKind != "advertiser" ||
 		managedOutput.Presentation.RenderedMarkdown == "" || bytes.Contains(resultBytes(t, managed), []byte("auth_account_id")) {
 		t.Fatalf("managed-account contract changed: calls=%d output=%#v", accounts.calls, managedOutput)
 	}

@@ -115,11 +115,14 @@ func TestAdvertiserDiscoveryUsesGeneratedRoleServicesAndRetriesCurrentPage(t *te
 	}
 }
 
-func TestStarMapDiscoveryFiltersStarAccountsAndVerifiesStarIDs(t *testing.T) {
+func TestStarMapDiscoveryFiltersStarAccountsAndRetriesReadFailures(t *testing.T) {
 	transport := &discoveryTransport{perRoute: map[string]int{}}
-	transport.respond = func(request *http.Request, _ int) (int, string) {
+	transport.respond = func(request *http.Request, attempt int) (int, string) {
 		switch request.URL.Path {
 		case "/open_api/oauth2/advertiser/get/":
+			if attempt == 1 {
+				return 200, `{"code":40100,"message":"rate limited","request_id":"fixture-rate-limit"}`
+			}
 			return 200, `{"code":0,"data":{"list":[
 				{"account_id":3001,"account_type":"PLATFORM_ROLE_STAR","account_name":"星图账户","is_valid":true},
 				{"account_id":3002,"account_type":"ADVERTISER","is_valid":true}
@@ -136,7 +139,14 @@ func TestStarMapDiscoveryFiltersStarAccountsAndVerifiesStarIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := (AdvertiserDiscoveryAdapter{Factory: factory}).Discover(
+	adapter := AdvertiserDiscoveryAdapter{
+		Factory: factory,
+		Retry: platformretry.Policy{
+			Delays: []time.Duration{0, 0},
+			Sleep:  func(context.Context, time.Duration) error { return nil },
+		},
+	}
+	snapshot, err := adapter.Discover(
 		testRequestContext(t, "star_map"), "star_map", "fixture-access",
 	)
 	if err != nil {
@@ -145,8 +155,8 @@ func TestStarMapDiscoveryFiltersStarAccountsAndVerifiesStarIDs(t *testing.T) {
 	if !reflect.DeepEqual(snapshot.AdvertiserIDs, []string{"3001"}) || len(snapshot.Accounts) != 1 {
 		t.Fatalf("unexpected star map snapshot: %#v", snapshot)
 	}
-	if len(transport.calls) != 2 || transport.calls[1].Host != BusinessHost ||
-		transport.calls[1].Path != "/open_api/2/star/info/" {
+	if len(transport.calls) != 3 || transport.calls[2].Host != BusinessHost ||
+		transport.calls[2].Path != "/open_api/2/star/info/" {
 		t.Fatalf("unexpected star map request sequence: %#v", transport.calls)
 	}
 }

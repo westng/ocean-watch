@@ -90,16 +90,25 @@ func (adapter AdvertiserDiscoveryAdapter) listAuthorizedAccounts(
 	if err != nil {
 		return nil, err
 	}
-	response, httpResponse, sdkErr := client.sdk.Oauth2AdvertiserGetApi().Get(ctx).
-		AccessToken(accessToken).Execute()
-	if response == nil {
-		return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-	}
-	if err := GuardEnvelope(
-		httpResponse, sdkErr, response.Code, response.Message, response.RequestId,
-		true, response.Data != nil,
-	); err != nil {
-		return nil, err
+	response, err := platformretry.Do(
+		ctx, adapter.readRetry(), ClassifyReadError,
+		func(ctx context.Context, _ int) (*models.Oauth2AdvertiserGetResponse, error) {
+			response, httpResponse, sdkErr := client.sdk.Oauth2AdvertiserGetApi().Get(ctx).
+				AccessToken(accessToken).Execute()
+			if response == nil {
+				return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+			}
+			if err := GuardEnvelope(
+				httpResponse, sdkErr, response.Code, response.Message, response.RequestId,
+				true, response.Data != nil,
+			); err != nil {
+				return nil, err
+			}
+			return response, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list authorized accounts: %w", err)
 	}
 	accounts := make([]domain.AuthorizedAccount, 0, len(response.Data.List))
 	seen := map[string]struct{}{}
@@ -435,13 +444,22 @@ func (adapter AdvertiserDiscoveryAdapter) verifyStarAccounts(
 				return nil, err
 			}
 		}
-		response, httpResponse, sdkErr := client.sdk.StarInfoV2Api().Get(ctx).
-			AccessToken(accessToken).StarIds(ids).Execute()
-		if response == nil {
-			return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-		}
-		if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
-			return nil, err
+		response, err := platformretry.Do(
+			ctx, adapter.readRetry(), ClassifyReadError,
+			func(ctx context.Context, _ int) (*models.StarInfoV2Response, error) {
+				response, httpResponse, sdkErr := client.sdk.StarInfoV2Api().Get(ctx).
+					AccessToken(accessToken).StarIds(ids).Execute()
+				if response == nil {
+					return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
+				}
+				if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
+					return nil, err
+				}
+				return response, nil
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("verify star account batch %d: %w", start/50+1, err)
 		}
 		if response.Data == nil {
 			return nil, errors.New("star info response is missing data")

@@ -135,7 +135,6 @@ func parseQianchuanTemplateUpdate(args []string) (qianchuanTemplateUpdateArgs, e
 	return result, nil
 }
 
-
 func RunQianchuanTemplates(
 	ctx context.Context,
 	action string,

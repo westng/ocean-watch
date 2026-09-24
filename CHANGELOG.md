@@ -51,6 +51,10 @@
 
 ### 修复
 
+- 修复星图账号复用广告主字段造成的展示歧义：账户输出现在同时提供 `subject_id` 与 `subject_kind`，星图使用 `star_account` 语义，旧 `advertiser_id` 状态字段继续兼容；星图授权账户发现和广告主账户发现统一使用有界只读重试。
+- 修复 macOS Keychain 写入凭据时将 Secret 放入进程参数的问题，改为通过 `security` 的 stdin 提交；凭据文件账户名现在拒绝路径分隔符和其他非安全标识字符。
+- 补齐 Go 格式、竞态测试和 Python Ruff 质量门禁，并增加临时分发目录的 MCP 启动探针；移除构建器与运行时之间重复维护的 SDK 版本注入。
+
 - 修复千川全域账户维度报表把 `start_date` 与 `end_date` 按裸日期发送、被官方按参数不合规拒绝的问题；`/v1.0/qianchuan/report/uni_promotion/get/` 要求 `YYYY-MM-DD HH:MM:SS`，现在与 `all_promotion` 一致补齐 `00:00:00` 与 `23:59:59`。原先只有 `all_promotion` 分支补时间后缀，因此 `report_qianchuan_account` 的 `scope=uni`（以及 CLI `qc-reports uni-account`）对任何账户都恒定失败，并被上游错误映射笼统报成官方查询故障。适配器与应用层测试此前把裸日期断言固化为契约，现在改为锁定带时间格式，并补充 `end_date`、`marketing_goal` 与 `order_platform` 的默认值断言。
 - 修复千川预检快照保存时把模板中的大整数商品 ID 经 `float64` 重编码而改变精度、同时让模板 JSON 字段顺序参与快照指纹，导致预检成功后用精确 `preflight_id` 立即读取仍返回 `PREFLIGHT_INVALID` 的问题；Operation Journal 现在保留任意长度 JSON 数字，快照指纹按模板 JSON 语义规范化。
 - 修复干净 Git checkout 中 Unix 稳定启动器丢失执行位、Windows 启动脚本被行尾转换后与签名清单哈希不一致，以及代理热切换测试在 Windows 上错误断言仅 Unix 支持的 Host 软链接，导致三平台 CI 阻断的问题。

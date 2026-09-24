@@ -40,6 +40,8 @@ type managedAccountItem struct {
 	Channel      string `json:"channel"`
 	Name         string `json:"name"`
 	AdvertiserID string `json:"advertiser_id"`
+	SubjectID    string `json:"subject_id"`
+	SubjectKind  string `json:"subject_kind"`
 	Enabled      bool   `json:"enabled"`
 }
 
@@ -259,13 +261,13 @@ type qianchuanUniAccountReportInput struct {
 }
 
 type qianchuanUniAccountReportOutput struct {
-	OK           bool                                 `json:"ok"`
-	RequestID    string                               `json:"request_id"`
-	Source       string                               `json:"source"`
-	AdvertiserID string                               `json:"advertiser_id"`
-	DateRange    applicationreports.DateRange         `json:"date_range"`
-	Data         map[string]any                       `json:"data"`
-	Meta         map[string]any                       `json:"_meta,omitempty"`
+	OK           bool                         `json:"ok"`
+	RequestID    string                       `json:"request_id"`
+	Source       string                       `json:"source"`
+	AdvertiserID string                       `json:"advertiser_id"`
+	DateRange    applicationreports.DateRange `json:"date_range"`
+	Data         map[string]any               `json:"data"`
+	Meta         map[string]any               `json:"_meta,omitempty"`
 }
 
 type qianchuanPlanReportInput struct {
@@ -325,9 +327,11 @@ func (runtime Runtime) listManagedAccounts(ctx context.Context, request *mcp.Cal
 	accounts := book.List(selected, !input.IncludeDisabled)
 	items := make([]managedAccountItem, len(accounts))
 	for index, account := range accounts {
+		subject := account.Subject()
 		items[index] = managedAccountItem{
 			Channel: string(account.Channel), Name: account.Name,
-			AdvertiserID: account.AdvertiserID, Enabled: account.Enabled,
+			AdvertiserID: account.AdvertiserID, SubjectID: subject.ID,
+			SubjectKind: subject.Kind, Enabled: account.Enabled,
 		}
 	}
 	presentation := domain.ManagedAccountPresentation(accounts, input.IncludeDisabled)
@@ -554,7 +558,7 @@ func (runtime Runtime) reportQianchuanUniAccount(ctx context.Context, request *m
 			AdvertiserID: input.AdvertiserID, AuthAccountID: input.AuthAccountID,
 		},
 		StartDate: input.StartDate, EndDate: input.EndDate,
-		Fields:    append([]string(nil), applicationreports.DefaultQianchuanUniPromotionFields...),
+		Fields: append([]string(nil), applicationreports.DefaultQianchuanUniPromotionFields...),
 	}
 	result, err := runtime.QianchuanReports.QianchuanUniPromotion(ctx, query)
 	if err != nil {

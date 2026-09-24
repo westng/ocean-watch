@@ -53,7 +53,7 @@ const listSuccessSchema = `{
   }
 }`
 
-const listOutputSchema = objectOneOf +listSuccessSchema + `,` + errorOutputSchema + `]}`
+const listOutputSchema = objectOneOf + listSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const getInputSchema = `{
   "type":"object","additionalProperties":false,"required":["channel","template_id"],
@@ -96,7 +96,7 @@ const getSuccessSchema = `{
   }
 }`
 
-const getOutputSchema = objectOneOf +getSuccessSchema + `,` + errorOutputSchema + `]}`
+const getOutputSchema = objectOneOf + getSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const preflightInputSchema = `{
   "type":"object","additionalProperties":false,"required":["plan_template","items"],
@@ -248,4 +248,4 @@ const getPreflightSuccessSchema = `{
   }
 }`
 
-const getPreflightOutputSchema = objectOneOf +getPreflightSuccessSchema + `,` + errorOutputSchema + `]}`
+const getPreflightOutputSchema = objectOneOf + getPreflightSuccessSchema + `,` + errorOutputSchema + `]}`

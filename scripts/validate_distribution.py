@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-import json
 import hashlib
+import json
 import re
 import stat
 import sys
 from pathlib import Path
 
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = (

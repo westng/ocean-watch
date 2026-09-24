@@ -17,7 +17,6 @@ import (
 	"strings"
 )
 
-const sdkVersion = "v1.1.92"
 const cliVersionSymbol = "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/cli.Version"
 const runtimeVersionSymbol = "main.runtimeVersion"
 
@@ -301,7 +300,6 @@ func build(moduleRoot, destination, version, distribution string, value target) 
 			"-s", "-w", "-buildid=",
 			"-X", cliVersionSymbol + "=" + version,
 			"-X", runtimeVersionSymbol + "=" + distribution,
-			"-X", "main.sdkVersion=" + sdkVersion,
 		}, " "),
 		"-o", destination, "./cmd/ocean-watch",
 	}

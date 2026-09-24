@@ -96,7 +96,9 @@ func (store Store) Write(ctx context.Context, account string, value map[string]a
 	switch backend {
 	case BackendMacOSKeychain:
 		_ = store.runCommand(ctx, "security", macOSDeleteArguments(account), nil, false)
-		err = store.runCommand(ctx, "security", macOSWriteArguments(account, string(payload)), nil, true)
+		// With -w at the end security prompts for the value on stdin. Keeping
+		// the secret out of argv prevents it from appearing in process listings.
+		err = store.runCommand(ctx, "security", macOSWriteArguments(account), append(append([]byte(nil), payload...), '\n'), true)
 	case BackendLinuxSecretService:
 		err = store.runCommand(ctx, "secret-tool", linuxWriteArguments(account), payload, true)
 	case BackendWindowsDPAPI:
@@ -135,8 +137,8 @@ func macOSDeleteArguments(account string) []string {
 	return []string{"delete-generic-password", "-s", Service, "-a", account}
 }
 
-func macOSWriteArguments(account, payload string) []string {
-	return []string{"add-generic-password", "-U", "-s", Service, "-a", account, "-w", payload}
+func macOSWriteArguments(account string) []string {
+	return []string{"add-generic-password", "-U", "-s", Service, "-a", account, "-w"}
 }
 
 func linuxReadArguments(account string) []string {
@@ -280,7 +282,14 @@ func encode(value map[string]any, indented bool) ([]byte, error) {
 }
 
 func validateAccount(account string) error {
-	if account == "" || strings.ContainsAny(account, "\x00\r\n") {
+	if account == "" {
+		return errors.New("credential account name is invalid")
+	}
+	for _, value := range account {
+		if value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' ||
+			value >= '0' && value <= '9' || value == '.' || value == '_' || value == '-' {
+			continue
+		}
 		return errors.New("credential account name is invalid")
 	}
 	return nil

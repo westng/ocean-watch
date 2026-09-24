@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -49,6 +50,61 @@ type ManagedAccount struct {
 	Name          string  `json:"name"`
 	Enabled       bool    `json:"enabled"`
 	AuthAccountID string  `json:"auth_account_id,omitempty"`
+}
+
+// AccountSubject describes the external account identity without assuming
+// that every channel exposes an advertiser.
+type AccountSubject struct {
+	ID    string
+	Kind  string
+	Label string
+}
+
+func (c Channel) SubjectKind() string {
+	if c == StarMap {
+		return "star_account"
+	}
+	return "advertiser"
+}
+
+func (c Channel) SubjectIDLabel() string {
+	if c == StarMap {
+		return "星图账号 ID"
+	}
+	return "广告主 ID"
+}
+
+func (c Channel) SubjectKindLabel() string {
+	if c == StarMap {
+		return "星图账号"
+	}
+	return "广告主"
+}
+
+func (account ManagedAccount) Subject() AccountSubject {
+	return AccountSubject{
+		ID: account.AdvertiserID, Kind: account.Channel.SubjectKind(), Label: account.Channel.SubjectIDLabel(),
+	}
+}
+
+// MarshalJSON keeps the legacy advertiser_id field while exposing the
+// channel-neutral identity used by new consumers.
+func (account ManagedAccount) MarshalJSON() ([]byte, error) {
+	type accountJSON struct {
+		Channel       Channel `json:"channel"`
+		AdvertiserID  string  `json:"advertiser_id"`
+		SubjectID     string  `json:"subject_id"`
+		SubjectKind   string  `json:"subject_kind"`
+		Name          string  `json:"name"`
+		Enabled       bool    `json:"enabled"`
+		AuthAccountID string  `json:"auth_account_id,omitempty"`
+	}
+	subject := account.Subject()
+	return json.Marshal(accountJSON{
+		Channel: account.Channel, AdvertiserID: account.AdvertiserID,
+		SubjectID: subject.ID, SubjectKind: subject.Kind, Name: account.Name,
+		Enabled: account.Enabled, AuthAccountID: account.AuthAccountID,
+	})
 }
 
 type AccountBook struct {
@@ -182,7 +238,8 @@ func (book *AccountBook) SetEnabled(channel Channel, advertiserID string, enable
 var ManagedAccountColumns = []PresentationColumn{
 	{Field: "channel_name", Label: "渠道"},
 	{Field: "name", Label: "账户名称"},
-	{Field: "advertiser_id", Label: "广告主 ID"},
+	{Field: "subject_kind", Label: "账号类型"},
+	{Field: "subject_id", Label: "账号 ID"},
 	{Field: "enabled_label", Label: "启用状态"},
 }
 
@@ -193,9 +250,10 @@ func ManagedAccountPresentation(accounts []ManagedAccount, includeDisabled bool)
 		if account.Enabled {
 			enabledLabel = "已启用"
 		}
+		subject := account.Subject()
 		rows = append(rows, map[string]any{
 			"channel_name": account.Channel.DisplayName(),
-			"name":         account.Name, "advertiser_id": account.AdvertiserID,
+			"name":         account.Name, "subject_kind": account.Channel.SubjectKindLabel(), "subject_id": subject.ID,
 			"enabled_label": enabledLabel,
 		})
 	}
