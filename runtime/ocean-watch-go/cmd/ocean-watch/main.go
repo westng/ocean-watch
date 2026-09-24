@@ -64,7 +64,8 @@ func main() {
 		return
 	}
 	runner := cli.Runner{
-		Routes: application.DefaultRouteManifest(),
+		Routes:         application.DefaultRouteManifest(),
+		RuntimeVersion: effectiveRuntimeVersion(),
 	}
 	os.Exit(runner.Execute(ctx, os.Args[1:]))
 }

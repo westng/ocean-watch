@@ -264,6 +264,25 @@ func TestInstalledVersionFingerprintTracksAtomicCacheReplacement(t *testing.T) {
 	}
 }
 
+func TestInstalledVersionFingerprintTracksSameVersionManifestReplacement(t *testing.T) {
+	root := t.TempDir()
+	manifest := filepath.Join(root, "1.0.9+codex.same", ".codex-plugin", "runtime-manifest.json")
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := installedVersionFingerprint(root)
+	if err := os.WriteFile(manifest, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after := installedVersionFingerprint(root)
+	if before == "" || after == "" || before == after {
+		t.Fatalf("same-version manifest replacement was not observed: before=%q after=%q", before, after)
+	}
+}
+
 func proxyRuntimeVersion(t *testing.T, session *mcp.ClientSession) string {
 	t.Helper()
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{

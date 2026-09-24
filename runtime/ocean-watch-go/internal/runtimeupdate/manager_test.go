@@ -126,6 +126,96 @@ func TestResolveReusesValidatedPrivateSlotWithoutRehashing(t *testing.T) {
 	}
 }
 
+func TestResolveDoesNotReusePrivateSlotAfterSameVersionManifestChanges(t *testing.T) {
+	root := t.TempDir()
+	version := "1.0.9+codex.same"
+	fallback := writeCandidate(t, root, "fallback", version, "fallback")
+	installed := writeCandidate(t, filepath.Join(root, "codex", "plugins", "cache", marketplaceName, pluginName), version, version, "installed")
+	manager := testManager(root, fallback.PluginRoot, installed)
+	selected, err := manager.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated := writeCandidate(t, filepath.Dir(installed.PluginRoot), version, version, "updated")
+	manager.Discover = func() (string, string, error) {
+		return updated.PluginRoot, updated.Version, nil
+	}
+	again, err := manager.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.SHA256 == selected.SHA256 || again.SHA256 != updated.SHA256 {
+		t.Fatalf("same-version installed manifest change was ignored: selected=%#v again=%#v", selected, again)
+	}
+}
+
+func TestResolveKeepsValidSlotUntilSameVersionReplacementIsComplete(t *testing.T) {
+	root := t.TempDir()
+	version := "1.0.9+codex.same"
+	fallback := writeCandidate(t, root, "fallback", version, "fallback")
+	installed := writeCandidate(t, filepath.Join(root, "codex", "plugins", "cache", marketplaceName, pluginName), version, version, "old")
+	manager := testManager(root, fallback.PluginRoot, installed)
+	selected, err := manager.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := writeCandidate(t, filepath.Dir(installed.PluginRoot), version, version, "new")
+	resource := filepath.Join(updated.PluginRoot, "f2", "resolve.py")
+	if err := os.WriteFile(resource, []byte("incomplete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	again, err := manager.Resolve(context.Background())
+	if err != nil || again.SHA256 != selected.SHA256 {
+		t.Fatalf("incomplete replacement displaced valid runtime: %#v %v", again, err)
+	}
+	writeTestHostResources(t, updated.PluginRoot)
+	again, err = manager.Resolve(context.Background())
+	if err != nil || again.SHA256 != updated.SHA256 {
+		t.Fatalf("completed replacement was not selected: %#v %v", again, err)
+	}
+}
+
+func TestDiagnoseReportsInstalledBundleDrift(t *testing.T) {
+	root := t.TempDir()
+	version := "1.0.9+codex.same"
+	cacheRoot := filepath.Join(root, "codex", "plugins", "cache", marketplaceName, pluginName)
+	installed := writeCandidate(t, cacheRoot, version, version, "old")
+	manager := testManager(root, installed.PluginRoot, installed)
+	if _, err := manager.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	manager.ProbeVersion = func(_ context.Context, path string) ([]byte, error) {
+		payload, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(path)), "runtime-manifest.json"))
+		if err != nil {
+			return nil, err
+		}
+		var manifest Manifest
+		if err := json.Unmarshal(payload, &manifest); err != nil {
+			return nil, err
+		}
+		return []byte("ocean-watch " + strings.SplitN(manifest.Version, "+", 2)[0]), nil
+	}
+	clean := manager.Diagnose(context.Background())
+	if len(clean.Issues) != 0 {
+		t.Fatalf("valid selected bundle produced diagnostic issues: %#v", clean)
+	}
+	writeCandidate(t, cacheRoot, version, version, "new")
+	drift := manager.Diagnose(context.Background())
+	if !containsString(drift.Issues, "installed_bundle_not_selected") {
+		t.Fatalf("installed same-version drift was not reported: %#v", drift)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPruneObsoleteRuntimesWaitsForActiveLease(t *testing.T) {
 	root := t.TempDir()
 	oldSource := writeCandidate(t, root, "old", "1.0.9+codex.old", "old")

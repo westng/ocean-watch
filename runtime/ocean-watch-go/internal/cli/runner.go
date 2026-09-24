@@ -15,16 +15,19 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/onboarding"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/configuration"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/resources"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
 
-var Version = "0.9.1"
+var Version = "dev"
 
 type Runner struct {
 	Routes             application.RouteManifest
+	RuntimeVersion     string
 	Stdout             io.Writer
 	Stderr             io.Writer
 	Stdin              io.Reader
@@ -261,7 +264,29 @@ func (runner Runner) runSetup(
 	if probe == nil {
 		probe = environment.Probe{PythonResolver: runner.PythonResolver, Credentials: credentialStore}
 	}
-	doctor := onboarding.Doctor{Probe: probe}
+	doctor := onboarding.Doctor{Probe: probe, RuntimeVersion: runner.RuntimeVersion}
+	if runner.RuntimeVersion != "" {
+		doctor.RuntimeCheck = func(ctx context.Context) onboarding.Check {
+			manager := runtimeupdate.Manager{CodexRoot: codexRoot, PluginRoot: filesystem.ResolvePluginRoot(cwd)}
+			diagnostic := manager.Diagnose(ctx)
+			count := 0
+			for _, spec := range contracts.DefaultCapabilityRegistry.All() {
+				if spec.MCPTool != "" {
+					count++
+				}
+			}
+			check := onboarding.Check{
+				"id": "runtime", "required": true, "status": "ready", "diagnostic": diagnostic,
+				"mcp_tool_count": count, "message": "Runtime bundles are consistent.", "remediation": nil,
+			}
+			if len(diagnostic.Issues) > 0 {
+				check["status"] = "blocked"
+				check["message"] = "Runtime bundles are inconsistent or invalid."
+				check["remediation"] = "Reinstall the validated plugin bundle, then start a new task. Authorization does not need to be repeated."
+			}
+			return check
+		}
+	}
 	switch action {
 	case "doctor":
 		options, err := parseDoctorOptions(args)

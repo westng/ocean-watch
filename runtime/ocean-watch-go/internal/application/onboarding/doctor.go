@@ -1,6 +1,9 @@
 package onboarding
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 type Check map[string]any
 
@@ -24,7 +27,9 @@ type EnvironmentReport struct {
 }
 
 type Doctor struct {
-	Probe EnvironmentProbe
+	Probe          EnvironmentProbe
+	RuntimeVersion string
+	RuntimeCheck   func(context.Context) Check
 }
 
 func (doctor Doctor) Report(ctx context.Context, channel, redirectURI string) EnvironmentReport {
@@ -35,6 +40,18 @@ func (doctor Doctor) Report(ctx context.Context, channel, redirectURI string) En
 		doctor.Probe.CodexCLI(ctx),
 		doctor.Probe.CredentialBackend(ctx),
 		doctor.Probe.Callback(ctx, redirectURI),
+	}
+	if version := strings.TrimSpace(doctor.RuntimeVersion); version != "" {
+		check := Check{
+			"id": "runtime", "required": false, "status": "ready", "version": version,
+			"message":     "This command is running on the reported Ocean Watch Runtime.",
+			"remediation": nil,
+		}
+		if doctor.RuntimeCheck != nil {
+			check = doctor.RuntimeCheck(ctx)
+			check["version"] = version
+		}
+		checks = append(checks, check)
 	}
 	blockers := []string{}
 	warnings := []string{}

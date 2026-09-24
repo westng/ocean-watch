@@ -40,3 +40,24 @@ func TestDoctorSeparatesBlockersAndWarnings(t *testing.T) {
 		t.Fatalf("unexpected warnings: %#v", report)
 	}
 }
+
+func TestDoctorReportsRuntimeVersion(t *testing.T) {
+	probe := &probeFixture{checks: []Check{
+		{"id": "python", "required": true, "status": "ready"},
+		{"id": "f2", "required": true, "status": "ready"},
+		{"id": "platform", "required": true, "status": "ready"},
+		{"id": "codex_cli", "required": false, "status": "ready"},
+		{"id": "credential_backend", "required": true, "status": "ready"},
+		{"id": "oauth_callback", "required": true, "status": "ready"},
+	}}
+	report := (Doctor{Probe: probe, RuntimeVersion: "1.0.9+codex.test"}).Report(
+		context.Background(), "marketing", "http://127.0.0.1:8787/oauth/callback",
+	)
+	if len(report.Checks) != 7 {
+		t.Fatalf("runtime check missing: %#v", report.Checks)
+	}
+	check := report.Checks[len(report.Checks)-1]
+	if check["id"] != "runtime" || check["version"] != "1.0.9+codex.test" {
+		t.Fatalf("unexpected runtime check: %#v", check)
+	}
+}

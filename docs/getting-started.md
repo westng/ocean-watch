@@ -48,6 +48,8 @@ skills/ads-plan-monitor/run setup init --home-config
 
 Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、CLI 环境、安全凭据后端和 OAuth 回调端口；它不会安装依赖、修改系统设置或发起 OAuth。
 
+托管 Runtime 还会在 doctor 结果中报告当前执行版本、已选 Runtime slot、已安装候选的 manifest 指纹和 MCP 工具数量；如果这些内容不一致，会明确阻断并提示重新安装 Plugin，授权状态无需重复配置。
+
 默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`。状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。配置不包含 Secret 或 Token。
 
 ## 3. 分渠道授权

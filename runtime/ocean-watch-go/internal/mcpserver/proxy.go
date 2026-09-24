@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -256,7 +258,19 @@ func installedVersionFingerprint(path string) string {
 	versions := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
-			versions = append(versions, entry.Name())
+			manifestPath := filepath.Join(path, entry.Name(), ".codex-plugin", "runtime-manifest.json")
+			info, statErr := os.Lstat(manifestPath)
+			if statErr != nil || !info.Mode().IsRegular() || info.Size() > 1024*1024 {
+				versions = append(versions, entry.Name()+"\x00invalid")
+				continue
+			}
+			payload, readErr := os.ReadFile(manifestPath)
+			if readErr != nil {
+				versions = append(versions, entry.Name()+"\x00invalid")
+				continue
+			}
+			digest := sha256.Sum256(payload)
+			versions = append(versions, entry.Name()+"\x00"+hex.EncodeToString(digest[:]))
 		}
 	}
 	sort.Strings(versions)

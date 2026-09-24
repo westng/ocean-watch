@@ -63,7 +63,7 @@ python3 scripts/validate_distribution.py
 
 构建固定 `CGO_ENABLED=0`、目标平台、时区、locale、`-trimpath` 和空 build ID。任何源码、Go 依赖、构建参数或基础版本变化都必须重新生成五个平台产物。
 
-构建器同时生成 `.codex-plugin/runtime-manifest.json`，绑定 Plugin 名称/版本、Plugin 清单、`.mcp.json`、两套 Skill 全部文件、F2、稳定 Unix 启动器和五个平台二进制哈希。私有 Runtime 槽位必须包含清单声明的全部平台二进制，避免同一台 Apple Silicon 设备上的原生 arm64 App 与 Rosetta/x64 CLI 争用架构专属槽位。Runtime 实现的兼容升级不得改变外层 17 个 MCP 工具的名称、输入/输出 Schema、注解或错误边界；任何合同变化必须作为非兼容 Host 合同单独评审，不能依赖 Runtime 热切换。
+构建器同时生成 `.codex-plugin/runtime-manifest.json`，绑定 Plugin 名称/版本、Plugin 清单、`.mcp.json`、两套 Skill 全部文件、F2、稳定 Unix 启动器和五个平台二进制哈希。私有 Runtime 槽位必须包含清单声明的全部平台二进制，避免同一台 Apple Silicon 设备上的原生 arm64 App 与 Rosetta/x64 CLI 争用架构专属槽位。Runtime 实现的兼容升级不得改变外层 18 个 MCP 工具的名称、输入/输出 Schema、注解或错误边界；任何合同变化必须作为非兼容 Host 合同单独评审，不能依赖 Runtime 热切换。
 
 ## 质量门
 

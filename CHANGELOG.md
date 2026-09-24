@@ -6,16 +6,16 @@
 
 ### 新增
 
-- 同一仓库现在同时作为 Codex 插件、Claude Code 插件和豆包工作 Skills 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录。本次不新增 MCP 工具，Host 工具合同仍为 17 个。
+- 同一仓库现在同时作为 Codex 插件、Claude Code 插件和豆包工作 Skills 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录。跨 Host 接入本身不新增 MCP 工具；当前工具合同为 18 个。
 - 新增 Host 中立状态根 `OCEAN_WATCH_HOME`，优先级为 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。默认值不变，已有 Codex 安装零迁移；三个 Host 共用同一个根，因此 OAuth 只需授权一次——官方刷新响应会替换已存储的 refresh token，各存一份会互相作废凭据。
-- 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，Host 工具合同仍为 17 个。
+- 新增千川当日计划本地绑定存储与显式迁移命令：绑定以 `业务日 + group_id` 为唯一键，落在 `qianchuan/plan-bindings.json` 并带独立文件锁和 Schema 版本校验，不支持的 Schema 直接拒绝而不静默重建；只读 `qc-plans binding-audit` 列出指定业务日的历史候选、当前绑定和分页请求清单，`qc-plans bind` 默认 dry-run 返回 `would_bind`，只有 `--submit` 才在广告主写锁下写入本地绑定。两条命令都不调用官方写接口，`bind` 强制 `--group-id` 与完整计划身份精确一致且 `--ad-id` 必须是当日该组的精确候选；本次不为迁移新增 MCP 工具，当前 Host 工具合同为 18 个。
 - 新增稳定本地 MCP 代理与版本化私有 Runtime：macOS/Linux 在同一 Codex 任务和同一外层 MCP 会话内自动发现兼容安装升级，校验 Plugin 身份、版本、Runtime/F2/启动器哈希、二进制自报版本与完整工具合同后原子切换；坏版本在接管前自动恢复并只拒绝该次清单，修复版可继续自动升级。
-- MCP 新增只读 `get_capabilities`，从 76 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
+- MCP 新增只读 `get_capabilities`，从 77 条 CLI 唯一命令事实源返回渠道、副作用和 `requires_submit`；副作用区分本地读写、公开网络读取、授权状态写入、官方业务读取和可提交在线写入。
 - MCP 代理新增初始化、Runtime 切换、拒绝回滚和业务调用阶段计时日志，并在工具结果 `_meta.ocean_watch` 返回实际 Runtime 版本与代理内业务调用耗时。
 
 - Plugin 新增内置本地 stdio MCP，并首批提供 `list_templates`、`get_template` 两个模板只读工具；工具与 CLI 共享 Go Application Service，使用严格 Schema、字符串 ID、状态版本游标、稳定错误码、只读安全注解和独立脱敏 Presenter，不启动或解析 CLI。
 - MCP 新增 `preflight_qianchuan_works` 与 `get_qianchuan_preflight`：前者复用千川批量 Application Service 执行无业务写入的官方只读预检并保存短期快照，后者完全本地读取白名单摘要；两者拒绝配置路径和提交参数，不返回原始链接、模板 payload、授权选择器、Token 或内部错误，确认后的在线提交仍保留在显式 CLI 写入路径。
-- MCP 新增 `list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account` 与 `report_qianchuan_plans` 七个高频任务型查询工具；本地账户/授权查询不刷新 Token、不访问官方接口，商品、计划和固定报表复用现有 Application Service，使用严格 Schema、字符串 ID、白名单 Presenter 和脱敏稳定错误。
+- MCP 新增 `list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account`、`report_qianchuan_uni_account` 与 `report_qianchuan_plans` 八个高频任务型查询工具；本地账户/授权查询不刷新 Token、不访问官方接口，商品、计划和固定报表复用现有 Application Service，使用严格 Schema、字符串 ID、白名单 Presenter 和脱敏稳定错误。
 - MCP 新增 `get_marketing_authorization`、`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 与 `report_marketing_plans` 五个巨量营销高频任务型查询工具；本地授权查询不刷新 Token、不访问官方接口，素材和固定报表复用现有 Application Service，达人素材按显式单页读取，避免为少量结果扫描全部分页。
 - 新增真实 MCP 子进程协议门禁，验证初始化、工具发现、成功与错误调用、取消、正常退出、代理阶段计时和 stderr 脱敏；macOS/Linux 通过固定本地启动器验收稳定代理，五平台交叉构建只证明对应 CLI 产物，不额外宣称 Windows MCP 已验收。
 - Plugin 内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 五个平台的 Go CLI；macOS/Linux 的 Skill 与 MCP 统一进入稳定启动器并解析当前版本化 Runtime，Windows Skill 继续通过 `run.cmd` 选择内置 CLI，Marketplace 源码快照安装后不再依赖 Python 业务包或额外编译。
@@ -24,7 +24,7 @@
 ### 变更
 
 - Go 工具链从 `1.26.5` 升级到 `1.27.0`，全仓库保持单一版本：`go.mod` 的 `go` 指令、`cmd/build-runtime` 内层用于保证产物逐字节复现的 `GOTOOLCHAIN`、两个 GitHub Actions workflow 的 `go-version` 以及全部文档命令示例同步对齐。`go` 指令是最低版本要求，因此从源码构建现在需要 Go `1.27.0` 及以上；编译器变化使五平台二进制与 `runtime-manifest.json` 哈希一并更新，本次不改变任何运行时行为或 Host 工具合同。
-- 全部 17 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；三个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
+- 全部 18 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；三个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
 - 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，因为 Claude 下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
 - 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。
 - 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
@@ -49,6 +49,7 @@
 
 ### 修复
 
+- 修复开发二进制未注入版本时仍报告旧正式版本的问题：现在显示 `dev`；重新生成五平台 Runtime 与完整资源清单，校验源码、分发包与已安装 Runtime 的一致性。
 - 修复千川全域账户维度报表把 `start_date` 与 `end_date` 按裸日期发送、被官方按参数不合规拒绝的问题；`/v1.0/qianchuan/report/uni_promotion/get/` 要求 `YYYY-MM-DD HH:MM:SS`，现在与 `all_promotion` 一致补齐 `00:00:00` 与 `23:59:59`。原先只有 `all_promotion` 分支补时间后缀，因此 `report_qianchuan_account` 的 `scope=uni`（以及 CLI `qc-reports uni-account`）对任何账户都恒定失败，并被上游错误映射笼统报成官方查询故障。适配器与应用层测试此前把裸日期断言固化为契约，现在改为锁定带时间格式，并补充 `end_date`、`marketing_goal` 与 `order_platform` 的默认值断言。
 - 修复千川预检快照保存时把模板中的大整数商品 ID 经 `float64` 重编码而改变精度、同时让模板 JSON 字段顺序参与快照指纹，导致预检成功后用精确 `preflight_id` 立即读取仍返回 `PREFLIGHT_INVALID` 的问题；Operation Journal 现在保留任意长度 JSON 数字，快照指纹按模板 JSON 语义规范化。
 - 修复干净 Git checkout 中 Unix 稳定启动器丢失执行位、Windows 启动脚本被行尾转换后与签名清单哈希不一致，以及代理热切换测试在 Windows 上错误断言仅 Unix 支持的 Host 软链接，导致三平台 CI 阻断的问题。
@@ -56,6 +57,7 @@
 - 修复旧插件缓存、源码目录和运行中 Host 合同混为一体，导致升级后仍执行旧实现、坏候选污染 current、普通 CLI 重复查询安装信息并哈希大二进制的问题；更新发现不再调用可能阻塞数十秒的 `codex plugin list`，而是读取本地安装版本目录的小清单，再对候选执行完整身份、资源、二进制、自报版本和 MCP 合同校验；私有槽位快速复用只核对不可变小清单和二进制身份。
 - 修复 Runtime 自报版本探针未继承有界截止时间，恶意或损坏候选可能拖住初始化的问题；单候选探针现在最多等待 2 秒，超时即拒绝候选并保留当前有效 Runtime。
 - 修复安装器原子替换版本目录时父目录修改时间可能不变、稳定代理因此漏掉兼容升级的问题；监控现在比较排序后的本地安装版本目录指纹，并用同一外层 MCP 会话的 A→B 只读探针锁定实际切换。
+- 修复同一 Plugin 版本号复用旧 Runtime、已安装 manifest 已更新却仍加载旧工具合同的问题；Runtime 现在比较安装 manifest 指纹，稳定代理也感知同版本 manifest 变化，`setup doctor` 会报告实际 Runtime、已选 slot、已安装包和 MCP 工具数量。
 - 修复 MCP 内层只返回基础产品版本、无法区分 cachebuster Runtime 的诊断歧义；CLI `--version` 继续返回产品版本，MCP 能力结果和代理 `_meta` 统一返回完整 Runtime 版本。
 - 修复版本化 Runtime 中 `setup init` 可能把私有槽位误当成可写 Plugin 配置根的问题；托管 Runtime 在用户未显式覆盖路径时始终使用 `$CODEX_HOME/ads-plan-monitor/config.json`，F2 仍与被选中的 Runtime 版本保持一致。
 - 修复 Apple Silicon 桌面客户端使用 arm64、终端或 Codex CLI 使用 Rosetta/x64 时共享私有 Runtime 状态会互相把架构专属二进制误判为损坏的问题；每个签名槽位现在保存清单中的全部平台产物，版本身份只由版本、清单哈希和槽位根确定，各进程从同一只读槽位选择本架构二进制。

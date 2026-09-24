@@ -1,6 +1,6 @@
 {
   "name": "ocean-watch",
-  "version": "1.0.9+codex.20260818123547",
+  "version": "1.0.9+codex.20260924172936",
   "description": "Claude Code plugin for Ocean Engine OAuth, responsible-account reporting, plan operations, performance reporting, and monitoring analysis.",
   "author": {
     "name": "westng",
@@ -19,7 +19,13 @@
   "mcpServers": {
     "ocean-watch": {
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/ocean-watch-launcher",
-      "args": ["mcp", "proxy", "--stdio", "--plugin-root", "${CLAUDE_PLUGIN_ROOT}"]
+      "args": [
+        "mcp",
+        "proxy",
+        "--stdio",
+        "--plugin-root",
+        "${CLAUDE_PLUGIN_ROOT}"
+      ]
     }
   }
 }

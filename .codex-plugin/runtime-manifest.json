@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "version": "1.0.9+codex.20260818123547",
+  "version": "1.0.9+codex.20260924172936",
   "plugin": {
     "name": "ocean-watch",
-    "version": "1.0.9+codex.20260818123547",
-    "sha256": "84e5f34b2e2cd05ac7d31cbc76861f753af3fdbc5b9731e816faa220ce4fca26"
+    "version": "1.0.9+codex.20260924172936",
+    "sha256": "3a64e2fbf0c4b4a16e3b17e4ca40e43e726bcc17f0329525417aaa72eb38a208"
   },
   "resources": {
-    ".claude-plugin/plugin.json": "bf88988696f228ce3913c6285a1c08a67c8e8848a54e17f82cf689d91a7a0e2a",
+    ".claude-plugin/plugin.json": "e9b984ee039f69f2984bc3d719727221f30f990b078ff7d1d406c385ddbc0e4e",
     ".mcp.json": "f80bd432bd313c11e965290d6c8bdb1be515f26c361288e8fe0922109738d475",
     "bin/ocean-watch-launcher": "02dc307e25750bb94ac39d45b1a328d9592aee160cf546d71404e4eaaa4c5a15",
     "f2/resolve.py": "d2229d4a64fdd90cd58bd5c53610352d8eec64fb40deaca658be99e3862968fb",
@@ -27,15 +27,15 @@
     "skills/qc-plan-monitor/assets/qianchuan-product-plan.example.json": "97fa77df8fdbf4279ea00c90a8aab8939740cdd1137f02d9777fe8902f2c2e46",
     "skills/qc-plan-monitor/references/official-api-notes.md": "2fdd75903844060135777df6b07149315ddf8b6eaf7df8086c82bd4e8b0abf61",
     "skills/qc-plan-monitor/references/unified-report-routing.md": "b88ca0a48dd3545b5ff0c43f7b5ea1afe47a899d10217c92f52d46ac3be29c5f",
-    "skills/qc-plan-monitor/references/workflow-reference.md": "1f81b3627cc5a1ce96d491c59b3346989ba05fc20f2a936ca1f16352523486ca",
+    "skills/qc-plan-monitor/references/workflow-reference.md": "71884a9300a1cbeb1cdf0f349fcf7d0229bcddf55c74a7748bf5994092214b0e",
     "skills/qc-plan-monitor/run": "4c3f9c23d8ffd65eaf6ebfe8caf0d8523a2841d2346831c670acbe6bf8762d56",
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "7d4688af8ca4fce150b83bfd8a0a7e188d890a7e293c2838786fd099bf9e2930",
-    "ocean-watch_darwin_arm64": "86f37c4a539d9153ac0bf56d2ad2af9c3d7b156701f5317f78874e3482e590dc",
-    "ocean-watch_linux_amd64": "8b4d787daa8ffdfdf4b90868f0b7414905b7856e4c9b6a1838748b49eff64954",
-    "ocean-watch_linux_arm64": "0c96261f7fe94d5f199cb2f706e2ab79610578a07d2d8645d07819489a634d66",
-    "ocean-watch_windows_amd64.exe": "0645e31308f673422284432d6d544f86dbf4d205e07ec95dd229d69338dff87c"
+    "ocean-watch_darwin_amd64": "87ea7612ea9f355898383daca1e431f523e0b0fa68751a04230b6882e264624e",
+    "ocean-watch_darwin_arm64": "cd64b9825b08034ea8b34223a1815c489ea6a386326a6039eefdcf9c25317c31",
+    "ocean-watch_linux_amd64": "71189ea74b0e5dc708765b315faf971a16f6fea432ac9e0e43aa586de5d1bdf6",
+    "ocean-watch_linux_arm64": "6c762acfe0b68eff3690f20ef1d45e7807945bb80ea7ba33a861562e95d8b842",
+    "ocean-watch_windows_amd64.exe": "2a8a82006c69182c1cf65d574bede4500cf04aeeb6d447ac8a1be29934d2ef45"
   }
 }

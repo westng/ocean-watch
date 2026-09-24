@@ -112,11 +112,11 @@ func (manager Manager) ResolveLeased(ctx context.Context) (Candidate, *filesyste
 
 func (manager Manager) resolveLocked(ctx context.Context) (Candidate, error) {
 	state, _ := manager.readState()
-	if !manager.AlwaysDiscover && manager.canReuseLocalState(state) {
+	installedRoot, installedVersion, discoveryErr := manager.discoverInstalled()
+	if !manager.AlwaysDiscover && discoveryErr != nil && manager.canReuseLocalState(state) {
 		return manager.selectRecordedCandidate(state.Current)
 	}
-	installedRoot, installedVersion, discoveryErr := manager.discoverInstalled()
-	if manager.canReuseState(state, installedVersion, discoveryErr) {
+	if manager.canReuseState(state, installedRoot, installedVersion, discoveryErr) {
 		return manager.selectRecordedCandidate(state.Current)
 	}
 	fallbackSource, fallbackErr := manager.validateCandidate(ctx, manager.PluginRoot, "")
@@ -182,12 +182,33 @@ func (manager Manager) canReuseLocalState(state State) bool {
 	return hex.EncodeToString(digest[:]) == state.Current.SHA256
 }
 
-func (manager Manager) canReuseState(state State, installedVersion string, discoveryErr error) bool {
+func (manager Manager) canReuseState(
+	state State,
+	installedRoot string,
+	installedVersion string,
+	discoveryErr error,
+) bool {
 	if state.SchemaVersion != 2 || state.Current.Version == "" || !manager.isRuntimeSlot(state.Current) ||
 		manager.quickValidateRecorded(state.Current) != nil {
 		return false
 	}
-	return discoveryErr == nil && installedVersion == state.Current.Version
+	if discoveryErr != nil || installedVersion != state.Current.Version {
+		return false
+	}
+	manifestHash, err := runtimeManifestHash(installedRoot)
+	if err != nil || manifestHash != state.Current.SHA256 {
+		return false
+	}
+	return true
+}
+
+func runtimeManifestHash(root string) (string, error) {
+	payload, err := readRegularFile(filepath.Join(root, ".codex-plugin", "runtime-manifest.json"))
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(payload)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func (manager Manager) isRuntimeSlot(candidate Candidate) bool {
