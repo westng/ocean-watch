@@ -75,6 +75,47 @@ def validate_claude_manifest():
             fail(f"Claude manifest file is writable by group or other: {path.name}")
 
 
+def validate_harness_manifest():
+    manifest = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    codex = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    if manifest.get("name") != "ocean-watch" or manifest.get("type") != "module":
+        fail("Harness package identity is invalid")
+    if manifest.get("version") != codex["version"].split("+", 1)[0]:
+        fail("Harness package version must match the product base version")
+    if manifest.get("dsh") != {"bundle": {"patch": "./harness/cordis.patch.yml"}}:
+        fail("Harness package must declare its bundle patch")
+    if manifest.get("exports", {}).get(".") != "./harness/index.mjs":
+        fail("Harness package must export its native plugin")
+    patch = yaml.safe_load((ROOT / "harness" / "cordis.patch.yml").read_text(encoding="utf-8"))
+    if patch != [{"insert": [{"id": "ocean-watch", "name": "ocean-watch"}]}]:
+        fail("Harness bundle must mount the ocean-watch plugin once")
+    peers = manifest.get("peerDependencies", {})
+    required_peers = {"@deepseek-ai/dsh-mcp-client", "@deepseek-ai/dsh-skill-filesystem"}
+    # package.json owns the compatibility pin; the desktop probe verifies it against the host.
+    versions = list(peers.values())
+    if (
+        set(peers) != required_peers
+        or any(not isinstance(version, str) for version in versions)
+        or len(set(versions)) != 1
+        or not re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", versions[0])
+    ):
+        fail("Harness peers must share one exact desktop runtime version")
+    if manifest.get("peerDependenciesMeta") != {
+        name: {"optional": True} for name in required_peers
+    }:
+        fail("Harness must reuse the host's plugin providers")
+    required_files = {
+        "harness/index.mjs", "harness/config.mjs", "harness/cordis.patch.yml",
+        "bin/ocean-watch-launcher", ".codex-plugin/", ".claude-plugin/plugin.json",
+        ".mcp.json", "skills/", "f2/resolve.py", "contracts/", "pyproject.toml",
+    }
+    if set(manifest.get("files", [])) != required_files:
+        fail("Harness package must include exactly the declared distribution resources")
+    for path in required_files:
+        if not (ROOT / path).exists():
+            fail(f"Harness distribution resource is missing: {path}")
+
+
 def validate_mcp():
     payload = json.loads((ROOT / ".mcp.json").read_text(encoding="utf-8"))
     if set(payload) != {"mcpServers"}:
@@ -261,6 +302,10 @@ def validate_runtime_manifest():
     resources = {
         ".mcp.json": ROOT / ".mcp.json",
         ".claude-plugin/plugin.json": ROOT / ".claude-plugin" / "plugin.json",
+        "package.json": ROOT / "package.json",
+        "harness/index.mjs": ROOT / "harness" / "index.mjs",
+        "harness/config.mjs": ROOT / "harness" / "config.mjs",
+        "harness/cordis.patch.yml": ROOT / "harness" / "cordis.patch.yml",
         "f2/resolve.py": ROOT / "f2" / "resolve.py",
         "bin/ocean-watch-launcher": ROOT / "bin" / "ocean-watch-launcher",
     }
@@ -327,6 +372,7 @@ def main():
     try:
         validate_manifest()
         validate_claude_manifest()
+        validate_harness_manifest()
         validate_mcp()
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")

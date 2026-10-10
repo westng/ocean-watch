@@ -11,7 +11,11 @@
     ".mcp.json": "f80bd432bd313c11e965290d6c8bdb1be515f26c361288e8fe0922109738d475",
     "bin/ocean-watch-launcher": "02dc307e25750bb94ac39d45b1a328d9592aee160cf546d71404e4eaaa4c5a15",
     "f2/resolve.py": "d2229d4a64fdd90cd58bd5c53610352d8eec64fb40deaca658be99e3862968fb",
-    "skills/ads-plan-monitor/SKILL.md": "2a9e46c663636b11963b04564efc367ce2cd76f4865ebd13774535afc4624389",
+    "harness/config.mjs": "3bdddd27040a73d696eca79c4ef15ccc43581faf476d451fb258b8b7ba816278",
+    "harness/cordis.patch.yml": "07ca9c5f25523fe98c1822b6550fadd1c284ecc726e3b0c7193b311a3227ee90",
+    "harness/index.mjs": "d5121dd35f9b75dd2e5670ecaf6ae52e46dae265b3e848179ad263376a8a1e96",
+    "package.json": "fcd6258f69b46f3d1ffd91054121a74266aa8eb013960dfce730ecb2040366fb",
+    "skills/ads-plan-monitor/SKILL.md": "d9b5d207563e40bb2238d8a5443062b4304ca45ee7f890039fd225dddf006114",
     "skills/ads-plan-monitor/agents/openai.yaml": "8d54d9d0712713352df716d13f9dd5826e896477b8d2f33edef9ace662b701d7",
     "skills/ads-plan-monitor/assets/config.example.json": "f56cd5635e9432b33032eae566e72f40c3f2edbcdf4055834c1db347bf0a9647",
     "skills/ads-plan-monitor/assets/creator-batch-jobs.example.json": "8120e664528ab5c7238b695c9e9a804ce90a60ae6ea95b8e57003e7772fab614",
@@ -21,7 +25,7 @@
     "skills/ads-plan-monitor/references/workflow-reference.md": "71067e187b017d4a0fe96f31ceed8c4a2ed0df51847574dff27de6fb86a4c473",
     "skills/ads-plan-monitor/run": "4c3f9c23d8ffd65eaf6ebfe8caf0d8523a2841d2346831c670acbe6bf8762d56",
     "skills/ads-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c",
-    "skills/qc-plan-monitor/SKILL.md": "cc7d5cc9be9bed3d7f290e642e965768504ec35ab1b71819b6ff33865f2ecd2a",
+    "skills/qc-plan-monitor/SKILL.md": "aed8e2b459a0e54e84870e659bbfdf868f51dad9fa8d08de54c3e02efab33c37",
     "skills/qc-plan-monitor/agents/openai.yaml": "9390ae8f5a799b6f538ad61dfbad4f482e1eee104b31d04293dd502a30a3060a",
     "skills/qc-plan-monitor/assets/qianchuan-live-plan.example.json": "862dabdf61747943d62b6a05406f0cde52d17a3acb654f5f80555c7b7585d0cc",
     "skills/qc-plan-monitor/assets/qianchuan-product-plan.example.json": "97fa77df8fdbf4279ea00c90a8aab8939740cdd1137f02d9777fe8902f2c2e46",
@@ -32,10 +36,10 @@
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "8e4e487fd51577f18f67e12723ff0b6a6c4f3e02bfe4fc2de66226beb0bab527",
-    "ocean-watch_darwin_arm64": "daa69454084f4fe7d4017a2480da9e7e4fcfdd46fbcc55d08889da55b72401ad",
-    "ocean-watch_linux_amd64": "f9167ae9b9aa0fad53fe893d74ea4040a3866d3cde464dcf19a60a709285970f",
-    "ocean-watch_linux_arm64": "cee72560ce20df40c11e46bb310a1a61060fd9409591c3e1ded627f8d729188a",
-    "ocean-watch_windows_amd64.exe": "c6808151c223f3f58b7f955074fb386a533b7a14f05b259cc2554b45baad002d"
+    "ocean-watch_darwin_amd64": "cc413de1f69df29587142e764e53a633401e6d572c75d4ee9f271592bbc6e427",
+    "ocean-watch_darwin_arm64": "84971a8b18fa59922e9b3bf330f247bb43c78f4a91b15162ae0a4fdfbb29e2cf",
+    "ocean-watch_linux_amd64": "becd8ad6ea94d731cbfbebbb05ac5fd9708b8b27c905bcd33e8a53e308f6c218",
+    "ocean-watch_linux_arm64": "1f3fe604672e2bf5297a722f2f1fbb3395bfbded9b8947e77e03be1c09deffe2",
+    "ocean-watch_windows_amd64.exe": "df0ede2ceca03032c56b02c90a101dfc97bfb444122f2726988643eb3bcd8f5a"
   }
 }

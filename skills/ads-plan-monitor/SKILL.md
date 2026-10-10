@@ -11,6 +11,8 @@ Classify the user's outcome once, then use the first matching route. Do not sear
 
 Every `./run` below is this skill's own launcher. On Codex invoke it as written. On Claude Code invoke `${CLAUDE_PLUGIN_ROOT}/skills/ads-plan-monitor/run` with the same arguments, because the working directory is the user's project rather than this skill directory. Do not search for the launcher anywhere else.
 
+On DeepSeek Harness, use the absolute directory of the loaded `SKILL.md` to resolve this launcher: `<skill-directory>/run` on macOS/Linux or `<skill-directory>\run.cmd` on Windows. Keep the same arguments. The conversation's working directory is not the skill directory; use the location returned by Harness instead of guessing an installation path.
+
 <!-- capability-routes:start -->
 | User outcome | Exact route |
 | --- | --- |

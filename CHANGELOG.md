@@ -6,6 +6,8 @@
 
 ### 新增
 
+- 新增 DeepSeek Harness 桌面版原生组合包：适配桌面应用及内置运行时 `0.2.0-rc.2`，通过桌面插件管理安装到 `desktop` profile，无需兼容性豁免或独立 npm/CLI 宿主；注册两项 Skill 和 18 个本地 MCP 工具，复用五平台 Go 运行时。根目录 `package.json` 是宿主兼容版本的唯一机器可读来源，`package.json` 与三个 `harness/` 入口一并纳入 `runtime-manifest.json` 的 SHA-256 绑定；`scripts/validate_distribution.py` 新增组合包校验（包身份、与产品基础版本一致、`dsh.bundle` 补丁、单次挂载、peer 精确同版本且复用宿主提供方、分发清单精确匹配），`scripts/version_tag.py` 将该版本纳入检查并在发布时同步更新，日常 CI 新增 Linux/macOS/Windows 三平台的组合包路径与打包检查。新增基于已安装 macOS 桌面应用的隔离验收命令，覆盖打包、版本准入、技能共存、工具发现、五渠道无凭据能力查询、卸载及重新挂载；其他桌面平台尚未完成端到端验收。
+
 - 新增独立 `star_map`（巨量星图）授权渠道：支持本地 OAuth、Token 刷新、授权 state 隔离、星图账户发现与账户信息校验；星图计划与报表能力暂不复用巨量营销或千川实现。
 
 - 同一仓库现在同时作为 Codex 插件、Claude Code 插件和豆包工作 Skills 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill：新增 `.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json`，Claude 清单内联 `mcpServers` 并以 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`，marketplace `source` 为 `"./"` 避免重复克隆仓库；`.claude-plugin/plugin.json` 纳入 `runtime-manifest.json` 的 SHA-256 绑定，`scripts/validate_distribution.py` 新增与 Codex 同强度的 Claude 清单校验（身份、版本一致、内联 server 精确匹配、禁止经 shell 启动、组/其他写位）。Claude 会在缺省时继承插件根的 `./.mcp.json`，但按用户工作目录而不是插件根解析其中的相对路径，因此仓库外的普通用户安装必须内联绝对路径；内联同名 server 是替换而非叠加该缺省发现，仍只注册一次。豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录。本次新增 `report_qianchuan_uni_account`，Host 工具合同为 18 个。
@@ -27,7 +29,7 @@
 
 - Go 工具链从 `1.26.5` 升级到 `1.27.0`，全仓库保持单一版本：`go.mod` 的 `go` 指令、`cmd/build-runtime` 内层用于保证产物逐字节复现的 `GOTOOLCHAIN`、两个 GitHub Actions workflow 的 `go-version` 以及全部文档命令示例同步对齐。`go` 指令是最低版本要求，因此从源码构建现在需要 Go `1.27.0` 及以上；编译器变化使五平台二进制与 `runtime-manifest.json` 哈希一并更新，本次不改变任何运行时行为或 Host 工具合同。
 - 全部 18 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；三个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
-- 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，因为 Claude 下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
+- 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，DeepSeek Harness 按已加载 `SKILL.md` 的绝对目录解析 `<skill-directory>/run` 或 Windows 的 `<skill-directory>\run.cmd`，因为这些宿主下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。
 - 两个 Skill 入口改为约 60 行的第一屏唯一意图矩阵：高频业务直接调用对应 MCP/CLI，未命中高频目标时最多查询一次能力目录；普通业务请求禁止搜索仓库、插件缓存、历史任务或完整工作流参考，详细合同移入按需 reference。
 - 兼容插件升级不再要求退出或重启 Codex；只有新增/删除工具、修改工具 Schema/注解或 Skill 触发合同的非兼容 Host 升级需要新任务加载。Windows 继续支持原生 CLI，但当前 Plugin/MCP 清单没有 OS 命令分支，因此不宣称 Windows MCP 已验收。
 
@@ -50,6 +52,8 @@
 - 日常 CI 改为 Linux、macOS、Windows 三平台 Go 测试/静态检查与启动器验证，并在 Python 3.10、3.12 验证 F2 包装层；手动 Release 会从固定提交重建五个平台二进制并逐字节核对仓库内产物，工作流始终不修改或回推 `main`。
 
 ### 修复
+
+- 修复 MCP 代理首次准备运行时会阻塞握手的问题：协议探测与工具发现可先完成，首次业务调用再校验并连接运行时，避免 Harness 自动协商提前超时；MCP 专属能力不再输出空的 `domain` / `action` 字段，使能力查询结果符合已声明的输出 Schema。
 
 - 修复星图账号复用广告主字段造成的展示歧义：账户输出现在同时提供 `subject_id` 与 `subject_kind`，星图使用 `star_account` 语义，旧 `advertiser_id` 状态字段继续兼容；星图授权账户发现和广告主账户发现统一使用有界只读重试。
 - 修复 macOS Keychain 写入凭据时将 Secret 放入进程参数的问题，改为通过 `security` 的 stdin 提交；凭据文件账户名现在拒绝路径分隔符和其他非安全标识字符。

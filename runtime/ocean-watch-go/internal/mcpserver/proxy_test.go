@@ -11,12 +11,70 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
+
+func TestProxyInitializesRuntimeOnlyWhenAToolIsCalled(t *testing.T) {
+	root := t.TempDir()
+	candidate := writeProxyCandidate(t, root, "source", "1.0.9+codex.lazy", "runtime")
+	var connections atomic.Int32
+	proxy := &Proxy{Manager: runtimeupdate.Manager{
+		CodexRoot: filepath.Join(root, "codex"), PluginRoot: candidate.PluginRoot,
+		GOOS: "linux", GOARCH: "amd64",
+		ProbeVersion: func(context.Context, string) ([]byte, error) {
+			return []byte("ocean-watch 1.0.9"), nil
+		},
+	}, Connect: func(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
+		connections.Add(1)
+		clientTransport, serverTransport := mcp.NewInMemoryTransports()
+		if _, err := (Runtime{}).NewServer(candidate.Version).Connect(ctx, serverTransport, nil); err != nil {
+			return nil, nil, err
+		}
+		client := mcp.NewClient(&mcp.Implementation{Name: "lazy-backend-test", Version: "1"}, nil)
+		session, err := client.Connect(ctx, clientTransport, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		listed, err := session.ListTools(ctx, nil)
+		if err != nil {
+			_ = session.Close()
+			return nil, nil, err
+		}
+		return session, listed.Tools, nil
+	}}
+	defer proxy.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	server := Runtime{Forward: proxy.Forward}.NewServer("stable")
+	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
+		t.Fatal(err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "lazy-host-test", Version: "1"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	listed, err := session.ListTools(ctx, nil)
+	if err != nil || len(listed.Tools) != 18 || connections.Load() != 0 {
+		t.Fatalf("handshake must expose the stable catalog without preparing a runtime: tools=%v connections=%d err=%v", listed, connections.Load(), err)
+	}
+	for range 2 {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_capabilities", Arguments: map[string]any{"channel": "marketing"}})
+		if err != nil || result == nil || result.IsError {
+			t.Fatalf("first-use runtime connection failed: result=%v err=%v", result, err)
+		}
+	}
+	if connections.Load() != 1 {
+		t.Fatalf("runtime must be initialized once and reused, got %d connections", connections.Load())
+	}
+}
 
 func TestProxySwitchesRuntimeInsideOneOuterSessionAndRejectsContractChanges(t *testing.T) {
 	root := t.TempDir()

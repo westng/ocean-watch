@@ -112,10 +112,32 @@ jobs:
       - name: Validate metadata and F2 wrapper
         run: |
           python scripts/version_tag.py check
+          python -m unittest discover -s scripts -p "test_*.py" -v
           python -m unittest discover -s f2 -p "test_resolve.py" -v
           python -m compileall -q f2 scripts
           python -m ruff check f2 scripts
 
+  harness:
+    name: Harness package / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Test platform and path resolution
+        run: npm test
+      - name: Check plugin packaging
+        run: npm pack --dry-run --ignore-scripts
+      # Desktop integration uses the installed app: npm run test:desktop.
+      # Do not install an independent npm/CLI Harness for this check.
   plugin:
     name: Plugin contracts
     runs-on: ubuntu-latest

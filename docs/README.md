@@ -7,5 +7,6 @@ Ocean Watch 只有一套 Go 业务实现：两个 Skill 按能力通过 Plugin �
 3. [CLI 参考](cli.md)：稳定命令分组、输出和写入安全语义。
 4. [架构说明](architecture.md)：Go 模块、官方 API、状态与请求治理。
 5. [发布指南](releasing.md)：版本、五平台二进制、Tag 与 Release。
+6. [DeepSeek Harness 接入](deepseek-harness.md)：原生组合包、安装、兼容版本与验证。
 
 仓库级文档包括[贡献指南](../CONTRIBUTING.md)、[安全说明](../SECURITY.md)和[更新日志](../CHANGELOG.md)。阶段性迁移稿不再作为当前事实源；历史设计可从 Git 历史追溯。

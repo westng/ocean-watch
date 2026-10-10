@@ -191,6 +191,13 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
         json.dumps(plugin_data, ensure_ascii=True, indent=2) + "\n",
         encoding="utf-8",
     )
+    harness_path = root / "package.json"
+    harness_data = json.loads(harness_path.read_text(encoding="utf-8"))
+    harness_data["version"] = target_version
+    harness_path.write_text(
+        json.dumps(harness_data, ensure_ascii=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
     validate_versions(root, tag=f"v{target_version}")
     return {
         "version": target_version,
@@ -229,9 +236,10 @@ def validate_versions(root, tag=None):
     versions = {
         "project": project_version(root),
         "plugin": plugin_version(root),
+        "harness": json.loads((root / "package.json").read_text(encoding="utf-8")).get("version"),
     }
     plugin_base = versions["plugin"].split("+", 1)[0]
-    if versions["project"] != plugin_base:
+    if versions["project"] != plugin_base or versions["harness"] != versions["project"]:
         raise VersionTagError(f"version tag metadata does not match: {versions}")
     validate_tag_version(versions["project"])
     if tag:

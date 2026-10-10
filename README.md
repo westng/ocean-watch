@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">面向 Codex、Claude Code 与豆包工作的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
+<p align="center">面向 Codex、Claude Code、DeepSeek Harness 与豆包工作的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
@@ -36,7 +36,7 @@
 
 中文 | [English](README.en-US.md)
 
-Ocean Watch 让投放人员直接在 Codex、Claude Code 或豆包工作中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为三个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
+Ocean Watch 让投放人员直接在 Codex、Claude Code、DeepSeek Harness 或豆包工作中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为四个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
 
 ## 能做什么
 
@@ -58,7 +58,7 @@ Ocean Watch 让投放人员直接在 Codex、Claude Code 或豆包工作中用�
 
 ## 快速开始
 
-需要 Codex CLI `0.144.1+` 或 Claude Code。普通营销和千川流程直接使用 Plugin 内置运行时；只有千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。
+需要 Codex CLI `0.144.1+`、Claude Code、DeepSeek Harness 桌面版 `0.2.0-rc.2` 或豆包工作。普通营销和千川流程直接使用 Plugin 内置运行时；只有千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。
 
 Codex：
 
@@ -73,6 +73,10 @@ Claude Code：
 claude plugin marketplace add westng/ocean-watch
 claude plugin install ocean-watch@ocean-watch
 ```
+
+DeepSeek Harness 桌面版 `0.2.0-rc.2`：在应用的「插件 → 添加插件」中输入本仓库的绝对路径，安装到当前 `desktop` profile。无需安装独立 npm/CLI 宿主。
+
+原生组合包同时注册两个 Skill 和本地 MCP 工具。安装与桌面版验收方式见 [DeepSeek Harness 接入](docs/deepseek-harness.md)。
 
 豆包工作 (Doubao Work)：
 
@@ -89,7 +93,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 # 4. 在对话中使用：@巨量千川计划助手 或 @巨量引擎盯盘助手
 ```
 
-三个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
+四个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
 
 首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
 
@@ -119,8 +123,8 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 ## 运行方式与支持范围
 
 ```text
-Codex ───────┐
-Claude Code ─┴→ Skill → 本地 stdio MCP ─┐
+Codex / Claude Code / DeepSeek Harness
+                    └→ Skill → 本地 stdio MCP ─┐
                     └→ run/run.cmd ────┴→ Go Application Service → 巨量引擎官方 API
                                                               └→ Python 3.10+ → F2 0.0.1.7
                                                                  仅解析抖音公开作品元数据

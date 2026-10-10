@@ -38,8 +38,8 @@ type capabilityOutput struct {
 
 type capabilityItem struct {
 	ID             string `json:"id"`
-	Domain         string `json:"domain"`
-	Action         string `json:"action"`
+	Domain         string `json:"domain,omitempty"`
+	Action         string `json:"action,omitempty"`
 	Channel        string `json:"channel"`
 	Effect         string `json:"effect"`
 	RequiresSubmit bool   `json:"requires_submit"`

@@ -53,10 +53,9 @@ func RunProxy(ctx context.Context, version, pluginRoot string) error {
 		AlwaysDiscover: true,
 	}, LogWriter: os.Stderr}
 	defer proxy.Close()
-	if _, err := proxy.ensureSession(ctx); err != nil {
-		return err
-	}
 	go proxy.monitor(ctx)
+	// Runtime preparation can outlast a client's discovery probe. Serve the
+	// stable MCP contract now; the first business call validates its runtime.
 	server := Runtime{Forward: proxy.Forward}.NewServer(version)
 	err = server.Run(ctx, &mcp.StdioTransport{})
 	if errors.Is(err, context.Canceled) {
@@ -69,6 +68,14 @@ func (proxy *Proxy) Forward(ctx context.Context, request *mcp.CallToolRequest) (
 	started := proxy.now()
 	proxy.mu.Lock()
 	current := proxy.current
+	if current == nil {
+		proxy.mu.Unlock()
+		if _, err := proxy.ensureSession(ctx); err != nil {
+			return nil, err
+		}
+		proxy.mu.Lock()
+		current = proxy.current
+	}
 	if current != nil {
 		current.active++
 	}

@@ -1,0 +1,58 @@
+{
+  "name": "ocean-watch",
+  "version": "1.0.9",
+  "description": "Ocean Engine Marketing and Qianchuan tools and skills for DeepSeek Harness",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/westng/ocean-watch.git"
+  },
+  "homepage": "https://github.com/westng/ocean-watch",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "ocean-engine",
+    "advertising",
+    "qianchuan"
+  ],
+  "exports": {
+    ".": "./harness/index.mjs",
+    "./package.json": "./package.json",
+    "./harness/cordis.patch.yml": "./harness/cordis.patch.yml"
+  },
+  "files": [
+    "harness/index.mjs",
+    "harness/config.mjs",
+    "harness/cordis.patch.yml",
+    "bin/ocean-watch-launcher",
+    ".codex-plugin/",
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "skills/",
+    "f2/resolve.py",
+    "contracts/",
+    "pyproject.toml"
+  ],
+  "scripts": {
+    "test": "node --test harness/*.test.mjs",
+    "test:desktop": "node harness/desktop-probe.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./harness/cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-mcp-client": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.0-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-mcp-client": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-skill-filesystem": {
+      "optional": true
+    }
+  }
+}

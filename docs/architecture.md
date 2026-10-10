@@ -29,7 +29,9 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个�
 
 `.mcp.json` 在 macOS/Linux 启动固定本地代理。代理监控 `$CODEX_HOME/plugins/cache/ocean-watch/ocean-watch/` 的本地安装版本目录，不调用可能阻塞的 `codex plugin list`；目录名只用于发现候选，不能证明候选可信。代理随后校验 Plugin 名称/版本、Runtime 清单、MCP 配置、两套 Skill 及其资源、全部签名平台二进制 SHA-256 与最多 2 秒的当前平台自报版本探针，再把完整五平台产物复制到 `$CODEX_HOME/ocean-watch/runtime/versions/<manifest-sha256>` 私有只读槽位。槽位身份只由版本、清单哈希和槽位根确定，arm64/x64 进程从同一槽位选择各自二进制。若桌面客户端仍缓存被安装器删除的旧版本目录，代理只在该路径确属 Ocean Watch 缓存且不存在时建立指向已验证新 Host 的兼容别名，使随后新任务加载新版 Skill/MCP。同一外层 MCP 会话只在工具合同兼容时建立新内层会话并原子切换；工具名、Schema 或注解变化时，当前任务保留上一 Runtime，新任务别名仍发布新版 Host，因此只需新任务、不需退出客户端。真正无法初始化或校验身份的候选不会发布；候选握手失败时自动恢复上一 Runtime，成功切换后则清除瞬时回退状态，并通过跨进程共享租约删除不再使用的历史签名槽位。私有 Runtime 状态只提供启动解析与只读诊断，不再提供长期固定或人工回退入口。
 
-当前 Plugin/MCP 清单没有操作系统命令分支。macOS 与 Linux 可使用同一个 POSIX 稳定启动器；五个平台 Go CLI 仍是 CLI 分发目标，Windows MCP 尚无原生 Host 启动合同，不得把 Windows CLI 或交叉构建成功描述为 Windows MCP 已验收。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
+稳定代理先响应 MCP 协议探测和工具发现，首次业务调用再准备、校验并连接私有 Runtime。这样不会让 Harness 的握手探测等待运行时复制和启动；未通过校验的 Runtime 仍不能处理业务调用。
+
+Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX 稳定启动器。DeepSeek Harness 通过根目录 npm 组合包加载 `harness/index.mjs`，按平台选择五个内置二进制之一，并注册独立的包内 Skill 提供方；其中包括 Windows amd64 的原生 MCP 启动入口。本地集成验证在 macOS 上完成，CI 配置覆盖 macOS、Linux 与 Windows；交叉构建成功不等于其他平台的 MCP 已实测。详见 [DeepSeek Harness 接入](deepseek-harness.md)。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 
@@ -38,6 +40,9 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个�
 | 路径 | 职责 |
 | --- | --- |
 | `skills/*/SKILL.md` | 自然语言意图、业务安全边界、强制输出合同 |
+| `package.json` / `harness/cordis.patch.yml` | Harness 组合包清单、兼容版本与按包名注册的配置层 |
+| `harness/index.mjs` / `harness/config.mjs` | Cordis 子插件组合与无状态的平台路径解析，不承载业务或修改宿主 profile |
+| `harness/desktop-probe.mjs` / `harness/probe.mjs` | 桌面运行时测试启动器与插件合同验收，使用同一份临时状态，测试资源统一由启动器清理 |
 | `bin/ocean-watch-launcher` | macOS/Linux 稳定 MCP/CLI 外壳与 Runtime 解析入口 |
 | `skills/*/run*` | Unix 委派稳定外壳；Windows 解析版本化 CLI Runtime |
 | `.codex-plugin/bin/` | Marketplace 快照内的五平台 Go CLI |
@@ -54,6 +59,16 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个�
 | `f2/resolve.py` | F2 原始响应到稳定作品元数据合同的只读映射 |
 
 生成的官方 SDK 类型只能出现在 `internal/adapters/oceanengine`。Application 与 Domain 依赖端口和稳定 DTO，不直接依赖生成 SDK 或 CLI。
+
+## Harness 适配边界
+
+按照 Harness 的组合包规范，`dsh.bundle` 只贡献配置层，真实 profile 的安装、启停和兼容性豁免由宿主管理。入口通过 `inject` 声明 `tools`、`skills`，再以 `ctx.plugin` 挂载宿主提供的 MCP 与 Skill 子插件。连接、watcher、工具和技能注册由 Cordis 的 effect 生命周期管理，父插件卸载会递归释放子插件，不另建一套清理协议。
+
+`package.json` 是兼容版本的唯一机器可读来源。分发校验只检查 peer 身份与精确版本约束，隔离集成测试再调用宿主自己的版本准入检查。项目使用 JavaScript 入口，不需要单独安装 dsh 开发依赖来做类型检查；运行测试直接复用已安装桌面版的实现。
+
+桌面测试启动器只负责打包、临时目录与进程边界，合同测试通过包的公开导出加载入口，验证工具、技能、卸载和重新挂载。测试不打开桌面 UI，不读写真实 profile，不依赖真实模型或业务凭据。广告业务始终留在 Go Runtime。
+
+规范参考：[组合包与安装](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish)、[生命周期与 effect](https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/02-lifecycle-and-effects)。
 
 ## 请求治理
 

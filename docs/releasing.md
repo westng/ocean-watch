@@ -1,6 +1,6 @@
 # 发布指南
 
-Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex 与 Claude Code Marketplace 安装源，豆包工作通过安装脚本使用已安装的插件。快照必须已经包含五个平台的 Go CLI；GitHub Release 说明来自 `CHANGELOG.md` 对应版本段。
+Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex 与 Claude Code Marketplace 安装源，豆包工作通过安装脚本使用已安装的插件。DeepSeek Harness 使用根目录 `package.json` 声明的 npm 组合包，可安装本地仓库或打包后的 tarball。快照必须已经包含五个平台的 Go CLI；GitHub Release 说明来自 `CHANGELOG.md` 对应版本段。
 
 ## 日常推送
 
@@ -15,6 +15,7 @@ Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex 与 Claude Code Market
 ## 版本关系
 
 - `pyproject.toml` 的 `project.version` 是产品基础版本。
+- 根目录 `package.json` 的 `version` 与产品基础版本一致；`scripts/version_tag.py` 同时检查并更新这个版本。Harness 的 `peerDependencies` 单独声明已经验证的宿主版本，不跟随 Ocean Watch 的产品版本变化。
 - `.codex-plugin/plugin.json` 使用 `<基础版本>+codex.<cachebuster>`；cachebuster 用于生成新的安装快照。兼容升级可由稳定代理在同一任务内切换 Runtime；改变工具或 Skill Host 合同仍需要新任务加载。
 - Go CLI 版本在构建时从 Plugin 基础版本注入。
 - Python 没有 Ocean Watch 包版本；`pyproject.toml` 只声明 F2/开发依赖边界。
@@ -59,6 +60,7 @@ python3 scripts/version_tag.py release-check --latest-tag "${latest_tag}"
 GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all
 GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all --verify
 python3 scripts/validate_distribution.py
+npm test
 ```
 
 构建固定 `CGO_ENABLED=0`、目标平台、时区、locale、`-trimpath` 和空 build ID。任何源码、Go 依赖、构建参数或基础版本变化都必须重新生成五个平台产物。
@@ -84,6 +86,8 @@ git diff --check -- . ':(exclude).codex-plugin/bin/**'
 五个平台 Runtime 是 30MB 以上的二进制文件，文本 whitespace 检查必须排除该目录，避免 Git 为大对象差异分配无意义的文本比较内存。二进制完整性不因此降低：前面的 `build-runtime --all --verify` 会逐字节重建并比较全部五个平台产物和 Runtime manifest。
 
 日常 CI 在 Linux、macOS、Windows 验证 Go 运行时和当前平台启动器，在 Python 3.10/3.12 验证 F2 包装层，并验证 Plugin/Skill/二进制分发合同。
+
+Harness 的桌面兼容验收另在安装了目标 macOS 桌面版的开发机运行 `npm run test:desktop`。它调用随附运行时进行隔离测试，不操作真实桌面 UI 或 profile；CI 的路径与打包检查不能替代桌面运行时验收，不再安装独立 npm/CLI Harness。详见 [DeepSeek Harness 接入](deepseek-harness.md)。
 
 ## 正式发布
 

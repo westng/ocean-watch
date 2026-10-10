@@ -4,7 +4,7 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex, Claude Code, and Doubao Work</p>
+<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex, Claude Code, DeepSeek Harness, and Doubao Work</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
@@ -36,7 +36,7 @@
 
 [中文](README.md) | English
 
-Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex, Claude Code, or Doubao Work in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for all three Hosts, sharing a single Go runtime, one local state root, and the same Skills.
+Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex, Claude Code, DeepSeek Harness, or Doubao Work in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for all four Hosts, sharing a single Go runtime, one local state root, and the same Skills.
 
 ## What It Does
 
@@ -58,7 +58,7 @@ The two Skills share one Go business implementation while strictly isolating cha
 
 ## Quick Start
 
-Requires Codex CLI `0.144.1+` or Claude Code. Standard Marketing and Qianchuan workflows use the Plugin's bundled runtime. Only Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`.
+Requires Codex CLI `0.144.1+`, Claude Code, DeepSeek Harness Desktop `0.2.0-rc.2`, or Doubao Work. Standard Marketing and Qianchuan workflows use the Plugin's bundled runtime. Only Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`.
 
 Codex:
 
@@ -73,6 +73,10 @@ Claude Code:
 claude plugin marketplace add westng/ocean-watch
 claude plugin install ocean-watch@ocean-watch
 ```
+
+DeepSeek Harness Desktop `0.2.0-rc.2`: open **Plugins → Add plugin** in the desktop app and enter this repository's absolute path. This installs into the active `desktop` profile; no separate npm/CLI Harness installation is needed.
+
+The native bundle registers both Skills and the local MCP tools. See the Chinese [DeepSeek Harness guide](docs/deepseek-harness.md) for compatibility, desktop profiles, and verification.
 
 Doubao Work:
 
@@ -89,7 +93,7 @@ cd ~/.codex/plugins/ocean-watch  # or your plugin installation directory
 # 4. Use in conversations: @巨量千川计划助手 or @巨量引擎盯盘助手
 ```
 
-All three hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
+All four hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
 
 After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
 
@@ -119,8 +123,8 @@ See [Configuration](docs/configuration.md) and [Security](SECURITY.md) for detai
 ## Runtime and Support
 
 ```text
-Codex ───────┐
-Claude Code ─┴→ Skill → local stdio MCP ─┐
+Codex / Claude Code / DeepSeek Harness
+                    └→ Skill → local stdio MCP ─┐
                     └→ run/run.cmd ─────┴→ Go Application Service → official Ocean Engine API
                                                                 └→ Python 3.10+ → F2 0.0.1.7
                                                                    Douyin public metadata only
