@@ -19,6 +19,7 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/configuration"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/state"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/resources"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
@@ -39,6 +40,7 @@ type Runner struct {
 	Authorizations     onboarding.AuthorizationReader
 	PythonResolver     python.Resolver
 	EnvironmentProbe   onboarding.EnvironmentProbe
+	StateInspector     state.Inspector
 	AccountReports     AccountReportRuntime
 	Auth               AuthRuntime
 	MarketingDiscovery MarketingDiscoveryRuntime
@@ -264,7 +266,7 @@ func (runner Runner) runSetup(
 	if probe == nil {
 		probe = environment.Probe{PythonResolver: runner.PythonResolver, Credentials: credentialStore}
 	}
-	doctor := onboarding.Doctor{Probe: probe, RuntimeVersion: runner.RuntimeVersion}
+	doctor := onboarding.Doctor{Probe: probe, RuntimeVersion: runner.RuntimeVersion, StateInspector: runner.StateInspector}
 	if runner.RuntimeVersion != "" {
 		doctor.RuntimeCheck = func(ctx context.Context) onboarding.Check {
 			manager := runtimeupdate.Manager{CodexRoot: codexRoot, PluginRoot: filesystem.ResolvePluginRoot(cwd)}

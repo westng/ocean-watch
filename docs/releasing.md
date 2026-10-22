@@ -67,6 +67,8 @@ npm test
 
 构建器同时生成 `.codex-plugin/runtime-manifest.json`，绑定 Plugin 名称/版本、Plugin 清单、`.mcp.json`、两套 Skill 全部文件、F2、稳定 Unix 启动器和五个平台二进制哈希。私有 Runtime 槽位必须包含清单声明的全部平台二进制，避免同一台 Apple Silicon 设备上的原生 arm64 App 与 Rosetta/x64 CLI 争用架构专属槽位。Runtime 实现的兼容升级不得改变外层 18 个 MCP 工具的名称、输入/输出 Schema、注解或错误边界；任何合同变化必须作为非兼容 Host 合同单独评审，不能依赖 Runtime 热切换。
 
+Manifest 格式也属于升级合同：当前 `schema_version=1` 的旧 Proxy 使用严格字段解析，因此不能直接给 v1 增加未知顶层字段或跳到 v2。未来若需要 Manifest v2，必须先发布一个能同时读取 v1/v2 的桥接版本，再切换生产清单；桥接版本发布前不得破坏旧任务的候选验证和回退链。
+
 ## 质量门
 
 ```bash

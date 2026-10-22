@@ -27,6 +27,8 @@
 
 ### 变更
 
+- V3 重构补齐 SQLite 本地状态、旧状态安全导入、凭据轮换、操作快照/审批/租约/恢复和统一状态诊断边界；环境检查按能力降级 F2 依赖，OAuth 回调检查明确仅验证 URI 配置；同步更新五平台 Runtime 产物与清单哈希，并删除已被当前 PRD、代码和正式文档取代的旧架构过程文档。
+
 - Go 工具链从 `1.26.5` 升级到 `1.27.0`，全仓库保持单一版本：`go.mod` 的 `go` 指令、`cmd/build-runtime` 内层用于保证产物逐字节复现的 `GOTOOLCHAIN`、两个 GitHub Actions workflow 的 `go-version` 以及全部文档命令示例同步对齐。`go` 指令是最低版本要求，因此从源码构建现在需要 Go `1.27.0` 及以上；编译器变化使五平台二进制与 `runtime-manifest.json` 哈希一并更新，本次不改变任何运行时行为或 Host 工具合同。
 - 全部 18 个 MCP 工具的 `outputSchema` 现在在顶层声明 `"type":"object"`，千川预检的 `$defs` 上移到输出 Schema 根，使 `"#/$defs/..."` 能从该根解析。MCP 规范与 Go SDK 都接受裸 `oneOf` 且不要求顶层 `type`，但 Claude Code 客户端会以此拒绝整个工具列表；三个 Host 共用同一份载荷，因此取更严的一侧。此前 16 个工具在 Claude Code 上无法拉取。
 - 两个 Skill 的路由表在受控区块外补充启动器解析规则：Codex 按字面量使用 `./run`，Claude Code 使用 `${CLAUDE_PLUGIN_ROOT}/skills/<name>/run`，DeepSeek Harness 按已加载 `SKILL.md` 的绝对目录解析 `<skill-directory>/run` 或 Windows 的 `<skill-directory>\run.cmd`，因为这些宿主下工作目录是用户项目而不是 Skill 目录。路由表本身保持单一字面量，不改变既有能力条目。

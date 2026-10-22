@@ -4,7 +4,7 @@
 >
 > 文档属性：AI 辅助实施计划与交付 Gate
 >
-> 权威边界：本文规定 V3 的实施顺序和验收门禁，不代表功能已经实现；目标合同以 [`../designs/ocean-watch-plugin-target-architecture-v3.md`](../designs/ocean-watch-plugin-target-architecture-v3.md) 为准，当前行为以代码、测试、Plugin 清单、Skill 和正式文档为准
+> 权威边界：本文规定 V3 重构的实施顺序和验收门禁，不代表功能已经实现；产品目标与验收要求以 [`../../prd.md`](../../prd.md) 为准，当前行为以代码、测试、Plugin 清单、Skill 和正式文档为准
 >
 > 证据约定：本文不保留日期化核验记录。验收结论必须在验收当时重新执行门禁得出，不得引用历史记录
 >

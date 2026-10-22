@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/cli"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/mcpserver"
@@ -61,9 +62,11 @@ func main() {
 		}
 		return
 	}
+	userHome, _ := os.UserHomeDir()
 	runner := cli.Runner{
 		Routes:         application.DefaultRouteManifest(),
 		RuntimeVersion: effectiveRuntimeVersion(),
+		StateInspector: sqlite.Inspector{Path: filepath.Join(filesystem.StateHome(os.Getenv, userHome), "ads-plan-monitor", "state", "ocean-watch.db")},
 	}
 	os.Exit(runner.Execute(ctx, os.Args[1:]))
 }

@@ -17,18 +17,14 @@
 - `reviews/`：评审与审计快照；
 - `handoffs/`：跨会话或跨人员交接。
 
-## 当前设计
+## 当前产品需求
 
-- [Ocean Watch Plugin 目标架构 V3](designs/ocean-watch-plugin-target-architecture-v3.md)：W0–W7 已完成；W8 候选已构建安装，等待新任务 Host 加载检查；W9–W10 尚未执行
+- [Ocean Watch 开源产品重构 PRD](../prd.md)：共享 Go 核心/Skill、配置优先的薄宿主适配、工具集与执行模式、SQLite/可信确认/恢复和固定构建的产品技术基线；Harness 仍是平等适配目标，WorkBuddy 后续必接。方案尚未实现，旧整改计划不等于新里程碑已获实施授权或完成，实施状态须核对代码与验收证据。
 
 ## 当前计划
 
-- [Ocean Watch Plugin V3 架构整改实施计划](plans/ocean-watch-plugin-architecture-remediation-plan.md)：实施中；下一步是在新任务完成 W8 Host 加载检查
+- [Ocean Watch Plugin V3 架构整改实施计划](plans/ocean-watch-plugin-architecture-remediation-plan.md)：仍在维护；W8/W10 验收和首次连接回退缺陷尚未关闭。
 
-## 当前审计
+## 历史文档清理
 
-- [Ocean Watch Plugin 当前架构审计](research/ocean-watch-plugin-current-architecture-audit.md)：2026-08-18 现状基线
-
-## 历史设计
-
-- [千川计划创建快速工作流设计（历史 V2）](designs/qianchuan-plan-creation-workflow-v2.md)：已被 V3 取代，不再作为实施依据
+已删除被代码、正式文档或当前 PRD/实施计划取代的旧架构设计、审计快照和一次性修复说明。当前运行行为仍以代码、测试、Plugin 清单、Skill 和正式文档为准。

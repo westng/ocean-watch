@@ -3,6 +3,8 @@ package onboarding
 import (
 	"context"
 	"strings"
+
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/state"
 )
 
 type Check map[string]any
@@ -30,6 +32,7 @@ type Doctor struct {
 	Probe          EnvironmentProbe
 	RuntimeVersion string
 	RuntimeCheck   func(context.Context) Check
+	StateInspector state.Inspector
 }
 
 func (doctor Doctor) Report(ctx context.Context, channel, redirectURI string) EnvironmentReport {
@@ -53,13 +56,25 @@ func (doctor Doctor) Report(ctx context.Context, channel, redirectURI string) En
 		}
 		checks = append(checks, check)
 	}
+	if doctor.StateInspector != nil {
+		checks = append(checks, doctor.inspectState(ctx))
+	}
 	blockers := []string{}
 	warnings := []string{}
 	for _, check := range checks {
 		identifier, _ := check["id"].(string)
+		check["check_id"] = identifier
+		if _, exists := check["evidence"]; !exists {
+			check["evidence"] = map[string]string{
+				"python": "python_version_probe", "f2": "f2_metadata_version_probe",
+				"platform": "runtime_platform", "codex_cli": "cli_version_probe_not_host_discovery",
+				"credential_backend": "backend_metadata_only", "oauth_callback": "callback_configuration_only",
+				"runtime": "local_runtime_metadata_not_host_discovery",
+			}[identifier]
+		}
 		status, _ := check["status"].(string)
 		required, _ := check["required"].(bool)
-		if required && status == "blocked" {
+		if required && (status == "blocked" || status == "error") {
 			blockers = append(blockers, identifier)
 		}
 		if status == "warning" {
@@ -74,4 +89,30 @@ func (doctor Doctor) Report(ctx context.Context, channel, redirectURI string) En
 		OK: len(blockers) == 0, Mode: "environment_check", Channel: channel,
 		Checks: checks, BlockingChecks: blockers, Warnings: warnings, NextAction: nextAction,
 	}
+}
+
+func (doctor Doctor) inspectState(ctx context.Context) Check {
+	inspection, err := doctor.StateInspector.Inspect(ctx)
+	check := Check{
+		"id": "state", "required": false, "status": "warning",
+		"evidence": "state_not_verified", "message": "State was not fully verified.",
+		"remediation": "Validate state explicitly before using persisted operations.",
+	}
+	if err != nil {
+		check["required"], check["status"] = true, "error"
+		check["evidence"] = "state_inspection_failed"
+		return check
+	}
+	check["inspection"] = inspection
+	check["evidence"] = inspection.Evidence
+	switch inspection.Status {
+	case "ready":
+		check["status"], check["message"], check["remediation"] = "ready", "State inspection passed.", nil
+	case "not_initialized":
+		check["message"] = "State is not initialized; unrelated read capabilities remain available."
+	case "blocked", "error":
+		check["required"], check["status"] = true, inspection.Status
+		check["message"] = "State inspection requires explicit remediation."
+	}
+	return check
 }

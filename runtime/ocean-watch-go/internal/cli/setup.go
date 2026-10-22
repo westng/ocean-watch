@@ -34,6 +34,7 @@ func parseDoctorOptions(args []string) (doctorOptions, error) {
 	options := doctorOptions{channel: "marketing"}
 	flags := flag.NewFlagSet("setup doctor", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	flags.Bool("json", false, "")
 	flags.StringVar(&options.configPath, "config", "", "")
 	flags.StringVar(&options.channel, "channel", "marketing", "")
 	flags.StringVar(&options.redirectURI, "redirect-uri", "", "")

@@ -52,7 +52,7 @@ func TestF2CheckRequiresPinnedPackageVersion(t *testing.T) {
 		},
 	}}
 	blocked := probe.F2(context.Background())
-	if blocked["status"] != "blocked" || blocked["required_version"] != python.RequiredF2Version {
+	if blocked["status"] != "warning" || blocked["required"] != false || blocked["required_version"] != python.RequiredF2Version {
 		t.Fatalf("unexpected mismatched F2 check: %#v", blocked)
 	}
 	installed = python.RequiredF2Version
@@ -89,16 +89,14 @@ func TestCredentialBackendClassification(t *testing.T) {
 	}
 }
 
-func TestCallbackRequiresLoopbackAndClosesProbe(t *testing.T) {
-	listener := new(listenerFixture)
-	var network, address string
-	probe := Probe{Listen: func(gotNetwork, gotAddress string) (net.Listener, error) {
-		network, address = gotNetwork, gotAddress
-		return listener, nil
+func TestCallbackRequiresLoopbackWithoutBindingPort(t *testing.T) {
+	probe := Probe{Listen: func(string, string) (net.Listener, error) {
+		t.Fatal("doctor must not bind a callback port")
+		return nil, errors.New("unexpected listen")
 	}}
 	check := probe.Callback(context.Background(), "http://127.0.0.1:8787/oauth/callback")
-	if check["status"] != "ready" || network != "tcp4" || address != "127.0.0.1:8787" || !listener.closed {
-		t.Fatalf("unexpected callback probe: %#v, %s, %s, closed=%v", check, network, address, listener.closed)
+	if check["status"] != "ready" || check["port_verified"] != false || check["evidence"] != "loopback_uri_validated" {
+		t.Fatalf("unexpected callback configuration check: %#v", check)
 	}
 	blocked := probe.Callback(context.Background(), "http://example.test:8787/oauth/callback")
 	if blocked["status"] != "blocked" {

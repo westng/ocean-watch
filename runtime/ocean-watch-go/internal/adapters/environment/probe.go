@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/url"
 	"os/exec"
@@ -45,10 +44,10 @@ func (probe Probe) Python(ctx context.Context) onboarding.Check {
 	runtimeInfo, err := probe.PythonResolver.Resolve(ctx)
 	ready := err == nil && runtimeInfo.Version.AtLeast(minimumPython)
 	result := onboarding.Check{
-		"id": "python", "required": true,
-		"status": "blocked", "minimum_version": minimumPythonText,
-		"message":     "Python 3.10 or newer is required.",
-		"remediation": "Install Python 3.10 or newer, then start a new Codex task.",
+		"id": "python", "required": false,
+		"status": "warning", "affected_capabilities": []string{"public_work_metadata"}, "minimum_version": minimumPythonText,
+		"message":     "Python 3.10 or newer is unavailable for public work metadata.",
+		"remediation": "Install Python 3.10 or newer to enable public work metadata.",
 	}
 	if runtimeInfo.Executable != "" {
 		result["version"] = runtimeInfo.Version.String()
@@ -58,16 +57,18 @@ func (probe Probe) Python(ctx context.Context) onboarding.Check {
 		result["status"] = "ready"
 		result["message"] = "Python runtime is supported."
 		result["remediation"] = nil
+	} else {
+		result["available"] = false
 	}
 	return result
 }
 
 func (probe Probe) F2(ctx context.Context) onboarding.Check {
 	result := onboarding.Check{
-		"id": "f2", "required": true,
-		"status": "blocked", "required_version": python.RequiredF2Version,
-		"message":     "F2 " + python.RequiredF2Version + " is required in the selected Python runtime.",
-		"remediation": "Install F2 " + python.RequiredF2Version + " into the selected Python runtime, then rerun setup doctor.",
+		"id": "f2", "required": false,
+		"status": "warning", "affected_capabilities": []string{"public_work_metadata"}, "required_version": python.RequiredF2Version,
+		"message":     "F2 " + python.RequiredF2Version + " is unavailable for public work metadata.",
+		"remediation": "Install F2 " + python.RequiredF2Version + " into the selected Python runtime to enable public work metadata.",
 	}
 	runtimeInfo, err := probe.PythonResolver.ResolveF2(ctx)
 	if err != nil || !runtimeInfo.Version.AtLeast(minimumPython) {
@@ -195,25 +196,11 @@ func (probe Probe) Callback(_ context.Context, redirectURI string) onboarding.Ch
 			"remediation": "Use http://127.0.0.1:8787/oauth/callback in local config and the official console.",
 		}
 	}
-	listen := probe.Listen
-	if listen == nil {
-		listen = net.Listen
-	}
-	listener, listenErr := listen(target.network, target.address)
-	if listenErr != nil {
-		return onboarding.Check{
-			"id": "oauth_callback", "required": true, "status": "blocked", "redirect_uri": redirectURI,
-			"host": target.host, "port": target.port, "path": target.path,
-			"message":     fmt.Sprintf("OAuth callback port %d is unavailable.", target.port),
-			"remediation": fmt.Sprintf("Stop the process using %s:%d, then rerun the environment check.", target.host, target.port),
-			"error":       truncate(listenErr.Error(), 256),
-		}
-	}
-	_ = listener.Close()
 	return onboarding.Check{
 		"id": "oauth_callback", "required": true, "status": "ready", "redirect_uri": redirectURI,
 		"host": target.host, "port": target.port, "path": target.path,
-		"message": "OAuth callback host and port are available.", "remediation": nil,
+		"port_verified": false, "evidence": "loopback_uri_validated",
+		"message": "OAuth callback loopback URI is valid; port availability was not probed.", "remediation": nil,
 	}
 }
 
