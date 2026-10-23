@@ -26,7 +26,7 @@ skills/qc-plan-monitor/run plans batch-qianchuan-works --help
 | `setup` | 环境检查、初始化、配置就绪校验 |
 | `auth` | App、OAuth、Token、广告主同步与脱敏映射 |
 | `accounts` | 负责账户名单与跨渠道账户表现 |
-| `templates` | 跨渠道模板列表、详情、创建、迁移、校验、删除 |
+| `templates` | 跨渠道模板列表、详情、创建、校验、删除 |
 | `qc-templates` | 千川商品/直播模板专属操作 |
 | `materials` | 营销账户上传与达人授权素材 |
 | `qc-materials` | 千川达人、作品和公开作品链接检查 |
@@ -90,6 +90,6 @@ skills/qc-plan-monitor/run qc-reports products --advertiser-id ADVERTISER_ID --r
 
 `qc-materials inspect-work` 和 `plans batch-qianchuan-works` 接受普通链接、Markdown 链接或带口令片段的文本。包装层规范化短链并批量调用 F2；F2 只提供公开身份和商品提示。创建前仍以可见抖音号定向查询官方授权达人，校验数字 UID，再按同一达人和模板商品验证作品。
 
-CLI 的批量入口继续接受旧的逐行 `--work-url` 参数作为兼容层，并输出弃用提示；新 MCP 入口只接受结构化 `items[]`，不保留旧顶层批次类型或商务字段。CLI 和 MCP 最终都调用同一个批次 Application Service，输入顺序、分组身份、预检快照和安全边界保持一致。
+CLI 的批量入口在兼容期内继续接受旧的逐行 `--work-url` 参数并输出弃用提示；新 MCP 入口只接受结构化 `items[]`，不保留旧顶层批次类型或商务字段。CLI 和 MCP 最终都调用同一个批次 Application Service，输入顺序、分组身份、预检快照和安全边界保持一致。兼容参数的移除必须另行记录在版本变更中。
 
 批量成功结果固定展示 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`。跳过、官方查询不完整和失败原因放在表外，空结果也保留表头。

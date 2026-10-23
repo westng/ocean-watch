@@ -39,7 +39,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 
 四个 Host 共用同一份本地状态，授权只需完成一次。
 
-首次安装后新建任务。普通用户直接说”帮我初始化巨量引擎盯盘”即可，不必记忆命令。兼容升级只替换本机业务 Runtime，已加载的稳定 MCP 代理会在同一任务内自动切换，不要求退出或重启客户端；若升级增加/删除工具、修改 Schema 或 Skill 触发合同,则属于 Host 合同升级，需要新任务加载新的工具清单。
+首次安装后新建任务。普通用户直接说“帮我初始化巨量引擎盯盘”即可，不必记忆命令。升级行为按宿主合同处理：Codex 的兼容 Runtime 升级可由稳定代理切换；Claude Code 更新插件后需要新任务；DeepSeek Harness 和豆包工作在更新包或 Skill 后应按各自宿主流程重新加载并验收。若升级增加/删除工具、修改 Schema 或 Skill 触发合同，必须新建任务加载新的工具清单。
 
 ## 2. 环境与配置
 
@@ -50,11 +50,11 @@ skills/ads-plan-monitor/run setup doctor
 skills/ads-plan-monitor/run setup init --home-config
 ```
 
-Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、CLI 环境、安全凭据后端和 OAuth 回调端口；它不会安装依赖、修改系统设置或发起 OAuth。
+Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 Python `3.10+`、当前解释器中的固定 F2 `0.0.1.7`、平台、CLI 环境、安全凭据后端和 OAuth 回调 URI 配置；它不监听或验证回调端口，不会安装依赖、修改系统设置或发起 OAuth。
 
 托管 Runtime 还会在 doctor 结果中报告当前执行版本、已选 Runtime slot、已安装候选的 manifest 指纹和 MCP 工具数量；如果这些内容不一致，会明确阻断并提示重新安装 Plugin，授权状态无需重复配置。
 
-默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`。状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，两个 Host 共用同一个根。配置不包含 Secret 或 Token。
+默认配置位于 `$CODEX_HOME/ads-plan-monitor/config.json`。状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，Codex、Claude Code、DeepSeek Harness 和豆包工作共用同一个根。配置不包含 Secret 或 Token。
 
 ## 3. 分渠道授权
 

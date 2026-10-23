@@ -6,7 +6,7 @@ Ocean Watch 使用 Harness 原生 npm 组合包格式。安装一份包即可加
 
 - 当前适配 DeepSeek Harness 桌面应用及内置运行时 `0.2.0-rc.2`，peer 声明精确限定该版本，无需 `compatibility.json` 豁免。宿主升级后需要重新验证再更新声明。
 - 本地开发、调试和验收统一使用已安装的桌面应用及 `desktop` profile，不安装或通过 `npx` 下载独立 npm/CLI Harness。插件自身仍使用 npm 打包，并复用桌面应用提供的 MCP 客户端和 Skill 提供方。
-- 启动程序覆盖 macOS Apple Silicon / Intel、Linux arm64 / amd64、Windows amd64。2026-10-10 的桌面集成验收环境为 macOS Apple Silicon；其他桌面平台的完整交互尚未验收，平台路径单元测试不能代替该验收。
+- 启动程序覆盖 macOS Apple Silicon / Intel、Linux arm64 / amd64、Windows amd64。历史验收记录的环境为 2026-10-10 的 macOS Apple Silicon，但未绑定当前 V3 提交或产物身份，不能据此认定当前版本已通过桌面验收；各目标组合须重新执行下文验收，平台路径单元测试不能代替该验收。
 - 旧 npm/CLI `0.1.5-rc.3`、`0.1.7-rc.2` 与桌面版 `0.2.0-rc.1` 不再作为兼容目标或开发环境。
 
 ## 安装与更新

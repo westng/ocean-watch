@@ -48,6 +48,20 @@ Ocean Watch 让投放人员直接在 Codex、Claude Code、DeepSeek Harness 或�
 
 两个 Skill 共用一套 Go 业务实现，但渠道凭据、授权用户、广告主、模板、素材和写入事务严格隔离。
 
+### 当前功能支持
+
+以下按宿主 / 接入平台列出，而非广告业务渠道。“已实现接入”表示仓库已有适配资源，不代表当前 V3 已通过该宿主及全部操作系统的实际验收。
+
+| 宿主 / 平台 | 功能与接入方式 | 支持状态 | 限制与验收 |
+| --- | --- | --- | --- |
+| Codex | Plugin + 两个 Skill + 本地 MCP，调用共享 Go 核心的查询、报表与批量预检能力 | 已实现接入；V3 待验收 | 当前 Plugin/MCP 使用 macOS/Linux 启动器；工具或 Skill 合同变化后需新建任务 |
+| Claude Code | Plugin + 两个 Skill + 本地 MCP，调用同一套业务能力 | 已实现接入；V3 待验收 | 使用独立 Claude Plugin 清单；更新插件后需新建任务，不承诺同会话自动热升级 |
+| DeepSeek Harness | 原生组合包 + 两个 Skill + 本地 MCP | 已实现接入；V3 桌面验收待完成 | peer 声明限定桌面版 `0.2.0-rc.2`；历史桌面验收不代表当前 V3 已通过 |
+| 豆包工作 | 两个 Skill + 本地 MCP 路径配置，复用已安装的 Go Runtime | 已提供适配脚本；V3 待验收 | 当前脚本面向 macOS Apple Silicon，配置已有的用户 Skill；其他平台与真实发现需另行验收 |
+| WorkBuddy | 规划通过 Connector + Skill + 本地 MCP 接入共享 Go 核心 | 规划中（WB1），尚未接入 | 尚未交付对应适配包，不列为当前已兼容宿主 |
+
+已接入入口共用业务核心和本地状态。MCP 仅提供已注册的查询和预检工具；在线写入必须先展示预检并获得明确确认，再通过 CLI 的 `--submit` 提交。更多限制见下文[运行方式与支持范围](#运行方式与支持范围)。
+
 ## 为什么选择 Ocean Watch
 
 - **自然语言驱动**：按业务目标理解口语、简称和上下文追问，不要求记忆固定命令。
@@ -123,7 +137,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 ## 运行方式与支持范围
 
 ```text
-Codex / Claude Code / DeepSeek Harness
+Codex / Claude Code / DeepSeek Harness / 豆包工作
                     └→ Skill → 本地 stdio MCP ─┐
                     └→ run/run.cmd ────┴→ Go Application Service → 巨量引擎官方 API
                                                               └→ Python 3.10+ → F2 0.0.1.7
@@ -133,7 +147,7 @@ Codex / Claude Code / DeepSeek Harness
 - 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
 - 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
 - 稳定代理保持 18 个 MCP 工具合同不变，并在同一外层会话内监控已安装快照、校验版本/哈希/插件身份/F2 资源和工具 Schema，再切换本机私有 Runtime；同版本内容变化也通过 manifest 指纹触发重新验证。坏版本自动回滚且只拒绝该次清单，后续修复版仍可自动升级。
-- `get_capabilities` 只读返回 76 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
+- `get_capabilities` 只读返回 77 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
 - MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
 - Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
 - macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前两个 Host 的 Plugin/MCP 清单都没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。

@@ -26,7 +26,7 @@ Ocean Watch 以 Git Tag 对应的仓库快照作为 Codex 与 Claude Code Market
 python3 scripts/version_tag.py check
 ```
 
-正式发布前，维护者实时读取最新的非草稿、非预发布 Release。已有正式版本时，运行一次本地发布准备，将 `未发布` 归档到下一个 patch 并同步两个版本元数据：
+正式发布前，维护者实时读取最新的非草稿、非预发布 Release。已有正式版本时，运行一次本地发布准备，将 `未发布` 归档到下一个 patch 并同步版本元数据：
 
 ```bash
 latest_tag="$(gh api --method GET 'repos/westng/ocean-watch/releases?per_page=100' \

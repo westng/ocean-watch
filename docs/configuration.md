@@ -9,7 +9,7 @@
 3. 从当前目录向上找到 Plugin 根后读取 `config/ads-plan-monitor/config.json`
 4. `$CODEX_HOME/ads-plan-monitor/config.json`
 
-状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析；Codex、Claude Code 与豆包工作共用同一个根，因此授权只需完成一次。推荐普通用户运行 `setup init --home-config`；仓库内配置仅供本地开发且已被 Git 忽略。
+状态根按 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析；Codex、Claude Code、DeepSeek Harness 与豆包工作共用同一个根，因此授权只需完成一次。推荐普通用户运行 `setup init --home-config`；仓库内配置仅供本地开发且已被 Git 忽略。
 
 配置存储渠道端点、OAuth 回调、负责账户和业务模板，不存 App Secret、Access Token 或 Refresh Token。修改后运行：
 
@@ -63,7 +63,7 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 `get_qianchuan_preflight` 只接受严格的 `preflight_id`，只读本地 Operation Journal，不读取凭据、不刷新 Token、不调用官方 API。工具只返回模板、商品、有效期、可提交作品数量和稳定排序的新建/追加决策，不返回原始作品链接、模板 payload、授权选择器或快照指纹。确认提交仍使用 `plans batch-qianchuan-works --submit --preflight-id ID`，MCP 不会自动提交。
 
-常用千川查询由七个任务型 MCP 工具承载：`list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account` 和 `report_qianchuan_plans`。前两个只读本地账户/授权状态，不刷新 Token、不调用官方 API；后五个使用广告主绑定授权，必要时刷新 Token，并读取官方商品、计划或报表接口。所有输入拒绝配置路径与未知字段，所有 ID 使用字符串，输出只保留完成任务所需字段，不返回图片/素材 URL、原始官方响应、请求 URL、凭据值或内部错误。
+常用千川查询由八个任务型 MCP 工具承载：`list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account`、`report_qianchuan_uni_account` 和 `report_qianchuan_plans`。前两个只读本地账户/授权状态，不刷新 Token、不调用官方 API；后六个使用广告主绑定授权，必要时刷新 Token，并读取官方商品、计划或报表接口。所有输入拒绝配置路径与未知字段，所有 ID 使用字符串，输出只保留完成任务所需字段，不返回图片/素材 URL、原始官方响应、请求 URL、凭据值或内部错误。
 
 常用巨量营销查询由五个任务型 MCP 工具承载：`get_marketing_authorization` 只读本地授权和广告主映射，不刷新 Token、不调用官方 API；`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 和 `report_marketing_plans` 使用广告主绑定授权并读取现有素材或固定报表用例。达人素材查询按 `page` 单页读取，`limit` 直接作为官方 `page_size`，最多 100 条，不会先扫描最多 100 页再截断输出。
 
