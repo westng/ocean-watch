@@ -89,7 +89,7 @@ git diff --check -- . ':(exclude).codex-plugin/bin/**'
 
 日常 CI 在 Linux、macOS、Windows 验证 Go 运行时和当前平台启动器，在 Python 3.10/3.12 验证 F2 包装层，并验证 Plugin/Skill/二进制分发合同。
 
-Harness 的桌面兼容验收另在安装了目标 macOS 桌面版的开发机运行 `npm run test:desktop`。它调用随附运行时进行隔离测试，不操作真实桌面 UI 或 profile；CI 的路径与打包检查不能替代桌面运行时验收，不再安装独立 npm/CLI Harness。详见 [DeepSeek Harness 接入](deepseek-harness.md)。
+Harness 的桌面兼容验收另在安装了目标 macOS 桌面版的开发机运行 `npm run test:desktop`。它调用随附运行时进行隔离测试，不操作真实桌面 UI 或 profile；CI 的路径与打包检查不能替代桌面运行时验收，不再安装独立 npm/CLI Harness。详见 [DeepSeek Harness 接入](../guides/deepseek-harness.md)。
 
 ## 正式发布
 

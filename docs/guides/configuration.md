@@ -71,7 +71,7 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 ## 本地状态
 
-`$CODEX_HOME/ads-plan-monitor/state/` 保存授权快照、请求控制、作品身份提示缓存、短期千川预检快照和 Plugin 执行记录。它们不属于开源仓库，不应复制到其他用户环境。
+`$CODEX_HOME/ads-plan-monitor/state/` 保存授权快照、请求控制、作品身份提示缓存和 Plugin 执行记录；`ocean-watch.db` 是 SQLite 事务状态库，千川预检快照及其操作版本写入该库，营销旧 JSON Journal 路径仍保留在迁移期。它们不属于开源仓库，不应复制到其他用户环境。
 
 30 天作品身份缓存只保存非敏感的作品 ID、可见抖音号与数字达人 UID 关系，用作下一次官方定向查询提示。缓存不证明授权、归属或商品匹配，过期或不匹配时快速跳过。
 

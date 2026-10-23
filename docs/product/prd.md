@@ -234,7 +234,7 @@ WorkBuddy 官方用户文档还描述了包含 Skill、MCP 等组件的插件打
 | GitHub MCP Server [S11] | 单一服务提供业务工具，按工具集和只读模式控制暴露范围 | 第 8.5 节；工具暴露限制不代替账户权限、逐操作确认和核心校验 |
 | Playwright MCP [S12] | 根据场景选择 MCP 或 CLI + Skill，共享执行能力 | 第 8.4 节；不把 MCP 当安全边界，不以浏览器自动化替代官方投放 API，不在 WorkBuddy 连接器混用业务通道 |
 
-技术栈保持 Go 模块化单体、官方 MCP Go SDK、Go DTO/JSON Schema、SQLite/系统凭据及官方 Go SDK/REST Adapter；Python/F2 只做可替换公开元数据解析。复用仓库已声明依赖，不因参考项目使用其他库而替换整套工具链。SQLite 驱动已在 `go.mod` 固定为 `modernc.org/sqlite v1.60.1`，配套 `modernc.org/libc v1.77.1`；新状态层仍与旧业务路径隔离，运行条件及跨平台准入按第 5.2 节在 M1 验证，尚未完成整体门禁。
+技术栈保持 Go 模块化单体、官方 MCP Go SDK、Go DTO/JSON Schema、SQLite/系统凭据及官方 Go SDK/REST Adapter；Python/F2 只做可替换公开元数据解析。复用仓库已声明依赖，不因参考项目使用其他库而替换整套工具链。SQLite 驱动已在 `go.mod` 固定为 `modernc.org/sqlite v1.60.1`，配套 `modernc.org/libc v1.77.1`；千川预检 Journal 已接入 SQLite 操作版本/快照表，营销旧 Journal、凭据和其他迁移路径仍按阶段逐步切换。运行条件及跨平台准入按第 5.2 节在 M1 验证，尚未完成整体门禁。
 
 ## 4. 目标代码结构
 
@@ -1069,8 +1069,8 @@ Codex、Claude、Harness、豆包和 CLI 各自列出目标版本、OS/架构、
 - 架构改变时先更新本文和对应实施计划，再修改代码。
 - 所有“正式支持”“已兼容”“迁移完成”“安全确认”都必须有验收证据。
 - 本文不授权真实账户操作、真实数据迁移、插件安装、提交、推送、Tag、Release 或 Marketplace 发布。
-- 当前现状参考：[docs/architecture.md](architecture.md)、[docs/configuration.md](configuration.md)、[docs/cli.md](cli.md)、[CONTRIBUTING.md](../CONTRIBUTING.md)、[SECURITY.md](../SECURITY.md)。
-- 当前清单/入口参考：[.codex-plugin/plugin.json](../.codex-plugin/plugin.json)、[.claude-plugin/plugin.json](../.claude-plugin/plugin.json)、[harness/index.mjs](../harness/index.mjs)、[scripts/install-doubao.sh](../scripts/install-doubao.sh)。
+- 当前现状参考：[docs/architecture/overview.md](../architecture/overview.md)、[docs/guides/configuration.md](../guides/configuration.md)、[docs/reference/cli.md](../reference/cli.md)、[CONTRIBUTING.md](../../CONTRIBUTING.md)、[SECURITY.md](../../SECURITY.md)。
+- 当前清单/入口参考：[.codex-plugin/plugin.json](../../.codex-plugin/plugin.json)、[.claude-plugin/plugin.json](../../.claude-plugin/plugin.json)、[harness/index.mjs](../../harness/index.mjs)、[scripts/install-doubao.sh](../../scripts/install-doubao.sh)。
 
 ### 16.1 外部机制核实与适用边界
 

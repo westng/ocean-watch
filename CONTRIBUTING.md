@@ -1,6 +1,6 @@
 # Contributing
 
-感谢参与 Ocean Watch。开始前请阅读[架构说明](docs/architecture.md)和[文档中心](docs/README.md)。
+感谢参与 Ocean Watch。开始前请阅读[架构说明](docs/architecture/overview.md)和[文档中心](docs/README.md)。
 
 ## 开发环境
 
@@ -51,6 +51,6 @@ CI 另在 Linux、macOS、Windows 验证 Go 与启动器，并在 Python 3.10、
 
 ## Pull Request 与发布
 
-PR 描述应包含问题、设计选择、行为变化、验证结果和安全影响，避免混入无关重构。正式发布流程见[发布指南](docs/releasing.md)：发布准备先作为普通可审查提交进入 `main`，手动 Release 工作流只读验证固定提交并创建 Tag/Release，不修改或回推分支。
+PR 描述应包含问题、设计选择、行为变化、验证结果和安全影响，避免混入无关重构。正式发布流程见[发布指南](docs/release/releasing.md)：发布准备先作为普通可审查提交进入 `main`，手动 Release 工作流只读验证固定提交并创建 Tag/Release，不修改或回推分支。
 
 提交前确认 `config/`、`runs/`、`.venv/`、日志、任务清单、journal、Cookie 和 API 响应未被跟踪。

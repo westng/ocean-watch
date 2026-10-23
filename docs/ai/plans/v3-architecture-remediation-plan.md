@@ -4,7 +4,7 @@
 >
 > 文档属性：AI 辅助实施计划与交付 Gate
 >
-> 权威边界：本文规定 V3 重构的实施顺序、兼容边界和验收门禁；产品目标与阶段要求以 [`../../prd.md`](../../prd.md) 为准，当前行为以代码、测试、Plugin 清单、Skill 和正式文档为准
+> 权威边界：本文规定 V3 重构的实施顺序、兼容边界和验收门禁；产品目标与阶段要求以 [`../../product/prd.md`](../../product/prd.md) 为准，当前行为以代码、测试、Plugin 清单、Skill 和正式文档为准
 >
 > 证据约定：本文不保留日期化核验记录。验收结论必须在验收当时重新执行门禁得出，不得引用历史记录
 >
@@ -334,7 +334,7 @@ GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go test ./internal/application/pl
 
 ### 11.2 正式文档
 
-- 更新 `docs/configuration.md`、`docs/cli.md`、`docs/architecture.md` 和用户工作流说明。
+- 更新 `docs/guides/configuration.md`、`docs/reference/cli.md`、`docs/architecture/overview.md` 和用户工作流说明。
 - 更新 `CHANGELOG.md` `## 未发布`，准确记录 Schema 变化、分组修复、历史计划绑定和升级动作。
 - 对用户说明：安装/升级后新建任务加载合同，不需要退出客户端。
 
@@ -384,7 +384,7 @@ W8 的构建、安装和本地冒烟需要单独授权；本计划本身不授�
 - MCP probe 校验完整工具目录和 Schema；
 - Plugin 包不含凭据、状态、缓存、Journal 或环境配置。
 
-执行命令以 `docs/releasing.md` 当前规则为准，至少包括：
+执行命令以 `docs/release/releasing.md` 当前规则为准，至少包括：
 
 ```bash
 GOTOOLCHAIN=go1.27.0 go -C runtime/ocean-watch-go run ./cmd/build-runtime --all

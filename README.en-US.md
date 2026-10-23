@@ -19,8 +19,8 @@
   <a href="https://github.com/oceanengine/ad_open_sdk_go"><img src="https://img.shields.io/badge/Ocean_Engine-Go_SDK-00ADD8?logo=go&amp;logoColor=white" alt="Ocean Engine Go SDK"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-F2_Adapter-3776AB?logo=python&amp;logoColor=white" alt="Python F2 Adapter"></a>
   <a href="https://github.com/Johnserf-Seed/f2"><img src="https://img.shields.io/badge/F2-Public_Metadata-FF2D55" alt="F2 Public Metadata"></a>
-  <a href="docs/architecture.md"><img src="https://img.shields.io/badge/CLI-macOS_%7C_Linux_%7C_Windows-374151" alt="Cross-platform CLI"></a>
-  <a href="docs/configuration.md"><img src="https://img.shields.io/badge/Secure_Storage-Keychain_%7C_DPAPI_%7C_Secret_Service-0F766E" alt="Secure credential storage"></a>
+  <a href="docs/architecture/overview.md"><img src="https://img.shields.io/badge/CLI-macOS_%7C_Linux_%7C_Windows-374151" alt="Cross-platform CLI"></a>
+  <a href="docs/guides/configuration.md"><img src="https://img.shields.io/badge/Secure_Storage-Keychain_%7C_DPAPI_%7C_Secret_Service-0F766E" alt="Secure credential storage"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -90,7 +90,7 @@ claude plugin install ocean-watch@ocean-watch
 
 DeepSeek Harness Desktop `0.2.0-rc.2`: open **Plugins → Add plugin** in the desktop app and enter this repository's absolute path. This installs into the active `desktop` profile; no separate npm/CLI Harness installation is needed.
 
-The native bundle registers both Skills and the local MCP tools. See the Chinese [DeepSeek Harness guide](docs/deepseek-harness.md) for compatibility, desktop profiles, and verification.
+The native bundle registers both Skills and the local MCP tools. See the Chinese [DeepSeek Harness guide](docs/guides/deepseek-harness.md) for compatibility, desktop profiles, and verification.
 
 Doubao Work:
 
@@ -109,7 +109,7 @@ cd ~/.codex/plugins/ocean-watch  # or your plugin installation directory
 
 All four hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
 
-After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/getting-started.md) for environment checks, channel configuration, and OAuth.
+After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/guides/getting-started.md) for environment checks, channel configuration, and OAuth.
 
 ## Ask It Naturally
 
@@ -132,7 +132,7 @@ These are examples, not fixed commands. Ocean Watch selects the channel and capa
 - F2 reads public Douyin work metadata only. It does not download media, create a database, or automatically read browser cookies; official Qianchuan APIs under the target advertiser always determine deliverability.
 - User configuration, authorization snapshots, caches, reports, and execution history live locally under `$CODEX_HOME/ads-plan-monitor/` and are not open-source repository content.
 
-See [Configuration](docs/configuration.md) and [Security](SECURITY.md) for details.
+See [Configuration](docs/guides/configuration.md) and [Security](SECURITY.md) for details.
 
 ## Runtime and Support
 
@@ -154,7 +154,7 @@ Codex / Claude Code / DeepSeek Harness / Doubao Work
 - Versioned runtime hot upgrades in the stable proxy rely on Codex's version-directory layout. Claude Code installs a single repository snapshot, so integrity verification and signed slots still apply but there is no automatic hot upgrade: start a new task after updating the plugin.
 - Python participates only in public metadata resolution for Qianchuan work links. It does not own authorization, accounts, templates, plans, or reports.
 
-See [Architecture](docs/architecture.md) for current implementation boundaries.
+See [Architecture](docs/architecture/overview.md) for current implementation boundaries.
 
 ## Feature Requests
 
@@ -176,10 +176,10 @@ Every suggestion will be carefully evaluated. Valuable features may appear in th
 
 | Audience | Entry points |
 | --- | --- |
-| Everyday users | [Documentation](docs/README.md) · [Getting started](docs/getting-started.md) · [Configuration](docs/configuration.md) |
-| Scripting and diagnostics | [CLI reference](docs/cli.md) |
-| Developers | [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md) |
-| Project and security | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [Release guide](docs/releasing.md) · [MIT license](LICENSE) |
+| Everyday users | [Documentation](docs/README.md) · [Getting started](docs/guides/getting-started.md) · [Configuration](docs/guides/configuration.md) |
+| Scripting and diagnostics | [CLI reference](docs/reference/cli.md) |
+| Developers | [Architecture](docs/architecture/overview.md) · [Contributing](CONTRIBUTING.md) |
+| Project and security | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [Release guide](docs/release/releasing.md) · [MIT license](LICENSE) |
 
 Detailed guides are currently maintained in Chinese.
 

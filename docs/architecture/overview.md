@@ -31,7 +31,7 @@ Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个�
 
 稳定代理先响应 MCP 协议探测和工具发现，首次业务调用再准备、校验并连接私有 Runtime。这样不会让 Harness 的握手探测等待运行时复制和启动；未通过校验的 Runtime 仍不能处理业务调用。
 
-Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX 稳定启动器。DeepSeek Harness 通过根目录 npm 组合包加载 `harness/index.mjs`，按平台选择五个内置二进制之一，并注册独立的包内 Skill 提供方；其中包括 Windows amd64 的原生 MCP 启动入口。历史桌面验收的版本与平台范围见接入指南；它不证明当前 V3 工作树已经完成宿主验收。CI 配置覆盖 macOS、Linux 与 Windows，交叉构建成功不等于对应平台的 MCP 已实测。详见 [DeepSeek Harness 接入](deepseek-harness.md)。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
+Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX 稳定启动器。DeepSeek Harness 通过根目录 npm 组合包加载 `harness/index.mjs`，按平台选择五个内置二进制之一，并注册独立的包内 Skill 提供方；其中包括 Windows amd64 的原生 MCP 启动入口。历史桌面验收的版本与平台范围见接入指南；它不证明当前 V3 工作树已经完成宿主验收。CI 配置覆盖 macOS、Linux 与 Windows，交叉构建成功不等于对应平台的 MCP 已实测。详见 [DeepSeek Harness 接入](../guides/deepseek-harness.md)。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
 
@@ -84,7 +84,7 @@ Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX
 
 状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，Codex、Claude Code、DeepSeek Harness 和豆包工作共用同一个根。这不是历史包袱：官方刷新响应会替换已存储的 refresh token，若每个 Host 各存一份，任一侧刷新都会作废另一侧的凭据，因此授权只做一次。下文的 `$CODEX_HOME` 均指这个解析结果。
 
-CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`。
+CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`；千川预检 Journal 默认写入同一目录的 `ocean-watch.db` SQLite 状态库，测试和迁移期可显式注入其他 JournalStore。
 
 MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
 

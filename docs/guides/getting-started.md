@@ -119,4 +119,4 @@ skills/qc-plan-monitor/run qc-reports plans --advertiser-id ADVERTISER_ID --star
 
 默认输出一个结构化 JSON 文档。只有显式 `--out PATH` 才写文件；当结果包含强制 Presentation 时，Codex、Claude Code 或豆包工作会按其中的 Markdown、列和指标口径展示。
 
-下一步可阅读[配置与授权](configuration.md)和[CLI 参考](cli.md)。
+下一步可阅读[配置与授权](configuration.md)和[CLI 参考](../reference/cli.md)。

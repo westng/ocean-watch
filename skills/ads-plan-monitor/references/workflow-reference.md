@@ -38,7 +38,7 @@ Use the unified launcher from this Skill root:
 # Windows: run.cmd <domain> <action> [options]
 ```
 
-The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/cli.md` only when full command details are needed. Use the Plugin-provided MCP tools for template reads and the common Marketing reads listed below; do not invoke the launcher for an equivalent read.
+The launcher selects and executes the bundled Go binary for the current platform. Read `../../docs/reference/cli.md` only when full command details are needed. Use the Plugin-provided MCP tools for template reads and the common Marketing reads listed below; do not invoke the launcher for an equivalent read.
 
 Core routes:
 

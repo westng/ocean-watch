@@ -28,7 +28,7 @@
 ### 变更
 
 - 中英文 README 新增按 Codex、Claude Code、DeepSeek Harness、豆包工作与 WorkBuddy 划分的功能支持表，分别说明接入方式、实现状态、平台限制与 V3 待验收边界；WorkBuddy 仍为后续 WB1 规划，不标记为已兼容，并纠正能力数量与宿主展示。
-- 治理 `docs/` 文档存放与命名：正式文档保留稳定路径，V3 计划统一为 `docs/ai/plans/v3-architecture-remediation-plan.md`，合并重复交接单中的开放门禁并删除废弃副本，修复索引和相对引用；同步澄清 PRD 阶段状态、历史验收范围、宿主升级差异、doctor 回调 URI 检查及已移除的模板迁移命令说明。
+- 治理 `docs/` 文档分层与命名：根目录只保留 `README.md`，正式文档按指南、参考、架构、产品和发布职责分别放入对应子目录；V3 计划统一为 `docs/ai/plans/v3-architecture-remediation-plan.md`，合并重复交接单中的开放门禁并删除废弃副本，修复索引和相对引用；同步澄清 PRD 阶段状态、历史验收范围、宿主升级差异、doctor 回调 URI 检查及已移除的模板迁移命令说明。
 
 - V3 重构补齐 SQLite 本地状态、旧状态安全导入、凭据轮换、操作快照/审批/租约/恢复和统一状态诊断边界；环境检查按能力降级 F2 依赖，OAuth 回调检查明确仅验证 URI 配置；同步更新五平台 Runtime 产物与清单哈希，并删除已被当前 PRD、代码和正式文档取代的旧架构过程文档。
 

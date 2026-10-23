@@ -19,8 +19,8 @@
   <a href="https://github.com/oceanengine/ad_open_sdk_go"><img src="https://img.shields.io/badge/Ocean_Engine-Go_SDK-00ADD8?logo=go&amp;logoColor=white" alt="Ocean Engine Go SDK"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-F2_Adapter-3776AB?logo=python&amp;logoColor=white" alt="Python F2 Adapter"></a>
   <a href="https://github.com/Johnserf-Seed/f2"><img src="https://img.shields.io/badge/F2-Public_Metadata-FF2D55" alt="F2 Public Metadata"></a>
-  <a href="docs/architecture.md"><img src="https://img.shields.io/badge/CLI-macOS_%7C_Linux_%7C_Windows-374151" alt="Cross-platform CLI"></a>
-  <a href="docs/configuration.md"><img src="https://img.shields.io/badge/Secure_Storage-Keychain_%7C_DPAPI_%7C_Secret_Service-0F766E" alt="Secure credential storage"></a>
+  <a href="docs/architecture/overview.md"><img src="https://img.shields.io/badge/CLI-macOS_%7C_Linux_%7C_Windows-374151" alt="Cross-platform CLI"></a>
+  <a href="docs/guides/configuration.md"><img src="https://img.shields.io/badge/Secure_Storage-Keychain_%7C_DPAPI_%7C_Secret_Service-0F766E" alt="Secure credential storage"></a>
   <a href="https://github.com/westng/ocean-watch/actions/workflows/ci.yml"><img src="https://github.com/westng/ocean-watch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-111827" alt="MIT License"></a>
 </p>
@@ -90,7 +90,7 @@ claude plugin install ocean-watch@ocean-watch
 
 DeepSeek Harness 桌面版 `0.2.0-rc.2`：在应用的「插件 → 添加插件」中输入本仓库的绝对路径，安装到当前 `desktop` profile。无需安装独立 npm/CLI 宿主。
 
-原生组合包同时注册两个 Skill 和本地 MCP 工具。安装与桌面版验收方式见 [DeepSeek Harness 接入](docs/deepseek-harness.md)。
+原生组合包同时注册两个 Skill 和本地 MCP 工具。安装与桌面版验收方式见 [DeepSeek Harness 接入](docs/guides/deepseek-harness.md)。
 
 豆包工作 (Doubao Work)：
 
@@ -109,7 +109,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 
 四个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
 
-首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/getting-started.md)。
+首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/guides/getting-started.md)。
 
 ## 可以直接这样问
 
@@ -132,7 +132,7 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 - F2 只解析抖音公开作品元数据，不下载素材、不创建数据库、不自动读取浏览器 Cookie；最终可投放性始终由目标广告主下的千川官方接口确认。
 - 用户配置、授权快照、缓存、报表和执行记录位于本机 `$CODEX_HOME/ads-plan-monitor/`，不属于开源仓库内容。
 
-更多信息见[配置与授权](docs/configuration.md)和[安全说明](SECURITY.md)。
+更多信息见[配置与授权](docs/guides/configuration.md)和[安全说明](SECURITY.md)。
 
 ## 运行方式与支持范围
 
@@ -154,7 +154,7 @@ Codex / Claude Code / DeepSeek Harness / 豆包工作
 - 稳定代理的版本化 Runtime 热升级依赖 Codex 的版本目录布局。Claude Code 安装的是单个仓库快照，因此完整性校验与签名槽位仍生效，但没有自动热升级：更新插件后重开任务即可。
 - Python 只参与千川作品链接的公开元数据解析，不承载授权、账户、模板、计划或报表逻辑。
 
-技术边界与当前实现见[架构说明](docs/architecture.md)。
+技术边界与当前实现见[架构说明](docs/architecture/overview.md)。
 
 ## 功能建议
 
@@ -176,10 +176,10 @@ Codex / Claude Code / DeepSeek Harness / 豆包工作
 
 | 读者 | 入口 |
 | --- | --- |
-| 普通用户 | [Documentation](docs/README.md) · [快速开始](docs/getting-started.md) · [配置与授权](docs/configuration.md) |
-| 脚本与排错 | [CLI 参考](docs/cli.md) |
-| 开发者 | [架构说明](docs/architecture.md) · [Contributing](CONTRIBUTING.md) |
-| 项目与安全 | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [发布指南](docs/releasing.md) · [MIT license](LICENSE) |
+| 普通用户 | [Documentation](docs/README.md) · [快速开始](docs/guides/getting-started.md) · [配置与授权](docs/guides/configuration.md) |
+| 脚本与排错 | [CLI 参考](docs/reference/cli.md) |
+| 开发者 | [架构说明](docs/architecture/overview.md) · [Contributing](CONTRIBUTING.md) |
+| 项目与安全 | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [发布指南](docs/release/releasing.md) · [MIT license](LICENSE) |
 
 ## 鸣谢
 
