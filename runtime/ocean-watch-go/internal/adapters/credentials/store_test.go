@@ -77,17 +77,6 @@ func TestCredentialBackendsUseStableServiceAndAccountNames(t *testing.T) {
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("macOS lookup = %v, want %v", got, want)
 	}
-	if got, want := macOSDeleteArguments(account), []string{
-		"delete-generic-password", "-s", "ads-plan-monitor", "-a", account,
-	}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("macOS delete = %v, want %v", got, want)
-	}
-	if got, want := macOSWriteArguments(account), []string{
-		"add-generic-password", "-U", "-s", "ads-plan-monitor", "-a", account,
-		"-w",
-	}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("macOS write = %v, want %v", got, want)
-	}
 	if got, want := linuxReadArguments(account), []string{
 		"lookup", "service", "ads-plan-monitor", "account", account,
 	}; !reflect.DeepEqual(got, want) {

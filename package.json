@@ -1,7 +1,7 @@
 {
   "name": "ocean-watch",
   "version": "1.0.9",
-  "description": "Ocean Engine Marketing and Qianchuan tools and skills for DeepSeek Harness",
+  "description": "Ocean Engine Marketing, Qianchuan, and Star Map authorization tools and skills for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
   "repository": {

@@ -1,6 +1,6 @@
 # DeepSeek Harness 桌面版接入
 
-Ocean Watch 使用 Harness 原生 npm 组合包格式。安装一份包即可加载 `ads-plan-monitor`、`qc-plan-monitor` 和 18 个本地 stdio MCP 工具；业务逻辑、授权与数据由现有 Go 运行时处理。
+Ocean Watch 使用 Harness 原生 npm 组合包格式。安装一份包即可加载 `ads-plan-monitor`、`qc-plan-monitor`、`xt-plan-monitor` 和 26 个本地 stdio MCP 工具；业务逻辑、授权与数据由现有 Go 运行时处理。新增的三项 F2 配置工具需重新加载宿主声明，尚未在真实桌面 profile 中重新验收。
 
 ## 兼容与开发基准
 
@@ -14,7 +14,7 @@ Ocean Watch 使用 Harness 原生 npm 组合包格式。安装一份包即可加
 1. 打开 DeepSeek Harness 桌面应用，进入「插件 → 添加插件」。
 2. 输入 Ocean Watch 仓库的绝对路径，安装到当前桌面应用的 `desktop` profile。也可在仓库根目录运行 `npm pack`，将生成的 `.tgz` 文件绝对路径用于安装。
 3. 在插件页面确认 `ocean-watch` 已启用、组件正在运行，再新建会话。若界面提示需要重启，先结束当前任务，再完全退出并重新打开桌面应用。
-4. 确认技能列表出现 `ads-plan-monitor` 和 `qc-plan-monitor`，工具采用 `mcp__ocean-watch__<工具名>`，例如 `mcp__ocean-watch__get_capabilities`。
+4. 确认技能列表出现 `ads-plan-monitor`、`qc-plan-monitor` 和 `xt-plan-monitor`，工具采用 `mcp__ocean-watch__<工具名>`，例如 `mcp__ocean-watch__get_capabilities`。
 
 更新已有安装时，重新从本地路径安装当前包。曾为旧包添加版本豁免的环境，应在新包安装成功后移除该旧豁免；当前包本身应通过正常的版本检查。`web` 与 `desktop` 是不同 profile，安装到 `web` 不会更新桌面版。
 
@@ -24,7 +24,7 @@ Ocean Watch 使用 Harness 原生 npm 组合包格式。安装一份包即可加
 
 各 Host 使用相同的本地状态规则：`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`。需要隔离时，在启动 Harness 前设置独立的 `OCEAN_WATCH_HOME`。
 
-MCP 直接启动当前平台的内置 Go 二进制，将插件根目录作为独立参数传入，支持包含空格的安装路径。两项 Skill 从各自 `SKILL.md` 的绝对目录定位 `run` / `run.cmd`，不依赖会话工作目录。千川作品链接解析仍使用 Python 与 F2。
+MCP 直接启动当前平台的内置 Go 二进制，将插件根目录作为独立参数传入，支持包含空格的安装路径。三项 Skill 从各自 `SKILL.md` 的绝对目录定位 `run` / `run.cmd`，不依赖会话工作目录。千川作品链接解析仍使用 Python 与 F2。
 
 代理先响应协议探测与工具发现；首次业务调用再准备、校验并连接私有运行时，后续调用复用连接。首次调用可能较慢，校验失败会明确返回错误。
 
@@ -47,7 +47,7 @@ npm run test:desktop
 npm run test:desktop -- "/path/to/DeepSeek Harness.app"
 ```
 
-桌面探测脚本目前支持 macOS。它调用已安装应用的 Electron Node 模式和内置 ASAR 运行时，对当前仓库执行 `npm pack` 并解包到含空格的临时 `desktop` profile；全程不下载独立 Harness，不打开桌面 UI 或修改真实 profile。探测不使用真实模型凭据或账户状态，隔离 `DSH_HOME`、`DSH_AGENTS_HOME`、`CODEX_HOME` 和 `OCEAN_WATCH_HOME`，验证无需豁免的版本准入、两项技能与宿主技能共存、18 个 MCP 工具、五渠道能力查询，以及卸载、重新挂载后的资源释放与可调用性。
+桌面探测脚本目前支持 macOS。它调用已安装应用的 Electron Node 模式和内置 ASAR 运行时，对当前仓库执行 `npm pack` 并解包到含空格的临时 `desktop` profile；全程不下载独立 Harness，不打开桌面 UI 或修改真实 profile。探测不使用真实模型凭据或账户状态，隔离 `DSH_HOME`、`DSH_AGENTS_HOME`、`CODEX_HOME` 和 `OCEAN_WATCH_HOME`，验证无需豁免的版本准入、三项技能与宿主技能共存、26 个 MCP 工具、五渠道能力查询，以及卸载、重新挂载后的资源释放与可调用性。这里描述探测覆盖范围，不表示新增 F2 工具的桌面验收已执行。
 
 CI 在三个操作系统运行路径测试与打包检查，不将这些检查声称为桌面集成验收。发布前应在目标桌面应用运行上述探测，并由使用者通过真实桌面插件管理完成安装与显示检查；该步骤不属于自动化代码测试。
 

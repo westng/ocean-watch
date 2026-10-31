@@ -5,6 +5,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -87,14 +88,60 @@ def parse_product(detail):
     }
 
 
+def parse_products(detail):
+    extra = first_value(detail, "anchor_info", "extra")
+    try:
+        products = json.loads(extra) if isinstance(extra, str) else extra
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(products, list):
+        return []
+    result, seen = [], set()
+    for item in products:
+        if not isinstance(item, dict):
+            continue
+        product_id = str(item.get("product_id") or "").strip()
+        if not product_id.isdigit() or int(product_id) <= 0 or product_id in seen:
+            continue
+        seen.add(product_id)
+        result.append({"product_info_id": product_id, "product_info_name": str(item.get("title") or "")})
+    return result
+
+
+class MetadataValidationError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def metadata_failure(error):
+    # Classify only observable facts. An empty response or HTTP 403 alone is
+    # never labelled as proof of login requirements or anti-bot interception.
+    code = "f2_metadata_query_failed"
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if status is None:
+        status = getattr(error, "status_code", None)
+    if isinstance(error, MetadataValidationError):
+        code = error.code
+    elif isinstance(error, json.JSONDecodeError):
+        code = "f2_response_parse_failed"
+    elif isinstance(status, int) and 100 <= status <= 599:
+        code = "f2_http_error"
+    elif isinstance(error, OSError) or type(error).__name__ in {
+        "ConnectError", "ReadError", "WriteError", "ProxyError", "RemoteProtocolError"
+    }:
+        code = "f2_network_error"
+    return {"code": code, "message": "F2 did not return usable public work metadata"}
+
+
 def map_video_response(video, expected_work_id):
     raw = video._to_raw()
     detail = raw.get("aweme_detail") if isinstance(raw, dict) else None
     if not isinstance(detail, dict):
-        raise ValueError("F2 returned invalid work metadata")
+        raise MetadataValidationError("f2_invalid_work_metadata")
     work_id = str(detail.get("aweme_id") or "").strip()
     if work_id != expected_work_id:
-        raise ValueError("F2 returned mismatched work metadata")
+        raise MetadataValidationError("f2_work_id_mismatch")
     author = detail.get("author") if isinstance(detail.get("author"), dict) else {}
     video_result = {
         "video_info_cover": str(first_value(detail, "video", "cover", "url_list", 0) or ""),
@@ -118,6 +165,7 @@ def map_video_response(video, expected_work_id):
                 "avatar": str(first_value(author, "avatar_thumb", "url_list", 0) or ""),
             },
             "product": parse_product(detail),
+            "products": parse_products(detail),
             "video": video_result,
         },
     }
@@ -176,13 +224,20 @@ async def fetch_many(
     ttwid_factory=None,
     per_work_timeout=PER_WORK_TIMEOUT,
     batch_timeout=BATCH_TIMEOUT,
+    cookie=None,
 ):
     semaphore = asyncio.Semaphore(concurrency)
     started_at = time.monotonic()
     deadline = started_at + batch_timeout
     kwargs = {
-        "headers": {"User-Agent": USER_AGENT, "Referer": "https://www.douyin.com/"},
-        "cookie": resolve_cookie(ttwid_factory),
+        # The current Douyin detail gateway requires this header in addition to
+        # Cookie. A missing header returns HTTP 403 before metadata is queried.
+        "headers": {
+            "User-Agent": USER_AGENT,
+            "Referer": "https://www.douyin.com/",
+            "x-tt-argus": "1",
+        },
+        "cookie": resolve_cookie(ttwid_factory) if cookie is None else cookie,
         "proxies": proxy_config(),
         "max_connections": concurrency,
         "max_tasks": concurrency,
@@ -196,9 +251,11 @@ async def fetch_many(
 
         async def fetch_video(work_id):
             response = await crawler.fetch_post_detail(request_type(aweme_id=work_id))
+            if not response:
+                raise MetadataValidationError("f2_empty_response")
             video = filter_type(response)
             if video.nickname is None:
-                raise ValueError("F2 returned incomplete work metadata")
+                raise MetadataValidationError("f2_incomplete_work_metadata")
             return video
 
         close = crawler.close
@@ -215,12 +272,9 @@ async def fetch_many(
             except asyncio.TimeoutError:
                 metadata = None
                 error = {"code": "f2_work_timeout", "message": "F2 work metadata query timed out"}
-            except Exception:
+            except Exception as error_detail:
                 metadata = None
-                error = {
-                    "code": "f2_metadata_query_failed",
-                    "message": "F2 did not return usable public work metadata",
-                }
+                error = metadata_failure(error_detail)
         attempts.setdefault(work_id, []).append(time.monotonic() - attempt_started_at)
         return work_id, metadata, error
 
@@ -304,7 +358,7 @@ async def fetch_many(
     }
 
 
-def execute(work_ids, *, concurrency=DEFAULT_CONCURRENCY):
+def execute(work_ids, *, concurrency=DEFAULT_CONCURRENCY, cookie=None):
     concurrency = int(concurrency)
     if concurrency < 1 or concurrency > MAX_CONCURRENCY:
         raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
@@ -314,10 +368,24 @@ def execute(work_ids, *, concurrency=DEFAULT_CONCURRENCY):
     with tempfile.TemporaryDirectory(prefix="ocean-watch-f2-") as directory:
         os.chdir(directory)
         try:
-            return asyncio.run(fetch_many(work_ids, concurrency=concurrency))
+            return asyncio.run(fetch_many(work_ids, concurrency=concurrency, cookie=cookie))
         finally:
             logging.shutdown()
             os.chdir(original_directory)
+
+
+def read_credentials(stream):
+    payload = stream.read(200705)
+    if len(payload) > 200704:
+        raise ValueError("invalid F2 credential input")
+    value = json.loads(payload)
+    if not isinstance(value, dict) or set(value) != {"cookie"}:
+        raise ValueError("invalid F2 credential input")
+    cookie = value["cookie"]
+    if (not isinstance(cookie, str) or not cookie or len(cookie) > 32768
+            or "=" not in cookie or any(ord(ch) < 32 or ord(ch) > 126 for ch in cookie)):
+        raise ValueError("invalid F2 credential input")
+    return cookie
 
 
 def main(argv=None):
@@ -326,9 +394,11 @@ def main(argv=None):
     )
     parser.add_argument("--work-id", action="append", required=True)
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    parser.add_argument("--credentials-stdin", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
-        result = execute(args.work_id, concurrency=args.concurrency)
+        cookie = read_credentials(sys.stdin.buffer) if args.credentials_stdin else None
+        result = execute(args.work_id, concurrency=args.concurrency, cookie=cookie)
     except Exception:
         result = {
             "ok": False,

@@ -47,7 +47,7 @@ Core routes:
 | Check local environment | `setup doctor` |
 | First run | `setup init` |
 | Validate config | `setup validate --mode query|create-preview|create-submit|all` |
-| Marketing OAuth | `auth authorize --channel marketing` |
+| Marketing OAuth | `auth authorize --channel marketing`; reauthorize an existing grant with `--authorization-id ID` |
 | Replace Marketing app | `auth set-app --channel marketing` |
 | Token/account status and mapping | MCP `get_marketing_authorization` |
 | Refresh current authorized user's advertisers | `auth sync-accounts --channel marketing` |

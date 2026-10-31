@@ -165,6 +165,13 @@ func TestBatchPlanNameRendersTemplateAndWeightedLimit(t *testing.T) {
 	if got, err := service.planName(request, group); err != nil || got != "达人甲_creator-visible_4000000000000001_测试商品官方全称_20260804_123045_20260804123045" {
 		t.Fatalf("custom plan name rendered as %q", got)
 	}
+	group.works[0].CreatorName = ""
+	group.creator.Name = " "
+	if _, err := service.planName(request, group); err == nil {
+		t.Fatal("visible ID or UID must not substitute for a missing nickname")
+	}
+	group.creator = creator
+	group.works[0].CreatorName = "达人甲"
 	request.PlanNameTemplate = ""
 	request.PlanType, request.Business = "随手po", "刘研"
 	if got, err := service.planName(request, group); err != nil || got != "8.4-达人甲-测试商品-随手po-刘研" {

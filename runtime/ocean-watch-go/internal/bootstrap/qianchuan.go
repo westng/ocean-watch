@@ -5,11 +5,14 @@ import (
 	"path/filepath"
 	"time"
 
+	credentialadapter "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	adapterworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/workmetadata"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/f2config"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	applicationqianchuanread "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/qianchuan"
@@ -47,6 +50,8 @@ type QianchuanOptions struct {
 	Submit               bool
 	OnlineRead           bool
 	BatchReadConcurrency int
+	Journals             sharedplans.JournalStore
+	RuntimeVersion       string
 }
 
 type QianchuanRuntime struct {
@@ -148,7 +153,13 @@ func newQianchuanBatchReadFactory(concurrency int, stateRoot string) (*oceanengi
 func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.CommandService, error) {
 	service := applicationqianchuan.CommandService{
 		Config: options.Config, Links: options.Links,
-		Journals: filesystem.OperationJournalStore{Root: options.StateRoot}, Now: options.Now,
+		Journals: options.Journals, Now: options.Now,
+	}
+	if service.Journals == nil {
+		service.Journals = sqlite.SQLiteJournalStore{
+			Path: filepath.Join(options.StateRoot, "ocean-watch.db"), RuntimeVersion: options.RuntimeVersion,
+			Legacy: filesystem.OperationJournalStore{Root: options.StateRoot},
+		}
 	}
 	if !options.OnlineRead && !options.Submit {
 		return service, nil
@@ -212,6 +223,7 @@ func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.
 			Links: adapterworkmetadata.DouyinRedirectResolver{Client: options.HTTPClient},
 			Metadata: adapterworkmetadata.F2Resolver{
 				Python: options.PythonResolver, Directory: options.PluginRoot,
+				Cookie: (f2config.Settings{Store: credentialadapter.SystemStore{}}).Cookie,
 			},
 		}
 	}

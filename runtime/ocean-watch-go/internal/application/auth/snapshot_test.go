@@ -44,7 +44,7 @@ func TestAdvertiserSnapshotTransaction(t *testing.T) {
 	}
 	syncer := AdvertiserSnapshotSync{
 		Tokens: staticTokenProvider{lease: TokenLease{
-			Channel: "qianchuan", AuthorizationID: "target", AccessToken: "fixture-access",
+			Channel: "qianchuan", AuthorizationID: "target", TokenRevision: 1, AccessToken: "fixture-access",
 		}},
 		Authorizations: store, Discovery: staticDiscovery{snapshot: snapshot},
 		Now: func() time.Time { return now },
@@ -134,5 +134,32 @@ func snapshotStateFixture() map[string]any {
 		},
 		"account_index":    map[string]any{"9000000000000088": "target"},
 		"advertiser_index": map[string]any{"1000000000000088": []any{"target"}},
+	}
+}
+
+func TestAdvertiserSnapshotRejectsDiscoveryFromObsoleteCredential(t *testing.T) {
+	store := &memoryAuthorizationStore{channels: map[string]map[string]any{"qianchuan": snapshotStateFixture()}}
+	var selected map[string]any
+	syncer := AdvertiserSnapshotSync{
+		Authorizations: store,
+		Tokens:         staticTokenProvider{lease: TokenLease{Channel: "qianchuan", AuthorizationID: "target", TokenRevision: 1, AccessToken: "fixture-access"}},
+		Discovery: recoveryDiscoveryFunc(func(ctx context.Context) (domain.AdvertiserSnapshot, error) {
+			if err := store.UpdateChannel(ctx, "qianchuan", func(state map[string]any) error {
+				row := configuration.Object(configuration.Object(state["authorizations"])["target"])
+				row["token_revision"], row["pending_account_sync"] = 2, true
+				return nil
+			}); err != nil {
+				return domain.AdvertiserSnapshot{}, err
+			}
+			selected, _ = store.LoadChannel(ctx, "qianchuan")
+			return domain.AdvertiserSnapshot{Accounts: []domain.AuthorizedAccount{{AccountID: "9001", AdvertiserIDs: []string{"1001"}}}, AdvertiserIDs: []string{"1001"}}, nil
+		}),
+	}
+	if _, err := syncer.Sync(context.Background(), AdvertiserSyncQuery{Channel: "qianchuan", AuthorizationID: "target"}); err == nil {
+		t.Fatal("obsolete credential discovery activated an account snapshot")
+	}
+	after, _ := store.LoadChannel(context.Background(), "qianchuan")
+	if !reflect.DeepEqual(selected, after) {
+		t.Fatal("obsolete discovery replaced the newer pending grant")
 	}
 }

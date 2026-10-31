@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/f2config"
 	"io"
 	"path/filepath"
 	"strings"
@@ -132,12 +134,13 @@ func (runner Runner) runInspectWork(
 			Metadata: metadataadapter.F2Resolver{
 				Python: runner.PythonResolver, Directory: pluginRoot,
 				Entrypoint: filepath.Join(pluginRoot, "f2", "resolve.py"),
+				Cookie:     (f2config.Settings{Store: credentials.SystemStore{}}).Cookie,
 			},
 		}
 		if pluginRoot == "" {
 			service = metadataapplication.Resolver{
 				Links:    metadataadapter.DouyinRedirectResolver{},
-				Metadata: metadataadapter.F2Resolver{Python: pythonruntime.Resolver{}},
+				Metadata: metadataadapter.F2Resolver{Python: pythonruntime.Resolver{}, Cookie: (f2config.Settings{Store: credentials.SystemStore{}}).Cookie},
 			}
 		}
 	}

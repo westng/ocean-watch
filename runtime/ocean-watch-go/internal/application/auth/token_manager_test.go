@@ -285,3 +285,38 @@ func tokenFixtureState(authorizationID string) map[string]any {
 		"account_index": map[string]any{}, "advertiser_index": map[string]any{},
 	}
 }
+
+func TestTokenRefreshValidatesGrantApplicationAndRetainsUserIdentity(t *testing.T) {
+	for _, appID := range []string{"100", "200"} {
+		t.Run(appID, func(t *testing.T) {
+			now := time.Date(2026, 10, 29, 1, 0, 0, 0, time.UTC)
+			credentials := tokenFixtureCredentials(now, "marketing", "grant")
+			credentials.entries["oceanengine-auth-marketing-grant-r1"]["app_id"] = appID
+			credentials.entries["oceanengine-auth-marketing-grant-r1"]["authorized_user_id"] = "7001"
+			state := tokenFixtureState("grant")
+			row := configuration.Object(configuration.Object(state["authorizations"])["grant"])
+			row["app_id"], row["authorized_user_id"] = appID, "7001"
+			store := &memoryAuthorizationStore{channels: map[string]map[string]any{"marketing": state}}
+			oauth := &countingOAuth{counts: map[string]int{}}
+			manager := TokenManager{Credentials: credentials, Authorizations: store, Locks: &keyedMemoryLocker{locks: map[string]*sync.Mutex{}}, OAuth: oauth, Now: func() time.Time { return now }}
+			lease, err := manager.Ensure(context.Background(), TokenQuery{Channel: "marketing", AuthorizationID: "grant"})
+			if appID != "100" {
+				var domainErr *domain.Error
+				if !errors.As(err, &domainErr) || domainErr.Code != "reauthorization_required" || oauth.counts["marketing"] != 0 {
+					t.Fatalf("different app was used to refresh the grant: %v", err)
+				}
+				if _, exists := credentials.entries["oceanengine-auth-marketing-grant-r2"]; exists {
+					t.Fatal("application mismatch persisted a new credential")
+				}
+				return
+			}
+			if err != nil || lease.TokenRevision != 2 || oauth.counts["marketing"] != 1 {
+				t.Fatalf("matching application did not refresh: %+v, %v", lease, err)
+			}
+			refreshed, _ := credentials.Read(context.Background(), "oceanengine-auth-marketing-grant-r2")
+			if refreshed["app_id"] != appID || refreshed["authorized_user_id"] != "7001" {
+				t.Fatal("refresh discarded the verified grant identity")
+			}
+		})
+	}
+}

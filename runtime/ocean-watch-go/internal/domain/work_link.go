@@ -6,15 +6,17 @@ import (
 )
 
 type ResolvedWorkLink struct {
-	InputIndex   int              `json:"input_index"`
-	InputURL     string           `json:"input_url"`
-	ResolvedURL  string           `json:"resolved_url"`
-	CanonicalURL string           `json:"canonical_url"`
-	AwemeItemID  string           `json:"aweme_item_id"`
-	CreatorName  string           `json:"creator_name_hint,omitempty"`
-	OwnerHint    *WorkOwnerHint   `json:"owner_hint,omitempty"`
-	ProductHint  *WorkProductHint `json:"product_hint,omitempty"`
-	Metadata     json.RawMessage  `json:"metadata,omitempty"`
+	InputIndex      int               `json:"input_index"`
+	InputURL        string            `json:"input_url"`
+	ResolvedURL     string            `json:"resolved_url"`
+	CanonicalURL    string            `json:"canonical_url"`
+	AwemeItemID     string            `json:"aweme_item_id"`
+	CreatorName     string            `json:"creator_name_hint,omitempty"`
+	OwnerHint       *WorkOwnerHint    `json:"owner_hint,omitempty"`
+	ProductHint     *WorkProductHint  `json:"product_hint,omitempty"`
+	ProductHints    []WorkProductHint `json:"product_hints,omitempty"`
+	TargetProductID string            `json:"target_product_id,omitempty"`
+	Metadata        json.RawMessage   `json:"metadata,omitempty"`
 }
 
 type WorkProductHint struct {

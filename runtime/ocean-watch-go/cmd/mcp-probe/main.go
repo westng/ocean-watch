@@ -182,11 +182,16 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	}
 	sort.Strings(names)
 	expectedNames := []string{
+		"cancel_authorization_session",
+		"cancel_f2_configuration_session",
+		"get_authorization_session",
 		"get_capabilities",
+		"get_f2_configuration_session",
 		"get_marketing_authorization",
 		"get_qianchuan_authorization",
 		"get_qianchuan_plan",
 		"get_qianchuan_preflight",
+		"get_star_map_authorization",
 		"get_template",
 		"list_managed_accounts",
 		"list_qianchuan_plans",
@@ -200,6 +205,9 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		"search_marketing_creator_materials",
 		"search_marketing_videos",
 		"search_qianchuan_products",
+		"start_account_sync",
+		"start_authorization",
+		"start_f2_configuration",
 	}
 	if strings.Join(names, ",") != strings.Join(expectedNames, ",") {
 		_ = session.Close()
@@ -342,8 +350,11 @@ func validatePreflightInputSchema(tool *mcp.Tool) error {
 	if err := json.Unmarshal(payload, &top); err != nil {
 		return fmt.Errorf("decode preflight input schema: %w", err)
 	}
-	if !sameStrings(top.Required, []string{"items", "plan_template"}) {
+	if !sameStrings(top.Required, []string{"items"}) {
 		return fmt.Errorf("preflight input schema has unexpected required fields: %v", top.Required)
+	}
+	if _, exists := top.Properties["plan_template"]; !exists {
+		return errors.New("preflight input schema is missing optional plan_template")
 	}
 	for _, legacy := range []string{"work_urls", "plan_type", "business"} {
 		if _, exists := top.Properties[legacy]; exists {
@@ -362,7 +373,7 @@ func validatePreflightInputSchema(tool *mcp.Tool) error {
 	if !sameStrings(items.Items.Required, []string{"work_url"}) {
 		return fmt.Errorf("preflight item schema has unexpected required fields: %v", items.Items.Required)
 	}
-	for _, field := range []string{"work_url", "plan_type", "business"} {
+	for _, field := range []string{"work_url", "plan_type", "business", "plan_template", "product_id", "advertiser_id", "creator_uid"} {
 		if _, exists := items.Items.Properties[field]; !exists {
 			return fmt.Errorf("preflight item schema is missing %q", field)
 		}

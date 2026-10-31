@@ -91,8 +91,44 @@ func TestRejectRestoresPreviousAndRejectsCandidate(t *testing.T) {
 	}
 }
 
+func TestRejectMarksCandidateWhenNoPreviousRuntimeExists(t *testing.T) {
+	root := t.TempDir()
+	fallback := writeCandidate(t, root, "fallback", "1.0.9+codex.bad", "bad")
+	manager := testManager(root, fallback.PluginRoot, fallback)
+	selected, err := manager.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := manager.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Previous = nil
+	if err := manager.writeState(state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Reject(context.Background(), selected); !errors.Is(err, ErrNoPreviousRuntime) {
+		t.Fatalf("reject error = %v, want %v", err, ErrNoPreviousRuntime)
+	}
+	state, err = manager.Status()
+	if err != nil || state.RejectedSHA256 != selected.SHA256 {
+		t.Fatalf("candidate was not persistently rejected: state=%#v err=%v", state, err)
+	}
+	if _, err := manager.Resolve(context.Background()); err == nil {
+		t.Fatal("rejected runtime was selected again without a fallback")
+	}
+	fixed := writeCandidate(t, root, "fixed", "1.0.10+codex.fixed", "fixed")
+	manager.Discover = func() (string, string, error) {
+		return fixed.PluginRoot, fixed.Version, nil
+	}
+	selected, err = manager.Resolve(context.Background())
+	if err != nil || selected.Version != fixed.Version {
+		t.Fatalf("a later fixed runtime was blocked after first-connect rejection: selected=%#v err=%v", selected, err)
+	}
+}
+
 func TestResolveRejectsTamperedPluginAndResource(t *testing.T) {
-	for _, relative := range []string{".codex-plugin/plugin.json", "f2/resolve.py"} {
+	for _, relative := range []string{".codex-plugin/plugin.json", "f2/resolve.py", "skills/xt-plan-monitor/SKILL.md"} {
 		t.Run(relative, func(t *testing.T) {
 			root := t.TempDir()
 			fallback := writeCandidate(t, root, "fallback", "1.0.9+codex.old", "old")
@@ -520,6 +556,8 @@ func writeTestHostResources(t *testing.T, pluginRoot string) map[string]string {
 		"skills/ads-plan-monitor/run":      []byte("ads run"),
 		"skills/qc-plan-monitor/SKILL.md":  []byte("qc skill"),
 		"skills/qc-plan-monitor/run":       []byte("qc run"),
+		"skills/xt-plan-monitor/SKILL.md":  []byte("xt skill"),
+		"skills/xt-plan-monitor/run":       []byte("xt run"),
 	}
 	hashes := make(map[string]string, len(resources))
 	for relative, payload := range resources {

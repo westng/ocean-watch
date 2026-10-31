@@ -25,6 +25,7 @@
 
 ## 当前计划
 
+- [授权与广告账户获取流程重构](plans/authorization-flow-refactor-2026-10-29.md)：按官方用户身份保存授权、按角色发现账户及失败恢复的本地实施与验证记录；产品行为见正式授权合同。
 - [V3 架构整改实施计划](plans/v3-architecture-remediation-plan.md)：维护 W0–W10 的实施范围、迁移期兼容验证和 Alpha 开放门禁；PRD 的整体验收要求仍以正式 PRD 为准。
 
 ## 历史文档清理

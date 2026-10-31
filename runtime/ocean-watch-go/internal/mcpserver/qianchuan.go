@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 )
 
 var qianchuanPreflightIDPattern = regexp.MustCompile(`^qianchuan-preflight-[0-9]{8}t[0-9]{6}-[0-9a-f]{12}$`)
+var qianchuanRoutingIDPattern = regexp.MustCompile(`^[1-9][0-9]{0,63}$`)
 
 type preflightInput struct {
 	PlanTemplate  string          `json:"plan_template"`
@@ -24,9 +26,17 @@ type preflightInput struct {
 }
 
 type preflightItem struct {
-	WorkURL  string `json:"work_url"`
-	PlanType string `json:"plan_type"`
-	Business string `json:"business"`
+	WorkURL         string `json:"work_url"`
+	PlanType        string `json:"plan_type"`
+	Business        string `json:"business"`
+	PlanTemplate    string `json:"plan_template,omitempty"`
+	ProductID       string `json:"product_id,omitempty"`
+	ProductName     string `json:"product_name,omitempty"`
+	AdvertiserID    string `json:"advertiser_id,omitempty"`
+	AuthAccountID   string `json:"auth_account_id,omitempty"`
+	CreatorUID      string `json:"creator_uid,omitempty"`
+	CreatorDouyinID string `json:"creator_douyin_id,omitempty"`
+	CreatorName     string `json:"creator_name,omitempty"`
 }
 
 type getPreflightInput struct {
@@ -218,6 +228,9 @@ func (runtime Runtime) preflightQianchuanWorks(
 	if err != nil {
 		return runtime.failureResult(started, requestID, "preflight_qianchuan_works", mapQianchuanPreflightError(err)), nil
 	}
+	if result.Routed {
+		return runtime.successResult(started, requestID, "preflight_qianchuan_works", presentRoutedPreflightOutput(requestID, result)), nil
+	}
 	output := presentPreflightOutput(requestID, result)
 	return runtime.successResult(started, requestID, "preflight_qianchuan_works", output), nil
 }
@@ -227,6 +240,9 @@ func preflightBatchItems(input preflightInput) []domainqianchuan.BatchItem {
 	for index, item := range input.Items {
 		items[index] = domainqianchuan.BatchItem{
 			InputIndex: index, WorkURL: item.WorkURL, PlanType: item.PlanType, Business: item.Business,
+			PlanTemplate: item.PlanTemplate, ProductID: item.ProductID, ProductName: item.ProductName,
+			AdvertiserID: item.AdvertiserID, AuthAccountID: item.AuthAccountID,
+			CreatorUID: item.CreatorUID, CreatorDouyinID: item.CreatorDouyinID, CreatorName: item.CreatorName,
 		}
 	}
 	return items
@@ -256,18 +272,25 @@ func (runtime Runtime) getQianchuanPreflight(
 func decodePreflightInput(raw json.RawMessage) (preflightInput, *toolFailure) {
 	input := preflightInput{Concurrency: applicationqianchuan.DefaultBatchConcurrency}
 	if err := decodeStrict(raw, &input); err != nil ||
-		!validText(input.PlanTemplate, 256, true) || len(input.Items) < 1 || len(input.Items) > 100 ||
+		!validText(input.PlanTemplate, 256, false) || len(input.Items) < 1 || len(input.Items) > 100 ||
 		input.Concurrency < 1 || input.Concurrency > 10 || !validText(input.AuthAccountID, 256, false) {
 		failure := invalidArgumentFailure()
 		return preflightInput{}, &failure
 	}
 	for _, item := range input.Items {
-		if !validText(item.WorkURL, 2048, true) || !validText(item.PlanType, 128, false) || !validText(item.Business, 128, false) {
+		if !validText(item.WorkURL, 2048, true) || !validText(item.PlanType, 128, false) || !validText(item.Business, 128, false) ||
+			!validText(item.PlanTemplate, 256, false) || !validText(item.ProductName, 256, false) ||
+			!validOptionalRoutingID(item.ProductID) || !validOptionalRoutingID(item.AdvertiserID) || !validOptionalRoutingID(item.CreatorUID) ||
+			!validText(item.AuthAccountID, 256, false) || !validText(item.CreatorDouyinID, 128, false) || !validText(item.CreatorName, 256, false) {
 			failure := invalidArgumentFailure()
 			return preflightInput{}, &failure
 		}
 	}
 	return input, nil
+}
+
+func validOptionalRoutingID(value string) bool {
+	return value == "" || qianchuanRoutingIDPattern.MatchString(value)
 }
 
 func decodeGetPreflightInput(raw json.RawMessage) (getPreflightInput, *toolFailure) {
@@ -442,6 +465,12 @@ func cloneCounts(source map[string]int) map[string]int {
 }
 
 func mapQianchuanPreflightError(err error) toolFailure {
+	// Inspect the full cause chain before a preflight stage turns an invalid
+	// refresh token into a generic authorization/inventory retry.
+	var invalid authapplication.InvalidRefreshError
+	if errors.As(err, &invalid) && invalid.RequiresReauthorization() {
+		return authorizationFailure("qianchuan", false)
+	}
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return toolFailure{Code: "UPSTREAM_QUERY_FAILED", Message: "Qianchuan preflight was interrupted", Retryable: true, Details: map[string]any{}}
@@ -453,13 +482,19 @@ func mapQianchuanPreflightError(err error) toolFailure {
 	var domainError *domain.Error
 	if errors.As(err, &domainError) {
 		switch domainError.Code {
-		case "authorization_not_found", "authorization_ambiguous", "authorization_pending_sync", "reauthorization_required":
+		case "reauthorization_required", "oauth_app_missing":
+			return authorizationFailure("qianchuan", false)
+		case "authorization_pending_sync":
+			return authorizationFailure("qianchuan", true)
+		case "authorization_not_found", "authorization_ambiguous":
 			return toolFailure{Code: "AUTHORIZATION_UNAVAILABLE", Message: "Qianchuan authorization is unavailable", Details: map[string]any{}}
 		}
 	}
 	var linkError *domain.WorkLinkError
 	if errors.As(err, &linkError) {
 		switch linkError.Code {
+		case "f2_cookie_missing", "f2_cookie_invalid", "f2_credential_unavailable":
+			return toolFailure{Code: "F2_CONFIGURATION_REQUIRED", Message: "请先在本机页面配置 F2 Cookie", Details: map[string]any{"recovery_tool": "start_f2_configuration", "resume_original_request": true}}
 		case "f2_runtime_unavailable":
 			return toolFailure{Code: "F2_RUNTIME_UNAVAILABLE", Message: "F2 work metadata runtime is unavailable", Details: map[string]any{}}
 		case "f2_cli_timeout", "f2_work_timeout":

@@ -1,39 +1,141 @@
-# 架构说明
+# V3 项目运行架构
+
+本文是持续维护的项目级架构说明，覆盖宿主接入、能力合同、业务核心、操作控制、存储、进程生命周期与交付升级。当前行为以代码和运行证据为准；标为“目标”或“待接入”的部分遵循 [V3 PRD](../product/prd.md)，不能作为已完成验收的依据。
 
 ## 总览
 
 ```mermaid
-flowchart LR
-    User["用户自然语言"] --> Host["Codex / Claude Code / DeepSeek Harness / 豆包工作意图理解"]
-    Host --> Skill["ads-plan-monitor / qc-plan-monitor"]
-    Skill --> MCP["稳定本地 stdio MCP 代理"]
-    MCP --> Runtime["版本化私有业务 Runtime"]
-    Runtime --> MCPPresenter["MCP Schema / Presenter"]
-    MCPPresenter --> Application["Go Application Service"]
-    Skill --> Launcher["run / run.cmd"]
-    Launcher --> Go["内置 Go CLI"]
-    Go --> Application
-    Application --> SDK["官方 Go SDK / REST Adapter"]
-    SDK --> API["巨量引擎官方 API"]
-    Application --> State["配置、授权快照、缓存与执行记录"]
-    Application --> Secrets["Keychain / DPAPI / Secret Service"]
-    Application --> F2["Python 3.10+ / F2 0.0.1.7"]
-    F2 --> Public["抖音公开作品元数据"]
+flowchart TB
+    subgraph Access["用户入口与宿主适配"]
+        Hosts["Codex / Claude Code<br/>DeepSeek Harness<br/>豆包工作 / WorkBuddy"] --> Adapter["薄 Host Adapter<br/>清单 / 生命周期 / 配置"]
+        Adapter --> Skills["共享渠道 Skill<br/>ads-plan-monitor<br/>qc-plan-monitor<br/>xt-plan-monitor"]
+        Terminal["独立 CLI / 自动化"]
+    end
+    subgraph Boundary["能力合同与调用边界"]
+        MCP["本地 MCP stdio"] --> Capability["Capability API：逻辑合同<br/>DTO / Schema / 渠道 / 副作用"]
+        CLI["CLI 参数与稳定 JSON"] --> Capability
+    end
+    Skills --> MCP
+    Skills --> CLI
+    Terminal --> CLI
+    subgraph Runtime["共享 Go Core：各实例独立运行"]
+        App["Application：完整用例<br/>授权账户 / 模板素材<br/>计划 / 报表 / 管理"] --> Domain["Domain / Ports<br/>规则 / 状态 / 依赖接口"]
+        App -.-> Operations["统一操作控制（待接入）<br/>模式 / 快照 / 租约<br/>派发 / 对账 / 恢复"]
+        Operations -.-> Domain
+    end
+    Capability --> App
+    Operations -. 请求确认 .-> Approval["可信审批（待接入）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
+    Approval -. 验证回执 .-> Operations
+    Domain --> Infrastructure["基础设施 Adapters<br/>SDK / REST / 存储 / 凭据"]
+    Infrastructure --> API["巨量引擎官方 API"]
+    Infrastructure --> State["共享本地状态<br/>SQLite / 配置 / 迁移期文件"]
+    Infrastructure --> Secrets["系统凭据库<br/>Keychain / DPAPI<br/>Secret Service"]
+    Infrastructure --> F2["Python / F2<br/>抖音公开元数据"]
+    Delivery["构建 / 分发 / 安装<br/>版本绑定 / 升级 / 迁移"]
+    Delivery -. 注册与启动 .-> Adapter
+    Delivery -. Runtime 版本绑定 .-> MCP
+    Delivery -. Runtime 版本绑定 .-> CLI
+    classDef pending stroke:#b7791f,stroke-width:2px,stroke-dasharray:5 5
+    class Operations,Approval pending
 ```
 
-Ocean Watch 是模块化单体。业务逻辑只有一套 Go Application/Domain 实现，CLI 与 MCP 是同一实现之上的两个 Transport，不是两套业务运行时，也不存在 MCP 启动 CLI 或解析 CLI stdout 的链路。F2 是作品元数据 Adapter 的外部进程依赖，不属于广告业务运行时。
+Ocean Watch 采用本地优先的模块化单体。图中实线表示当前主要调用关系，虚线框表示尚未完成生产接入的目标模块，交付节点的虚线表示安装与版本绑定关系。业务核心只有一套 Go Application/Domain 实现，各进程复用相同代码；“共享核心”不表示所有宿主连接到同一个常驻服务。
 
-## 当前状态
+Capability API 是逻辑业务合同，由 CLI 和 MCP 分别映射，不新增第三种网络服务。Go CLI 在自身进程内调用 Application；MCP Server 也直接调用 Application，不启动 CLI 或解析 CLI stdout。支持 CLI 的宿主可通过受控启动器调用稳定 JSON；WorkBuddy 仅使用 MCP。Python/F2 是公开作品元数据 Adapter 的外部进程依赖。
 
-Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 18 个工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、负责账户查询 1 个、巨量营销授权/素材/报表查询 5 个，以及只读能力目录 `get_capabilities`。前 17 个业务工具直接转发到当前版本化 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout；能力目录返回 77 条 CLI 能力、渠道、副作用和提交门禁。Skill 对高频目标直接选择唯一工具，只在未知但已确认属于 Ocean Watch 的目标上查询一次能力目录。
+## 分层职责与依赖
 
-`.mcp.json` 在 macOS/Linux 启动固定本地代理。代理监控 `$CODEX_HOME/plugins/cache/ocean-watch/ocean-watch/` 的本地安装版本目录，不调用可能阻塞的 `codex plugin list`；目录名只用于发现候选，不能证明候选可信。代理随后校验 Plugin 名称/版本、Runtime 清单、MCP 配置、两套 Skill 及其资源、全部签名平台二进制 SHA-256 与最多 2 秒的当前平台自报版本探针，再把完整五平台产物复制到 `$CODEX_HOME/ocean-watch/runtime/versions/<manifest-sha256>` 私有只读槽位。槽位身份只由版本、清单哈希和槽位根确定，arm64/x64 进程从同一槽位选择各自二进制。若桌面客户端仍缓存被安装器删除的旧版本目录，代理只在该路径确属 Ocean Watch 缓存且不存在时建立指向已验证新 Host 的兼容别名，使随后新任务加载新版 Skill/MCP。同一外层 MCP 会话只在工具合同兼容时建立新内层会话并原子切换；工具名、Schema 或注解变化时，当前任务保留上一 Runtime，新任务别名仍发布新版 Host，因此只需新任务、不需退出客户端。真正无法初始化或校验身份的候选不会发布；候选握手失败时自动恢复上一 Runtime，成功切换后则清除瞬时回退状态，并通过跨进程共享租约删除不再使用的历史签名槽位。私有 Runtime 状态只提供启动解析与只读诊断，不再提供长期固定或人工回退入口。
+| 层次 | 项目级职责 | 边界 |
+| --- | --- | --- |
+| 宿主适配 | 声明式清单、安装注册、Skill/Tool 挂载、配置、取消、结果映射和卸载；目标还包括可信审批桥接。 | 专属代码留在适配包，不选择业务授权、不保存 Token、不编排投放规则。 |
+| 共享 Skill | 将用户目标映射到准确渠道和任务，约定调用顺序及展示要求。 | `ads-plan-monitor`、`qc-plan-monitor`、`xt-plan-monitor` 共用框架；宿主仅覆盖受控调用映射，Skill 不授予权限。 |
+| 能力合同与 Transport | 静态能力声明、稳定 DTO、JSON Schema、严格解码、渠道/副作用元数据及协议结果。 | CLI 与 MCP 复用同一用例；工具按任务设计，不机械复制全部 CLI 命令。 |
+| Application / Domain / Ports | 初始化诊断、授权账户、模板素材、计划、报表、记录与恢复；领域模型、业务身份和依赖接口。 | Application 编排用例，Domain 保留规则与状态；两者不依赖宿主 SDK 或生成的官方 SDK 类型。 |
+| 操作控制 | 目标统一操作版本、快照、审批验证、执行租约、派发、对账和恢复。 | 工具可见性与执行权限分开检查；当前生产入口尚未全面接入。 |
+| 基础设施与请求治理 | 官方 SDK/REST、SQLite/文件、凭据、浏览器回调、F2，以及跨进程锁、分页、限流与有界重试。 | Adapter 实现端口；Core 决定业务范围和是否执行，公开元数据不能证明官方授权。 |
+| 交付与可观测性 | 固定来源构建、平台产物、宿主包、清单校验、版本诊断、脱敏日志、阶段计时、升级与迁移。 | 安装层管理发布文件；业务请求不承担安装升级。数据 Schema、操作格式与能力合同需分别校验。 |
+
+营销、千川、星图是这套框架中的渠道切片，不是各自复制一套运行平台。当前星图切片覆盖授权、账户同步和本地账户/授权查询，尚未接入星图计划、素材与报表 API。
+
+## 从安装到退出的生命周期
+
+1. **构建与安装**：同一源码生成平台 Runtime 和宿主资源，安装层核对清单与完整性，注册对应宿主支持的入口；安装路径和用户业务数据目录分离。目标为每个进程固定不可变 Runtime，当前兼容代理行为见下文。
+2. **启动与组合**：宿主创建自己拥有的 MCP 连接/子进程，或 CLI 创建本次调用；Transport 和组合根解析受保护配置、状态根及 Adapter。目标在启动时固定工具集、执行模式和审批方式，并检查能力、操作格式及数据库兼容性。
+3. **处理调用**：入口严格解码后交给共享 Application，按渠道、账户和授权定位业务；通过端口访问持久状态与外部系统，输出稳定结构化结果。需要网络的用例按需使用授权服务，不运行共享刷新守护进程。
+4. **取消与退出**：目标先停止接收新工作，再有界结束本实例资源；未派发工作可以取消，已派发但结果不明的工作保留事实并在恢复时对账。终止本地调用不等于撤销官方写入。
+5. **升级与恢复**：安装层显式更新，必要时先备份、迁移并核对未结操作；新实例重新校验合同、状态和执行条件。完整 V3 不因重启自动重放写入，也不因卸载单个宿主删除共享数据。
+
+上述步骤定义完整 V3 的生命周期合同；当前已实现范围与剩余接入见“当前落地与目标差异”。
+
+## 完整调用链路
+
+### 查询与预检
+
+用户目标经 Host/Skill 选择任务，MCP 或 CLI 将输入规范化为稳定请求。Application 解析准确的渠道、账户和授权，调用 Domain/Ports；Adapter 完成本地读取、官方查询或公开元数据读取，再由 Presenter 返回白名单字段、业务状态和必要展示。
+
+查询与预检的副作用不同：必要缓存和审计可落地，预检还会写入本地快照，但不派发投放变更。目标 `read / plan / execute` 是进程启动时固定的副作用上限，业务工具集是能力可见范围，两者正交；普通请求和 Skill 不能提高模式。该统一模式控制尚未完成生产接入，现有写入仍由各用例的预检和提交门禁控制。
+
+### 初始化、授权与管理
+
+环境检查、首次配置、授权、账户同步、模板本地管理、数据迁移与业务投放是不同用例。诊断目标是只检查必要元数据，默认不触发官方请求或修改用户状态；迁移必须走显式管理入口及备份/锁规则，不向模型提供任意数据库或 Shell 通道。
+
+当前 CLI/MCP 通过同一授权服务处理官方 OAuth、用户/App 核验、凭据保存、账户发现和快照激活；本机浏览器交互由当前 Runtime 拥有的短期会话承载。账户同步确认和账户改绑确认只批准对应管理动作，宿主对 MCP 的连接信任也不构成投放审批。秘密由系统凭据 Adapter 持有，不进入 Skill、模型参数或普通配置。
+
+### 投放写入、审批与恢复（完整 V3 目标）
+
+1. 准备操作及版本，保存输入、账户范围、逐项动作和快照摘要；修改输入产生新版本，并使旧审批失效。
+2. 经已验证的宿主 Approval Adapter 请求真实用户确认；无可验证宿主通道时，由按需本地 Broker 交互。回执绑定操作、版本、摘要、范围、有效期和一次性 nonce，Core 通过受保护信任根验证。
+3. 在事务内消费有效审批并取得执行租约；执行前再次检查启用能力、模式、渠道/账户与全部子项。审批引用和租约都不能替代官方授权。
+4. 在账户级 OS 写锁保护下记录派发意图，执行有界官方请求，再记录结果；数据库事务不跨网络调用或审批等待。租约约束本地执行权，不假设官方 API 支持相同的幂等协议。
+5. 明确成功项不重复派发，部分成功按项保存；超时或断开产生的未知项先官方读回对账，再决定后续动作，不能当作明确失败重放。
+6. 后续调用按精确操作身份查询或恢复，并重新检查版本、授权、审批和派发事实。持久操作 ID 不意味着存在后台执行器，进程重启也不自动恢复派发。
+
+操作模型、验证端口和 SQLite 已有基础实现，但上述端到端链路尚未接入全部生产写入。当前 `--submit` 是既有提交门禁，不能描述成已实现的 V3 可信审批证据；本地 Broker 也仍是目标组件。
+
+## 进程、资源与数据归属
+
+下表定义 V3 的所有权合同；完整退出、异常回收与多宿主行为仍需逐入口验收。
+
+| 资源 | 所有者与结束方式 | 多宿主共享边界 |
+| --- | --- | --- |
+| MCP 连接、Runtime 子进程、宿主注册和监听 | 对应宿主适配器实例；仅释放本实例创建的资源。 | 各宿主独立连接和运行进程；卸载 A 不得停止 B。 |
+| CLI、F2 子进程及临时文件 | 对应调用实例；完成、取消或有界超时后回收。 | 不按全局进程名查杀，不清理其他调用的目录。 |
+| OAuth 本机监听与目标审批 Broker | 分别由授权会话、单次审批请求拥有；结束或超时回收。 | 两种交互具有独立身份与权限，不创建共享常驻 Broker。 |
+| Runtime、Skill、Adapter 发布文件 | 安装层管理，活动使用者保留所需版本资源。 | 可以复用不可变字节产物，不共享一个可被任意宿主停止的服务。 |
+| SQLite 连接、Token 刷新与账户写锁 | 各 Runtime 持有自己的连接和按需刷新逻辑；跨进程协议协调访问。 | 共享数据和锁，不另建共享数据库服务或刷新 worker。 |
+| 账户、配置、系统凭据和业务历史 | 用户所有，通过显式迁移或清理处理。 | 最后一个宿主卸载也不自动删除；恢复按持久事实进行。 |
+
+## 当前落地与目标差异
+
+| 部分 | 当前落点 | 尚未完成的完整 V3 目标 |
+| --- | --- | --- |
+| 共享核心与入口 | 广告业务已统一到 Go；三个渠道 Skill，CLI 与 26 个任务型 MCP 工具，能力目录含 77 条 CLI 能力。 | 新增 F2 工具需重新加载宿主；按宿主版本逐项验收完整生命周期、业务调用和能力等价合同。 |
+| 能力与模式 | 已有静态能力、副作用和提交门禁声明。 | 用户配置固定业务工具集和 `read / plan / execute`，所有生产入口执行同一权限检查。 |
+| 操作与审批 | 已有操作领域、Application Service、审批验证端口及 SQL 存储基础。 | 生产写入统一接入操作状态机、真实可信审批 Provider/Broker、租约与逐项恢复。 |
+| 状态存储 | 千川预检 Journal 默认接入 SQLite，旧 JSON 可回读；授权索引、模板、绑定等仍有文件实现。 | 事务性业务状态迁入 SQLite，完成备份、逐项迁移及未结操作处理。 |
+| 凭据轮换 | 使用系统凭据库，授权服务已有渠道/授权级跨进程锁和 revision 校验。 | SQL 凭据引用与跨存储轮换恢复基础接入现有 Token Manager，完成故障恢复验证。 |
+| Runtime 更新 | Codex 兼容代理可切换兼容版本；Claude 更新后需新任务；WorkBuddy 使用安装器固定目录。 | 每个进程固定不可变 Runtime、显式更新，分别校验能力合同、操作格式和 Schema；完成迁移前保留现有兼容路径。 |
+| 诊断与验收 | 已有环境、版本、状态诊断和隔离协议探测；WorkBuddy 已验证安装、三项 Skill 与 26/26 工具连接。 | 完成 PRD M1–M5、各平台数据恢复和逐宿主完整业务验收；工具发现与交叉构建不替代这些证据。 |
+
+## 当前入口与 Runtime 兼容路径
+
+Go 切换已经完成。本地 stdio MCP 的外层稳定合同共注册 26 个工具：模板列表/详情 2 个、千川预检/快照与常用查询 9 个、负责账户查询 1 个、巨量营销授权/素材/报表查询 5 个、星图授权查询 1 个，四个受控授权恢复管理工具、三个 F2 本机配置会话工具，以及只读能力目录 `get_capabilities`。25 个业务与配置管理工具直接转发到当前版本化 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout；能力目录返回 77 条 CLI 能力、渠道、副作用和提交门禁。Skill 对高频目标直接选择唯一工具，只在未知但已确认属于 Ocean Watch 的目标上查询一次能力目录。
+
+F2 配置页复用本机授权的回环地址与来源校验；Cookie 使用独立的系统凭据项，通过标准输入交给解析子进程。该路径禁止 OAuth 开发用文件回退，也不使用 Windows DPAPI 文件；详见[配置说明](../guides/configuration.md#f2)。新增工具改变 Host 合同，旧会话不会热切换，需重新加载声明。WorkBuddy 已核实 26 项工具的原生发现与连接，其他宿主原有的 23 工具验收记录不覆盖这三项新工具。
+
+`.mcp.json` 在 macOS/Linux 启动固定本地代理。代理监控 `$CODEX_HOME/plugins/cache/ocean-watch/ocean-watch/` 的本地安装版本目录，不调用可能阻塞的 `codex plugin list`；目录名只用于发现候选，不能证明候选可信。代理校验 Plugin 名称/版本、Runtime 清单、MCP 配置、三套 Skill 及其资源、清单列出的全部平台二进制 SHA-256，并运行最多 2 秒的当前平台自报版本探针。
+
+通过校验的完整五平台产物复制到 `$CODEX_HOME/ocean-watch/runtime/versions/<manifest-sha256>` 私有只读槽位。槽位身份由版本、清单哈希和槽位根确定，arm64/x64 进程从同一槽位选择各自二进制。若桌面客户端仍缓存被安装器删除的旧版本目录，代理只在该路径确属 Ocean Watch 缓存且不存在时建立兼容别名，使随后新任务加载新版 Skill/MCP。
+
+同一外层 MCP 会话只在工具合同兼容时建立新内层会话并原子切换；工具名、Schema 或注解变化时，当前任务保留上一 Runtime，新任务加载新版 Host，无需退出客户端。无法初始化或校验身份的候选不会发布；候选握手失败时恢复上一 Runtime，成功切换后清除瞬时回退状态，再通过跨进程使用租约回收不再使用的历史槽位。该使用租约与业务操作的执行租约职责不同。私有 Runtime 状态只提供启动解析与只读诊断，不提供长期固定或人工回退入口。
 
 稳定代理先响应 MCP 协议探测和工具发现，首次业务调用再准备、校验并连接私有 Runtime。这样不会让 Harness 的握手探测等待运行时复制和启动；未通过校验的 Runtime 仍不能处理业务调用。
 
 Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX 稳定启动器。DeepSeek Harness 通过根目录 npm 组合包加载 `harness/index.mjs`，按平台选择五个内置二进制之一，并注册独立的包内 Skill 提供方；其中包括 Windows amd64 的原生 MCP 启动入口。历史桌面验收的版本与平台范围见接入指南；它不证明当前 V3 工作树已经完成宿主验收。CI 配置覆盖 macOS、Linux 与 Windows，交叉构建成功不等于对应平台的 MCP 已实测。详见 [DeepSeek Harness 接入](../guides/deepseek-harness.md)。旧 Python 业务实现、Prototype、Shadow、兼容迁移入口和旧运行目录已从当前分发中删除，历史设计不作为运行或回退路径。
 
 因此，任何广告业务修复都只进入 `runtime/ocean-watch-go`，不得再增加并行实现。`internal/adapters/python` 的唯一职责是发现 Python 并运行固定 F2；它不能承载授权、账户、模板、计划、报表或官方 API 调用。
+
+WorkBuddy 本机安装器直接注册固定清单目录中的 `mcp serve --stdio`，共用相同工具实现、状态与凭据，不经过 Codex 的稳定代理升级链路。生成的三个 Skill 只保留 MCP 路由，不通过 Shell 补执行 CLI。已在 WorkBuddy `5.9.3`、macOS arm64 验证三项 Skill 原生展示、重启后连接成功与 26/26 工具启用，安装产物的隔离协议探测也通过；完整业务验收仍待完成。更新后需重跑安装器并重新加载 MCP，新固定目录可能需要重新完成原生信任。详见 [WorkBuddy 本机接入](../../hosts/workbuddy/README.md)。
 
 ## 目录职责
 
@@ -50,11 +152,15 @@ Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX
 | `runtime/ocean-watch-go/internal/mcpserver/` | 稳定代理、stdio MCP、工具 Schema、专用 Presenter、稳定错误和脱敏阶段日志 |
 | `runtime/ocean-watch-go/internal/runtimeupdate/` | 安装快照发现、完整性校验、版本槽位、切换与回滚状态机 |
 | `runtime/ocean-watch-go/internal/bootstrap/` | CLI 与 MCP 共享的 Adapter/Application 组合根，不承载业务规则 |
+| `runtime/ocean-watch-go/internal/contracts/` | 静态能力标识、渠道、副作用、主入口及 CLI/MCP 映射合同 |
 | `runtime/ocean-watch-go/internal/cli/` | 参数解析、路由、JSON envelope、Presentation |
 | `runtime/ocean-watch-go/internal/application/` | OAuth、账户、模板、素材、计划和报表用例 |
+| `runtime/ocean-watch-go/internal/application/operations/` | 操作确认、审批接收、租约和派发服务基础，尚未全面接入生产写入 |
 | `runtime/ocean-watch-go/internal/domain/` | 领域模型、规则和稳定错误 |
 | `runtime/ocean-watch-go/internal/ports/` | 官方 API、状态、凭据和元数据端口 |
-| `runtime/ocean-watch-go/internal/adapters/` | 官方 SDK、文件、凭据、浏览器回调、F2 Adapter |
+| `runtime/ocean-watch-go/internal/ports/approval/` | 可信审批 Provider/Verifier 与受保护信任根合同，实际宿主/Broker 接入待完成 |
+| `runtime/ocean-watch-go/internal/adapters/` | 官方 SDK、SQLite、文件、凭据、浏览器回调、F2 Adapter |
+| `runtime/ocean-watch-go/internal/adapters/sqlite/` | 编号 SQL 迁移、操作/快照/派发/凭据引用存储与迁移恢复基础；当前生产默认接入千川 Journal |
 | `runtime/ocean-watch-go/internal/platform/` | 分页、重试、限流、请求计数和写入对账 |
 | `f2/resolve.py` | F2 原始响应到稳定作品元数据合同的只读映射 |
 
@@ -82,17 +188,32 @@ Codex 与 Claude Code 的 Plugin/MCP 清单仍使用 macOS/Linux 共用的 POSIX
 
 ## 状态与凭据
 
-状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，Codex、Claude Code、DeepSeek Harness 和豆包工作共用同一个根。这不是历史包袱：官方刷新响应会替换已存储的 refresh token，若每个 Host 各存一份，任一侧刷新都会作废另一侧的凭据，因此授权只做一次。下文的 `$CODEX_HOME` 均指这个解析结果。
+状态根由 `OCEAN_WATCH_HOME`、`CODEX_HOME`、`~/.codex` 依次解析，所有宿主应共用同一个根。官方刷新响应会替换已存储的 refresh token，分散保存凭据会造成跨宿主刷新冲突；同一渠道的有效授权应复用，营销与千川仍需分别授权。下文的 `$CODEX_HOME` 均指这个解析结果。
 
 CLI 配置优先级为显式 `--config`、`ADS_PLAN_MONITOR_CONFIG`、当前 Plugin 仓库的忽略配置、`$CODEX_HOME/ads-plan-monitor/config.json`。MCP 不接受路径或 `ADS_PLAN_MONITOR_CONFIG` 覆盖，只读取启动时解析出的当前操作系统用户 `$CODEX_HOME/ads-plan-monitor/config.json`；Unix 目录权限不得宽于 `0700`、配置文件不得宽于 `0600`，且拒绝符号链接和路径逃逸。授权快照、缓存和执行记录位于 `$CODEX_HOME/ads-plan-monitor/state/`；千川预检 Journal 默认写入同一目录的 `ocean-watch.db` SQLite 状态库，测试和迁移期可显式注入其他 JournalStore。
 
-MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
+MCP 启动后只保留执行官方查询与预检所需的最小运行环境，包括 locale、`PATH`、Python/F2 覆盖、可选 F2 Cookie、代理和开发文件凭据开关；不会把 Cookie、Token 或路径写入工具输出和日志。`list_templates`、`get_template`、`list_managed_accounts`、`get_marketing_authorization`、`get_qianchuan_authorization`、`get_star_map_authorization` 和 `get_qianchuan_preflight` 只读本地状态，不刷新 Token、不调用官方接口；营销素材/报表、千川商品/计划/报表和预检工具可能按现有 Token Manager 规则刷新对应渠道授权并访问官方读取接口。
 
-营销、千川和星图拥有独立 App、OAuth state、Token 和账户索引。官方账户发现只有在完整读取和验证成功后才原子替换当前授权快照；部分或异常结果保留旧快照。星图当前仅开放授权、账户同步和本地授权状态，计划与报表不复用营销或千川实现。
+营销、千川和星图拥有独立 App、OAuth state、Token 和账户索引。`auth.Service` 统一编排 CLI/MCP 的换码、官方用户 UID/App 核验、授权保存与按角色发现；`RecoveryCoordinator` 只处理会话生命周期。新凭据先保存并将授权标为待同步，再由快照服务完整分页、去重、批量校验并核对凭据 revision 后激活。发现失败保留新凭据和旧快照，待同步范围不能用于业务；已识别的角色权限缺失单独记录发现问题。星图当前仅开放授权、账户同步和本地授权状态，计划与报表不复用营销或千川实现。详见[授权合同](../reference/authorization-recovery.md)。
 
 负责账户的持久化仍兼容历史 `advertiser_id` 字段；运行时同时暴露 channel-neutral 的 `subject_id` 与 `subject_kind`。营销和千川的 subject kind 为 `advertiser`，星图为 `star_account`，展示层使用“账号 ID”及对应账号类型，避免把星图账号误称为广告主。
 
 凭据使用 macOS Keychain、Windows DPAPI 或 Linux Secret Service。明文文件只在开发者显式设置 `ADS_PLAN_MONITOR_ALLOW_INSECURE_FILE_FALLBACK=1` 时启用。
+
+### 完整 V3 的数据合同
+
+下表是持久化目标，不能替代上文对当前文件存储和 SQLite 接入范围的说明。
+
+| 数据类别 | 存储目标 | 一致性与权限 |
+| --- | --- | --- |
+| 非秘密设置 | 小型配置文件 | 用户可管理，受目录和文件权限保护。 |
+| 授权索引、账户快照 | SQLite | 保存来源、revision、完整性和激活状态，秘密只存引用。 |
+| 模板、绑定、操作、预检、审批记录、派发与对账 | SQLite | 以事务、版本和状态约束连接完整生命周期。 |
+| 凭据引用及轮换意图 | SQLite | 记录跨存储恢复事实；系统凭据库与数据库不假设原子提交。 |
+| 公开元数据缓存 | SQLite 或可重建缓存 | 记录有效期与来源，不赋予官方权限。 |
+| App Secret、Access Token、Refresh Token | OS Credential Store | 不进入 SQLite、普通配置、日志或模型上下文。 |
+
+SQLite 层采用 `database/sql`、无 CGO 驱动和编号 SQL 迁移。完整运行合同要求启用 WAL，并对每个物理连接设置和验证外键、有界 busy timeout 等连接级选项；事务不跨网络请求，审批等待不占用业务写锁。迁移前制作包含 WAL 一致性的受保护备份，旧 Runtime 只能读取已验证兼容的 Schema。现有存储基础并不证明五个平台的并发、崩溃恢复和备份恢复都已验收，具体要求见 [PRD 数据方案](../product/prd.md#5-本地数据与持久化方案)。
 
 ## F2 边界
 
@@ -101,10 +222,12 @@ Go 通过 `internal/adapters/workmetadata` 调用 `f2/resolve.py`。该包装层
 - 要求 Python `3.10+` 和 F2 `0.0.1.7`；
 - 只查询公开作品信息，不下载媒体、不创建数据库、不自动读取浏览器 Cookie；
 - 对一批作品共享只读连接池，设置单作品和整批截止时间，并只重试失败项一次；
-- 映射作品 ID、达人 UID、可见抖音号、昵称、视频和首个商品提示；
+- 映射作品 ID、达人 UID、可见抖音号、昵称、视频和所有有效商品提示，并保留首个商品的兼容字段；
 - 把原始元数据作为诊断数据传回 Go，但不赋予其官方授权证明力。
 
-F2 不可用、超时或数据不完整时，单条作品可使用有效的 30 天身份缓存继续定向官方复核，否则快速跳过该条。任何情况下都不会恢复无条件扫描全部授权达人。
+F2 不可用、超时或数据不完整时，单条作品可使用有效的 30 天身份缓存，或用户补充的准确可见抖音号，继续定向官方复核；缺少数字 UID 时必须通过完整查询取得唯一精确匹配，命名昵称可由用户显式补充。否则快速跳过该条。错误按空响应、数据不完整、HTTP、网络、超时及解析错误分类；未知失败不被解释为已证实的反爬。任何情况下都不会恢复无条件扫描全部授权达人。
+
+混合作品入口先根据启用商品模板的商品、广告主绑定逐行唯一匹配。没有显式商品/模板的行共享一次公开元数据查询，多个商品或候选模板均待确认；匹配完成前不读取对应账户凭据。按广告主和模板拆出的子批次依次复用现有核验、计划判断与快照链路，凭据、缓存和提交 ID 保持账户隔离，失败按子批次返回。详见[混合商品作品流程](../reference/qianchuan-work-routing.md)。
 
 ## 输出合同
 
@@ -114,21 +237,28 @@ CLI stdout 只输出一个 UTF-8 JSON 文档。MCP stdout 只输出换行分隔�
 
 `cmd/build-runtime` 使用固定 Go 工具链、`CGO_ENABLED=0`、`-trimpath` 与清空 build ID 构建五个平台二进制，并从 Plugin 基础版本注入 CLI 版本。`--all --verify` 在临时位置重建并逐字节对比仓库内产物。
 
+清单中的 SHA-256 用于核对产物一致性，不等于独立的来源签名；来源证明与受信安装属于交付边界。
+
 Marketplace 安装直接消费 Git 快照中的 `.codex-plugin/bin/`。Release 工作流不修改文件或回推 `main`，只验证固定提交、测试、重建产物并创建不可变 Tag/Release。
 
-同一个仓库同时作为 Codex 插件、Claude Code 插件、DeepSeek Harness 组合包和豆包工作 Skills 分发，四者共用一套 Go Runtime、一份状态和同一组 Skill：
+同一个仓库提供 Codex 插件、Claude Code 插件、DeepSeek Harness 组合包、豆包工作 Skills、WorkBuddy Connector/Skill 及独立 CLI。各入口共用 Go 业务核心、共享状态协议和渠道 Skill；宿主各自管理运行实例：
 
 - Codex 读 `.codex-plugin/plugin.json`，其中 `mcpServers` 显式指向 `./.mcp.json`。
 - Claude Code 读 `.claude-plugin/plugin.json`。该清单**必须内联** `mcpServers`，并用 `${CLAUDE_PLUGIN_ROOT}` 展开命令与 `--plugin-root`：Claude 虽然会在缺省时继承插件根的 `./.mcp.json`，但不把其中的相对路径重写到插件根，而是相对用户工作目录解析，因此普通用户在仓库外一律 `ENOENT` 而连不上。内联同名 server 是**替换**而非叠加该缺省发现，只注册一次。`.claude-plugin/marketplace.json` 的 `source` 为 `"./"`，使插件指向 marketplace 自身那一份克隆，而不是再克隆一次仓库。
-- 豆包工作通过 `scripts/install-doubao.sh` 脚本将两个 Skill 安装到豆包工作 Skills 目录，共享同一份通过 Codex 或 Claude Code 安装的插件 Runtime 和本地状态。
+- DeepSeek Harness 读根目录组合包和 `harness/` 适配入口，通过宿主提供方挂载 MCP 与三个 Skill，业务仍由同一 Go Runtime 处理。
+- 豆包工作先导入三个渠道 Skill，再通过 `scripts/install-doubao.sh` 更新已有 Skill 的 MCP 路径；脚本使用所在仓库的 arm64 Runtime，并共用本地状态。
+- WorkBuddy 通过 `scripts/install-workbuddy.py` 安装清单固定目录、MCP Connector 和三个 MCP-only Skill，更新与原生信任流程见[接入说明](../../hosts/workbuddy/README.md)。
+- 独立 CLI 直接运行对应平台二进制并输出稳定 JSON，不要求启动任何桌面宿主。
 - 在本仓库内开发时，项目级 `./.mcp.json` 会与插件级注册并存，形成项目和插件两个作用域的同名 server。这只影响仓库内的开发会话，不影响任何仓库外的普通用户安装；验收插件级路径必须在仓库目录之外进行。
-- `.claude-plugin/plugin.json` 与 `.mcp.json`、启动器和两套 Skill 一样纳入 `runtime-manifest.json` 的 SHA-256 绑定。
+- `.claude-plugin/plugin.json` 与 `.mcp.json`、启动器和三套 Skill 一样纳入 `runtime-manifest.json` 的 SHA-256 绑定。
 - 工具 `outputSchema` 必须在顶层声明 `"type":"object"`，且 `"#/$defs/..."` 引用必须能从该顶层解析。MCP 规范和 Go SDK 都接受裸 `oneOf`，但 Claude Code 客户端会拒绝，因此各 MCP 宿主共用的载荷取更严的那一侧。
 - Claude Code 的安装布局是 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`（版本目录里的 `+` 被改写为 `-`）。版本化槽位、完整性校验、拒绝与原子切换在 Codex 和 Claude Code 上都照常生效，但候选发现只扫描 `$CODEX_HOME/plugins/cache/`，不扫描 Claude 的缓存；Claude 侧安装因此走已验证的 `PluginRoot` 回退路径，升级插件后需要新任务而不是同一会话热切换。豆包工作使用已安装的插件 Runtime，不参与版本化槽位管理。
 
+完整 V3 的迁移目标为先冻结旧状态写入、备份并创建 Schema，再导入旧记录、逐项分类未结操作，最后按宿主和用例切换。未知派发需先对账，不能导入成可自动执行任务；备份、格式兼容和回退条件核验前，不删除旧业务状态。现有兼容代理不等于这一完整升级迁移方案已完成，具体步骤见 [PRD 第 10–11 节](../product/prd.md#10-升级分发与运行时方案)。
+
 ## 升级与耗时证据
 
-- 兼容升级不改变外层 18 工具名称、Schema 或注解；稳定代理在同一 Host 会话中切换实现，不要求重启客户端。Runtime 以安装快照的 manifest 指纹识别同版本内容变化，不会因版本号未变而复用旧实现。
+- 兼容升级不改变当前 26 个工具的名称、Schema 或注解；新增或修改工具属于 Host 合同变更，稳定代理不会在同一旧会话中热切换，需加载新会话。Runtime 以安装快照的 manifest 指纹识别同版本内容变化，不会因版本号未变而复用旧实现。
 - 非兼容工具合同或 Skill 触发合同由 Host 在任务开始时加载，当前方案不声称能热替换；此类升级需要新任务。
 - 代理 stderr 分别记录 `runtime_initialized`、`runtime_switched`、`runtime_rejected` 和 `business_tool` 阶段及 `duration_ms`；工具结果 `_meta.ocean_watch` 返回实际 Runtime 版本和代理内业务调用耗时。版本目录和 manifest 指纹变化时触发完整候选验证，普通业务调用不查询插件清单或扫描仓库。
 - 千川作品预检结构化 `performance` 记录独立组件 stages（输入规范化、短链、F2、凭据、官方核验、计划库存、组对账、素材差集、快照持久化和总墙钟）以及 requests（短链、F2、官方请求、重试、缓存和绑定计数）。并行组件耗时允许重叠且不得相加，`total_runtime_seconds` 是唯一端到端 Runtime 墙钟。模型意图理解发生在 Host 侧，Plugin 无法伪造内部计时；通过 Skill 第一屏唯一矩阵、禁止仓库/缓存探索和一次性能力目录约束其可控路径。

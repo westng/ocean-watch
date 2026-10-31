@@ -15,13 +15,14 @@ const (
 )
 
 type WorkInput struct {
-	InputIndex  int        `json:"input_index"`
-	InputURL    string     `json:"input_url,omitempty"`
-	AwemeItemID string     `json:"aweme_item_id,omitempty"`
-	CreatorName string     `json:"creator_name_hint,omitempty"`
-	PlanType    string     `json:"plan_type,omitempty"`
-	Business    string     `json:"business,omitempty"`
-	OwnerHint   *OwnerHint `json:"owner_hint,omitempty"`
+	InputIndex      int        `json:"input_index"`
+	InputURL        string     `json:"input_url,omitempty"`
+	AwemeItemID     string     `json:"aweme_item_id,omitempty"`
+	CreatorName     string     `json:"creator_name_hint,omitempty"`
+	PlanType        string     `json:"plan_type,omitempty"`
+	Business        string     `json:"business,omitempty"`
+	OwnerHint       *OwnerHint `json:"owner_hint,omitempty"`
+	TargetProductID string     `json:"target_product_id,omitempty"`
 }
 
 type VerifiedWork struct {
@@ -117,6 +118,7 @@ func (verifier WorkVerifier) Verify(
 	if maxPages == 0 {
 		maxPages = WorkVerifyMaxPages
 	}
+	works = verifier.recoverVisibleCreatorHints(ctx, request, works, maxPages, &result)
 	owners := make(map[string]map[string]verifiedOwner, len(works))
 	creatorsByID := map[string]domainqianchuan.AuthorizedCreator{}
 	creatorOrder := []string{}
@@ -341,6 +343,13 @@ func (verifier WorkVerifier) Verify(
 			continue
 		}
 		productSet := matchedProducts[work.AwemeItemID]
+		if work.TargetProductID != "" {
+			if _, matched := productSet[work.TargetProductID]; matched {
+				productSet = map[string]struct{}{work.TargetProductID: {}}
+			} else {
+				productSet = nil
+			}
+		}
 		if len(productSet) == 0 {
 			reason, message := "product_mismatch", "作品与模板绑定商品不匹配"
 			if failedProductWorks[work.AwemeItemID] {

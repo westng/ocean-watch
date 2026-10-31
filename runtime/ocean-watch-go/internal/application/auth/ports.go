@@ -24,3 +24,7 @@ type OAuthAdapter interface {
 	ExchangeCode(context.Context, string, domain.OAuthApp, string) (domain.OAuthToken, error)
 	RefreshToken(context.Context, string, domain.OAuthApp, string) (domain.OAuthToken, error)
 }
+
+type AuthorizedUserProvider interface {
+	GetAuthorizedUser(context.Context, string, string) (domain.AuthorizedUser, error)
+}

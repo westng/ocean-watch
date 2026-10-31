@@ -27,6 +27,28 @@ type QianchuanPlanPayload struct {
 	Payload          json.RawMessage
 }
 
+// QianchuanProductPlanPayloads returns configured, active product templates.
+// Routing uses their explicit bindings; it never discovers advertisers or
+// guesses an account from a work title.
+func QianchuanProductPlanPayloads(config map[string]any) ([]QianchuanPlanPayload, error) {
+	templates, _, err := listQianchuanProductTemplates(config)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]QianchuanPlanPayload, 0, len(templates))
+	for _, template := range templates {
+		if template["status"] != "active" {
+			continue
+		}
+		payload, err := exportQianchuanProductPayload(config, stringValue(template["template_id"]), "")
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, payload)
+	}
+	return result, nil
+}
+
 func ExportQianchuanPlanPayload(
 	config map[string]any,
 	kind QianchuanTemplateKind,

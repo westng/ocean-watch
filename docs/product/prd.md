@@ -6,7 +6,7 @@
 | 文档版本 | 0.5 |
 | 状态 | 目标方案已明确；V3 已落地部分运行时改造，完整 M1–M5 与逐宿主外部验收仍未完成 |
 | 创建日期 | 2026-10-21 |
-| 更新日期 | 2026-10-23 |
+| 更新日期 | 2026-10-30 |
 | 目标 | 将 Ocean Watch 重构为好用、可恢复、可验证、易贡献的开源本地投放工具 |
 | 本轮范围 | 产品与技术方案及阶段状态；不授权真实数据迁移、插件安装、提交、推送或发布 |
 
@@ -23,6 +23,8 @@ Ocean Watch 的目标产品是：
 首批 M0～M5 仍围绕原有五个入口完成重构；WorkBuddy 的扩展边界在本期预留，具体接入纳入后续 WB1，不把“后面接入”解释为本期已经实现或必须同时发布。
 
 宿主负责自然语言理解和界面承载；Host-native Adapter 负责原生安装注册、生命周期、能力声明、配置、审批桥接和结果映射；Host-neutral Core 负责确定性的授权解析、业务校验、预检、确认验证、执行、对账、恢复和数据保护。各宿主是平等适配目标，具体支持级别须逐个验收。
+
+渠道入口统一为 `ads-plan-monitor`（营销）、`qc-plan-monitor`（千川）和 `xt-plan-monitor`（星图），都通过同一能力合同和共享 Go Core 执行。Skill 名称与内部渠道键分离，星图继续使用 `star_map`，账号类型为 `star_account`。星图已接入的授权与账户能力必须由独立 Skill 承接；计划、素材和报表扩展仍按实际 API 接入范围验收。
 
 ### 1.1 必须解决的问题
 
@@ -199,7 +201,7 @@ Ocean Watch 的目标产品是：
 
 ### 3.6 WorkBuddy 后续接入方案
 
-WorkBuddy 使用同一 Capability API、Go Core、共享状态根和系统凭据库，不另建 WorkBuddy 版广告业务、Token 仓库或远程服务。适配边界在当前重构保留，WB1 才生成和验收对应分发包。
+WorkBuddy 使用同一 Capability API、Go Core、共享状态根和系统凭据库，不另建 WorkBuddy 版广告业务、Token 仓库或远程服务。当前提供 `hosts/workbuddy/` 薄 Skill 输入与 `scripts/install-workbuddy.py` 本机安装入口，用于真实共享状态及浏览器授权恢复；WB1 的正式连接器分发包与全部宿主验收仍待完成。
 
 **确定的接入方向：**
 
@@ -719,12 +721,12 @@ Capability API 是逻辑请求/响应合同，不是第三种网络服务。允�
 | --- | --- | --- |
 | `setup doctor`、`capabilities --json` | CLI；宿主可映射为无副作用诊断 | 默认不发官方/OAuth 请求、不读秘密、不写用户状态；只报告资源、合同、模式和宿主发现证据 |
 | `setup migrate` | CLI/受控安装辅助；不作为模型 MCP 工具 | 需要显式用户动作、备份、迁移锁和第 11 节未结项规则；不能由 `execute` 模式绕过 |
-| `auth authorize` | CLI 或宿主提供的真实交互入口 | 用户明确发起 OAuth；授权秘密不经过模型参数；不能由 Skill 自行批准 |
-| `auth sync-accounts` | CLI/显式 setup-auth 入口；账户快照由 Core 写入 | 可能触发凭据刷新和本地状态写入；共享刷新锁和轮换恢复规则仍适用，不等于投放审批 |
+| `auth authorize` | CLI 或 `start_authorization` 对应的本机浏览器交互入口 | MCP 只能创建短期会话；用户在浏览器确认并完成官方 OAuth；授权秘密不经过模型参数，不能由 Skill 自行批准 |
+| `auth sync-accounts` | CLI 或 `start_account_sync` 对应的本机浏览器确认入口；账户快照由 Core 写入 | 可能触发凭据刷新和本地状态写入；共享刷新锁和轮换恢复规则仍适用，不等于投放审批 |
 | `auth status`、模板列出/读取/校验 | CLI；必要时可映射为受限只读工具 | 不授予业务写入；模板本地编辑必须单独展示本地副作用，不冒称官方投放变更 |
 | 模板/账户本地创建、修改、删除 | CLI 或明确的本地管理界面 | 只改变本地配置/模板；如未来纳入 MCP，必须增加独立能力合同和风险确认，不能借 `execute_operation` 泛化 |
 
-因此，MCP/Skill 默认不提供 `setup migrate`、`auth authorize` 或泛化本地管理写入工具；它们的可用性以宿主和显式管理入口为准。
+MCP/Skill 不提供 `setup migrate` 或泛化本地管理写入工具。授权管理只开放上述两种受限交互会话及 `get_authorization_session`、`cancel_authorization_session`；参数不能包含秘密、回调地址、任意命令或模型确认标记，不能借业务执行模式隐式批准管理写入。完整状态、错误和恢复规则见[宿主内授权恢复](../reference/authorization-recovery.md)。
 - MCP/CLI 对同一 fixture 的能力过滤、越权拒绝和副作用边界一致。验收包含未知模式、隐藏工具直接调用、跨工具集执行、其他账户操作、无审批及重放，不能只检查工具列表变短。
 
 ### 8.6 统一诊断与首次使用体验

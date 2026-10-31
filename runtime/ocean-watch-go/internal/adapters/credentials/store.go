@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 )
@@ -24,6 +25,7 @@ const (
 	BackendLinuxSecretService = "linux-secret-service"
 	BackendFileFallback       = "file-fallback"
 	BackendUnavailable        = "unavailable"
+	credentialCommandTimeout  = 30 * time.Second
 )
 
 type Store struct {
@@ -95,10 +97,11 @@ func (store Store) Write(ctx context.Context, account string, value map[string]a
 	backend := store.BackendName()
 	switch backend {
 	case BackendMacOSKeychain:
-		_ = store.runCommand(ctx, "security", macOSDeleteArguments(account), nil, false)
-		// With -w at the end security prompts for the value on stdin. Keeping
-		// the secret out of argv prevents it from appearing in process listings.
-		err = store.runCommand(ctx, "security", macOSWriteArguments(account), append(append([]byte(nil), payload...), '\n'), true)
+		// Prompted passwords are read from the terminal, not reliably from stdin.
+		// Interactive command mode accepts the complete command on stdin; -X keeps
+		// JSON quoting out of its parser and the credential out of process arguments.
+		// -U updates in place, so a failed write does not first delete the old entry.
+		err = store.runCommand(ctx, "security", []string{"-i"}, macOSWriteInput(account, payload), true)
 	case BackendLinuxSecretService:
 		err = store.runCommand(ctx, "secret-tool", linuxWriteArguments(account), payload, true)
 	case BackendWindowsDPAPI:
@@ -109,11 +112,11 @@ func (store Store) Write(ctx context.Context, account string, value map[string]a
 		err = errors.New("no secure credential backend is available; install a supported backend or explicitly enable the development-only file fallback")
 	}
 	if err != nil {
-		return "", err
+		return "", &writeError{cause: err, reason: "CREDENTIAL_WRITE_FAILED"}
 	}
 	written, err := store.Read(ctx, account)
 	if err != nil {
-		return "", fmt.Errorf("verify credential write: %w", err)
+		return "", &writeError{cause: err, reason: "CREDENTIAL_VERIFY_FAILED"}
 	}
 	want, err := encode(value, false)
 	if err != nil {
@@ -124,7 +127,7 @@ func (store Store) Write(ctx context.Context, account string, value map[string]a
 		return "", err
 	}
 	if !bytes.Equal(want, got) {
-		return "", fmt.Errorf("credential read-back verification failed for %s", account)
+		return "", &writeError{cause: errors.New("credential read-back verification failed"), reason: "CREDENTIAL_VERIFY_FAILED"}
 	}
 	return backend, nil
 }
@@ -133,12 +136,8 @@ func macOSReadArguments(account string) []string {
 	return []string{"find-generic-password", "-s", Service, "-a", account, "-w"}
 }
 
-func macOSDeleteArguments(account string) []string {
-	return []string{"delete-generic-password", "-s", Service, "-a", account}
-}
-
-func macOSWriteArguments(account string) []string {
-	return []string{"add-generic-password", "-U", "-s", Service, "-a", account, "-w"}
+func macOSWriteInput(account string, payload []byte) []byte {
+	return []byte("add-generic-password -U -s " + Service + " -a " + account + " -X " + hex.EncodeToString(payload) + "\n")
 }
 
 func linuxReadArguments(account string) []string {
@@ -157,12 +156,17 @@ func (store Store) readCommand(ctx context.Context, name string, args []string, 
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, credentialCommandTimeout)
+	defer cancel()
 	command := exec.CommandContext(ctx, path, args...)
 	var stdout bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = ioDiscard{}
 	err = command.Run()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if !fail {
 			return map[string]any{}, nil
 		}
@@ -179,6 +183,8 @@ func (store Store) runCommand(ctx context.Context, name string, args []string, s
 		}
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, credentialCommandTimeout)
+	defer cancel()
 	command := exec.CommandContext(ctx, path, args...)
 	if stdin != nil {
 		command.Stdin = bytes.NewReader(stdin)

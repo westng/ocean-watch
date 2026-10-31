@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
@@ -179,10 +180,13 @@ type batchLinkPerformance struct {
 
 type BatchCommandResult struct {
 	BatchResult
-	Performance BatchPerformance `json:"performance"`
-	PreflightID string           `json:"preflight_id,omitempty"`
-	ExpiresAt   string           `json:"expires_at,omitempty"`
-	Warnings    []string         `json:"warnings,omitempty"`
+	Routed      bool                `json:"routed,omitempty"`
+	Batches     []RoutedBatchResult `json:"batches,omitempty"`
+	Pending     []RoutingPending    `json:"pending,omitempty"`
+	Performance BatchPerformance    `json:"performance"`
+	PreflightID string              `json:"preflight_id,omitempty"`
+	ExpiresAt   string              `json:"expires_at,omitempty"`
+	Warnings    []string            `json:"warnings,omitempty"`
 }
 
 type RemoveWorksCommand struct {
@@ -250,6 +254,9 @@ func (service CommandService) BatchWorks(
 	if command.PreflightID != "" {
 		return service.submitBatchPreflight(ctx, command, started)
 	}
+	if needsBatchRouting(command) {
+		return service.routeBatchWorks(ctx, command)
+	}
 	if service.Config == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch command dependencies are incomplete")
 	}
@@ -313,15 +320,22 @@ func (service CommandService) BatchWorks(
 	linkChannel := make(chan linkOutcome, 1)
 	leaseChannel := make(chan leaseOutcome, 1)
 	parallelContext, cancelParallel := context.WithCancel(ctx)
-	defer cancelParallel()
+	var preparation sync.WaitGroup
+	preparation.Add(2)
+	defer func() {
+		cancelParallel()
+		preparation.Wait()
+	}()
 	inputFinished := service.now()
 	go func() {
+		defer preparation.Done()
 		resolved, cache, linkPerf, resolveErr := resolveBatchLinks(parallelContext, linkResolver, applicationworkmetadata.ResolveRequest{
 			URLs: batchItemURLs(command.Items), Concurrency: concurrency,
 		}, exported.AdvertiserID, service.OwnerHints, service.now)
 		linkChannel <- linkOutcome{result: resolved, cachePerformance: cache, linkPerformance: linkPerf, err: resolveErr}
 	}()
 	go func() {
+		defer preparation.Done()
 		lease, scopedContext, leaseErr := service.readLease(parallelContext, exported.AdvertiserID, command.AuthAccountID)
 		leaseChannel <- leaseOutcome{lease: lease, ctx: scopedContext, err: leaseErr, finished: service.now()}
 	}()
@@ -884,12 +898,15 @@ func qianchuanWorkInputs(
 		if selected, exists := hints[value.AwemeItemID]; exists {
 			copy := selected
 			hint = &copy
+		} else if value.OwnerHint != nil && value.OwnerHint.AwemeShowID != "" {
+			hint = &OwnerHint{AwemeID: value.OwnerHint.AwemeID, AwemeShowID: value.OwnerHint.AwemeShowID}
 		}
 		item := batchItemAt(items, value.InputIndex)
 		result = append(result, WorkInput{
 			InputIndex: item.InputIndex, InputURL: value.InputURL, AwemeItemID: value.AwemeItemID,
-			CreatorName: strings.TrimSpace(value.CreatorName),
-			PlanType:    item.PlanType, Business: item.Business, OwnerHint: hint,
+			CreatorName:     strings.TrimSpace(value.CreatorName),
+			TargetProductID: value.TargetProductID,
+			PlanType:        item.PlanType, Business: item.Business, OwnerHint: hint,
 		})
 	}
 	return result
@@ -942,7 +959,7 @@ func ownerHintsFromResolvedLinks(values []domain.ResolvedWorkLink) map[string]Ow
 			AwemeID:     strings.TrimSpace(value.OwnerHint.AwemeID),
 			AwemeShowID: strings.TrimSpace(value.OwnerHint.AwemeShowID),
 		}
-		if validPositiveID(hint.AwemeID) {
+		if validPositiveID(hint.AwemeID) || hint.AwemeShowID != "" {
 			result[value.AwemeItemID] = hint
 		}
 	}
@@ -991,8 +1008,14 @@ func resolveBatchLinks(
 			performance.Warning = ownerHintCacheWarning("owner_hint_cache_read_failed", err)
 			return map[string]OwnerHint{}
 		}
-		performance.LoadedFromCache = len(loaded)
-		return loaded
+		complete := map[string]OwnerHint{}
+		for itemID, hint := range loaded {
+			if validPositiveID(hint.AwemeID) && hint.AwemeShowID != "" {
+				complete[itemID] = hint
+			}
+		}
+		performance.LoadedFromCache = len(complete)
+		return complete
 	}
 	applyHints := func(rows []domain.ResolvedWorkLink, hints map[string]OwnerHint) {
 		for index := range rows {
@@ -1038,7 +1061,7 @@ func resolveBatchLinks(
 
 	missing := make([]domain.ResolvedWorkLink, 0, len(result.Resolved))
 	for _, row := range result.Resolved {
-		if _, ok := merged[row.AwemeItemID]; !ok {
+		if hint, ok := merged[row.AwemeItemID]; !ok || hint.AwemeShowID == "" || !validPositiveID(hint.AwemeID) && row.CreatorName == "" {
 			missing = append(missing, row)
 		}
 	}

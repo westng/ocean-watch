@@ -162,6 +162,7 @@ def validate_skill(name):
     dependency_descriptions = {
         "ads-plan-monitor": "Ocean Watch template and common Marketing query tools",
         "qc-plan-monitor": "Ocean Watch template, common Qianchuan query, report, and preflight tools",
+        "xt-plan-monitor": "Ocean Watch Star Map authorization and managed-account tools",
     }
     expected_dependency = [{
         "type": "mcp",
@@ -171,7 +172,7 @@ def validate_skill(name):
     }]
     if dependencies != expected_dependency:
         fail(f"{name} MCP dependency contract is invalid")
-    if "MCP `list_templates`" not in content or "MCP `get_template`" not in content:
+    if name != "xt-plan-monitor" and ("MCP `list_templates`" not in content or "MCP `get_template`" not in content):
         fail(f"{name} does not route template reads through MCP")
     if "MCP `get_capabilities`" not in content or "Do not call `get_capabilities` when" not in content:
         fail(f"{name} does not expose the bounded uncommon-capability route")
@@ -209,6 +210,10 @@ def validate_skill(name):
             fail(f"ads-plan-monitor does not route common Marketing reads through MCP: {missing}")
         if "Do not call an equivalent CLI route" not in content or "stop without a CLI fallback" not in content:
             fail("ads-plan-monitor does not fail closed for common Marketing MCP reads")
+    if name == "xt-plan-monitor":
+        for tool in ("get_star_map_authorization", "list_managed_accounts", "start_authorization", "start_account_sync", "get_authorization_session", "cancel_authorization_session"):
+            if f"`{tool}`" not in content:
+                fail(f"xt-plan-monitor is missing its Star Map route: {tool}")
     if "search the repository" not in content or "stop without a CLI fallback" not in content:
         fail(f"{name} does not fail closed when MCP template tools are unavailable")
     if "call that exact MCP tool immediately" not in content or "never enumerate `ALL_TOOLS`" not in content:
@@ -223,7 +228,7 @@ def validate_skill(name):
 def validate_capability_routes():
     fixture_path = ROOT / "runtime" / "ocean-watch-go" / "internal" / "contracts" / "testdata" / "skill-fast-routes.json"
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
-    expected_by_skill = {name: [] for name in ("ads-plan-monitor", "qc-plan-monitor")}
+    expected_by_skill = {name: [] for name in ("ads-plan-monitor", "qc-plan-monitor", "xt-plan-monitor")}
     seen = set()
     for item in fixture:
         required = ("skill", "outcome", "capability_id", "surface", "route")
@@ -376,6 +381,7 @@ def main():
         validate_mcp()
         validate_skill("ads-plan-monitor")
         validate_skill("qc-plan-monitor")
+        validate_skill("xt-plan-monitor")
         validate_capability_routes()
         validate_binaries()
         validate_runtime_manifest()

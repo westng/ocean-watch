@@ -27,7 +27,13 @@ type MetadataRow struct {
 	AwemeShowID string
 	ProductID   string
 	ProductName string
+	Products    []MetadataProduct
 	Metadata    []byte
+}
+
+type MetadataProduct struct {
+	ID   string
+	Name string
 }
 
 type MetadataError struct {

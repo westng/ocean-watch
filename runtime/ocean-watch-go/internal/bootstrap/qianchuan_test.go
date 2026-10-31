@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
@@ -27,6 +28,9 @@ func TestNewQianchuanCommandServiceUsesSharedPorts(t *testing.T) {
 		service.Verifier.Reader == nil || service.Batch.Reader == nil || service.Batch.Writer == nil ||
 		service.Batch.Reconciler == nil || service.Locks == nil || service.Journals == nil {
 		t.Fatalf("shared Qianchuan service was not fully assembled: %#v", service)
+	}
+	if journals, ok := service.Journals.(sqlite.SQLiteJournalStore); !ok || journals.Path == "" {
+		t.Fatalf("Qianchuan service did not default to SQLite journal storage: %#v", service.Journals)
 	}
 }
 

@@ -28,7 +28,8 @@ func TestFactoryPinsEveryOfficialProfileAndDisablesSDKLogs(t *testing.T) {
 	}
 	tests := map[HostProfile]string{
 		ProfileBusiness: BusinessHost, ProfileOAuth: OAuthHost,
-		ProfileAgent: OAuthHost, ProfileQianchuanVideo: OAuthHost,
+		ProfileAccountDiscovery: BusinessHost,
+		ProfileAgent:            OAuthHost, ProfileQianchuanVideo: OAuthHost,
 	}
 	for profile, host := range tests {
 		client, clientErr := factory.Client("marketing", profile, TimeoutStandard)

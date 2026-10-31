@@ -44,7 +44,24 @@ func (adapter OAuthAdapter) ExchangeCode(
 	); err != nil {
 		return domain.OAuthToken{}, err
 	}
-	return mapAccessToken(response.Data, response.RequestId, true)
+	token, err := mapAccessToken(response.Data, response.RequestId, true)
+	if err != nil {
+		return domain.OAuthToken{}, &oauthResponseError{cause: err, requestID: stringPointerValue(response.RequestId), httpStatus: httpResponse.StatusCode}
+	}
+	return token, nil
+}
+
+type oauthResponseError struct {
+	cause      error
+	requestID  string
+	httpStatus int
+}
+
+func (err *oauthResponseError) Error() string                      { return "official OAuth response is invalid" }
+func (err *oauthResponseError) Unwrap() error                      { return err.cause }
+func (err *oauthResponseError) AuthorizationFailureReason() string { return "INVALID_TOKEN_RESPONSE" }
+func (err *oauthResponseError) AuthorizationFailureMetadata() (int64, string, int) {
+	return 0, err.requestID, err.httpStatus
 }
 
 func (adapter OAuthAdapter) RefreshToken(

@@ -29,10 +29,11 @@ const (
 type HostProfile string
 
 const (
-	ProfileBusiness       HostProfile = "official-business"
-	ProfileOAuth          HostProfile = "official-oauth"
-	ProfileAgent          HostProfile = "official-agent"
-	ProfileQianchuanVideo HostProfile = "official-qianchuan-video"
+	ProfileBusiness         HostProfile = "official-business"
+	ProfileAccountDiscovery HostProfile = "official-account-discovery"
+	ProfileOAuth            HostProfile = "official-oauth"
+	ProfileAgent            HostProfile = "official-agent"
+	ProfileQianchuanVideo   HostProfile = "official-qianchuan-video"
 )
 
 type TimeoutProfile string
@@ -92,6 +93,8 @@ func (err *SDKRequestError) Unwrap() error {
 func (err *SDKRequestError) Dispatched() bool {
 	return err != nil && err.dispatched
 }
+
+func (err *SDKRequestError) AuthorizationFailureReason() string { return "REQUEST_FAILED" }
 
 type notDispatchedError struct {
 	cause error
@@ -162,6 +165,8 @@ func (factory *ClientFactory) Client(
 	}
 	sharedQianchuanControl := factory.sharedQianchuanControl
 	if channel == "qianchuan" && !qianchuanAdvertiserScopedProfile(hostProfile) {
+		// OAuth and account discovery run before an advertiser is selected.
+		// The authorization governor and command request budget still apply.
 		sharedQianchuanControl = nil
 	}
 	client := newClient(
@@ -179,7 +184,7 @@ func qianchuanAdvertiserScopedProfile(profile HostProfile) bool {
 
 func resolveHostProfile(profile HostProfile) (ClientProfile, error) {
 	switch profile {
-	case ProfileBusiness:
+	case ProfileBusiness, ProfileAccountDiscovery:
 		return ClientProfile{Name: profile, Host: BusinessHost, Scheme: OfficialScheme}, nil
 	case ProfileOAuth, ProfileAgent, ProfileQianchuanVideo:
 		return ClientProfile{Name: profile, Host: OAuthHost, Scheme: OfficialScheme}, nil

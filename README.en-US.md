@@ -4,11 +4,12 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">Integrated campaign operations, reporting, and performance monitoring for Ocean Engine Marketing and Qianchuan in Codex, Claude Code, DeepSeek Harness, and Doubao Work</p>
+<p align="center">Ocean Engine Marketing and Qianchuan campaign operations, plus Star Map account authorization, for Codex, Claude Code, DeepSeek Harness, Doubao Work, and WorkBuddy</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-Plugin-D97757" alt="Claude Code Plugin"></a>
+  <a href="hosts/workbuddy/README.md"><img src="https://img.shields.io/badge/WorkBuddy-MCP_%2B_Skills-2563EB" alt="WorkBuddy MCP and Skills"></a>
   <a href="skills/"><img src="https://img.shields.io/badge/Doubao_Work-Skills-1677FF" alt="Doubao Work Skills"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-Runtime-00ADD8?logo=go&amp;logoColor=white" alt="Go Runtime"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-5A67D8" alt="MCP stdio"></a>
@@ -36,52 +37,50 @@
 
 [中文](README.md) | English
 
-Ocean Watch lets delivery teams manage Ocean Engine Marketing and Qianchuan from Codex, Claude Code, DeepSeek Harness, or Doubao Work in natural language. It uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis, and it previews every online write before asking for explicit confirmation. One repository ships as a Plugin for all four Hosts, sharing a single Go runtime, one local state root, and the same Skills.
+Ocean Watch uses official Ocean Engine APIs for authorization, accounts, materials, templates, plans, reports, and delivery analysis. Three channel Skills cover Marketing, Qianchuan, and Star Map, while local MCP and CLI entry points share one Go business core, local state, and credentials. Plan mutations default to preflight.
+
+This page describes the current source, including [unreleased changes](CHANGELOG.md#未发布). Published versions are listed in [Releases](https://github.com/westng/ocean-watch/releases). Parts of V3 are implemented; the complete architecture and host business acceptance remain in progress.
 
 ## What It Does
 
-| Skill | Channel | Main capabilities |
+| Entry point | Channel | Main capabilities |
 | --- | --- | --- |
-| `ads-plan-monitor` | Ocean Engine Marketing | OAuth, authorized-advertiser sync, responsible accounts, uploaded and creator-authorized materials, templates, plans, reports, and strategy |
-| `qc-plan-monitor` | Qianchuan | OAuth, authorized-advertiser sync, responsible accounts, product and live templates, creator works, all-domain plans, and all-domain/Multiplication reports |
-| Runtime `star_map` channel | 巨量星图 | OAuth, Star account authorization sync, and local authorization state; Star plans and reports are not enabled yet |
+| [ads-plan-monitor](skills/ads-plan-monitor/SKILL.md) | Ocean Engine Marketing | OAuth, authorized-advertiser sync, responsible accounts, uploaded and creator-authorized materials, templates, plans, reports, and strategy |
+| [qc-plan-monitor](skills/qc-plan-monitor/SKILL.md) | Qianchuan | OAuth, authorized-advertiser sync, responsible accounts, product and live templates, creator works, all-domain plans, and all-domain/Multiplication reports |
+| [xt-plan-monitor](skills/xt-plan-monitor/SKILL.md) | Ocean Engine Star Map (巨量星图) | Dedicated channel Skill for OAuth, recovery, account sync, managed accounts, and local authorization mappings; Star plans and reports are not enabled yet |
 
-The two Skills share one Go business implementation while strictly isolating channel credentials, authorized users, advertisers, templates, materials, and write transactions.
+Marketing, Qianchuan, and Star Map manage separate applications, authorizations, and account mappings. Credentials and business templates are not reused across channels.
+
+`xt-plan-monitor` is the public Star Map Skill name; `star_map` remains its internal Runtime channel key. All three Skills use the same capability contract and shared Go core. Star Map accounts use the `star_account` subject type.
+
+The current catalog contains **77 CLI capabilities and 26 MCP tools**, with overlap between the two. MCP provides local queries, official material and report reads, Qianchuan work preflight, authorization/account-sync management, and local F2 Cookie setup. Plan creation, material changes, budgets, ROI targets, bids, and status updates still use CLI. **WorkBuddy currently exposes MCP capabilities only and does not execute CLI writes through a shell.** Native discovery and connection of the three new F2 tools have been verified in WorkBuddy; other hosts require a reload and separate acceptance.
 
 ### Current Feature Support
 
-This table is organized by host / integration platform, not by advertising channel. “Integration implemented” means the repository contains adapter resources, not that the current V3 build has passed acceptance testing on that host or every operating system.
+Status verified on **2026-10-30**. Adapter availability, tool discovery, and real business acceptance are separate scopes of evidence.
 
 | Host / platform | Features and integration | Support status | Limits and acceptance |
 | --- | --- | --- | --- |
-| Codex | Plugin + two Skills + local MCP, exposing shared Go queries, reports, and batch preflight | Integration implemented; V3 acceptance pending | Current Plugin/MCP uses the macOS/Linux launcher; tool or Skill contract changes require a new task |
-| Claude Code | Plugin + two Skills + local MCP, using the same business capabilities | Integration implemented; V3 acceptance pending | Uses a dedicated Claude Plugin manifest; start a new task after updating, without assuming automatic in-session hot upgrades |
-| DeepSeek Harness | Native bundle + two Skills + local MCP | Integration implemented; V3 desktop acceptance pending | Peer declarations target Desktop `0.2.0-rc.2`; historical desktop acceptance does not establish acceptance of the current V3 build |
-| Doubao Work | Two Skills + local MCP path configuration, reusing the installed Go Runtime | Adapter script available; V3 acceptance pending | Current script targets macOS Apple Silicon and configures existing user Skills; other platforms and real discovery require acceptance testing |
-| WorkBuddy | Planned Connector + Skill + local MCP integration with the shared Go core | Planned (WB1); not integrated | No corresponding adapter package has been delivered; not listed as a currently compatible host |
+| Codex | Plugin + three Skills + local MCP; Skills can use CLI for additional capabilities | Adapter implemented; full current-V3 host acceptance pending | MCP uses the macOS/Linux launcher; tool or Skill contract changes require a new task |
+| Claude Code | Dedicated Plugin manifest + three Skills + local MCP / CLI | Adapter implemented; full current-V3 host acceptance pending | MCP uses the POSIX launcher; start a new task after updating |
+| DeepSeek Harness | Desktop native bundle + three Skills + local MCP / CLI | Adapter implemented; current-V3 desktop acceptance pending | Peers pin bundled runtime `0.2.0-rc.2`; no separate npm/CLI host |
+| Doubao Work | Existing user Skills + MCP path-configuration script | Script available; current-V3 discovery and business acceptance pending | macOS Apple Silicon only; the script does not install Skills |
+| WorkBuddy | Local installer + stdio MCP + three generated Skills | Local installation, all three Skills, native connection after restart, and 26/26 enabled tools verified on `5.9.3`, macOS arm64 | Full WB1 business acceptance pending, without a published connector Marketplace package |
 
-Integrated entry points share the business core and local state. MCP exposes only registered query and preflight tools. Online writes require a preview and explicit confirmation before CLI `--submit`. See [Runtime and Support](#runtime-and-support) below for additional limits.
-
-## Why Ocean Watch
-
-- **Natural-language workflows:** Understands business goals, conversational wording, abbreviations, and contextual follow-ups without requiring fixed commands.
-- **Official data is authoritative:** Advertising operations use official Ocean Engine APIs; public work metadata never replaces official authorization, ownership, or product checks.
-- **Safe by default:** Create, append, remove, and plan-setting operations preview first and submit only after explicit confirmation.
-- **Credential isolation:** Secrets and tokens use operating-system secure storage and never belong in ordinary project configuration, output, or logs.
-- **Traceable outcomes:** Batch jobs retain successful results and separately explain skips, failures, and incomplete official queries; uncertain writes are reconciled by reading official state first.
+A source-built macOS arm64 Runtime has passed real Qianchuan account-sync and explicitly approved account-rebinding acceptance. This does not establish acceptance for all channels, hosts, or plan writes.
 
 ## Quick Start
 
-Requires Codex CLI `0.144.1+`, Claude Code, DeepSeek Harness Desktop `0.2.0-rc.2`, or Doubao Work. Standard Marketing and Qianchuan workflows use the Plugin's bundled runtime. Only Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`.
+Choose one host integration. Standard Marketing and Qianchuan workflows use the bundled Go Runtime without requiring a Go installation. Qianchuan Douyin work-link parsing additionally requires Python `3.10+` and F2 `0.0.1.7`. Local Python installation scripts also require Python 3.
 
-Codex:
+Codex with Plugin support:
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-Claude Code:
+Claude Code with Plugin support:
 
 ```bash
 claude plugin marketplace add westng/ocean-watch
@@ -90,38 +89,96 @@ claude plugin install ocean-watch@ocean-watch
 
 DeepSeek Harness Desktop `0.2.0-rc.2`: open **Plugins → Add plugin** in the desktop app and enter this repository's absolute path. This installs into the active `desktop` profile; no separate npm/CLI Harness installation is needed.
 
-The native bundle registers both Skills and the local MCP tools. See the Chinese [DeepSeek Harness guide](docs/guides/deepseek-harness.md) for compatibility, desktop profiles, and verification.
+The native bundle registers all three Skills and the local MCP tools. See the Chinese [DeepSeek Harness guide](docs/guides/deepseek-harness.md) for compatibility, desktop profiles, and verification.
 
-Doubao Work:
+WorkBuddy (verified on macOS Apple Silicon): run the installer from the repository root with native arm64 Python so a Rosetta interpreter does not select an Intel binary.
 
 ```bash
-# 1. Install the plugin (via Codex or Claude Code)
-codex plugin marketplace add westng/ocean-watch
-codex plugin add ocean-watch@ocean-watch
-
-# 2. Configure Doubao Work Skills
-cd ~/.codex/plugins/ocean-watch  # or your plugin installation directory
-./scripts/install-doubao.sh
-
-# 3. Fully quit and restart Doubao Work
-# 4. Use in conversations: @巨量千川计划助手 or @巨量引擎盯盘助手
+/usr/bin/arch -arm64 /usr/bin/python3 scripts/install-workbuddy.py
 ```
 
-All four hosts share one local state root (`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`), so you authorize only once.
+The installer verifies the manifest, backs up previous configuration and Skills, and preserves other MCP services and native trust settings. Reload MCP / start a new session afterward, restarting WorkBuddy if needed. See [WorkBuddy local integration](hosts/workbuddy/README.md) for other platform commands, shared state, and acceptance scope.
 
-After the first installation, start a task and describe the desired outcome. On Codex, later compatible upgrades are switched by the already loaded stable local proxy inside the same task, without quitting or restarting; only an incompatible Host-contract upgrade that adds/removes MCP tools, changes tool schemas, or changes Skill triggering requires a new task. On Claude Code, start a new task after any plugin update. See the Chinese [getting-started guide](docs/guides/getting-started.md) for environment checks, channel configuration, and OAuth.
+Doubao Work (macOS Apple Silicon): first import all three Skills from `skills/` into Doubao Work, then run this command from a repository checkout kept on the local machine:
+
+```bash
+bash scripts/install-doubao.sh
+```
+
+The script only updates existing Skills' MCP paths and requires the repository's arm64 Runtime. Fully quit and restart Doubao Work afterward.
+
+All hosts should use the same state root, resolved in priority order: `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`. A valid authorization for a channel can be reused across hosts; Marketing and Qianchuan still require separate authorizations. After initial installation, start a new task, describe your goal, and follow the official OAuth flow. See [Getting started](docs/guides/getting-started.md) and [Configuration](docs/guides/configuration.md).
 
 ## Ask It Naturally
 
-- **Set up authorization:** “Check my environment and guide me through Ocean Engine Marketing authorization.”
-- **Authorize Star:** `auth authorize --channel star_map`
+- **Star Map accounts:** “Guide me through Star Map authorization, then sync the accounts covered by this grant.”
+- **Authorize or recover access:** “Guide me through Qianchuan authorization, then show the authorization status.”
 - **Refresh access:** “This authorized user received new advertisers. Update the local access snapshot to match the official account.”
-- **Review business data:** “Show today's spend for the Marketing and Qianchuan accounts I manage, summarize by channel, and identify failures.”
-- **Create Marketing plans:** “Find today's uploaded videos, group five per unit, and create plans with my template. Let me review them first.”
-- **Process Qianchuan works:** “Use these Douyin works for my product all-domain plans. Create missing plans and append only missing materials to existing plans. Preflight first.”
+- **Review accounts:** “List the accounts in my local managed-account registry and inspect Qianchuan authorization.”
+- **Review business data:** “Show today's spend, GMV, and ROI for this Qianchuan account, including the report scope.”
+- **Find Marketing materials:** “Find videos uploaded to this Marketing account today.”
+- **Process Qianchuan works:** “Preflight these Douyin works with this template. Show proposed creates, appends, skips, and failures.”
 - **Analyze performance:** “Review the last seven days of material performance, identify high-spend low-conversion materials, and recommend actions.”
 
-These are examples, not fixed commands. Ocean Watch selects the channel and capability from context and asks for missing advertisers, templates, products, date ranges, or write confirmation.
+These are examples; available operations depend on the tools loaded by the host. CLI-capable entry points can also create plans and change delivery settings, after showing preflight results and receiving explicit confirmation.
+
+## V3 Runtime Architecture
+
+V3 is a local-first modular monolith: **thin host adapters + shared Skills + a common capability contract + one Go core + shared persistent state and OS credentials**. Its runtime architecture covers installation and startup, business calls, confirmation and recovery, process shutdown, and version migration. The diagram shows these system boundaries; dashed boxes mark unified operation control and trusted approval that still need production integration.
+
+```mermaid
+flowchart TB
+    subgraph Access["User entry points and host integration"]
+        Hosts["Codex / Claude Code<br/>DeepSeek Harness<br/>Doubao Work / WorkBuddy"] --> Adapter["Thin Host Adapter<br/>Manifests / lifecycle / config"]
+        Adapter --> Skills["Shared channel Skills<br/>ads-plan-monitor<br/>qc-plan-monitor<br/>xt-plan-monitor"]
+        Terminal["Standalone CLI / automation"]
+    end
+    subgraph Boundary["Capability contract and invocation boundary"]
+        MCP["Local MCP stdio"] --> Capability["Capability API: logical contract<br/>DTOs / schemas / channels / effects"]
+        CLI["CLI arguments and stable JSON"] --> Capability
+    end
+    Skills --> MCP
+    Skills --> CLI
+    Terminal --> CLI
+    subgraph Runtime["Shared Go Core: independent instances"]
+        App["Application: complete use cases<br/>Auth and accounts / templates and materials<br/>Plans / reports / management"] --> Domain["Domain / Ports<br/>Rules / state / dependencies"]
+        App -.-> Operations["Operation control (pending)<br/>Modes / snapshots / leases<br/>Dispatch / reconcile / recover"]
+        Operations -.-> Domain
+    end
+    Capability --> App
+    Operations -. Request confirmation .-> Approval["Trusted approval (pending)<br/>Host Approval Adapter<br/>On-demand local Broker"]
+    Approval -. Verified receipt .-> Operations
+    Domain --> Infrastructure["Infrastructure Adapters<br/>SDK / REST / storage / credentials"]
+    Infrastructure --> API["Official Ocean Engine APIs"]
+    Infrastructure --> State["Shared local state<br/>SQLite / config / transitional files"]
+    Infrastructure --> Secrets["OS credential stores<br/>Keychain / DPAPI<br/>Secret Service"]
+    Infrastructure --> F2["Python / F2<br/>Public Douyin metadata"]
+    Delivery["Build / distribute / install<br/>Version binding / update / migrate"]
+    Delivery -. Register and launch .-> Adapter
+    Delivery -. Runtime version binding .-> MCP
+    Delivery -. Runtime version binding .-> CLI
+    classDef pending stroke:#b7791f,stroke-width:2px,stroke-dasharray:5 5
+    class Operations,Approval pending
+```
+
+| Layer | Project responsibility |
+| --- | --- |
+| Host adapters and shared Skills | Each host owns installation, registration, connections, and unloading. Three channel Skills share intent, call order, and presentation rules; host packages supply controlled mappings. |
+| Capability API and transports | MCP and CLI map the same business contract with channel, input/output, and effect metadata. MCP calls Application directly; Go CLI calls it in process. Capability API adds no network service, and WorkBuddy uses MCP only. |
+| Application / Domain / Ports | Shared use cases cover setup and diagnosis, authorization and accounts, templates and materials, plans, reports, execution history, and recovery. Domain rules do not depend on host SDKs; ports define external dependencies. |
+| Operation and request control | Current use cases provide preflight, write locks, pagination, rate control, and reconciliation. V3 unifies writes around operation versions, snapshot digests, trusted approval, execution leases, dispatch records, and recovery; tool visibility and execution permission are checked separately. |
+| Data and external dependencies | Hosts share a protected state root and cross-process lock protocols. Transactional state moves into SQLite; OS credential stores hold secrets and tokens. Official APIs and public metadata use separate adapters. |
+| Runtime and delivery lifecycle | Each host instance owns its connections, Runtime subprocesses, and temporary resources. Build and installation manage artifacts, compatibility, version binding, upgrades, migration, and rollback; shared data belongs to the user. |
+
+**Current implementation and the complete target:**
+
+| Area | Current runtime | Complete V3 target |
+| --- | --- | --- |
+| Operations and approval | Operation domain models, approval-verification ports, and SQLite foundations exist; production writes still use each use case's dry-run / `--submit` gates. | Advertising writes use unified operation state and `read / plan / execute` modes, preferring verified host approval with an on-demand local Broker fallback. Configuration, authorization, and migration retain separate management boundaries. |
+| Persistence | Qianchuan preflight journals default to SQLite; authorization indexes, templates, plan bindings, and other state still use files. | Transactional business state is persisted consistently, including credential-reference rotation, backups, migration, and unfinished-operation recovery; secrets stay in OS credential stores. |
+| Runtime and upgrades | Codex's compatibility proxy can still switch compatible runtimes; Claude updates require a new task, and WorkBuddy uses a pinned installation directory. | Each process binds an immutable Runtime and updates explicitly; operation formats, capability contracts, and database schemas are checked independently before recovery or migration. |
+
+The repository bundles five Runtime binaries: macOS Intel / Apple Silicon, Linux x86_64 / ARM64, and Windows x86_64. See [V3 Project Runtime Architecture](docs/architecture/overview.md) for layer responsibilities, complete request paths, state and process ownership, and implementation mapping; see the [PRD](docs/product/prd.md) for target requirements. Cross-compilation, one feature passing, or host tool discovery does not establish complete V3 acceptance.
 
 ## Operational and Security Boundaries
 
@@ -130,54 +187,21 @@ These are examples, not fixed commands. Ocean Watch selects the channel and capa
 - “Accounts I manage” reads the local responsible-account registry; refreshing advertisers available to an authorized user is a separate official authorization sync.
 - Marketing and Qianchuan GMV and ROI retain their official channel-specific definitions; cross-channel summaries combine only comparable spend.
 - F2 reads public Douyin work metadata only. It does not download media, create a database, or automatically read browser cookies; official Qianchuan APIs under the target advertiser always determine deliverability.
-- User configuration, authorization snapshots, caches, reports, and execution history live locally under `$CODEX_HOME/ads-plan-monitor/` and are not open-source repository content.
+- Secrets and tokens use macOS Keychain, Windows DPAPI, or Linux Secret Service, without entering chat, ordinary configuration, or logs.
+- User configuration, authorization snapshots, caches, reports, and execution history live locally under `<shared-state-root>/ads-plan-monitor/` and are not open-source repository content.
 
 See [Configuration](docs/guides/configuration.md) and [Security](SECURITY.md) for details.
 
-## Runtime and Support
-
-```text
-Codex / Claude Code / DeepSeek Harness / Doubao Work
-                    └→ Skill → local stdio MCP ─┐
-                    └→ run/run.cmd ─────┴→ Go Application Service → official Ocean Engine API
-                                                                └→ Python 3.10+ → F2 0.0.1.7
-                                                                   Douyin public metadata only
-```
-
-- Advertising logic has one Go Application/Domain implementation. MCP and CLI are two transports over that implementation, not separate business runtimes or silent fallback paths.
-- Local template lists and exact details use MCP's `list_templates` and `get_template`; Qianchuan work-batch preflight and snapshot inspection use `preflight_qianchuan_works` and `get_qianchuan_preflight`. Confirmed online submission still uses the bundled Go CLI and requires explicit write permission.
-- The stable proxy keeps a fixed 18-tool MCP contract and switches a validated private Runtime inside the same outer session. It checks version, hashes, plugin identity, the F2 resource, and the tool schema before switching; same-version content changes are also revalidated through the manifest fingerprint. A bad Runtime rolls back automatically without blocking a later fixed release.
-- Read-only `get_capabilities` exposes all 77 CLI capabilities with channel, side-effect, and submit-gate metadata. Each Skill routes common intent directly and queries this catalog only once for an uncommon already-confirmed Ocean Watch goal; it does not scan the repository or plugin caches.
-- MCP shortens the natural-language-to-preflight path and stabilizes structured results. It does not bypass official authorization, ownership, product-match, or plan-reconciliation reads, whose real latency remains part of preflight.
-- The Plugin bundles CLI binaries for macOS Intel and Apple Silicon, Linux x86_64 and ARM64, and Windows x86_64. Ordinary users do not need Go.
-- macOS and Linux MCP use the stable POSIX launcher. Neither Host's Plugin/MCP manifest has an operating-system command branch, so Windows is declared as CLI support only rather than falsely claiming Windows MCP acceptance.
-- Versioned runtime hot upgrades in the stable proxy rely on Codex's version-directory layout. Claude Code installs a single repository snapshot, so integrity verification and signed slots still apply but there is no automatic hot upgrade: start a new task after updating the plugin.
-- Python participates only in public metadata resolution for Qianchuan work links. It does not own authorization, accounts, templates, plans, or reports.
-
-See [Architecture](docs/architecture/overview.md) for current implementation boundaries.
-
 ## Feature Requests
 
-Want Ocean Watch to support more operations? Submit your ideas to [Issues](https://github.com/westng/ocean-watch/issues):
-
-- New Marketing or Qianchuan capabilities (plan types, targeting dimensions, report fields)
-- Batch operation improvements (concurrency control, resume support, conflict handling)
-- Data analysis enhancements (trend comparison, anomaly detection, optimization suggestions)
-- Workflow refinements (template management, material archiving, automation rules)
-
-When submitting an issue, please include:
-1. **Use case**: What problem you're solving and how you currently handle it
-2. **Expected behavior**: How you'd like Ocean Watch to help
-3. **Scope** (optional): Whether it involves official API limits, authorization changes, or cross-channel operations
-
-Every suggestion will be carefully evaluated. Valuable features may appear in the next release. Priority depends on demand frequency, technical feasibility, and consistency with existing capabilities.
+Describe your use case, expected behavior, host, and plugin version in [Issues](https://github.com/westng/ocean-watch/issues). Do not attach credentials or unredacted business data.
 
 ## Documentation
 
 | Audience | Entry points |
 | --- | --- |
 | Everyday users | [Documentation](docs/README.md) · [Getting started](docs/guides/getting-started.md) · [Configuration](docs/guides/configuration.md) |
-| Scripting and diagnostics | [CLI reference](docs/reference/cli.md) |
+| Scripting and diagnostics | [CLI reference](docs/reference/cli.md) · [Authorization recovery](docs/reference/authorization-recovery.md) |
 | Developers | [Architecture](docs/architecture/overview.md) · [Contributing](CONTRIBUTING.md) |
 | Project and security | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [Release guide](docs/release/releasing.md) · [MIT license](LICENSE) |
 

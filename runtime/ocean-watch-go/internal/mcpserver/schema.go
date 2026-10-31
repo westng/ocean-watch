@@ -99,12 +99,17 @@ const getSuccessSchema = `{
 const getOutputSchema = objectOneOf + getSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const preflightInputSchema = `{
-  "type":"object","additionalProperties":false,"required":["plan_template","items"],
+  "type":"object","additionalProperties":false,"required":["items"],
   "properties":{
     "plan_template":{"type":"string","minLength":1,"maxLength":256},
     "items":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["work_url"],"properties":{
       "work_url":{"type":"string","minLength":1,"maxLength":2048},
-      "plan_type":{"type":"string","maxLength":128},"business":{"type":"string","maxLength":128}
+      "plan_type":{"type":"string","maxLength":128},"business":{"type":"string","maxLength":128},
+      "plan_template":{"type":"string","minLength":1,"maxLength":256},
+      "product_id":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"},"product_name":{"type":"string","maxLength":256},
+      "advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"},"auth_account_id":{"type":"string","maxLength":256},
+      "creator_uid":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"},
+      "creator_douyin_id":{"type":"string","maxLength":128},"creator_name":{"type":"string","maxLength":256}
     }}},
     "concurrency":{"type":"integer","minimum":1,"maximum":10,"default":8},
     "auth_account_id":{"type":"string","maxLength":256}
@@ -212,8 +217,40 @@ const preflightDefs = `"$defs":{
       "properties":{"field":{"type":"string","enum":["plan_id","creator_nickname","product_id","material_id","material_title","skipped","query_failures","failed_results"]},"label":{"type":"string","minLength":1,"maxLength":32}}}
   }`
 
+const routedPreflightSuccessSchema = `{
+  "type":"object","additionalProperties":false,
+  "required":["ok","request_id","mode","channel","routed","counts","batches","pending"],
+  "properties":{
+    "ok":{"const":true},"request_id":{"type":"string","minLength":1,"maxLength":128},
+    "mode":{"const":"dry_run"},"channel":{"const":"qianchuan"},"routed":{"const":true},
+    "counts":{"type":"object","maxProperties":40,"propertyNames":{"pattern":"^[a-z][a-z0-9_]{0,63}$"},"additionalProperties":{"type":"integer","minimum":0}},
+    "batches":{"type":"array","maxItems":100,"items":{
+      "type":"object","additionalProperties":false,"required":["input_indexes","template","status"],
+      "properties":{
+        "input_indexes":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":0,"maximum":99}},
+        "template":{"type":"object","additionalProperties":false,"required":["template_id","name","advertiser_id","product_ids"],
+          "properties":{"template_id":{"type":"string","minLength":1,"maxLength":256},"name":{"type":"string","maxLength":256},
+          "advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"},"product_ids":{"type":"array","minItems":1,"maxItems":30,"items":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"}}}},
+        "status":{"type":"string","enum":["preflight_complete","preflight_failed"]},
+        "failure_stage":{"type":"string","maxLength":64},
+        "preflight":` + preflightSuccessSchema + `,
+        "failure":` + errorOutputSchema + `
+      }
+    }},
+    "pending":{"type":"array","maxItems":100,"items":{
+      "type":"object","additionalProperties":false,"required":["input_index","reason","candidates"],
+      "properties":{
+        "input_index":{"type":"integer","minimum":0,"maximum":99},"reason":{"type":"string","minLength":1,"maxLength":128},
+        "candidates":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["template_id","advertiser_id","product_ids"],
+          "properties":{"template_id":{"type":"string","minLength":1,"maxLength":256},"advertiser_id":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"},
+          "product_ids":{"type":"array","minItems":1,"maxItems":30,"items":{"type":"string","pattern":"^[1-9][0-9]{0,63}$"}}}}}
+      }
+    }}
+  }
+}`
+
 const preflightOutputSchema = `{"type":"object",` + preflightDefs + `,"oneOf":[` +
-	preflightSuccessSchema + `,` + errorOutputSchema + `]}`
+	preflightSuccessSchema + `,` + routedPreflightSuccessSchema + `,` + errorOutputSchema + `]}`
 
 const getPreflightInputSchema = `{
   "type":"object","additionalProperties":false,"required":["preflight_id"],

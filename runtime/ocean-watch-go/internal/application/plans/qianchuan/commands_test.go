@@ -70,6 +70,38 @@ func TestBatchPlanScanStartsBeforeSlowLinkResolutionFinishes(t *testing.T) {
 	}
 }
 
+func TestBatchWarmOwnerCacheUsesOfficialNicknameForPlanName(t *testing.T) {
+	url := "https://www.douyin.com/video/6000000000000001"
+	resolver := &stagedCommandLinkResolver{result: applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{
+		InputIndex: 0, InputURL: url, AwemeItemID: "6000000000000001",
+	}}}}
+	reader, writer := &commandReader{}, &commandWriter{}
+	service := CommandService{
+		Config: commandConfigReader{config: commandProductConfig()}, Tokens: &commandTokenProvider{}, Links: resolver,
+		OwnerHints: &commandOwnerHintCache{loaded: map[string]OwnerHint{
+			"6000000000000001": {AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
+		}},
+		Verifier: WorkVerifier{Reader: reader},
+		Batch:    BatchService{Reader: reader, Writer: writer, Reconciler: commandNoPlanFinder{}},
+		Journals: &commandJournalStore{}, NewPreflightID: func(string, time.Time) (string, error) {
+			return "qianchuan-preflight-warm-cache", nil
+		},
+	}
+	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{PlanTemplate: "qcpt_command", Items: batchCommandItems(url)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Counts["would_create"] != 1 || len(result.FailedResults) != 0 || len(result.Skipped) != 0 || len(result.Presentation.Rows) != 1 {
+		t.Fatalf("warm owner cache lost the plan naming metadata: %+v", result)
+	}
+	if resolver.metadataCalls != 0 || reader.authorizedCalls != 1 || reader.videoCalls == 0 || reader.unscopedCalls != 0 || writer.createCalls != 0 {
+		t.Fatalf("warm cache bypassed official checks or wrote a plan: resolver=%+v reader=%+v writer=%+v", resolver, reader, writer)
+	}
+	if !strings.Contains(result.Results[0].PlanName, "fixture-creator") {
+		t.Fatal("official nickname was not used for plan naming")
+	}
+}
+
 func TestBatchComponentTimingUsesOperationCompletion(t *testing.T) {
 	reader := &commandReader{authorizedDelay: 80 * time.Millisecond}
 	service := CommandService{
@@ -123,6 +155,84 @@ func TestBatchEmptyLinkResultSkipsCredentialsLockAndPlanScan(t *testing.T) {
 	case <-tokens.started:
 	case <-time.After(time.Second):
 		t.Fatal("parallel credential preparation did not start")
+	}
+}
+
+func TestBatchPreparationWaitsForCancelledPeer(t *testing.T) {
+	for _, branch := range []string{"authorization", "work_metadata", "empty_links"} {
+		t.Run(branch, func(t *testing.T) {
+			started := make(chan struct{})
+			cancelled := make(chan struct{})
+			release := make(chan struct{})
+			finished := make(chan struct{})
+			var releaseOnce sync.Once
+			unblock := func() { releaseOnce.Do(func() { close(release) }) }
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			defer unblock()
+			waitForCancellation := func(ctx context.Context) error {
+				defer close(finished)
+				close(started)
+				<-ctx.Done()
+				close(cancelled)
+				<-release
+				return ctx.Err()
+			}
+			service := CommandService{Config: commandConfigReader{config: commandProductConfig()}}
+			if branch == "authorization" {
+				service.Links = preparationLinkResolver{resolve: func(ctx context.Context) (applicationworkmetadata.ResolveResult, error) {
+					return applicationworkmetadata.ResolveResult{}, waitForCancellation(ctx)
+				}}
+				service.Tokens = &commandTokenProvider{onEnsure: func() { <-started }, err: errors.New("fixture authorization failure")}
+			} else {
+				service.Tokens = preparationTokenProvider{ensure: waitForCancellation}
+				service.Links = preparationLinkResolver{resolve: func(context.Context) (applicationworkmetadata.ResolveResult, error) {
+					<-started
+					if branch == "work_metadata" {
+						return applicationworkmetadata.ResolveResult{}, errors.New("fixture metadata failure")
+					}
+					return applicationworkmetadata.ResolveResult{Skipped: []domain.SkippedWorkLink{{InputIndex: 0, Reason: "invalid_url"}}}, nil
+				}}
+			}
+			done := make(chan error, 1)
+			go func() {
+				_, err := service.BatchWorks(ctx, BatchWorksCommand{
+					PlanTemplate: "qcpt_command", Items: batchCommandItems("https://www.douyin.com/video/6000000000000001"),
+				})
+				done <- err
+			}()
+			select {
+			case <-cancelled:
+			case <-time.After(time.Second):
+				t.Fatal("failed preparation did not cancel its peer")
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("batch returned before its cancelled peer finished: %v", err)
+			case <-time.After(20 * time.Millisecond):
+			}
+			unblock()
+			select {
+			case err := <-done:
+				if branch == "empty_links" {
+					if err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					var stageErr *PreflightStageError
+					if !errors.As(err, &stageErr) || stageErr.Stage != branch {
+						t.Fatalf("preparation failure changed: %v", err)
+					}
+				}
+			case <-time.After(time.Second):
+				t.Fatal("batch did not finish after its peer exited")
+			}
+			select {
+			case <-finished:
+			default:
+				t.Fatal("cancelled peer is still running")
+			}
+		})
 	}
 }
 
@@ -682,6 +792,22 @@ type commandTokenProvider struct {
 	last     authapplication.TokenQuery
 	onEnsure func()
 	err      error
+}
+
+type preparationLinkResolver struct {
+	resolve func(context.Context) (applicationworkmetadata.ResolveResult, error)
+}
+
+func (resolver preparationLinkResolver) Resolve(ctx context.Context, _ applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error) {
+	return resolver.resolve(ctx)
+}
+
+type preparationTokenProvider struct {
+	ensure func(context.Context) error
+}
+
+func (provider preparationTokenProvider) Ensure(ctx context.Context, _ authapplication.TokenQuery) (authapplication.TokenLease, error) {
+	return authapplication.TokenLease{}, provider.ensure(ctx)
 }
 
 type blockingCommandTokenProvider struct {

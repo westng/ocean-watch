@@ -25,21 +25,31 @@ On DeepSeek Harness, use the absolute directory of the loaded `SKILL.md` to reso
 | Search Marketing creator materials | MCP `search_marketing_creator_materials` |
 | Fixed Marketing material report | MCP `report_marketing_materials` |
 | Fixed Marketing project report | MCP `report_marketing_plans` |
-| Make current OAuth user's advertiser coverage match official access | `./run auth sync-accounts --channel marketing` |
+| Make current OAuth user's advertiser coverage match official access | MCP `start_account_sync` |
 <!-- capability-routes:end -->
 
 | User outcome | Exact route |
 | --- | --- |
+| Authorize or recover expired Marketing access | MCP `start_authorization` with `channel=marketing` and the original advertiser if known |
+| Retry saved authorization account discovery | MCP `start_account_sync` with `channel=marketing` and the exact authorization ID |
 | Confirmed Ocean Watch goal not matched above | MCP `get_capabilities` once with `channel=marketing`, then use its unique command |
-| Initialize, authorize, mutate local accounts/templates, create/update plans, custom reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
+| Initialize, mutate local accounts/templates, create/update plans, custom reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
 
 When a row matches, call that exact MCP tool immediately. MCP declarations may be deferred from the visible prompt: never enumerate `ALL_TOOLS`, inspect caches, or read memory to decide whether a named tool exists. Treat it as unavailable only when the direct call itself returns a Host-level unknown-tool or unavailable error; then report that error and stop without a CLI fallback. Do not call `get_capabilities` when a preceding row already matches.
 
+## Authorization Recovery
+
+On `REAUTHORIZATION_REQUIRED`, preserve the original request arguments and call MCP `start_authorization` with `channel=marketing` and the original advertiser if known. For authorization or reauthorization, open the returned official OAuth URL; for account synchronization, open the returned local confirmation page. Poll MCP `get_authorization_session` using its session ID and channel; only `completed` with `can_resume=true` permits rerunning the original read with the same arguments. Never ask for secrets, require the same links again, or suggest terminal commands for this MCP flow. Stop automatic retries on failure, cancellation, expiry or scope mismatch. Use MCP `cancel_authorization_session` when the user cancels.
+
+For reauthorization, include the exact existing `authorization_id` supplied by the error or the local authorization inspector. Core verifies the official user UID and App before updating that grant, saves the credential before role-based discovery, and retains a saved grant for account synchronization if discovery fails.
+
+On `ACCOUNT_SYNC_REQUIRED`, obtain the exact pending authorization ID from the authorization inspector and call MCP `start_account_sync`; a session with `sync_required=true` already supplies that ID. Preserve the advertiser, present its browser confirmation page and poll the session; do not generate another OAuth grant. Authorization recovery does not approve advertising writes.
+
 ## Intent Rules
 
-- This Skill owns only `marketing`. Route every Qianchuan request to `$qc-plan-monitor`; never mix apps, credentials, templates, advertiser mappings, endpoints, or plan transactions.
+- This Skill owns only `marketing`. Route Qianchuan requests to `$qc-plan-monitor` and Star Map requests to `$xt-plan-monitor`; never mix apps, credentials, templates, advertiser mappings, endpoints, or plan transactions.
 - Interpret “我负责的/常用的/管理的户” and contextual paraphrases as responsible-account intent. Membership means `list_managed_accounts`; spend, ROI, GMV, orders, or dated performance requires a fresh report in the current turn.
-- A request to make the local authorization reflect newly granted, removed, stale, or missing official advertiser access means `auth sync-accounts --channel marketing`, regardless of exact wording, abbreviations, omissions, or misspellings.
+- A request to make local authorization reflect official advertiser access means MCP `start_account_sync` with `channel=marketing` and an exact authorization ID from the local inspector, regardless of wording. Browser confirmation is required before synchronization.
 - Generic “创建投放模板” without a channel must use `templates create` without `--channel` and ask Marketing or Qianchuan. After Marketing, ask uploaded/mixed materials or creator-native materials. Do not infer a channel from active state.
 - If one required identifier or business choice is genuinely missing, ask only for that item. Do not run discovery unrelated to the missing field.
 

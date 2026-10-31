@@ -796,13 +796,15 @@ func mapOfficialQueryError(err error) toolFailure {
 			return toolFailure{Code: "AUTHORIZATION_NOT_FOUND", Message: "Qianchuan authorization was not found", Details: map[string]any{}}
 		case "authorization_ambiguous":
 			return toolFailure{Code: "AUTHORIZATION_AMBIGUOUS", Message: "Qianchuan advertiser maps to multiple authorizations", Details: map[string]any{}}
-		case "reauthorization_required", "authorization_pending_sync":
-			return toolFailure{Code: "REAUTHORIZATION_REQUIRED", Message: "Qianchuan authorization must be renewed", Details: map[string]any{}}
+		case "reauthorization_required", "oauth_app_missing":
+			return authorizationFailure("qianchuan", false)
+		case "authorization_pending_sync":
+			return authorizationFailure("qianchuan", true)
 		}
 	}
 	var envelope *oceanengine.EnvelopeError
-	if errors.As(err, &envelope) && envelope.Code == 40103 {
-		return toolFailure{Code: "REAUTHORIZATION_REQUIRED", Message: "Qianchuan authorization must be renewed", Details: map[string]any{}}
+	if errors.As(err, &envelope) && envelope.RequiresReauthorization() {
+		return authorizationFailure("qianchuan", false)
 	}
 	return toolFailure{Code: "UPSTREAM_QUERY_FAILED", Message: "Qianchuan query could not complete", Retryable: true, Details: map[string]any{}}
 }

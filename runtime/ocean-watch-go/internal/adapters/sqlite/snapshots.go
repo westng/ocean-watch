@@ -52,6 +52,9 @@ func (store *Store) SavePreflight(ctx context.Context, snapshot operations.Snaps
 			if !sameSnapshot(previous, snapshot) {
 				return ErrSnapshotConflict
 			}
+			if err := ensurePreflightState(ctx, tx, snapshot); err != nil {
+				return err
+			}
 			return nil
 		}
 		if snapshot.Version != current+1 {
@@ -76,7 +79,28 @@ func (store *Store) SavePreflight(ctx context.Context, snapshot operations.Snaps
 	if _, err := tx.ExecContext(ctx, "INSERT INTO preflight_snapshots(operation_id,operation_version,payload_json) VALUES(?,?,?)", snapshot.OperationID, snapshot.Version, string(snapshot.Payload)); err != nil {
 		return err
 	}
+	if err := ensurePreflightState(ctx, tx, snapshot); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func ensurePreflightState(ctx context.Context, tx *sql.Tx, snapshot operations.Snapshot) error {
+	var table string
+	if err := tx.QueryRowContext(ctx, "SELECT name FROM sqlite_schema WHERE type='table' AND name='operation_states'").Scan(&table); errors.Is(err, sql.ErrNoRows) {
+		// Schema version 1 predates the operation state table and is kept
+		// readable until the explicit upgrade path runs.
+		return nil
+	} else if err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO operation_states(
+		operation_id, operation_version, status, snapshot_digest, created_at, updated_at
+	) VALUES(?, ?, 'preflight_ready', ?, ?, ?)`,
+		snapshot.OperationID, snapshot.Version, snapshot.SnapshotDigest,
+		snapshot.CreatedAt.UTC().Format(time.RFC3339Nano), snapshot.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	return err
 }
 
 func (store *Store) GetSnapshot(ctx context.Context, operationID string, version int) (operations.Snapshot, error) {

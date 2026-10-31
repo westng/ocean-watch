@@ -14,10 +14,18 @@ var ErrDuplicateItemConflict = errors.New("DUPLICATE_ITEM_CONFLICT")
 // BatchItem is the normalized, user-provided identity portion of one work row.
 // An empty PlanType or Business is intentional and never inherits a neighbor.
 type BatchItem struct {
-	InputIndex int    `json:"input_index"`
-	WorkURL    string `json:"work_url"`
-	PlanType   string `json:"plan_type"`
-	Business   string `json:"business"`
+	InputIndex      int    `json:"input_index"`
+	WorkURL         string `json:"work_url"`
+	PlanType        string `json:"plan_type"`
+	Business        string `json:"business"`
+	PlanTemplate    string `json:"plan_template,omitempty"`
+	ProductID       string `json:"product_id,omitempty"`
+	ProductName     string `json:"product_name,omitempty"`
+	AdvertiserID    string `json:"advertiser_id,omitempty"`
+	AuthAccountID   string `json:"auth_account_id,omitempty"`
+	CreatorUID      string `json:"creator_uid,omitempty"`
+	CreatorDouyinID string `json:"creator_douyin_id,omitempty"`
+	CreatorName     string `json:"creator_name,omitempty"`
 }
 
 // VerifiedBatchItem is the domain input after official work, creator and
@@ -51,6 +59,14 @@ func NormalizeBatchItems(items []BatchItem) []BatchItem {
 		result[index].WorkURL = strings.TrimSpace(result[index].WorkURL)
 		result[index].PlanType = strings.TrimSpace(result[index].PlanType)
 		result[index].Business = strings.TrimSpace(result[index].Business)
+		result[index].PlanTemplate = strings.TrimSpace(result[index].PlanTemplate)
+		result[index].ProductID = strings.TrimSpace(result[index].ProductID)
+		result[index].ProductName = strings.TrimSpace(result[index].ProductName)
+		result[index].AdvertiserID = strings.TrimSpace(result[index].AdvertiserID)
+		result[index].AuthAccountID = strings.TrimSpace(result[index].AuthAccountID)
+		result[index].CreatorUID = strings.TrimSpace(result[index].CreatorUID)
+		result[index].CreatorDouyinID = strings.TrimSpace(result[index].CreatorDouyinID)
+		result[index].CreatorName = strings.TrimSpace(result[index].CreatorName)
 	}
 	return result
 }

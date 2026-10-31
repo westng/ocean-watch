@@ -476,7 +476,7 @@ func (service BatchService) executeNewGroup(
 		result.Status, result.Error = "failed", err.Error()
 		return result, err
 	}
-	payload, err := buildBatchCreatePayload(request, group.creator, planName, first)
+	payload, err := buildBatchCreatePayload(request, group.creator, planName, group.identity.ProductIDs, first)
 	if err != nil {
 		result.Status, result.Error = "failed", err.Error()
 		return result, err
@@ -963,13 +963,7 @@ func (service BatchService) planName(request normalizedBatchRequest, group batch
 	creator := group.creator
 	label := fields.creatorName
 	if label == "" {
-		label = creator.Name
-	}
-	if label == "" {
-		label = creator.VisibleID
-	}
-	if label == "" {
-		label = creator.AwemeID
+		label = strings.TrimSpace(creator.Name)
 	}
 	now := time.Now()
 	if service.Now != nil {
@@ -992,8 +986,8 @@ func (service BatchService) planName(request normalizedBatchRequest, group batch
 	if pattern == "" {
 		pattern = "{month_day}-{creator_name}-{product_short_name}-{type}-{business}"
 	}
-	if strings.Contains(pattern, "{creator_name}") && fields.creatorName == "" {
-		return "", errors.New("F2 未返回达人名称，无法创建千川计划")
+	if strings.Contains(pattern, "{creator_name}") && label == "" {
+		return "", errors.New("缺少用于计划命名的达人昵称，请补充 creator_name 后重新预检")
 	}
 	for _, key := range []string{"type", "business"} {
 		if values[key] == "" {
@@ -1082,6 +1076,7 @@ func buildBatchCreatePayload(
 	request normalizedBatchRequest,
 	creator domainqianchuan.AuthorizedCreator,
 	name string,
+	productIDs []string,
 	works []VerifiedWork,
 ) (json.RawMessage, error) {
 	object := cloneMap(request.payloadObject)
@@ -1091,7 +1086,16 @@ func buildBatchCreatePayload(
 	}
 	object["aweme_id"] = awemeID
 	object["name"] = name
-	creatives, err := buildProductCreatives(request.productIDs, works, true)
+	products := make([]int64, len(productIDs))
+	for index, productID := range productIDs {
+		product, err := strconv.ParseInt(productID, 10, 64)
+		if err != nil || product <= 0 {
+			return nil, errors.New("Qianchuan product_id exceeds the official integer range")
+		}
+		products[index] = product
+	}
+	object["product_ids"] = products
+	creatives, err := buildProductCreatives(productIDs, works, true)
 	if err != nil {
 		return nil, err
 	}

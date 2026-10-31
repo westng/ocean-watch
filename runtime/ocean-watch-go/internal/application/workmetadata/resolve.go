@@ -157,6 +157,9 @@ func (resolver Resolver) ResolveMetadata(ctx context.Context, result ResolveResu
 		if value.ProductID != "" {
 			row.ProductHint = &domain.WorkProductHint{ProductID: value.ProductID, ProductName: value.ProductName}
 		}
+		for _, product := range value.Products {
+			row.ProductHints = append(row.ProductHints, domain.WorkProductHint{ProductID: product.ID, ProductName: product.Name})
+		}
 		row.Metadata = append([]byte(nil), value.Metadata...)
 		resolved = append(resolved, row)
 	}

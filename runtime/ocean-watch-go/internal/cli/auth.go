@@ -16,9 +16,11 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/localauth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
@@ -34,6 +36,7 @@ type AuthRuntime struct {
 	Authorizations authapplication.AuthorizationStore
 	RefreshLocker  authapplication.RefreshLocker
 	OAuth          authapplication.OAuthAdapter
+	Users          authapplication.AuthorizedUserProvider
 	Discovery      authapplication.AdvertiserDiscovery
 	ClientFactory  *oceanengine.ClientFactory
 	Now            func() time.Time
@@ -129,6 +132,10 @@ func (runner Runner) runAuth(
 	if oauth == nil {
 		oauth = oceanengine.OAuthAdapter{Factory: factory}
 	}
+	users := runtimeConfig.Users
+	if users == nil {
+		users = oceanengine.OAuthAdapter{Factory: factory}
+	}
 	discovery := runtimeConfig.Discovery
 	if discovery == nil {
 		discovery = oceanengine.AdvertiserDiscoveryAdapter{Factory: factory}
@@ -147,30 +154,22 @@ func (runner Runner) runAuth(
 			NoOpen: options.noOpen, PrintURL: options.printURL, Stderr: stderr,
 		})
 	case "authorize":
+		operation := "authorize"
+		if options.authorizationID != "" {
+			operation = "reauthorize"
+		}
 		var callback localOAuthResult
 		callback, err = runLocalOAuth(ctx, localOAuthRequest{
 			Channel: options.channel, RedirectURI: options.redirectURI, Timeout: options.timeout,
 			ForceConfigure: options.configureApp, Credentials: credentials,
 			OpenURL: runtimeConfig.OpenURL, NoOpen: options.noOpen,
 			PrintURL: options.printURL, Stderr: stderr,
+			Input: authapplication.RecoveryRequest{Channel: options.channel, Operation: operation, AuthorizationID: options.authorizationID, AdvertiserID: options.advertiserID, RebindExisting: options.rebindExisting},
+			Flow: authapplication.Service{Credentials: credentials, OAuth: oauth, Users: users,
+				Authorizer: authapplication.Authorizer{Credentials: credentials, Authorizations: authorizations, Locks: locker, Now: runtimeConfig.Now},
+				Syncer:     authapplication.AdvertiserSnapshotSync{Tokens: manager, Authorizations: authorizations, Discovery: discovery, Now: runtimeConfig.Now}},
 		})
-		if err == nil {
-			app, appErr := readOAuthApp(ctx, credentials, options.channel)
-			if appErr != nil {
-				err = appErr
-				break
-			}
-			var token domain.OAuthToken
-			token, err = oauth.ExchangeCode(ctx, options.channel, app, callback.AuthCode)
-			if err == nil {
-				result, err = (authapplication.Authorizer{
-					Credentials: credentials, Authorizations: authorizations,
-					Discovery: discovery, Now: runtimeConfig.Now,
-				}).Authorize(ctx, authapplication.AuthorizationRequest{
-					Channel: options.channel, Token: token, RebindExisting: options.rebindExisting,
-				})
-			}
-		}
+		result = callback.Authorization
 	case "status":
 		result, err = (authapplication.QueryService{
 			Credentials: credentials, Authorizations: authorizations,
@@ -222,12 +221,14 @@ type localOAuthRequest struct {
 	NoOpen         bool
 	PrintURL       bool
 	Stderr         io.Writer
+	Input          authapplication.RecoveryRequest
+	Flow           authapplication.Service
 }
 
 type localOAuthResult struct {
-	Channel           string `json:"channel"`
-	CredentialBackend string `json:"credential_backend,omitempty"`
-	AuthCode          string `json:"-"`
+	Channel           string                              `json:"channel"`
+	CredentialBackend string                              `json:"credential_backend,omitempty"`
+	Authorization     authapplication.AuthorizationResult `json:"-"`
 }
 
 type localOAuthEvent struct {
@@ -255,7 +256,23 @@ func runLocalOAuth(ctx context.Context, request localOAuthRequest) (localOAuthRe
 	if err != nil {
 		return localOAuthResult{}, err
 	}
-	app, err := readOAuthApp(ctx, request.Credentials, request.Channel)
+	var app domain.OAuthApp
+	if request.ConfigureOnly {
+		app, err = readOAuthApp(ctx, request.Credentials, request.Channel)
+	} else {
+		if request.Input.Channel == "" {
+			request.Input.Channel = request.Channel
+		}
+		if request.Input.Channel != request.Channel {
+			return localOAuthResult{}, domain.NewError("invalid_arguments", "authorization channel does not match callback channel", 1, nil)
+		}
+		request.Flow.Credentials = request.Credentials
+		request.Input, app, err = request.Flow.Prepare(ctx, request.Input)
+		var domainErr *domain.Error
+		if errors.As(err, &domainErr) && domainErr.Code == "oauth_app_missing" {
+			err = nil
+		}
+	}
 	if err != nil {
 		return localOAuthResult{}, err
 	}
@@ -272,15 +289,27 @@ func runLocalOAuth(ctx context.Context, request localOAuthRequest) (localOAuthRe
 		default:
 		}
 	}
-	var handler http.Handler
-	handler = localOAuthHandler(localOAuthHandlerConfig{
+	waitCtx, cancel := context.WithTimeout(ctx, request.Timeout)
+	defer cancel()
+	var coordinator *authapplication.RecoveryCoordinator
+	var workerDone <-chan struct{}
+	if !request.ConfigureOnly {
+		coordinator = authapplication.NewRecoveryCoordinator(waitCtx, request.Input,
+			authapplication.RecoverySession{Channel: request.Channel, Operation: request.Input.Operation, AuthorizationID: request.Input.AuthorizationID, AdvertiserID: request.Input.AdvertiserID, Status: "awaiting_callback"},
+			state, request.Timeout, request.Flow)
+		workerDone = coordinator.Done()
+	}
+	handler := localOAuthHandler(localOAuthHandlerConfig{
 		Channel: request.Channel, RedirectURI: redirect.String(), State: state,
 		SetupToken: setupToken, ConfigureOnly: request.ConfigureOnly,
 		Credentials: request.Credentials, InitialApp: app, Send: send,
+		Context: waitCtx, Coordinator: coordinator,
 	})
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	serverErrors := make(chan error, 1)
+	serveDone := make(chan struct{})
 	go func() {
+		defer close(serveDone)
 		serveErr := server.Serve(listener)
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			serverErrors <- serveErr
@@ -302,19 +331,45 @@ func runLocalOAuth(ctx context.Context, request localOAuthRequest) (localOAuthRe
 			_, _ = fmt.Fprintf(request.Stderr, "Unable to open the browser automatically. Open: %s\n", startURL)
 		}
 	}
-	waitCtx, cancel := context.WithTimeout(ctx, request.Timeout)
-	defer cancel()
 	var event localOAuthEvent
 	select {
 	case event = <-events:
+	case <-workerDone:
 	case err = <-serverErrors:
 		event.err = err
+		if coordinator != nil {
+			coordinator.FailService()
+		}
 	case <-waitCtx.Done():
-		event.err = domain.NewError("oauth_timeout", "local OAuth session timed out", 1, nil)
+		event.err = domain.NewError("oauth_timeout", "local OAuth session timed out or was cancelled", 1, nil)
 	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
-	defer shutdownCancel()
-	_ = server.Shutdown(shutdownCtx)
+	if coordinator != nil {
+		if event.err != nil {
+			coordinator.RequestCancel()
+		}
+		<-workerDone
+		view := coordinator.View()
+		event.result = localOAuthResult{Channel: request.Channel, Authorization: coordinator.Result()}
+		if view.Status == "completed" {
+			event.err = nil
+		} else {
+			code := strings.ToLower(view.ErrorCode)
+			if code == "" {
+				code = "authorization_failed"
+			}
+			details := map[string]any{"status": view.Status, "authorization_id": view.AuthorizationID, "sync_required": view.SyncRequired}
+			for key, value := range view.FailureDiagnostics() {
+				details[key] = value
+			}
+			event.err = domain.NewError(code, "authorization did not complete", 1, details)
+		}
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		_ = server.Close()
+	}
+	shutdownCancel()
+	<-serveDone
 	return event.result, event.err
 }
 
@@ -327,10 +382,13 @@ type localOAuthHandlerConfig struct {
 	Credentials   authapplication.CredentialStore
 	InitialApp    domain.OAuthApp
 	Send          func(localOAuthEvent)
+	Context       context.Context
+	Coordinator   *authapplication.RecoveryCoordinator
 }
 
 func localOAuthHandler(config localOAuthHandlerConfig) http.Handler {
 	app := config.InitialApp
+	var appMu sync.Mutex
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/setup", func(writer http.ResponseWriter, request *http.Request) {
 		secureLocalHeaders(writer)
@@ -351,13 +409,15 @@ func localOAuthHandler(config localOAuthHandlerConfig) http.Handler {
 			http.Error(writer, "配置请求无效", http.StatusBadRequest)
 			return
 		}
+		appMu.Lock()
+		defer appMu.Unlock()
 		app = domain.OAuthApp{AppID: strings.TrimSpace(request.Form.Get("app_id")), Secret: strings.TrimSpace(request.Form.Get("secret"))}
 		if !positiveIdentifier(app.AppID) || app.Secret == "" || len(app.Secret) > 512 {
 			writeOAuthSetupPage(writer, config.Channel, config.SetupToken, "请检查 APP ID 和 Secret")
 			return
 		}
 		account, _ := domain.AppCredentialAccount(config.Channel)
-		backend, err := config.Credentials.Write(request.Context(), account, map[string]any{"app_id": app.AppID, "secret": app.Secret})
+		backend, err := config.Credentials.Write(config.Context, account, map[string]any{"app_id": app.AppID, "secret": app.Secret})
 		if err != nil {
 			writeOAuthSetupPage(writer, config.Channel, config.SetupToken, "系统凭据库写入失败")
 			return
@@ -376,27 +436,34 @@ func localOAuthHandler(config localOAuthHandlerConfig) http.Handler {
 			http.Error(writer, "授权请求无效", http.StatusMethodNotAllowed)
 			return
 		}
-		if stateErr := domain.ValidateOAuthCallbackState(request.URL.Query().Get("state"), config.State, config.Channel); stateErr != nil {
-			config.Send(localOAuthEvent{err: stateErr})
-			http.Error(writer, "授权 state 校验失败", http.StatusBadRequest)
-			return
-		}
-		if platformError := strings.TrimSpace(request.URL.Query().Get("error")); platformError != "" {
-			config.Send(localOAuthEvent{err: domain.NewError("oauth_rejected", "official OAuth authorization was not completed", 1, nil)})
-			http.Error(writer, "授权未完成", http.StatusBadRequest)
+		if config.Coordinator == nil {
+			http.Error(writer, "本次会话仅用于应用配置", http.StatusConflict)
 			return
 		}
 		code := strings.TrimSpace(request.URL.Query().Get("auth_code"))
 		if code == "" {
 			code = strings.TrimSpace(request.URL.Query().Get("code"))
 		}
-		if code == "" {
-			config.Send(localOAuthEvent{err: domain.NewError("oauth_code_missing", "OAuth callback code is required", 1, nil)})
-			http.Error(writer, "授权回调缺少 auth_code", http.StatusBadRequest)
+		if err := config.Coordinator.AcceptCallback(request.URL.Query().Get("state"), code, request.URL.Query().Get("error")); err != nil {
+			status := http.StatusForbidden
+			var domainErr *domain.Error
+			if errors.As(err, &domainErr) && domainErr.Code == "authorization_callback_used" {
+				status = http.StatusConflict
+			}
+			http.Error(writer, "授权回调无效、已使用或已失效", status)
 			return
 		}
-		config.Send(localOAuthEvent{result: localOAuthResult{Channel: config.Channel, AuthCode: code}})
-		writeOAuthMessage(writer, "授权成功，可以关闭页面，回到 Codex 继续。")
+		select {
+		case <-config.Coordinator.Done():
+			view := config.Coordinator.View()
+			if view.Status == "completed" {
+				writeOAuthMessage(writer, "授权及账户同步已完成，可以关闭页面，回到会话继续。")
+			} else {
+				writeOAuthMessage(writer, "授权流程已结束，请回到会话查看结果或重新发起。")
+			}
+		case <-request.Context().Done():
+		}
+
 	})
 	return mux
 }
@@ -418,15 +485,7 @@ func validateOAuthRedirect(value string) (*url.URL, string, error) {
 }
 
 func oauthAuthorizeURL(channel, appID, redirectURI, state string) string {
-	base := "https://ad.oceanengine.com/openapi/audit/oauth.html"
-	if channel == "qianchuan" {
-		base = "https://qianchuan.jinritemai.com/openapi/qc/audit/oauth.html"
-	}
-	values := url.Values{"app_id": {appID}, "redirect_uri": {redirectURI}, "state": {state}}
-	if channel == "qianchuan" {
-		values.Set("material_auth", "1")
-	}
-	return base + "?" + values.Encode()
+	return localauth.AuthorizationURL(channel, appID, redirectURI, state)
 }
 
 func readOAuthApp(ctx context.Context, credentials authapplication.CredentialStore, channel string) (domain.OAuthApp, error) {

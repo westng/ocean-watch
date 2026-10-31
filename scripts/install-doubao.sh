@@ -74,9 +74,10 @@ main() {
     exit 1
   fi
 
-  # 更新两个 Skills
+  # 更新已导入的三个渠道 Skills
   update_skill_config "qc-plan-monitor" "$OCEAN_WATCH_ROOT"
   update_skill_config "ads-plan-monitor" "$OCEAN_WATCH_ROOT"
+  update_skill_config "xt-plan-monitor" "$OCEAN_WATCH_ROOT"
 
   echo ""
   echo "✓ 配置完成！"

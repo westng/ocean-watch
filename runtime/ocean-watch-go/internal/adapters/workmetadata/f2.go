@@ -28,6 +28,7 @@ type F2Resolver struct {
 	Entrypoint string
 	Directory  string
 	Timeout    time.Duration
+	Cookie     func(context.Context) (string, error)
 }
 
 type f2Envelope struct {
@@ -51,6 +52,10 @@ type f2Metadata struct {
 			ID   string `json:"product_info_id"`
 			Name string `json:"product_info_name"`
 		} `json:"product"`
+		Products []struct {
+			ID   string `json:"product_info_id"`
+			Name string `json:"product_info_name"`
+		} `json:"products"`
 		Video struct {
 			ID string `json:"video_info_id"`
 		} `json:"video"`
@@ -79,6 +84,15 @@ func (resolver F2Resolver) ResolveMany(
 			arguments = append(arguments, "--work-id", workID)
 		}
 	}
+	var credentialInput []byte
+	if resolver.Cookie != nil {
+		cookie, err := resolver.Cookie(ctx)
+		if err != nil {
+			return portworkmetadata.MetadataResult{}, err
+		}
+		credentialInput, _ = json.Marshal(map[string]string{"cookie": cookie})
+		arguments = append(arguments, "--credentials-stdin")
+	}
 	runtime, err := resolver.Python.ResolveF2(ctx)
 	if err != nil || !runtime.Version.AtLeast(pythonruntime.Version{Major: 3, Minor: 10}) {
 		return portworkmetadata.MetadataResult{}, domain.NewWorkLinkError(
@@ -95,7 +109,15 @@ func (resolver F2Resolver) ResolveMany(
 	if directory := strings.TrimSpace(resolver.Directory); directory != "" {
 		command.Dir = directory
 	}
-	command.Stdin = bytes.NewReader(nil)
+	command.Stdin = bytes.NewReader(credentialInput)
+	if resolver.Cookie != nil {
+		command.Env = make([]string, 0, len(os.Environ()))
+		for _, value := range os.Environ() {
+			if !strings.HasPrefix(value, "OCEAN_WATCH_F2_DOUYIN_COOKIE=") {
+				command.Env = append(command.Env, value)
+			}
+		}
+	}
 	var stdout bytes.Buffer
 	stdoutWriter := &limitedBuffer{buffer: &stdout, limit: MaxF2ResponseBytes}
 	command.Stdout = stdoutWriter
@@ -123,6 +145,9 @@ func (resolver F2Resolver) ResolveMany(
 		Rows: map[string]portworkmetadata.MetadataRow{}, Errors: envelope.Errors,
 		Performance: safeF2Performance(envelope.Performance),
 	}
+	if result.Errors == nil {
+		result.Errors = map[string]portworkmetadata.MetadataError{}
+	}
 	for workID, raw := range envelope.Results {
 		if !seen[workID] {
 			continue
@@ -142,11 +167,18 @@ func (resolver F2Resolver) ResolveMany(
 			ProductID: productID, ProductName: strings.TrimSpace(metadata.Data.Product.Name),
 			Metadata: append([]byte(nil), raw...),
 		}
+		row := result.Rows[workID]
+		for _, product := range metadata.Data.Products {
+			if positiveDecimal(product.ID) {
+				row.Products = append(row.Products, portworkmetadata.MetadataProduct{ID: product.ID, Name: product.Name})
+			}
+		}
+		result.Rows[workID] = row
 	}
 	for _, workID := range workIDs {
 		if _, ok := result.Rows[workID]; !ok {
 			if _, ok := result.Errors[workID]; !ok {
-				result.Errors[workID] = portworkmetadata.MetadataError{Code: "f2_metadata_query_failed", Message: "F2 未返回可用的公开作品元数据"}
+				result.Errors[workID] = portworkmetadata.MetadataError{Code: "f2_incomplete_work_metadata", Message: "F2 未返回完整的作品身份信息"}
 			}
 		}
 	}

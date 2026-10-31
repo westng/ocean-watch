@@ -7,9 +7,10 @@ macOS/Linux：
 ```bash
 skills/ads-plan-monitor/run <domain> <action> [options]
 skills/qc-plan-monitor/run <domain> <action> [options]
+skills/xt-plan-monitor/run <domain> <action> [options]
 ```
 
-Windows 使用对应的 `run.cmd`。两个入口只负责选择当前平台的内置 Go 二进制，命令和 JSON 合同相同。
+Windows 使用对应的 `run.cmd`。三个 Skill 启动器只负责选择当前平台的内置 Go 二进制，命令和 JSON 合同相同。星图 Skill 使用 `--channel star_map`，仅接入授权与账户能力，不能把营销或千川命令当成星图计划 / 报表接口。
 
 完整参数以运行时帮助为准：
 
@@ -65,6 +66,8 @@ Skill 必须原样展示 `rendered_markdown`，保留列顺序、日期范围、
 # 环境和授权
 skills/ads-plan-monitor/run setup doctor
 skills/ads-plan-monitor/run auth authorize --channel marketing --print-url --no-open
+# Replace one existing authorization grant without creating a second identity
+skills/ads-plan-monitor/run auth authorize --channel marketing --authorization-id AUTHORIZATION_ID --print-url --no-open
 skills/qc-plan-monitor/run auth sync-accounts --channel qianchuan
 
 # 负责账户
@@ -77,7 +80,6 @@ skills/qc-plan-monitor/run qc-materials inspect-work --work-url DOUYIN_WORK_URL
 
 # 千川作品计划预检
 skills/qc-plan-monitor/run plans batch-qianchuan-works \
-  --advertiser-id ADVERTISER_ID \
   --plan-template TEMPLATE_ID \
   --work-url DOUYIN_WORK_URL
 
@@ -91,5 +93,9 @@ skills/qc-plan-monitor/run qc-reports products --advertiser-id ADVERTISER_ID --r
 `qc-materials inspect-work` 和 `plans batch-qianchuan-works` 接受普通链接、Markdown 链接或带口令片段的文本。包装层规范化短链并批量调用 F2；F2 只提供公开身份和商品提示。创建前仍以可见抖音号定向查询官方授权达人，校验数字 UID，再按同一达人和模板商品验证作品。
 
 CLI 的批量入口在兼容期内继续接受旧的逐行 `--work-url` 参数并输出弃用提示；新 MCP 入口只接受结构化 `items[]`，不保留旧顶层批次类型或商务字段。CLI 和 MCP 最终都调用同一个批次 Application Service，输入顺序、分组身份、预检快照和安全边界保持一致。兼容参数的移除必须另行记录在版本变更中。
+
+混合商品或账户使用重复 `--work-item` JSON 参数（MCP 使用 `items[]`），每行可指定 `product_id/product_name`、`advertiser_id`、`plan_template`，省略全局 `--plan-template`。入口根据启用模板的商品/账户绑定唯一匹配后，按广告主和模板拆批；歧义、缺少商品或公开元数据包含多个商品的行保留待确认。每个子批次独立核验和生成预检 ID，一个账户失败不阻断其他账户。没有跨账户统一提交 ID，确认后使用 `--submit --preflight-id ID` 逐个提交。字段、示例和流程图见[千川混合商品作品建计划流程](qianchuan-work-routing.md)。
+
+F2 失败时，可在结构化行中补充准确 `creator_douyin_id` 和命名 `creator_name`，由官方定向查询取得唯一数字 UID 后继续归属、商品核验。昵称只用于命名，不能代替身份；未知解析错误不能直接归因为反爬或未授权。
 
 批量成功结果固定展示 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`。跳过、官方查询不完整和失败原因放在表外，空结果也保留表头。

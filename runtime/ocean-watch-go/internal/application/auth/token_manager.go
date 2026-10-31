@@ -112,12 +112,19 @@ func (manager TokenManager) Ensure(ctx context.Context, query TokenQuery) (Token
 	if app.AppID == "" || app.Secret == "" {
 		return TokenLease{}, domain.NewError("oauth_app_missing", "OAuth app_id and secret are required", 2, nil)
 	}
+	if binding.AppID != "" && binding.AppID != app.AppID {
+		return TokenLease{}, domain.NewError("reauthorization_required", "configured OAuth application does not match this grant", 1, nil)
+	}
 	refreshContext, err := WithTokenLease(ctx, tokenLease(binding, credential, false))
 	if err != nil {
 		return TokenLease{}, err
 	}
 	refreshed, err := manager.OAuth.RefreshToken(refreshContext, query.Channel, app, refreshToken)
 	if err != nil {
+		var invalid InvalidRefreshError
+		if errors.As(err, &invalid) && invalid.RequiresReauthorization() {
+			return TokenLease{}, fmt.Errorf("%w: %w", domain.NewError("reauthorization_required", "OAuth refresh token is no longer valid; authorize again", 1, nil), err)
+		}
 		return TokenLease{}, err
 	}
 	updated, err := applyToken(credential, refreshed, now)

@@ -97,6 +97,7 @@ func TestMarketingAuthorizationIsLocalAndWhitelisted(t *testing.T) {
 			AdvertiserID: "1000000000000001", AdvertiserIDAuthorized: boolPointer(true),
 			Authorizations: []authapplication.AuthorizationStatus{{
 				AuthorizationID: "marketing-auth", TokenRevision: 2,
+				AppID: "7777001", AuthorizedUserID: "8888001",
 				HasAccessToken: true, HasRefreshToken: true,
 				AccessTokenExpiresAt: "2026-08-16T12:00:00Z", RefreshTokenExpiresAt: "2026-09-16T12:00:00Z",
 			}},
@@ -107,6 +108,7 @@ func TestMarketingAuthorizationIsLocalAndWhitelisted(t *testing.T) {
 			}},
 			Authorizations: []authapplication.AuthorizationMapping{{
 				AuthorizationID: "marketing-auth", TokenRevision: 2, HasAccessToken: true,
+				AppID: "7777001", AuthorizedUserID: "8888001",
 				HasRefreshToken: true, AdvertiserIDs: []string{"1000000000000001"},
 				AuthorizedAccounts: []authapplication.AuthorizedAccount{{AccountName: secret}},
 			}},
@@ -132,6 +134,12 @@ func TestMarketingAuthorizationIsLocalAndWhitelisted(t *testing.T) {
 	encoded, _ := json.Marshal(output)
 	if bytes.Contains(encoded, []byte(secret)) || bytes.Contains(logs.Bytes(), []byte(secret)) {
 		t.Fatalf("authorization output leaked account details: output=%s logs=%s", encoded, logs.Bytes())
+	}
+	raw, _ := json.Marshal(result.StructuredContent)
+	for _, field := range []string{`"app_id"`, `"authorized_user_id"`, "7777001", "8888001"} {
+		if bytes.Contains(raw, []byte(field)) {
+			t.Fatal("new internal identity fields changed the established MCP output contract")
+		}
 	}
 }
 

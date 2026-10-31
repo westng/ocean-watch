@@ -44,3 +44,4 @@ oceanengine-auth-*.dpapi
 *.bak
 tmp/
 artifacts/
+runtime/ocean-watch-go/.tmp-live-auth/

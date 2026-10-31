@@ -132,6 +132,9 @@ func (proxy *Proxy) ensureSession(ctx context.Context) (*mcp.ClientSession, erro
 		rejectedVersion := candidate.Version
 		restored, restoreErr := proxy.Manager.Reject(ctx, candidate)
 		if restoreErr != nil {
+			if errors.Is(restoreErr, runtimeupdate.ErrNoPreviousRuntime) {
+				proxy.log("runtime_rejected", "unavailable", proxy.now().Sub(started).Milliseconds(), rejectedVersion, "")
+			}
 			return nil, errors.Join(err, fmt.Errorf("restore previous Ocean Watch runtime: %w", restoreErr))
 		}
 		if proxy.current != nil && proxy.current.candidate.SHA256 == restored.SHA256 {

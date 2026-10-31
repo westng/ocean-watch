@@ -67,6 +67,7 @@ type QianchuanPlanRuntime struct {
 	HTTPClient     *http.Client
 	Retry          platformretry.Policy
 	Now            func() time.Time
+	Journals       sharedplans.JournalStore
 }
 
 type qianchuanCreateOptions struct {
@@ -87,6 +88,7 @@ type qianchuanBatchOptions struct {
 	preflightID     string
 	planTemplate    string
 	workURLs        repeatedValues
+	workItems       repeatedValues
 	concurrency     int
 	authAccountID   string
 	includePayloads bool
@@ -187,6 +189,7 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	flags.StringVar(&options.preflightID, "preflight-id", "", "")
 	flags.StringVar(&options.planTemplate, "plan-template", "", "")
 	flags.Var(&options.workURLs, "work-url", "")
+	flags.Var(&options.workItems, "work-item", "")
 	flags.StringVar(&options.planType, "plan-type", "", "")
 	flags.StringVar(&options.business, "business", "", "")
 	flags.IntVar(&options.concurrency, "concurrency", applicationqianchuan.DefaultBatchConcurrency, "")
@@ -205,15 +208,34 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 		if !options.submit {
 			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--preflight-id requires --submit")
 		}
-		if options.planTemplate != "" || len(options.workURLs) != 0 || options.planType != "" || options.business != "" {
-			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--preflight-id cannot be combined with --plan-template, --work-url, --plan-type, or --business")
+		if options.planTemplate != "" || len(options.workURLs) != 0 || len(options.workItems) != 0 || options.planType != "" || options.business != "" {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--preflight-id cannot be combined with --plan-template, --work-url, --work-item, --plan-type, or --business")
 		}
 	} else {
-		if options.planTemplate == "" {
-			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("plan_template is required")
-		}
-		if len(options.workURLs) == 0 {
+		if len(options.workURLs) == 0 && len(options.workItems) == 0 {
 			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("at least one work URL is required")
+		}
+	}
+	items := parseQianchuanBatchItems(options.workURLs, options.planType, options.business)
+	if len(options.workItems) > 0 {
+		if len(options.workURLs) > 0 || options.planType != "" || options.business != "" {
+			return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--work-item cannot be combined with --work-url, --plan-type, or --business")
+		}
+		for index, raw := range options.workItems {
+			var item domainqianchuan.BatchItem
+			decoder := json.NewDecoder(strings.NewReader(raw))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&item); err != nil {
+				return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--work-item requires a structured JSON work row")
+			}
+			if err := decoder.Decode(new(any)); err != io.EOF {
+				return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--work-item must contain exactly one JSON object")
+			}
+			item.InputIndex = index
+			if strings.TrimSpace(item.WorkURL) == "" {
+				return qianchuanBatchOptions{}, applicationqianchuan.BatchWorksCommand{}, errors.New("--work-item requires work_url")
+			}
+			items = append(items, item)
 		}
 	}
 	if options.concurrency < 1 || options.concurrency > applicationworkmetadata.MaxConcurrency {
@@ -222,7 +244,7 @@ func parseQianchuanBatchOptions(args []string) (qianchuanBatchOptions, applicati
 	options.legacyInput = options.preflightID == "" && len(options.workURLs) != 0
 	return options, applicationqianchuan.BatchWorksCommand{
 		PreflightID:  options.preflightID,
-		PlanTemplate: options.planTemplate, Items: parseQianchuanBatchItems(options.workURLs, options.planType, options.business),
+		PlanTemplate: options.planTemplate, Items: items,
 		Concurrency: options.concurrency, AuthAccountID: options.authAccountID,
 		IncludePayloads: options.includePayloads,
 		Submit:          options.submit,
@@ -548,7 +570,9 @@ func (runner Runner) qianchuanCommandService(
 		PythonResolver: runner.PythonResolver, PluginRoot: filesystem.ResolvePluginRoot(runner.Cwd),
 		Reader: runtime.Reader, Writer: runtime.Writer, Credentials: runtime.Credentials,
 		Locker: runtime.Locker, Tokens: runtime.Tokens, Retry: runtime.Retry, Now: runtime.Now,
-		Submit: submit, OnlineRead: onlineRead, BatchReadConcurrency: batchReadConcurrency,
+		Journals:       runtime.Journals,
+		RuntimeVersion: runner.RuntimeVersion,
+		Submit:         submit, OnlineRead: onlineRead, BatchReadConcurrency: batchReadConcurrency,
 	})
 	if err != nil {
 		return nil, err

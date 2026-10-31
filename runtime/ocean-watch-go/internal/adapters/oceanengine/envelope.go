@@ -19,6 +19,21 @@ type EnvelopeError struct {
 	RetryAfter time.Duration
 }
 
+func (err *EnvelopeError) RequiresReauthorization() bool {
+	return err.Code == 40103 || err.Code == 40107
+}
+
+func (err *EnvelopeError) AuthorizationFailureMetadata() (int64, string, int) {
+	return err.Code, err.RequestID, err.HTTPStatus
+}
+
+func (err *EnvelopeError) AuthorizationFailureReason() string {
+	if err.Code != 0 {
+		return "OFFICIAL_API_ERROR"
+	}
+	return "OFFICIAL_HTTP_ERROR"
+}
+
 func (err *EnvelopeError) Error() string {
 	if err.Code != 0 {
 		return fmt.Sprintf("Ocean Engine API business error %d: %s", err.Code, Redact(err.Message))

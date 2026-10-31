@@ -37,6 +37,8 @@ type StatusResult struct {
 
 type AuthorizationStatus struct {
 	AuthorizationID           string `json:"authorization_id"`
+	AppID                     string `json:"app_id,omitempty"`
+	AuthorizedUserID          string `json:"authorized_user_id,omitempty"`
 	TokenRevision             int    `json:"token_revision"`
 	HasAccessToken            bool   `json:"has_access_token"`
 	HasRefreshToken           bool   `json:"has_refresh_token"`
@@ -65,6 +67,8 @@ type AdvertiserMapping struct {
 
 type AuthorizationMapping struct {
 	AuthorizationID    string              `json:"authorization_id"`
+	AppID              string              `json:"app_id,omitempty"`
+	AuthorizedUserID   string              `json:"authorized_user_id,omitempty"`
 	TokenRevision      int                 `json:"token_revision"`
 	HasAccessToken     bool                `json:"has_access_token"`
 	HasRefreshToken    bool                `json:"has_refresh_token"`
@@ -88,6 +92,8 @@ type InspectionResult struct {
 
 type authorizationView struct {
 	ID                    string
+	AppID                 string
+	UserID                string
 	Revision              int
 	HasAccessToken        bool
 	HasRefreshToken       bool
@@ -116,7 +122,7 @@ func (service QueryService) inspect(ctx context.Context, query StatusQuery, read
 	if service.Credentials == nil || service.Authorizations == nil {
 		return InspectionResult{}, errors.New("authorization query dependencies are incomplete")
 	}
-	if query.Channel != "marketing" && query.Channel != "qianchuan" {
+	if _, err := domain.ParseChannel(query.Channel); err != nil {
 		return InspectionResult{}, errors.New("authorization channel is not supported")
 	}
 	if query.AdvertiserID != "" {
@@ -151,6 +157,7 @@ func (service QueryService) inspect(ctx context.Context, query StatusQuery, read
 	for _, view := range views {
 		statusRows = append(statusRows, AuthorizationStatus{
 			AuthorizationID: view.ID, TokenRevision: view.Revision,
+			AppID: view.AppID, AuthorizedUserID: view.UserID,
 			HasAccessToken: view.HasAccessToken, HasRefreshToken: view.HasRefreshToken,
 			AccessTokenExpiresAt:      view.AccessTokenExpiresAt,
 			RefreshTokenExpiresAt:     view.RefreshTokenExpiresAt,
@@ -161,6 +168,7 @@ func (service QueryService) inspect(ctx context.Context, query StatusQuery, read
 		if query.AdvertiserID == "" || queryContains(view.AdvertiserIDs, query.AdvertiserID) {
 			mappingRows = append(mappingRows, AuthorizationMapping{
 				AuthorizationID: view.ID, TokenRevision: view.Revision,
+				AppID: view.AppID, AuthorizedUserID: view.UserID,
 				HasAccessToken: view.HasAccessToken, HasRefreshToken: view.HasRefreshToken,
 				PendingAccountSync: view.PendingAccountSync,
 				AdvertiserIDs:      append([]string(nil), view.AdvertiserIDs...),
@@ -196,7 +204,12 @@ func (service QueryService) inspect(ctx context.Context, query StatusQuery, read
 		AdvertiserID: query.AdvertiserID,
 	}
 	if query.AdvertiserID != "" {
-		authorized := len(queryStringList(advertiserIndex[query.AdvertiserID])) != 0
+		authorized := false
+		for _, view := range views {
+			if !view.PendingAccountSync && queryContains(view.AdvertiserIDs, query.AdvertiserID) {
+				authorized = true
+			}
+		}
 		status.AdvertiserIDAuthorized = &authorized
 	}
 	return InspectionResult{
@@ -232,6 +245,7 @@ func (service QueryService) authorizationViews(
 		}
 		views = append(views, authorizationView{
 			ID: authorizationID, Revision: revision,
+			AppID: queryCredentialValue(metadata, "app_id"), UserID: queryCredentialValue(metadata, "authorized_user_id"),
 			HasAccessToken:        queryCredentialValue(token, "access_token") != "",
 			HasRefreshToken:       queryCredentialValue(token, "refresh_token") != "",
 			AccessTokenExpiresAt:  queryCredentialValue(token, "access_token_expires_at"),

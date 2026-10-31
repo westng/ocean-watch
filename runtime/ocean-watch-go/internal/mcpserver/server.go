@@ -19,8 +19,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/localauth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/f2config"
 	applicationmaterials "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/materials"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	applicationqianchuanread "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/qianchuan"
@@ -43,13 +45,12 @@ type ManagedAccountReader interface {
 	Read(context.Context) (domain.AccountBook, error)
 }
 
-type QianchuanAuthorizationReader interface {
+type AuthorizationReader interface {
 	Inspect(context.Context, authapplication.StatusQuery) (authapplication.InspectionResult, error)
 }
 
-type MarketingAuthorizationReader interface {
-	Inspect(context.Context, authapplication.StatusQuery) (authapplication.InspectionResult, error)
-}
+type QianchuanAuthorizationReader = AuthorizationReader
+type MarketingAuthorizationReader = AuthorizationReader
 
 type MarketingMaterialService interface {
 	QueryVideos(context.Context, applicationmaterials.VideoQuery) (applicationmaterials.VideoResult, error)
@@ -75,19 +76,22 @@ type QianchuanReportService interface {
 }
 
 type Runtime struct {
-	Query               applicationtemplates.Query
-	ManagedAccounts     ManagedAccountReader
-	MarketingAuth       MarketingAuthorizationReader
-	MarketingMaterials  MarketingMaterialService
-	MarketingReports    MarketingReportService
-	QianchuanAuth       QianchuanAuthorizationReader
-	QianchuanReads      QianchuanReadService
-	QianchuanReports    QianchuanReportService
-	QianchuanPreflights QianchuanPreflightService
-	LogWriter           io.Writer
-	Now                 func() time.Time
-	RequestID           func() string
-	Forward             mcp.ToolHandler
+	Query                 applicationtemplates.Query
+	ManagedAccounts       ManagedAccountReader
+	MarketingAuth         MarketingAuthorizationReader
+	MarketingMaterials    MarketingMaterialService
+	MarketingReports      MarketingReportService
+	QianchuanAuth         QianchuanAuthorizationReader
+	StarMapAuth           AuthorizationReader
+	QianchuanReads        QianchuanReadService
+	QianchuanReports      QianchuanReportService
+	QianchuanPreflights   QianchuanPreflightService
+	AuthorizationRecovery authapplication.Recovery
+	F2Configuration       f2config.Configuration
+	LogWriter             io.Writer
+	Now                   func() time.Time
+	RequestID             func() string
+	Forward               mcp.ToolHandler
 }
 
 type toolFailure struct {
@@ -212,6 +216,7 @@ func RunManaged(ctx context.Context, version string) error {
 	qianchuanRuntime, err := bootstrap.NewQianchuanRuntime(bootstrap.QianchuanOptions{
 		Config: store, StateRoot: stateRoot,
 		CredentialStore: credentialStore,
+		RuntimeVersion:  version,
 		PythonResolver:  python.Resolver{Getenv: os.Getenv}, PluginRoot: filesystem.ResolvePluginRoot(runtimeRoot),
 		OnlineRead: true, BatchReadConcurrency: 10,
 	})
@@ -224,17 +229,27 @@ func RunManaged(ctx context.Context, version string) error {
 	if err != nil {
 		return err
 	}
+	recovery, err := bootstrap.NewAuthorizationRecovery(ctx, stateRoot, credentialStore)
+	if err != nil {
+		return err
+	}
+	defer recovery.Close()
+	f2Configuration := localauth.NewF2(ctx, localauth.F2Options{Settings: f2config.Settings{Store: credentials.SystemStore{}}})
+	defer f2Configuration.Close()
 	runtime := Runtime{
-		Query:               applicationtemplates.Query{Store: store, VersionedStore: store},
-		ManagedAccounts:     filesystem.AccountStore{Path: store.Path},
-		MarketingAuth:       marketingRuntime.Auth,
-		MarketingMaterials:  marketingRuntime.Materials,
-		MarketingReports:    marketingRuntime.Reports,
-		QianchuanAuth:       qianchuanRuntime.Auth,
-		QianchuanReads:      qianchuanRuntime.Reads,
-		QianchuanReports:    qianchuanRuntime.Reports,
-		QianchuanPreflights: qianchuanRuntime.Preflights,
-		LogWriter:           os.Stderr,
+		Query:                 applicationtemplates.Query{Store: store, VersionedStore: store},
+		ManagedAccounts:       filesystem.AccountStore{Path: store.Path},
+		MarketingAuth:         marketingRuntime.Auth,
+		MarketingMaterials:    marketingRuntime.Materials,
+		MarketingReports:      marketingRuntime.Reports,
+		QianchuanAuth:         qianchuanRuntime.Auth,
+		StarMapAuth:           authapplication.QueryService{Credentials: credentialStore, Authorizations: filesystem.AuthorizationStore{Root: stateRoot}},
+		QianchuanReads:        qianchuanRuntime.Reads,
+		QianchuanReports:      qianchuanRuntime.Reports,
+		QianchuanPreflights:   qianchuanRuntime.Preflights,
+		AuthorizationRecovery: recovery,
+		F2Configuration:       f2Configuration,
+		LogWriter:             os.Stderr,
 	}
 	server := runtime.NewServer(version)
 	err = server.Run(ctx, &mcp.StdioTransport{})
@@ -257,6 +272,9 @@ func retainManagedEnvironment(
 	}
 	if runtime.GOOS == "windows" {
 		names = append(names, "SystemRoot", "WINDIR")
+	}
+	if runtime.GOOS == "linux" {
+		names = append(names, "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")
 	}
 	values := make(map[string]string, len(names))
 	for _, name := range names {
@@ -284,6 +302,9 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 			Capabilities: &mcp.ServerCapabilities{},
 		},
 	)
+	runtime.addAuthorizationTools(server)
+	runtime.addF2ConfigurationTools(server)
+	runtime.addStarMapTools(server)
 	readOnly, closedWorld := false, false
 	annotations := &mcp.ToolAnnotations{
 		DestructiveHint: &readOnly, IdempotentHint: true,
@@ -317,7 +338,7 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	}
 	addCapabilityTool(server, "qianchuan.work_preflight", &mcp.Tool{
 		Name: "preflight_qianchuan_works", Annotations: preflightAnnotations,
-		Description: "当用户给出千川商品全域模板和抖音作品链接，需要校验授权、归属、商品匹配并决定新建或追加计划时调用。不会创建或修改计划，但会读取官方接口、必要时刷新授权并保存短期本地预检快照。",
+		Description: "预检单个或多个抖音作品的千川商品全域计划。可指定整批模板，或在每行提供商品ID、商品名称、广告主或模板，唯一匹配后按账户和模板拆批；无法确定的行返回 pending。支持补充准确达人抖音号及命名昵称。不会创建或修改计划，每个子批次独立保存预检快照。",
 		InputSchema: json.RawMessage(preflightInputSchema), OutputSchema: json.RawMessage(preflightOutputSchema),
 	}, runtime.handler(withUnboundedRequestBudget(runtime.preflightQianchuanWorks)))
 	getPreflightAnnotations := *annotations

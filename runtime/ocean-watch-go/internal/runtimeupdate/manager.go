@@ -25,6 +25,14 @@ const (
 	marketplaceName = "ocean-watch"
 )
 
+// ErrNoPreviousRuntime indicates that a candidate was rejected but no
+// previously validated runtime is available for an immediate rollback.
+var ErrNoPreviousRuntime = errors.New("no previous Ocean Watch runtime is available")
+
+// ErrNoUsableRuntime indicates that every validated candidate is currently
+// rejected or unavailable, so the proxy must fail closed.
+var ErrNoUsableRuntime = errors.New("no usable Ocean Watch runtime is available")
+
 var requiredResources = []string{
 	".mcp.json",
 	"bin/ocean-watch-launcher",
@@ -33,6 +41,8 @@ var requiredResources = []string{
 	"skills/ads-plan-monitor/run",
 	"skills/qc-plan-monitor/SKILL.md",
 	"skills/qc-plan-monitor/run",
+	"skills/xt-plan-monitor/SKILL.md",
+	"skills/xt-plan-monitor/run",
 }
 
 type Manifest struct {
@@ -135,14 +145,14 @@ func (manager Manager) resolveLocked(ctx context.Context) (Candidate, error) {
 	switch {
 	case installedErr == nil && installed.SHA256 != state.RejectedSHA256 && manager.acceptInstalled(ctx, state.Current, installed):
 		selected = installed
-	case recordedCurrentErr == nil:
+	case recordedCurrentErr == nil && recordedCurrent.SHA256 != state.RejectedSHA256:
 		selected = recordedCurrent
-	case installedErr == nil:
+	case installedErr == nil && installed.SHA256 != state.RejectedSHA256:
 		selected = installed
-	case fallbackErr == nil:
+	case fallbackErr == nil && fallback.SHA256 != state.RejectedSHA256:
 		selected = fallback
 	default:
-		return Candidate{}, errors.Join(discoveryErr, installedErr, fallbackErr)
+		return Candidate{}, errors.Join(ErrNoUsableRuntime, discoveryErr, installedErr, fallbackErr)
 	}
 
 	if !sameCandidateIdentity(selected, state.Current) {
@@ -171,7 +181,7 @@ func (manager Manager) resolveLocked(ctx context.Context) (Candidate, error) {
 
 func (manager Manager) canReuseLocalState(state State) bool {
 	if state.SchemaVersion != 2 || state.Current.Version == "" || !manager.isRuntimeSlot(state.Current) ||
-		manager.quickValidateRecorded(state.Current) != nil {
+		state.Current.SHA256 == state.RejectedSHA256 || manager.quickValidateRecorded(state.Current) != nil {
 		return false
 	}
 	payload, err := readRegularFile(filepath.Join(manager.PluginRoot, ".codex-plugin", "runtime-manifest.json"))
@@ -189,7 +199,7 @@ func (manager Manager) canReuseState(
 	discoveryErr error,
 ) bool {
 	if state.SchemaVersion != 2 || state.Current.Version == "" || !manager.isRuntimeSlot(state.Current) ||
-		manager.quickValidateRecorded(state.Current) != nil {
+		state.Current.SHA256 == state.RejectedSHA256 || manager.quickValidateRecorded(state.Current) != nil {
 		return false
 	}
 	if discoveryErr != nil || installedVersion != state.Current.Version {
@@ -333,7 +343,12 @@ func (manager Manager) Reject(ctx context.Context, rejected Candidate) (Candidat
 		return current, nil
 	}
 	if state.Previous == nil {
-		return Candidate{}, errors.New("no previous Ocean Watch runtime is available")
+		state.RejectedSHA256 = rejected.SHA256
+		state.UpdatedAt = manager.now().UTC().Format(time.RFC3339)
+		if err := manager.writeState(state); err != nil {
+			return Candidate{}, err
+		}
+		return state.Current, ErrNoPreviousRuntime
 	}
 	previous, err := manager.validateRecordedCandidate(ctx, *state.Previous)
 	if err != nil {

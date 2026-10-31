@@ -86,6 +86,26 @@ func TestParseQianchuanBatchPreflightIDIsSubmitOnlyAndExclusive(t *testing.T) {
 	}
 }
 
+func TestStructuredQianchuanWorkItemsSupportMixedProductAccounts(t *testing.T) {
+	_, command, err := parseQianchuanBatchOptions([]string{
+		"--work-item", `{"work_url":"https://v.douyin.com/a/","product_name":"血橙","creator_douyin_id":"creator","creator_name":"昵称"}`,
+		"--work-item", `{"work_url":"https://v.douyin.com/b/","product_id":"5002","advertiser_id":"1002","plan_template":"qcpt_second"}`,
+	})
+	if err != nil || command.PlanTemplate != "" || len(command.Items) != 2 || command.Items[0].ProductName != "血橙" || command.Items[1].AdvertiserID != "1002" || command.Items[1].InputIndex != 1 {
+		t.Fatalf("mixed structured input lost: command=%#v err=%v", command, err)
+	}
+	for _, args := range [][]string{
+		{"--work-item", `{"work_url":"https://v.douyin.com/a/"}`, "--work-url", "https://v.douyin.com/b/"},
+		{"--work-item", `{"work_url":"https://v.douyin.com/a/","unexpected":true}`},
+		{"--work-item", `{"work_url":"https://v.douyin.com/a/"} {}`},
+		{"--submit", "--preflight-id", "qianchuan-preflight-20261030t010000-abcdef123456", "--work-item", `{"work_url":"https://v.douyin.com/a/"}`},
+	} {
+		if _, _, err := parseQianchuanBatchOptions(args); err == nil {
+			t.Fatalf("invalid structured arguments accepted: %#v", args)
+		}
+	}
+}
+
 func TestRunnerRoutesQianchuanPlanActionsWithoutMarketing(t *testing.T) {
 	manifest := qianchuanPlanGoManifest(t, "plans create-qianchuan")
 	qianchuan := &qianchuanPlanCommandServiceStub{createResult: applicationqianchuan.CreateCommandResult{

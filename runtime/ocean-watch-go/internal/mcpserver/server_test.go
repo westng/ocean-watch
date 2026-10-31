@@ -60,12 +60,19 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listedTools.Tools) != 18 || listedTools.Tools[0].Annotations == nil {
+	if len(listedTools.Tools) != 26 || listedTools.Tools[0].Annotations == nil {
 		t.Fatalf("unexpected tools: %#v", listedTools.Tools)
 	}
 	wantAnnotations := map[string]struct {
 		readOnly, idempotent, openWorld bool
 	}{
+		"start_authorization":                {readOnly: false, idempotent: false, openWorld: true},
+		"start_f2_configuration":             {readOnly: false, idempotent: false},
+		"get_f2_configuration_session":       {readOnly: true, idempotent: true},
+		"cancel_f2_configuration_session":    {readOnly: false, idempotent: false},
+		"start_account_sync":                 {readOnly: false, idempotent: false, openWorld: true},
+		"get_authorization_session":          {readOnly: true, idempotent: true},
+		"cancel_authorization_session":       {readOnly: false, idempotent: false, openWorld: true},
 		"list_templates":                     {readOnly: true, idempotent: true},
 		"get_template":                       {readOnly: true, idempotent: true},
 		"get_capabilities":                   {readOnly: true, idempotent: true},
@@ -80,6 +87,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 		"report_qianchuan_uni_account":       {readOnly: false, idempotent: false, openWorld: true},
 		"report_qianchuan_plans":             {readOnly: false, idempotent: false, openWorld: true},
 		"get_marketing_authorization":        {readOnly: true, idempotent: true},
+		"get_star_map_authorization":         {readOnly: true, idempotent: true},
 		"search_marketing_videos":            {readOnly: false, idempotent: false, openWorld: true},
 		"search_marketing_creator_materials": {readOnly: false, idempotent: false, openWorld: true},
 		"report_marketing_materials":         {readOnly: false, idempotent: false, openWorld: true},

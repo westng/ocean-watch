@@ -62,7 +62,7 @@ func TestCapabilityRegistryMapsEveryTransportExactlyOnce(t *testing.T) {
 			t.Fatalf("submit contract drift: %#v", spec)
 		}
 	}
-	if len(seenCommands) != 77 || len(seenTools) != 18 {
+	if len(seenCommands) != 77 || len(seenTools) != 26 {
 		t.Fatalf("transport inventory changed: commands=%d tools=%d", len(seenCommands), len(seenTools))
 	}
 }
@@ -119,7 +119,7 @@ func TestFastRouteFixtureAndSkillTablesMatchRegistry(t *testing.T) {
 		}
 	}
 	root := filepath.Join(filepath.Dir(source), "..", "..", "..", "..")
-	for _, skill := range []string{"ads-plan-monitor", "qc-plan-monitor"} {
+	for _, skill := range []string{"ads-plan-monitor", "qc-plan-monitor", "xt-plan-monitor"} {
 		content, err := os.ReadFile(filepath.Join(root, "skills", skill, "SKILL.md"))
 		if err != nil {
 			t.Fatal(err)

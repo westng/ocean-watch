@@ -21,6 +21,13 @@ type OAuthToken struct {
 	RequestID       string
 }
 
+// AuthorizedUser is the provider identity that owns a grant. Do not retain
+// email, scope lists, raw user responses, or credential values in this record.
+type AuthorizedUser struct {
+	ID    string
+	AppID string
+}
+
 func BuildOAuthState(channel, nonce string) (string, error) {
 	code, err := oauthStateCode(channel)
 	if err != nil {

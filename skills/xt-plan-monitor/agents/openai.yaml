@@ -1,0 +1,10 @@
+interface:
+  display_name: "巨量星图账号助手"
+  short_description: "星图独立渠道授权恢复、账户同步、负责账号与本地授权映射"
+  default_prompt: "Use $xt-plan-monitor to manage Star Map authorization and accounts through Ocean Watch MCP, keeping the star_map channel isolated and reporting unsupported plan or report requests accurately."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "ocean-watch"
+      description: "Ocean Watch Star Map authorization and managed-account tools"
+      transport: "stdio"

@@ -43,6 +43,26 @@ type AdvertiserSyncResult struct {
 	SyncedAt           string
 }
 
+type accountSnapshotFailure struct {
+	reason string
+	cause  error
+}
+
+func (err *accountSnapshotFailure) Error() string                      { return "authorization account snapshot failed" }
+func (err *accountSnapshotFailure) Unwrap() error                      { return err.cause }
+func (err *accountSnapshotFailure) AuthorizationFailureReason() string { return err.reason }
+
+func accountSyncFailure(reason string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var classified authorizationFailureReason
+	if errors.As(err, &classified) && allowedAuthorizationFailureReason(classified.AuthorizationFailureReason()) {
+		return err
+	}
+	return &accountSnapshotFailure{reason: reason, cause: err}
+}
+
 func (syncer AdvertiserSnapshotSync) Sync(
 	ctx context.Context,
 	query AdvertiserSyncQuery,
@@ -57,32 +77,47 @@ func (syncer AdvertiserSnapshotSync) Sync(
 	if err != nil {
 		return AdvertiserSyncResult{}, err
 	}
+	return syncer.syncLease(ctx, lease, query.RebindExisting)
+}
+
+// syncLease is shared by a newly saved grant and explicit account sync. It does
+// not acquire a token lock; the caller either owns it or obtained a lease from
+// TokenManager. Activation rejects an obsolete credential revision in both cases.
+func (syncer AdvertiserSnapshotSync) syncLease(ctx context.Context, lease TokenLease, rebindExisting bool) (AdvertiserSyncResult, error) {
+	if syncer.Authorizations == nil || syncer.Discovery == nil || lease.TokenRevision < 1 {
+		return AdvertiserSyncResult{}, errors.New("account synchronization dependencies are incomplete")
+	}
 	requestContext, err := WithTokenLease(ctx, lease)
 	if err != nil {
 		return AdvertiserSyncResult{}, err
 	}
-	snapshot, err := syncer.Discovery.Discover(requestContext, query.Channel, lease.AccessToken)
+	snapshot, err := syncer.Discovery.Discover(requestContext, lease.Channel, lease.AccessToken)
 	if err != nil {
-		return AdvertiserSyncResult{}, fmt.Errorf("discover complete advertiser snapshot: %w", err)
+		return AdvertiserSyncResult{}, fmt.Errorf("discover complete advertiser snapshot: %w", accountSyncFailure("ACCOUNT_DISCOVERY_FAILED", err))
 	}
 	if err := validateAdvertiserSnapshot(snapshot); err != nil {
-		return AdvertiserSyncResult{}, err
+		return AdvertiserSyncResult{}, accountSyncFailure("ACCOUNT_SNAPSHOT_INVALID", err)
 	}
 	now := time.Now().UTC()
 	if syncer.Now != nil {
 		now = syncer.Now().UTC()
 	}
 	syncedAt := now.Format(time.RFC3339Nano)
-	err = syncer.Authorizations.UpdateChannel(ctx, query.Channel, func(candidate map[string]any) error {
+	err = syncer.Authorizations.UpdateChannel(ctx, lease.Channel, func(candidate map[string]any) error {
+		metadata := configuration.Object(configuration.Object(candidate["authorizations"])[lease.AuthorizationID])
+		revision, err := positiveInteger(metadata["token_revision"], 1)
+		if err != nil || revision != lease.TokenRevision {
+			return errors.New("authorization credential changed during account discovery")
+		}
 		return activateAdvertiserSnapshot(
-			candidate, lease.AuthorizationID, snapshot, query.RebindExisting, syncedAt,
+			candidate, lease.AuthorizationID, snapshot, rebindExisting, syncedAt,
 		)
 	})
 	if err != nil {
-		return AdvertiserSyncResult{}, fmt.Errorf("activate advertiser snapshot: %w", err)
+		return AdvertiserSyncResult{}, fmt.Errorf("activate advertiser snapshot: %w", accountSyncFailure("ACCOUNT_ACTIVATION_FAILED", err))
 	}
 	return AdvertiserSyncResult{
-		Channel: query.Channel, AuthorizationID: lease.AuthorizationID,
+		Channel: lease.Channel, AuthorizationID: lease.AuthorizationID,
 		AuthorizedAccounts: len(snapshot.Accounts),
 		AdvertiserIDs:      append([]string(nil), snapshot.AdvertiserIDs...),
 		DiscoveryIssues:    append([]domain.AccountDiscoveryIssue(nil), snapshot.DiscoveryIssues...),
@@ -112,7 +147,7 @@ func activateAdvertiserSnapshot(
 		}
 	}
 	if len(conflicts) != 0 && !rebindExisting {
-		return fmt.Errorf("authorized accounts already belong to another authorization: %v", sortedConflictKeys(conflicts))
+		return accountSyncFailure("ACCOUNT_MAPPING_CONFLICT", fmt.Errorf("authorized accounts already belong to another authorization: %v", sortedConflictKeys(conflicts)))
 	}
 	if len(conflicts) != 0 {
 		for accountID, owner := range conflicts {

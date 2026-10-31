@@ -69,7 +69,7 @@ try {
 
   const catalog = await ctx.skills.list({ cwd: state });
   const names = catalog.filter((item) => item.provider === 'ocean-watch').map((item) => item.name).sort();
-  assert.deepEqual(names, ['ads-plan-monitor', 'qc-plan-monitor']);
+  assert.deepEqual(names, ['ads-plan-monitor', 'qc-plan-monitor', 'xt-plan-monitor']);
   assert.ok(catalog.some((item) => item.name === 'host-fixture'), 'Existing host skills must remain available');
   for (const name of names) {
     const skill = await ctx.skills.get(name, { cwd: state });
@@ -78,7 +78,7 @@ try {
   }
 
   const tools = ctx.tools.schemas().filter((item) => item.name.startsWith('mcp__ocean-watch__'));
-  assert.equal(tools.length, 18, 'Harness must register the entire MCP tool catalog');
+  assert.equal(tools.length, 26, 'Harness must register the entire MCP tool catalog');
   for (const channel of ['marketing', 'qianchuan', 'star_map', 'shared', 'all']) {
     const result = await ctx.tools.execute({
       signal: AbortSignal.timeout(30_000), callId: `ocean-watch-harness-probe-${channel}`,

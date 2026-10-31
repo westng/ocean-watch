@@ -62,7 +62,7 @@ func TestProxyInitializesRuntimeOnlyWhenAToolIsCalled(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 18 || connections.Load() != 0 {
+	if err != nil || len(listed.Tools) != 26 || connections.Load() != 0 {
 		t.Fatalf("handshake must expose the stable catalog without preparing a runtime: tools=%v connections=%d err=%v", listed, connections.Load(), err)
 	}
 	for range 2 {
@@ -193,6 +193,68 @@ func assertProxyHostVersion(t *testing.T, hostRoot, version string) {
 	}
 	if err := json.Unmarshal(payload, &plugin); err != nil || plugin.Version != version {
 		t.Fatalf("Host version=%q want=%q err=%v", plugin.Version, version, err)
+	}
+}
+
+func TestProxyRejectsFirstRuntimeContractMismatchWithoutRetryingIt(t *testing.T) {
+	root := t.TempDir()
+	cacheRoot := filepath.Join(root, "codex", "plugins", "cache", "ocean-watch", "ocean-watch")
+	source := writeProxyCandidate(t, cacheRoot, "1.0.9+codex.bad", "1.0.9+codex.bad", "bad")
+	hostRoot := filepath.Join(cacheRoot, "1.0.9+codex.host")
+	if err := os.Symlink(source.PluginRoot, hostRoot); err != nil {
+		t.Fatal(err)
+	}
+	manager := runtimeupdate.Manager{
+		CodexRoot: filepath.Join(root, "codex"), PluginRoot: hostRoot,
+		GOOS: "linux", GOARCH: "amd64", AlwaysDiscover: true,
+		Discover: func() (string, string, error) {
+			return source.PluginRoot, source.Version, nil
+		},
+		ProbeVersion: func(_ context.Context, path string) ([]byte, error) {
+			payload, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(path)), "runtime-manifest.json"))
+			if err != nil {
+				return nil, err
+			}
+			var manifest runtimeupdate.Manifest
+			if err := json.Unmarshal(payload, &manifest); err != nil {
+				return nil, err
+			}
+			return []byte("ocean-watch " + strings.SplitN(manifest.Version, "+", 2)[0]), nil
+		},
+	}
+	var connections atomic.Int32
+	proxy := &Proxy{Manager: manager, Connect: func(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
+		connections.Add(1)
+		clientTransport, serverTransport := mcp.NewInMemoryTransports()
+		server := Runtime{}.NewServer(candidate.Version)
+		if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
+			return nil, nil, err
+		}
+		client := mcp.NewClient(&mcp.Implementation{Name: "proxy-first-connect-test", Version: "1"}, nil)
+		session, err := client.Connect(ctx, clientTransport, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		listed, err := session.ListTools(ctx, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		listed.Tools = listed.Tools[:len(listed.Tools)-1]
+		return session, listed.Tools, nil
+	}}
+	defer proxy.Close()
+	if _, err := proxy.ensureSession(context.Background()); err == nil {
+		t.Fatal("first contract mismatch unexpectedly initialized a runtime")
+	}
+	state, err := manager.Status()
+	if err != nil || state.RejectedSHA256 == "" || state.RejectedSHA256 != state.Current.SHA256 {
+		t.Fatalf("first mismatch was not persisted as rejected: state=%#v err=%v", state, err)
+	}
+	if _, err := proxy.ensureSession(context.Background()); err == nil {
+		t.Fatal("rejected runtime was retried instead of failing closed")
+	}
+	if connections.Load() != 1 {
+		t.Fatalf("rejected runtime was connected %d times", connections.Load())
 	}
 }
 
@@ -397,6 +459,8 @@ func writeProxyHostResources(t *testing.T, pluginRoot string) map[string]string 
 		"skills/ads-plan-monitor/run":      []byte("ads run"),
 		"skills/qc-plan-monitor/SKILL.md":  []byte("qc skill"),
 		"skills/qc-plan-monitor/run":       []byte("qc run"),
+		"skills/xt-plan-monitor/SKILL.md":  []byte("xt skill"),
+		"skills/xt-plan-monitor/run":       []byte("xt run"),
 	}
 	hashes := make(map[string]string, len(resources))
 	for relative, payload := range resources {

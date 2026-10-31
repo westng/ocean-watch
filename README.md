@@ -4,11 +4,12 @@
 
 <h1 align="center">ocean-watch</h1>
 
-<p align="center">面向 Codex、Claude Code、DeepSeek Harness 与豆包工作的巨量营销与巨量千川一体化投放管理、数据报表与监控分析 Plugin</p>
+<p align="center">面向 Codex、Claude Code、DeepSeek Harness、豆包工作与 WorkBuddy 的营销与千川投放工具，以及星图账号授权管理</p>
 
 <p align="center">
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-Plugin-111827" alt="Codex Plugin"></a>
   <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-Plugin-D97757" alt="Claude Code Plugin"></a>
+  <a href="hosts/workbuddy/README.md"><img src="https://img.shields.io/badge/WorkBuddy-MCP_%2B_Skills-2563EB" alt="WorkBuddy MCP and Skills"></a>
   <a href="skills/"><img src="https://img.shields.io/badge/Doubao_Work-Skills-1677FF" alt="Doubao Work Skills"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-Runtime-00ADD8?logo=go&amp;logoColor=white" alt="Go Runtime"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-5A67D8" alt="MCP stdio"></a>
@@ -36,52 +37,50 @@
 
 中文 | [English](README.en-US.md)
 
-Ocean Watch 让投放人员直接在 Codex、Claude Code、DeepSeek Harness 或豆包工作中用自然语言管理巨量营销与巨量千川。它通过巨量引擎官方 API 完成授权、账户、素材、模板、计划、报表和投放分析，并在任何在线写入前展示预检结果、等待明确确认。同一仓库同时作为四个 Host 的 Plugin 分发，共用一套 Go Runtime、一份本地状态和同一组 Skill。
+Ocean Watch 通过巨量引擎官方 API 提供授权、账户、素材、模板、计划、报表和投放分析。AI 助手使用营销、千川、星图三个渠道 Skill 理解业务目标，本地 MCP 与 CLI 共用一套 Go 业务核心、状态和凭据，计划写入默认只预检。
+
+本页描述当前源码，包括[未发布改动](CHANGELOG.md#未发布)；已发布版本见 [Releases](https://github.com/westng/ocean-watch/releases)。V3 的部分能力已落地，完整架构目标和各宿主业务验收仍在推进。
 
 ## 能做什么
 
-| Skill | 渠道 | 主要能力 |
+| 入口 | 渠道 | 主要能力 |
 | --- | --- | --- |
-| `ads-plan-monitor` | 巨量营销 | OAuth、授权广告主同步、负责账户、上传与达人授权素材、模板、计划、报表和策略分析 |
-| `qc-plan-monitor` | 巨量千川 | OAuth、授权广告主同步、负责账户、商品与直播模板、达人作品、全域计划、全域与乘方报表 |
-| Runtime `star_map` 渠道 | 巨量星图 | OAuth、星图账户授权同步和本地授权状态；星图计划与报表 API 尚未接入 |
+| [ads-plan-monitor](skills/ads-plan-monitor/SKILL.md) | 巨量营销 | OAuth、授权广告主同步、负责账户、上传与达人授权素材、模板、计划、报表和策略分析 |
+| [qc-plan-monitor](skills/qc-plan-monitor/SKILL.md) | 巨量千川 | OAuth、授权广告主同步、负责账户、商品与直播模板、达人作品、全域计划、全域与乘方报表 |
+| [xt-plan-monitor](skills/xt-plan-monitor/SKILL.md) | 巨量星图 | 独立渠道 Skill：OAuth、授权恢复、星图账户同步、负责账号与本地授权映射；星图计划与报表 API 尚未接入 |
 
-两个 Skill 共用一套 Go 业务实现，但渠道凭据、授权用户、广告主、模板、素材和写入事务严格隔离。
+营销、千川和星图分别管理应用、授权和账户映射，不跨渠道复用凭据或业务模板。
+
+`xt-plan-monitor` 是星图 Skill 的对外名称，`star_map` 是其运行时渠道键。三个 Skill 都按统一能力合同调用共享 Go Core，星图账号使用 `star_account` 类型。
+
+当前能力目录包含 **77 条 CLI 能力和 26 个 MCP 工具**，两者有重叠。MCP 提供本地查询、官方素材与报表读取、千川作品预检，以及授权、账户同步和 F2 本机配置；计划创建、素材变更、预算、ROI、出价与状态调整仍使用 CLI。**WorkBuddy 当前仅接入 MCP 能力，不通过 Shell 补执行 CLI 写入。** 新增的三项 F2 工具已在 WorkBuddy 核实原生发现与连接，其他宿主需重新加载声明并分别验收。
 
 ### 当前功能支持
 
-以下按宿主 / 接入平台列出，而非广告业务渠道。“已实现接入”表示仓库已有适配资源，不代表当前 V3 已通过该宿主及全部操作系统的实际验收。
+以下状态核实于 **2026-10-30**。提供适配资源、发现工具和完成真实业务验收是不同范围，不能相互替代。
 
 | 宿主 / 平台 | 功能与接入方式 | 支持状态 | 限制与验收 |
 | --- | --- | --- | --- |
-| Codex | Plugin + 两个 Skill + 本地 MCP，调用共享 Go 核心的查询、报表与批量预检能力 | 已实现接入；V3 待验收 | 当前 Plugin/MCP 使用 macOS/Linux 启动器；工具或 Skill 合同变化后需新建任务 |
-| Claude Code | Plugin + 两个 Skill + 本地 MCP，调用同一套业务能力 | 已实现接入；V3 待验收 | 使用独立 Claude Plugin 清单；更新插件后需新建任务，不承诺同会话自动热升级 |
-| DeepSeek Harness | 原生组合包 + 两个 Skill + 本地 MCP | 已实现接入；V3 桌面验收待完成 | peer 声明限定桌面版 `0.2.0-rc.2`；历史桌面验收不代表当前 V3 已通过 |
-| 豆包工作 | 两个 Skill + 本地 MCP 路径配置，复用已安装的 Go Runtime | 已提供适配脚本；V3 待验收 | 当前脚本面向 macOS Apple Silicon，配置已有的用户 Skill；其他平台与真实发现需另行验收 |
-| WorkBuddy | 规划通过 Connector + Skill + 本地 MCP 接入共享 Go 核心 | 规划中（WB1），尚未接入 | 尚未交付对应适配包，不列为当前已兼容宿主 |
+| Codex | Plugin + 三个 Skill + 本地 MCP；Skill 可使用 CLI 补充能力 | 适配已实现；当前 V3 完整宿主验收待完成 | MCP 使用 macOS/Linux 启动器；工具或 Skill 合同变化后需新建任务 |
+| Claude Code | 独立 Plugin 清单 + 三个 Skill + 本地 MCP / CLI | 适配已实现；当前 V3 完整宿主验收待完成 | MCP 使用 POSIX 启动器；更新插件后需新建任务 |
+| DeepSeek Harness | 桌面版原生组合包 + 三个 Skill + 本地 MCP / CLI | 适配已实现；当前 V3 桌面验收待完成 | peer 声明限定内置运行时 `0.2.0-rc.2`；不使用独立 npm/CLI 宿主 |
+| 豆包工作 | 已有用户 Skill + MCP 路径配置脚本 | 已提供脚本；当前 V3 实际发现与业务验收待完成 | 脚本仅面向 macOS Apple Silicon，不负责安装 Skill |
+| WorkBuddy | 本机安装器 + stdio MCP + 三个生成的 Skill | 已在 `5.9.3`、macOS arm64 验证本机安装、三项 Skill 展示、重启后原生连接与 26/26 工具启用 | 完整业务验收（WB1）待完成，未发布连接器 Marketplace 包 |
 
-已接入入口共用业务核心和本地状态。MCP 仅提供已注册的查询和预检工具；在线写入必须先展示预检并获得明确确认，再通过 CLI 的 `--submit` 提交。更多限制见下文[运行方式与支持范围](#运行方式与支持范围)。
-
-## 为什么选择 Ocean Watch
-
-- **自然语言驱动**：按业务目标理解口语、简称和上下文追问，不要求记忆固定命令。
-- **官方数据为准**：广告业务调用巨量引擎官方 API；公开作品信息不能替代官方授权、归属和商品校验。
-- **默认安全**：创建、追加、删除和计划参数调整默认只预检，确认后才提交在线写入。
-- **凭据隔离**：Secret 和 Token 使用操作系统安全存储，不写入普通项目配置、输出或日志。
-- **结果可追踪**：批量任务保留成功结果，分别说明跳过、失败和官方查询不完整项；写入不确定时先回读对账。
+源码构建的 macOS arm64 Runtime 已完成真实千川授权的账户同步与显式改绑验收；这不代表所有渠道、宿主和计划写入已经验收。
 
 ## 快速开始
 
-需要 Codex CLI `0.144.1+`、Claude Code、DeepSeek Harness 桌面版 `0.2.0-rc.2` 或豆包工作。普通营销和千川流程直接使用 Plugin 内置运行时；只有千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。
+选择一个宿主接入。普通营销和千川流程使用内置 Go Runtime，无需安装 Go；千川抖音作品链接解析额外需要 Python `3.10+` 与 F2 `0.0.1.7`。本机 Python 安装脚本另需可用的 Python 3。
 
-Codex：
+支持 Plugin 的 Codex：
 
 ```bash
 codex plugin marketplace add westng/ocean-watch
 codex plugin add ocean-watch@ocean-watch
 ```
 
-Claude Code：
+支持 Plugin 的 Claude Code：
 
 ```bash
 claude plugin marketplace add westng/ocean-watch
@@ -90,38 +89,96 @@ claude plugin install ocean-watch@ocean-watch
 
 DeepSeek Harness 桌面版 `0.2.0-rc.2`：在应用的「插件 → 添加插件」中输入本仓库的绝对路径，安装到当前 `desktop` profile。无需安装独立 npm/CLI 宿主。
 
-原生组合包同时注册两个 Skill 和本地 MCP 工具。安装与桌面版验收方式见 [DeepSeek Harness 接入](docs/guides/deepseek-harness.md)。
+原生组合包同时注册三个 Skill 和本地 MCP 工具。安装与桌面版验收方式见 [DeepSeek Harness 接入](docs/guides/deepseek-harness.md)。
 
-豆包工作 (Doubao Work)：
+WorkBuddy（已实测 macOS Apple Silicon）：在仓库根目录使用原生 arm64 Python 安装，避免 Rosetta 解释器误选 Intel 二进制。
 
 ```bash
-# 1. 安装插件（通过 Codex 或 Claude Code）
-codex plugin marketplace add westng/ocean-watch
-codex plugin add ocean-watch@ocean-watch
-
-# 2. 配置豆包工作 Skills
-cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
-./scripts/install-doubao.sh
-
-# 3. 完全退出并重启豆包工作
-# 4. 在对话中使用：@巨量千川计划助手 或 @巨量引擎盯盘助手
+/usr/bin/arch -arm64 /usr/bin/python3 scripts/install-workbuddy.py
 ```
 
-四个 Host 共用同一份本地状态（`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`），授权只需完成一次。
+安装器校验清单、备份旧配置和 Skill，保留其他 MCP 服务及原生信任设置。安装后重新加载 MCP / 新建会话，必要时重启 WorkBuddy。其他平台命令、共享状态与验收范围见 [WorkBuddy 本机接入](hosts/workbuddy/README.md)。
 
-首次安装后新建任务并描述目标。在 Codex 上，后续兼容升级会由已加载的稳定本地代理在同一任务内切换业务 Runtime，无需退出或重启；只有新增/删除 MCP 工具、修改工具 Schema 或 Skill 触发合同的非兼容升级需要新任务加载新的 Host 合同。在 Claude Code 上，插件更新后新建任务即可。完整的环境检查、渠道配置与 OAuth 流程见[快速开始](docs/guides/getting-started.md)。
+豆包工作（macOS Apple Silicon）：先在豆包工作中导入 `skills/` 下的三个 Skill，再在保留于本机的仓库根目录运行：
+
+```bash
+bash scripts/install-doubao.sh
+```
+
+脚本只更新已有 Skill 的 MCP 路径，依赖仓库内的 arm64 Runtime；运行后完全退出并重启豆包工作。
+
+所有宿主应使用同一状态根：`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`，按优先级解析。同一渠道的有效授权可跨宿主复用；营销与千川仍需分别授权。首次接入后新建任务，描述目标并按引导完成官方 OAuth。详见[快速开始](docs/guides/getting-started.md)和[配置与授权](docs/guides/configuration.md)。
 
 ## 可以直接这样问
 
-- **初始化授权**：“帮我检查环境并完成巨量营销授权。”
-- **星图授权**：`auth authorize --channel star_map`
+- **星图账号**：“帮我完成星图授权，并同步这个授权下的星图账号。”
+- **授权与恢复**：“帮我完成千川授权，完成后查看授权状态。”
 - **同步权限**：“这个授权账号新增了广告主，把本地权限更新到官方最新状态。”
-- **查看经营数据**：“查询我负责的营销和千川账户今天消耗，按渠道汇总并标出失败账户。”
-- **创建营销计划**：“查询今天上传的视频，每 5 条组成一个单元，用现有模板创建计划，先让我确认。”
-- **处理千川作品**：“用这些抖音作品处理商品全域计划；没有对应计划就新建，已有计划只追加缺少素材，先预检。”
+- **查看账户**：“列出我本机负责的账户，并查看千川授权状态。”
+- **查看经营数据**：“查这个千川账户今天的消耗、GMV 和 ROI，注明报表范围。”
+- **查找营销素材**：“查询这个营销账户今天上传的视频。”
+- **处理千川作品**：“按这个模板预检这些抖音作品，列出会新建、追加、跳过和失败的项目。”
 - **分析投放效果**：“看最近 7 天的素材表现，找出高消耗低转化素材并给出优化建议。”
 
-这些问法只是示意，不是固定口令。Ocean Watch 会根据上下文选择渠道和能力，并在缺少广告主、模板、商品、日期或写入确认时继续询问。
+这些问法是示意，具体范围以宿主已加载的工具为准。支持 CLI 的入口还可创建计划和调整投放参数，但必须先展示预检、获得明确确认，再提交。
+
+## V3 运行架构
+
+V3 采用本地优先的模块化单体：**薄宿主适配 + 共享 Skill + 统一能力合同 + 唯一 Go Core + 共享持久状态与系统凭据**。项目运行包括安装启动、业务调用、操作确认与恢复、进程退出和版本迁移。下图覆盖这些系统边界；虚线框表示尚未完成生产接入的统一操作控制与可信审批。
+
+```mermaid
+flowchart TB
+    subgraph Access["用户入口与宿主适配"]
+        Hosts["Codex / Claude Code<br/>DeepSeek Harness<br/>豆包工作 / WorkBuddy"] --> Adapter["薄 Host Adapter<br/>清单 / 生命周期 / 配置"]
+        Adapter --> Skills["共享渠道 Skill<br/>ads-plan-monitor<br/>qc-plan-monitor<br/>xt-plan-monitor"]
+        Terminal["独立 CLI / 自动化"]
+    end
+    subgraph Boundary["能力合同与调用边界"]
+        MCP["本地 MCP stdio"] --> Capability["Capability API：逻辑合同<br/>DTO / Schema / 渠道 / 副作用"]
+        CLI["CLI 参数与稳定 JSON"] --> Capability
+    end
+    Skills --> MCP
+    Skills --> CLI
+    Terminal --> CLI
+    subgraph Runtime["共享 Go Core：各实例独立运行"]
+        App["Application：完整用例<br/>授权账户 / 模板素材<br/>计划 / 报表 / 管理"] --> Domain["Domain / Ports<br/>规则 / 状态 / 依赖接口"]
+        App -.-> Operations["统一操作控制（待接入）<br/>模式 / 快照 / 租约<br/>派发 / 对账 / 恢复"]
+        Operations -.-> Domain
+    end
+    Capability --> App
+    Operations -. 请求确认 .-> Approval["可信审批（待接入）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
+    Approval -. 验证回执 .-> Operations
+    Domain --> Infrastructure["基础设施 Adapters<br/>SDK / REST / 存储 / 凭据"]
+    Infrastructure --> API["巨量引擎官方 API"]
+    Infrastructure --> State["共享本地状态<br/>SQLite / 配置 / 迁移期文件"]
+    Infrastructure --> Secrets["系统凭据库<br/>Keychain / DPAPI<br/>Secret Service"]
+    Infrastructure --> F2["Python / F2<br/>抖音公开元数据"]
+    Delivery["构建 / 分发 / 安装<br/>版本绑定 / 升级 / 迁移"]
+    Delivery -. 注册与启动 .-> Adapter
+    Delivery -. Runtime 版本绑定 .-> MCP
+    Delivery -. Runtime 版本绑定 .-> CLI
+    classDef pending stroke:#b7791f,stroke-width:2px,stroke-dasharray:5 5
+    class Operations,Approval pending
+```
+
+| 层次 | 项目级职责 |
+| --- | --- |
+| 宿主适配与共享 Skill | 各宿主拥有自己的安装、注册、连接和卸载生命周期；三个渠道 Skill 共享意图、调用顺序和展示规则，宿主包只提供受控映射。 |
+| Capability API 与 Transport | MCP 与 CLI 映射同一业务合同，声明渠道、输入输出和副作用；MCP 直接调用 Application，Go CLI 在自身进程内调用 Application。Capability API 不新增网络服务，WorkBuddy 只使用 MCP。 |
+| Application / Domain / Ports | 统一实现初始化诊断、授权账户、模板素材、计划、报表、执行记录与恢复；领域规则不依赖宿主 SDK，外部依赖通过端口接入。 |
+| 操作与请求治理 | 当前已有预检、写锁、分页限流和结果对账。V3 目标将写入统一到操作版本、快照摘要、可信审批、执行租约、派发记录和恢复状态机，工具可见性与执行权限分别校验。 |
+| 数据与外部依赖 | 多宿主共享受保护的状态根和跨进程锁；事务性状态逐步迁入 SQLite，Secret/Token 由系统凭据库持有，官方 API 与公开元数据各有独立 Adapter。 |
+| 运行与交付生命周期 | 每个宿主实例拥有自己的连接、Runtime 子进程和临时资源；构建与安装层负责产物、兼容校验、版本绑定、升级、迁移及回退，共享数据由用户所有。 |
+
+**当前实现与完整目标的差异：**
+
+| 项目部分 | 当前运行方式 | 完整 V3 目标 |
+| --- | --- | --- |
+| 操作与审批 | 已有操作领域模型、审批验证端口和 SQLite 基础；现有生产写入仍走各用例的 dry-run / `--submit` 门禁。 | 投放写入接入统一操作状态机与 `read / plan / execute` 模式；经验证的宿主审批优先，本地 Broker 按需兜底。配置、授权和迁移保留独立管理边界。 |
+| 持久化 | 千川预检 Journal 默认写入 SQLite；授权索引、模板、计划绑定等仍有文件存储。 | 事务性业务状态统一持久化，完成凭据引用轮换、备份、迁移与未结操作恢复；秘密仍只在系统凭据库。 |
+| Runtime 与升级 | Codex 兼容代理仍可切换合同兼容的 Runtime；Claude 更新后新建任务，WorkBuddy 使用安装器固定目录。 | 每个进程绑定不可变 Runtime，显式更新；操作格式、能力合同和数据库 Schema 分别校验兼容性，再恢复或迁移。 |
+
+仓库预置 macOS Intel / Apple Silicon、Linux x86_64 / ARM64、Windows x86_64 五种 Runtime 二进制。逐层职责、完整请求链路、状态与进程归属及当前落点见 [V3 项目运行架构](docs/architecture/overview.md)；目标约束见 [PRD](docs/product/prd.md)。交叉构建、单个功能通过或宿主工具发现均不代表完整 V3 已验收。
 
 ## 操作与安全边界
 
@@ -130,54 +187,21 @@ cd ~/.codex/plugins/ocean-watch  # 或你的插件安装目录
 - “我负责的账户”读取本机账户簿；刷新当前授权用户可访问的广告主属于独立的官方授权同步。
 - 营销与千川的 GMV、ROI 等指标保持各自官方口径，跨渠道只汇总可比较的消耗。
 - F2 只解析抖音公开作品元数据，不下载素材、不创建数据库、不自动读取浏览器 Cookie；最终可投放性始终由目标广告主下的千川官方接口确认。
-- 用户配置、授权快照、缓存、报表和执行记录位于本机 `$CODEX_HOME/ads-plan-monitor/`，不属于开源仓库内容。
+- Secret 和 Token 保存在 macOS Keychain、Windows DPAPI 或 Linux Secret Service，不进入聊天、普通配置或日志。
+- 用户配置、授权快照、缓存、报表和执行记录位于本机 `<共享状态根>/ads-plan-monitor/`，不属于开源仓库内容。
 
 更多信息见[配置与授权](docs/guides/configuration.md)和[安全说明](SECURITY.md)。
 
-## 运行方式与支持范围
-
-```text
-Codex / Claude Code / DeepSeek Harness / 豆包工作
-                    └→ Skill → 本地 stdio MCP ─┐
-                    └→ run/run.cmd ────┴→ Go Application Service → 巨量引擎官方 API
-                                                              └→ Python 3.10+ → F2 0.0.1.7
-                                                                 仅解析抖音公开作品元数据
-```
-
-- 广告业务只有一套 Go Application/Domain 实现，MCP 与 CLI 是其上的两个入口，不存在第二套业务运行时或静默业务回退。
-- 本地模板列表和精确详情使用 MCP 的 `list_templates`、`get_template`；千川作品批量预检与快照查看使用 `preflight_qianchuan_works`、`get_qianchuan_preflight`。确认后的在线提交仍通过内置 Go CLI，并且必须获得明确写入许可。
-- 稳定代理保持 18 个 MCP 工具合同不变，并在同一外层会话内监控已安装快照、校验版本/哈希/插件身份/F2 资源和工具 Schema，再切换本机私有 Runtime；同版本内容变化也通过 manifest 指纹触发重新验证。坏版本自动回滚且只拒绝该次清单，后续修复版仍可自动升级。
-- `get_capabilities` 只读返回 77 条 CLI 能力、渠道、副作用和提交门禁；两个 Skill 的第一屏优先直达高频工具，只有未命中高频目标时才查询一次能力目录，不扫描仓库、插件缓存或历史文档。
-- MCP 缩短自然语言到预检服务的调用路径并稳定结构化回传，但不绕过官方授权、作品归属、商品匹配和计划核对；真实接口耗时仍计入预检。
-- Plugin 已内置 macOS Intel/Apple Silicon、Linux x86_64/ARM64 和 Windows x86_64 CLI，普通用户无需安装 Go。
-- macOS 与 Linux 的本地 MCP 使用稳定 POSIX 启动器；当前两个 Host 的 Plugin/MCP 清单都没有操作系统命令分支，因此 Windows 只声明 CLI 支持，不把交叉构建描述为 Windows MCP 已验收。
-- 稳定代理的版本化 Runtime 热升级依赖 Codex 的版本目录布局。Claude Code 安装的是单个仓库快照，因此完整性校验与签名槽位仍生效，但没有自动热升级：更新插件后重开任务即可。
-- Python 只参与千川作品链接的公开元数据解析，不承载授权、账户、模板、计划或报表逻辑。
-
-技术边界与当前实现见[架构说明](docs/architecture/overview.md)。
-
 ## 功能建议
 
-想让 Ocean Watch 支持更多操作？欢迎在 [Issues](https://github.com/westng/ocean-watch/issues) 提出你的需求：
-
-- 新的巨量营销或千川能力（计划类型、定向维度、报表字段）
-- 批量操作优化（并发控制、断点续传、冲突处理）
-- 数据分析增强（趋势对比、异常检测、优化建议）
-- 工作流改进（模板管理、素材归档、自动化规则）
-
-提交 Issue 时请说明：
-1. **使用场景**：你想解决什么问题，当前是怎么做的
-2. **期望行为**：希望 Ocean Watch 如何帮到你
-3. **影响范围**（可选）：是否涉及官方 API 限制、授权变更或跨渠道操作
-
-每个建议都会认真评估，有价值的功能可能在下一个版本中实现。优先级取决于需求频次、技术可行性和与现有能力的一致性。
+欢迎在 [Issues](https://github.com/westng/ocean-watch/issues) 描述使用场景、期望行为、宿主与插件版本；请勿附上凭据或未脱敏的业务数据。
 
 ## 文档
 
 | 读者 | 入口 |
 | --- | --- |
 | 普通用户 | [Documentation](docs/README.md) · [快速开始](docs/guides/getting-started.md) · [配置与授权](docs/guides/configuration.md) |
-| 脚本与排错 | [CLI 参考](docs/reference/cli.md) |
+| 脚本与排错 | [CLI 参考](docs/reference/cli.md) · [授权恢复](docs/reference/authorization-recovery.md) |
 | 开发者 | [架构说明](docs/architecture/overview.md) · [Contributing](CONTRIBUTING.md) |
 | 项目与安全 | [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [发布指南](docs/release/releasing.md) · [MIT license](LICENSE) |
 

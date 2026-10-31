@@ -36,6 +36,8 @@ type AuthorizationState struct {
 type AuthorizationBinding struct {
 	Channel            string
 	AuthorizationID    string
+	AppID              string
+	AuthorizedUserID   string
 	TokenRevision      int
 	CredentialAccount  string
 	PendingAccountSync bool
@@ -177,9 +179,17 @@ func ResolveAuthorization(
 	}
 	return AuthorizationBinding{
 		Channel: channel, AuthorizationID: selectedID, TokenRevision: revision,
+		AppID: authorizationIdentityString(metadata["app_id"]), AuthorizedUserID: authorizationIdentityString(metadata["authorized_user_id"]),
 		CredentialAccount: credentialAccount, PendingAccountSync: pending,
 		AccountIDs: accountIDs, AdvertiserIDs: coveredAdvertisers,
 	}, nil
+}
+
+func authorizationIdentityString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 func validateAuthorizationChannel(channel string) error {

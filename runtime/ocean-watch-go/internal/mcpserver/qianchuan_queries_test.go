@@ -36,6 +36,7 @@ func TestQianchuanQueryToolsUseTaskServicesAndWhitelistOutputs(t *testing.T) {
 			AdvertiserID: "2000000000000001", AdvertiserIDAuthorized: boolPointer(true),
 			Authorizations: []authapplication.AuthorizationStatus{{
 				AuthorizationID: "auth-fixture", TokenRevision: 3,
+				AppID: "7777001", AuthorizedUserID: "8888001",
 				HasAccessToken: true, HasRefreshToken: true,
 				AccessTokenExpiresAt:  "2026-08-17T00:00:00Z",
 				RefreshTokenExpiresAt: "2026-09-17T00:00:00Z",
@@ -48,6 +49,7 @@ func TestQianchuanQueryToolsUseTaskServicesAndWhitelistOutputs(t *testing.T) {
 			}},
 			Authorizations: []authapplication.AuthorizationMapping{{
 				AuthorizationID: "auth-fixture", TokenRevision: 3,
+				AppID: "7777001", AuthorizedUserID: "8888001",
 				HasAccessToken: true, HasRefreshToken: true,
 				AdvertiserIDs: []string{"2000000000000001"},
 			}},
@@ -140,6 +142,11 @@ func TestQianchuanQueryToolsUseTaskServicesAndWhitelistOutputs(t *testing.T) {
 	if authorization.calls != 1 || authOutput.Status.Generation != 2 || len(authOutput.Mappings) != 1 ||
 		bytes.Contains(resultBytes(t, authResult), []byte("access_token\":\"")) {
 		t.Fatalf("authorization contract changed: calls=%d output=%#v", authorization.calls, authOutput)
+	}
+	for _, field := range []string{`"app_id"`, `"authorized_user_id"`, "7777001", "8888001"} {
+		if bytes.Contains(resultBytes(t, authResult), []byte(field)) {
+			t.Fatal("new internal identity fields changed the established MCP output contract")
+		}
 	}
 
 	productResult := callTestTool(t, session, "search_qianchuan_products", map[string]any{
