@@ -1,0 +1,1412 @@
+{
+  "catalog_version": "qianchuan-public-2026-11-01",
+  "source_url": "https://open.oceanengine.com/labels/12/docs/1847297003631945",
+  "observed_on": "2026-11-01",
+  "queries": [
+    {
+      "query_id": "advertiser_fund_transaction_get_v2",
+      "upstream_tool": "advertiser_fund_transaction_get_v2",
+      "api_path": "/open_api/2/advertiser/fund/transaction/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1780627317170250",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "advertiser_info_v2",
+      "upstream_tool": "advertiser_info_v2",
+      "api_path": "/open_api/2/advertiser/info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697468139129870",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "advertiser_public_info_v2",
+      "upstream_tool": "advertiser_public_info_v2",
+      "api_path": "/open_api/2/advertiser/public_info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697468127552590",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "agent_adv_recharge_recharge_record_v2",
+      "upstream_tool": "agent_adv_recharge_recharge_record_v2",
+      "api_path": "/open_api/2/agent/adv/recharge/recharge_record/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1836524891344154",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "agent_advertiser_select_v2",
+      "upstream_tool": "agent_advertiser_select_v2",
+      "api_path": "/open_api/2/agent/advertiser/select/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467832592392",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "agent_advertiser_info_query_v2",
+      "upstream_tool": "agent_advertiser_info_query_v2",
+      "api_path": "/open_api/2/agent/advertiser_info/query/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1809915753481348",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "agent_charge_verify_v2",
+      "upstream_tool": "agent_charge_verify_v2",
+      "api_path": "/open_api/2/agent/charge/verify/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832711149796937",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "agent_info_v2",
+      "upstream_tool": "agent_info_v2",
+      "api_path": "/open_api/2/agent/info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467936570371",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "customer_center_advertiser_list_v2",
+      "upstream_tool": "customer_center_advertiser_list_v2",
+      "api_path": "/open_api/2/customer_center/advertiser/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1796368918556803",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "ebp_advertiser_list_v2",
+      "upstream_tool": "ebp_advertiser_list_v2",
+      "api_path": "/open_api/2/ebp/advertiser/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1829551614262412",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "file_video_agent_get_v2",
+      "upstream_tool": "file_video_agent_get_v2",
+      "api_path": "/open_api/2/file/video/agent/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1827446107102592",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_admin_info_v2",
+      "upstream_tool": "tools_admin_info_v2",
+      "api_path": "/open_api/2/tools/admin/info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1816770040511488",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_author_info_get_v2",
+      "upstream_tool": "tools_aweme_author_info_get_v2",
+      "api_path": "/open_api/2/tools/aweme_author_info/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754604074361856",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_category_top_author_get_v2",
+      "upstream_tool": "tools_aweme_category_top_author_get_v2",
+      "api_path": "/open_api/2/tools/aweme_category_top_author/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466881912835",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_info_search_v2",
+      "upstream_tool": "tools_aweme_info_search_v2",
+      "api_path": "/open_api/2/tools/aweme_info_search/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754603678777351",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_multi_level_category_get_v2",
+      "upstream_tool": "tools_aweme_multi_level_category_get_v2",
+      "api_path": "/open_api/2/tools/aweme_multi_level_category/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466893806595",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_similar_author_search_v2",
+      "upstream_tool": "tools_aweme_similar_author_search_v2",
+      "api_path": "/open_api/2/tools/aweme_similar_author_search/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754603569552391",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_country_info_v2",
+      "upstream_tool": "tools_country_info_v2",
+      "api_path": "/open_api/2/tools/country/info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1816770002957402",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_creative_word_select_v2",
+      "upstream_tool": "tools_creative_word_select_v2",
+      "api_path": "/open_api/2/tools/creative_word/select/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466866336772",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_industry_get_v2",
+      "upstream_tool": "tools_industry_get_v2",
+      "api_path": "/open_api/2/tools/industry/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697640099656704",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_action_category_v2",
+      "upstream_tool": "tools_interest_action_action_category_v2",
+      "api_path": "/open_api/2/tools/interest_action/action/category/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466903390219",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_action_keyword_v2",
+      "upstream_tool": "tools_interest_action_action_keyword_v2",
+      "api_path": "/open_api/2/tools/interest_action/action/keyword/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466916182083",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_id2word_v2",
+      "upstream_tool": "tools_interest_action_id2word_v2",
+      "api_path": "/open_api/2/tools/interest_action/id2word/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754604787816462",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_interest_category_v2",
+      "upstream_tool": "tools_interest_action_interest_category_v2",
+      "api_path": "/open_api/2/tools/interest_action/interest/category/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466937486339",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_interest_keyword_v2",
+      "upstream_tool": "tools_interest_action_interest_keyword_v2",
+      "api_path": "/open_api/2/tools/interest_action/interest/keyword/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466948442116",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_interest_action_keyword_suggest_v2",
+      "upstream_tool": "tools_interest_action_keyword_suggest_v2",
+      "api_path": "/open_api/2/tools/interest_action/keyword/suggest/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754604887592974",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "user_info_v2",
+      "upstream_tool": "user_info_v2",
+      "api_path": "/open_api/2/user/info/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1806175583735835",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "oauth2_advertiser_get",
+      "upstream_tool": "oauth2_advertiser_get",
+      "api_path": "/open_api/oauth2/advertiser/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467748096067",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_account_balance_get_v1",
+      "upstream_tool": "qianchuan_account_balance_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/account/balance/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783322092364800",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_account_budget_get_v1",
+      "upstream_tool": "qianchuan_account_budget_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/account/budget/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1777635660375047",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_compensate_status_get_v1",
+      "upstream_tool": "qianchuan_ad_compensate_status_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/compensate_status/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1778157489597440",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_detail_get_v1",
+      "upstream_tool": "qianchuan_ad_detail_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/detail/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467544882191",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_get_v1",
+      "upstream_tool": "qianchuan_ad_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467558690816",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_keywords_get_v1",
+      "upstream_tool": "qianchuan_ad_keywords_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/keywords/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1727447830172686",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_learing_status_get_v1",
+      "upstream_tool": "qianchuan_ad_learing_status_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/learing_status/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1778158222500876",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_material_get_v1",
+      "upstream_tool": "qianchuan_ad_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1803705421766656",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_material_suggestion_v1",
+      "upstream_tool": "qianchuan_ad_material_suggestion_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/material/suggestion/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1816413016616091",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_pivativewords_get_v1",
+      "upstream_tool": "qianchuan_ad_pivativewords_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/pivativewords/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1727448194054157",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_quota_get_v1",
+      "upstream_tool": "qianchuan_ad_quota_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/quota/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1731182713398283",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_recommend_keywords_get_v1",
+      "upstream_tool": "qianchuan_ad_recommend_keywords_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/recommend_keywords/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1730711298227214",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_ad_reject_reason_v1",
+      "upstream_tool": "qianchuan_ad_reject_reason_v1",
+      "api_path": "/open_api/v1.0/qianchuan/ad/reject_reason/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467603007503",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_advertiser_type_get_v1",
+      "upstream_tool": "qianchuan_advertiser_type_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/advertiser/type/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754620816918532",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_audience_group_get_v1",
+      "upstream_tool": "qianchuan_audience_group_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/audience_group/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1744039355184140",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_audience_list_get_v1",
+      "upstream_tool": "qianchuan_audience_list_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/audience_list/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1741766314771463",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_authorized_get_v1",
+      "upstream_tool": "qianchuan_aweme_authorized_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/authorized/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467726080011",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_estimate_profit_v1",
+      "upstream_tool": "qianchuan_aweme_estimate_profit_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/estimate_profit/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1757415052106760",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_interest_action_interest_keyword_v1",
+      "upstream_tool": "qianchuan_aweme_interest_action_interest_keyword_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/interest_action/interest/keyword/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754616248472640",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_order_detail_get_v1",
+      "upstream_tool": "qianchuan_aweme_order_detail_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/order/detail/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754615684361224",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_order_get_v1",
+      "upstream_tool": "qianchuan_aweme_order_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/order/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754615684532301",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_order_quota_get_v1",
+      "upstream_tool": "qianchuan_aweme_order_quota_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/order/quota/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1758439025795076",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_order_suggest_delivery_time_get_v1",
+      "upstream_tool": "qianchuan_aweme_order_suggest_delivery_time_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/order/suggest/delivery_time/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1779621018526732",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_product_available_get_v1",
+      "upstream_tool": "qianchuan_aweme_product_available_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/product/available/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754623806862336",
+      "group": "products",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_report_order_get_v1",
+      "upstream_tool": "qianchuan_aweme_report_order_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/report/order/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754616243989519",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_suggest_roi_goal_v1",
+      "upstream_tool": "qianchuan_aweme_suggest_roi_goal_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/suggest/roi/goal/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1757415442277379",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_suggest_bid_v1",
+      "upstream_tool": "qianchuan_aweme_suggest_bid_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/suggest_bid/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1757415284062219",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_ad_material_get_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_ad_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/ad/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1844129152007108",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_estimate_effect_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_estimate_effect_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/estimate/effect/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834804152700935",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_order_detail_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_order_detail_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/order/detail/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834798638887948",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_order_get_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_order_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/order/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834797699331148",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_order_report_get_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_order_report_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/order/report/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1844129628513816",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_order_suggest_delivery_time_get_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_order_suggest_delivery_time_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/order/suggest/delivery_time/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1836628495717452",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_report_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_report_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/report/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834802422645760",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_suggest_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_suggest_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/suggest/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834803969912960",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_uni_promotion_suggest_roi_v1",
+      "upstream_tool": "qianchuan_aweme_uni_promotion_suggest_roi_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/uni_promotion/suggest/roi/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834804305062915",
+      "group": "aweme_orders",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_video_get_v1",
+      "upstream_tool": "qianchuan_aweme_video_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme/video/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754616254611535",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_aweme_auth_list_get_v1",
+      "upstream_tool": "qianchuan_aweme_auth_list_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/aweme_auth_list/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1804287262648346",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_brand_authorized_get_v1",
+      "upstream_tool": "qianchuan_brand_authorized_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/brand/authorized/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1775646836699149",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_campaign_list_get_v1",
+      "upstream_tool": "qianchuan_campaign_list_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/campaign_list/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1702055567088643",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_carousel_aweme_get_v1",
+      "upstream_tool": "qianchuan_carousel_aweme_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/carousel/aweme/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1778159412906125",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_carousel_get_v1",
+      "upstream_tool": "qianchuan_carousel_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/carousel/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1778159308092424",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_dmp_audiences_get_v1",
+      "upstream_tool": "qianchuan_dmp_audiences_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/dmp/audiences/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1709032151638039",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_estimate_effect_v1",
+      "upstream_tool": "qianchuan_estimate_effect_v1",
+      "api_path": "/open_api/v1.0/qianchuan/estimate/effect/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1770010949341327",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_file_video_aweme_get_v1",
+      "upstream_tool": "qianchuan_file_video_aweme_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/file/video/aweme/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466774382599",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_file_video_efficiency_get_v1",
+      "upstream_tool": "qianchuan_file_video_efficiency_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/file/video/efficiency/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754607188087808",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_file_video_original_get_v1",
+      "upstream_tool": "qianchuan_file_video_original_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/file/video/original/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754607275560015",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_finance_detail_get_v1",
+      "upstream_tool": "qianchuan_finance_detail_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/finance/detail/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1725977659075599",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_finance_wallet_get_v1",
+      "upstream_tool": "qianchuan_finance_wallet_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/finance/wallet/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1725977604633615",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_image_get_v1",
+      "upstream_tool": "qianchuan_image_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/image/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1739304248623182",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_keyword_package_get_v1",
+      "upstream_tool": "qianchuan_keyword_package_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/keyword_package/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1777718838286403",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_lq_ad_get_v1",
+      "upstream_tool": "qianchuan_lq_ad_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/lq_ad/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1725457239476224",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_material_ad_get_v1",
+      "upstream_tool": "qianchuan_material_ad_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/material/ad/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1816411517288523",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_material_get_v1",
+      "upstream_tool": "qianchuan_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1810701753348235",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_orientation_package_get_v1",
+      "upstream_tool": "qianchuan_orientation_package_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/orientation_package/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1741765278816256",
+      "group": "targeting",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_product_available_get_v1",
+      "upstream_tool": "qianchuan_product_available_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/product/available/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467688861696",
+      "group": "products",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_qianchuan_report_today_live_room_config_get_v1",
+      "upstream_tool": "qianchuan_qianchuan_report_today_live_room_config_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/qianchuan/report/today_live/room/config/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1807424096554059",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_ad_get_v1",
+      "upstream_tool": "qianchuan_report_ad_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/ad/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466415173644",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_ad_material_get_v1",
+      "upstream_tool": "qianchuan_report_ad_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/ad/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1803706947586073",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_advertiser_get_v1",
+      "upstream_tool": "qianchuan_report_advertiser_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/advertiser/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466393573376",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_creative_get_v1",
+      "upstream_tool": "qianchuan_report_creative_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/creative/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697466431262732",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_custom_config_get_v1",
+      "upstream_tool": "qianchuan_report_custom_config_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/custom/config/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1824289917859843",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_custom_get_v1",
+      "upstream_tool": "qianchuan_report_custom_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/custom/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1824289996057844",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_live_get_v1",
+      "upstream_tool": "qianchuan_report_live_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/live/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763406675800128",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_long_transfer_order_config_get_v1",
+      "upstream_tool": "qianchuan_report_long_transfer_order_config_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/long_transfer/order/config/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1807348855527500",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_long_transfer_order_data_get_v1",
+      "upstream_tool": "qianchuan_report_long_transfer_order_data_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/long_transfer/order/data/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1807348907403268",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_long_transfer_order_get_v1",
+      "upstream_tool": "qianchuan_report_long_transfer_order_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/long_transfer/order/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1754619225006091",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_material_get_v1",
+      "upstream_tool": "qianchuan_report_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1745207002572807",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_search_word_get_v1",
+      "upstream_tool": "qianchuan_report_search_word_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/search_word/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1762139117875212",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_today_live_room_data_get_v1",
+      "upstream_tool": "qianchuan_report_today_live_room_data_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/today_live/room/data/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1807433722476556",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_uni_promotion_config_get_v1",
+      "upstream_tool": "qianchuan_report_uni_promotion_config_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/uni_promotion/config/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1823296280645708",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_uni_promotion_data_get_v1",
+      "upstream_tool": "qianchuan_report_uni_promotion_data_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/uni_promotion/data/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1823297941140569",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_uni_promotion_dimension_data_author_get_v1",
+      "upstream_tool": "qianchuan_report_uni_promotion_dimension_data_author_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/uni_promotion/dimension_data/author/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1786236031165513",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_uni_promotion_dimension_data_room_get_v1",
+      "upstream_tool": "qianchuan_report_uni_promotion_dimension_data_room_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/uni_promotion/dimension_data/room/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1786235355858947",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_uni_promotion_get_v1",
+      "upstream_tool": "qianchuan_report_uni_promotion_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/uni_promotion/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1770675169146947",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_report_video_user_lose_get_v1",
+      "upstream_tool": "qianchuan_report_video_user_lose_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/report/video_user_lose/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1745212588656647",
+      "group": "reports",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_shop_advertiser_list_v1",
+      "upstream_tool": "qianchuan_shop_advertiser_list_v1",
+      "api_path": "/open_api/v1.0/qianchuan/shop/advertiser/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1697467801357320",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_shop_authorized_get_v1",
+      "upstream_tool": "qianchuan_shop_authorized_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/shop/authorized/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1775801786494976",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_suggest_budget_v1",
+      "upstream_tool": "qianchuan_suggest_budget_v1",
+      "api_path": "/open_api/v1.0/qianchuan/suggest/budget/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1770008006444036",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_suggest_roi_goal_v1",
+      "upstream_tool": "qianchuan_suggest_roi_goal_v1",
+      "api_path": "/open_api/v1.0/qianchuan/suggest/roi/goal/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1730170307692548",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_suggest_bid_v1",
+      "upstream_tool": "qianchuan_suggest_bid_v1",
+      "api_path": "/open_api/v1.0/qianchuan/suggest_bid/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1761144594567183",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_today_live_room_detail_get_v1",
+      "upstream_tool": "qianchuan_today_live_room_detail_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/today_live/room/detail/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763409499649031",
+      "group": "live",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_today_live_room_flow_performance_get_v1",
+      "upstream_tool": "qianchuan_today_live_room_flow_performance_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/today_live/room/flow_performance/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763409732890699",
+      "group": "live",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_today_live_room_get_v1",
+      "upstream_tool": "qianchuan_today_live_room_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/today_live/room/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763408973310988",
+      "group": "live",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_today_live_room_product_list_get_v1",
+      "upstream_tool": "qianchuan_today_live_room_product_list_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/today_live/room/product_list/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763410225446924",
+      "group": "live",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_today_live_room_user_get_v1",
+      "upstream_tool": "qianchuan_today_live_room_user_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/today_live/room/user/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763409882431488",
+      "group": "live",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_allow_coupon_v1",
+      "upstream_tool": "qianchuan_tools_allow_coupon_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/allow_coupon/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1771275948928071",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_estimate_audience_v1",
+      "upstream_tool": "qianchuan_tools_estimate_audience_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/estimate_audience/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1757702925729792",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_gray_v1",
+      "upstream_tool": "qianchuan_tools_gray_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/gray/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1763675121890315",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_log_search_v1",
+      "upstream_tool": "qianchuan_tools_log_search_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/log_search/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832813828161028",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_smart_boost_ad_boost_report_get_v1",
+      "upstream_tool": "qianchuan_tools_smart_boost_ad_boost_report_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/smart_boost/ad_boost/report/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1759313983537163",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_smart_boost_ad_boost_status_get_v1",
+      "upstream_tool": "qianchuan_tools_smart_boost_ad_boost_status_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/smart_boost/ad_boost/status/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1759313437747204",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_tools_smart_boost_ad_boost_version_get_v1",
+      "upstream_tool": "qianchuan_tools_smart_boost_ad_boost_version_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/tools/smart_boost/ad_boost/version/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1759313851340800",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_aweme_authorized_get_v1",
+      "upstream_tool": "qianchuan_uni_aweme_authorized_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_aweme/authorized/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1771196800070656",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_aweme_suggest_budget_v1",
+      "upstream_tool": "qianchuan_uni_aweme_suggest_budget_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_aweme/suggest/budget/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1828257556490251",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_control_task_list_v1",
+      "upstream_tool": "qianchuan_uni_promotion_ad_control_task_list_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/ad/control_task/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1824940765838411",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_detail_v1",
+      "upstream_tool": "qianchuan_uni_promotion_ad_detail_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/ad/detail/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1804362305657868",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_material_get_v1",
+      "upstream_tool": "qianchuan_uni_promotion_ad_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/ad/material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1804363488115850",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_product_get_v1",
+      "upstream_tool": "qianchuan_uni_promotion_ad_product_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/ad/product/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832185836349447",
+      "group": "products",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_suggestion_v1",
+      "upstream_tool": "qianchuan_uni_promotion_ad_suggestion_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/ad/suggestion/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832628101966183",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_authorizable_shop_list_v1",
+      "upstream_tool": "qianchuan_uni_promotion_authorizable_shop_list_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/authorizable_shop/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1844495918167047",
+      "group": "accounts",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_block_material_get_v1",
+      "upstream_tool": "qianchuan_uni_promotion_block_material_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/block_material/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1825215820766292",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_list_v1",
+      "upstream_tool": "qianchuan_uni_promotion_list_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1848859765931272",
+      "group": "plans",
+      "status": "published_only",
+      "executable": false,
+      "notes": "Published link points to a change notification. Correct GET list documentation verified at https://open.oceanengine.com/labels/12/docs/1771195810853899; current MCP input has an optional integer/string-enum page_size conflict. The inactive prototype omits that field and verifies the documented default 10. Production policy/output contracts remain pending."
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_product_aweme_get_v1",
+      "upstream_tool": "qianchuan_uni_promotion_product_aweme_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/product/aweme/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1825216033296576",
+      "group": "products",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_product_get_v1",
+      "upstream_tool": "qianchuan_uni_promotion_product_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/uni_promotion/product/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1825216221095947",
+      "group": "products",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_video_by_aweme_get_v1",
+      "upstream_tool": "qianchuan_video_by_aweme_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/video/by_aweme/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1814938748938240",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "qianchuan_video_get_v1",
+      "upstream_tool": "qianchuan_video_get_v1",
+      "api_path": "/open_api/v1.0/qianchuan/video/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1739309912219663",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "account_fund_get_v3",
+      "upstream_tool": "account_fund_get_v3",
+      "api_path": "/open_api/v3.0/account/fund/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1812964516306124",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_can_transfer_balance_get_v3",
+      "upstream_tool": "cg_transfer_can_transfer_balance_get_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/can_transfer_balance/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1817406123096500",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_can_transfer_target_list_v3",
+      "upstream_tool": "cg_transfer_can_transfer_target_list_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/can_transfer_target/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1817407512558874",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_query_can_transfer_balance_v3",
+      "upstream_tool": "cg_transfer_query_can_transfer_balance_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/query_can_transfer_balance/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1798395239487699",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_query_transfer_balance_v3",
+      "upstream_tool": "cg_transfer_query_transfer_balance_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/query_transfer_balance/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1798395209349136",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_query_transfer_detail_v3",
+      "upstream_tool": "cg_transfer_query_transfer_detail_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/query_transfer_detail/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1798395284969472",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_transfer_balance_get_v3",
+      "upstream_tool": "cg_transfer_transfer_balance_get_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/transfer_balance/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1817406311960675",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "cg_transfer_transfer_detail_get_v3",
+      "upstream_tool": "cg_transfer_transfer_detail_get_v3",
+      "api_path": "/open_api/v3.0/cg_transfer/transfer_detail/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1817406243103171",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "charge_result_v3",
+      "upstream_tool": "charge_result_v3",
+      "api_path": "/open_api/v3.0/charge/result/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832807350934532",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "open_material_audit_pro_get_v3",
+      "upstream_tool": "open_material_audit_pro_get_v3",
+      "api_path": "/open_api/v3.0/open_material_audit/pro/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1832830677796042",
+      "group": "assets",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "remittance_code_list_v3",
+      "upstream_tool": "remittance_code_list_v3",
+      "api_path": "/open_api/v3.0/remittance_code/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1834443764106314",
+      "group": "finance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "security_score_disposal_info_get_v3",
+      "upstream_tool": "security_score_disposal_info_get_v3",
+      "api_path": "/open_api/v3.0/security/score_disposal_info/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1809255307204884",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "security_score_total_get_v3",
+      "upstream_tool": "security_score_total_get_v3",
+      "api_path": "/open_api/v3.0/security/score_total/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1809254968749066",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "security_score_violation_event_get_v3",
+      "upstream_tool": "security_score_violation_event_get_v3",
+      "api_path": "/open_api/v3.0/security/score_violation_event/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1809254532005028",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "subscribe_accounts_list_v3",
+      "upstream_tool": "subscribe_accounts_list_v3",
+      "api_path": "/open_api/v3.0/subscribe/accounts/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1818567554191363",
+      "group": "operations",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_aweme_banned_list_v3",
+      "upstream_tool": "tools_aweme_banned_list_v3",
+      "api_path": "/open_api/v3.0/tools/aweme_banned/list/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783173626394698",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_comment_get_v3",
+      "upstream_tool": "tools_comment_get_v3",
+      "api_path": "/open_api/v3.0/tools/comment/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783172795243529",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_comment_mid2item_id_v3",
+      "upstream_tool": "tools_comment_mid2item_id_v3",
+      "api_path": "/open_api/v3.0/tools/comment/mid2item_id/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783173172223044",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_comment_terms_banned_get_v3",
+      "upstream_tool": "tools_comment_terms_banned_get_v3",
+      "api_path": "/open_api/v3.0/tools/comment/terms_banned/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783173348083715",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_comment_metrics_get_v3",
+      "upstream_tool": "tools_comment_metrics_get_v3",
+      "api_path": "/open_api/v3.0/tools/comment_metrics/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783172953221129",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    },
+    {
+      "query_id": "tools_comment_reply_get_v3",
+      "upstream_tool": "tools_comment_reply_get_v3",
+      "api_path": "/open_api/v3.0/tools/comment_reply/get/",
+      "documentation_url": "https://open.oceanengine.com/labels/12/docs/1783172901160971",
+      "group": "compliance",
+      "status": "published_only",
+      "executable": false
+    }
+  ]
+}

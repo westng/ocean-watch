@@ -19,6 +19,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
 
@@ -33,6 +35,7 @@ type proxySession struct {
 var errHostContractChanged = errors.New("installed Ocean Watch runtime changed the stable MCP tool contract")
 
 type Proxy struct {
+	Policy    *policy.Instance
 	Manager   runtimeupdate.Manager
 	Connect   func(context.Context, runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error)
 	LogWriter io.Writer
@@ -48,15 +51,27 @@ func RunProxy(ctx context.Context, version, pluginRoot string) error {
 	if err != nil {
 		return err
 	}
-	proxy := &Proxy{Manager: runtimeupdate.Manager{
-		CodexRoot: filesystem.CodexHome(os.Getenv, userHome), PluginRoot: filepath.Clean(pluginRoot),
-		AlwaysDiscover: true,
-	}, LogWriter: os.Stderr}
+	manager := runtimeupdate.NewManager(filesystem.CodexHome(os.Getenv, userHome), pluginRoot)
+	manager.AlwaysDiscover = true
+	store, err := filesystem.NewManagedConfigStore(os.Getenv, userHome)
+	if err != nil {
+		return err
+	}
+	instance, err := bootstrap.StartupPolicy(ctx, store, "")
+	if err != nil {
+		return err
+	}
+	expected, err := stableToolCatalog(ctx, &instance)
+	if err != nil {
+		return err
+	}
+	manager = manager.ForHostContract(expected)
+	proxy := &Proxy{Manager: manager, Policy: &instance, LogWriter: os.Stderr, expected: expected}
 	defer proxy.Close()
 	go proxy.monitor(ctx)
 	// Runtime preparation can outlast a client's discovery probe. Serve the
 	// stable MCP contract now; the first business call validates its runtime.
-	server := Runtime{Forward: proxy.Forward}.NewServer(version)
+	server := Runtime{Policy: &instance, Forward: proxy.Forward}.NewServer(version)
 	err = server.Run(ctx, &mcp.StdioTransport{})
 	if errors.Is(err, context.Canceled) {
 		return nil
@@ -176,7 +191,9 @@ func (proxy *Proxy) ensureSession(ctx context.Context) (*mcp.ClientSession, erro
 func (proxy *Proxy) connectValidated(ctx context.Context, candidate runtimeupdate.Candidate, lease *filesystem.FileLock, publishHost bool) (*mcp.ClientSession, error) {
 	connect := proxy.Connect
 	if connect == nil {
-		connect = connectRuntime
+		connect = func(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
+			return connectRuntimeWithPolicy(ctx, candidate, proxy.Policy)
+		}
 	}
 	session, tools, err := connect(ctx, candidate)
 	if err != nil {
@@ -190,7 +207,7 @@ func (proxy *Proxy) connectValidated(ctx context.Context, candidate runtimeupdat
 		return nil, err
 	}
 	if proxy.expected == nil {
-		proxy.expected, err = stableToolCatalog(ctx)
+		proxy.expected, err = stableToolCatalog(ctx, proxy.Policy)
 		if err != nil {
 			_ = session.Close()
 			_ = lease.Release()
@@ -319,9 +336,16 @@ func (proxy *Proxy) releaseSession(session *proxySession) {
 }
 
 func connectRuntime(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
+	return connectRuntimeWithPolicy(ctx, candidate, nil)
+}
+func connectRuntimeWithPolicy(ctx context.Context, candidate runtimeupdate.Candidate, instance *policy.Instance) (*mcp.ClientSession, []*mcp.Tool, error) {
 	command := exec.Command(candidate.BinaryPath, "mcp", "serve", "--stdio")
 	command.Dir = candidate.PluginRoot
 	command.Env = managedRuntimeEnvironment(os.Environ())
+	if instance != nil {
+		encoded, _ := json.Marshal(instance.Snapshot())
+		command.Env = append(command.Env, bootstrap.StartupPolicyEnv+"="+string(encoded))
+	}
 	command.Stderr = os.Stderr
 	client := mcp.NewClient(
 		&mcp.Implementation{Name: "ocean-watch-stable-proxy", Version: candidate.Version},
@@ -343,16 +367,20 @@ func managedRuntimeEnvironment(values []string) []string {
 	prefix := filesystem.ManagedRuntimeEnv + "="
 	result := make([]string, 0, len(values)+1)
 	for _, value := range values {
-		if !strings.HasPrefix(value, prefix) {
+		if !strings.HasPrefix(value, prefix) && !strings.HasPrefix(value, bootstrap.StartupPolicyEnv+"=") {
 			result = append(result, value)
 		}
 	}
 	return append(result, prefix+"1")
 }
 
-func stableToolCatalog(ctx context.Context) ([]byte, error) {
+func stableToolCatalog(ctx context.Context, instances ...*policy.Instance) ([]byte, error) {
+	var instance *policy.Instance
+	if len(instances) > 0 {
+		instance = instances[0]
+	}
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	server := Runtime{Forward: func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	server := Runtime{Policy: instance, Forward: func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return nil, errors.New("stable catalog handler must not run")
 	}}.NewServer("stable")
 	serverSession, err := server.Connect(ctx, serverTransport, nil)

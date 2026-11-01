@@ -2,6 +2,12 @@
 
 Use this reference after the Skill has identified a Qianchuan 全域 or 乘方 reporting intent. Natural-language understanding chooses the subject; these deterministic contracts choose the command and official endpoint.
 
+## Conversation Routes
+
+Use `report_qianchuan_account` for one account's overall/uni fixed report, `report_qianchuan_uni_account` for the fixed all-domain report, and `report_qianchuan_managed_accounts` for the locally enabled responsible-account set. For one advertiser's custom topic, use `get_qianchuan_report_schema` when topics, dimensions or metrics need discovery, then `report_qianchuan_custom` with the exact `data_topic`, `dimensions`, `metrics`, `start_date` and `end_date`. These MCP routes reuse the existing SDK reporting services and retain their source, decimal amounts and partial failures.
+
+The CLI contracts below remain available for an explicitly requested advanced command or multi-account custom query. They are not a fallback for a missing task MCP. If a desired room/author report has no matching custom topic, use the approved exact official query contract for that dimension endpoint rather than inventing a topic.
+
 ## Semantic Selection
 
 | Intended subject | Command | Official endpoint | Required scope |
@@ -19,7 +25,7 @@ Use this reference after the Skill has identified a Qianchuan 全域 or 乘方 r
 | Live-room performance | `qc-reports rooms` | `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/room/get/` | advertiser, exact `room_id`, dates |
 | Douyin-author performance | `qc-reports authors` | `GET /v1.0/qianchuan/report/uni_promotion/dimension_data/author/get/` | advertiser, exact numeric `aweme_id`, dates |
 
-Do not route responsible-account-set performance here; use `accounts report`. Do not route product asset discovery here; use `qc-products list/search`. Do not route plan rows here; use `qc-reports plans`. Do not route ordinary 全域素材维度, 投后素材, or video-material performance to the legacy `qc-reports materials` command.
+Responsible-account-set performance uses MCP `report_qianchuan_managed_accounts`; product asset discovery uses `search_qianchuan_products`; plan metadata uses `list_qianchuan_plans`. Ordinary 全域素材维度, 投后素材 and video-material performance use the verified custom topic, not the legacy material report.
 
 ## Account Contracts
 

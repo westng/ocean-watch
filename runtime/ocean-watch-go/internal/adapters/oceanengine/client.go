@@ -2,6 +2,7 @@ package oceanengine
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,12 +19,13 @@ import (
 )
 
 const (
-	OfficialScheme        = "https"
-	BusinessHost          = "api.oceanengine.com"
-	OAuthHost             = "ad.oceanengine.com"
-	DefaultRequestTimeout = 30 * time.Second
-	DefaultMaxResponse    = int64(8 << 20)
-	qianchuanEnvelopePeek = 64 << 10
+	OfficialScheme          = "https"
+	BusinessHost            = "api.oceanengine.com"
+	OAuthHost               = "ad.oceanengine.com"
+	DefaultRequestTimeout   = 30 * time.Second
+	DefaultAdmissionTimeout = 60 * time.Second
+	DefaultMaxResponse      = int64(8 << 20)
+	qianchuanEnvelopePeek   = 64 << 10
 )
 
 type HostProfile string
@@ -32,6 +34,7 @@ const (
 	ProfileBusiness         HostProfile = "official-business"
 	ProfileAccountDiscovery HostProfile = "official-account-discovery"
 	ProfileOAuth            HostProfile = "official-oauth"
+	ProfileAppOAuth         HostProfile = "official-app-oauth"
 	ProfileAgent            HostProfile = "official-agent"
 	ProfileQianchuanVideo   HostProfile = "official-qianchuan-video"
 )
@@ -80,6 +83,7 @@ type Client struct {
 type SDKRequestError struct {
 	cause      error
 	dispatched bool
+	endpoint   string
 }
 
 func (err *SDKRequestError) Error() string {
@@ -92,6 +96,13 @@ func (err *SDKRequestError) Unwrap() error {
 
 func (err *SDKRequestError) Dispatched() bool {
 	return err != nil && err.dispatched
+}
+
+func (err *SDKRequestError) EndpointFamily() string {
+	if err == nil {
+		return ""
+	}
+	return err.endpoint
 }
 
 func (err *SDKRequestError) AuthorizationFailureReason() string { return "REQUEST_FAILED" }
@@ -184,7 +195,7 @@ func qianchuanAdvertiserScopedProfile(profile HostProfile) bool {
 
 func resolveHostProfile(profile HostProfile) (ClientProfile, error) {
 	switch profile {
-	case ProfileBusiness, ProfileAccountDiscovery:
+	case ProfileBusiness, ProfileAccountDiscovery, ProfileAppOAuth:
 		return ClientProfile{Name: profile, Host: BusinessHost, Scheme: OfficialScheme}, nil
 	case ProfileOAuth, ProfileAgent, ProfileQianchuanVideo:
 		return ClientProfile{Name: profile, Host: OAuthHost, Scheme: OfficialScheme}, nil
@@ -214,12 +225,26 @@ func newClient(
 		base: transport, channel: channel, governor: governor,
 		sharedQianchuanControl: sharedQianchuanControl,
 	}
+	httpTimeout := timeout
+	if channel == "qianchuan" && qianchuanAdvertiserScopedProfile(profile.Name) {
+		// Local quota, lock and cooldown waits have a separate budget. The
+		// network timer starts only once an HTTP attempt is admitted.
+		governedTransport.dispatchTimeout = timeout
+		governedTransport.admissionTimeout = DefaultAdmissionTimeout
+		httpTimeout = 0
+	}
+	var requestTransport http.RoundTripper = governedTransport
+	if profile.Name == ProfileAppOAuth {
+		// App authentication reserves its own attempt in OfficialAppTokens and
+		// does not consume an advertiser's business read/write admission slot.
+		requestTransport = transport
+	}
 	guardedTransport := &securityTransport{
-		base: governedTransport, host: profile.Host, scheme: profile.Scheme,
+		base: requestTransport, host: profile.Host, scheme: profile.Scheme,
 		maxResponseBytes: maxResponseBytes,
 	}
 	httpClient := &http.Client{
-		Timeout:   timeout,
+		Timeout:   httpTimeout,
 		Transport: guardedTransport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return errors.New("Ocean Engine SDK redirects are forbidden")
@@ -257,6 +282,8 @@ type governedTransport struct {
 	channel                string
 	governor               *requestcontrol.Governor
 	sharedQianchuanControl requestcontrol.SharedController
+	dispatchTimeout        time.Duration
+	admissionTimeout       time.Duration
 }
 
 func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -274,7 +301,13 @@ func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Resp
 	if err != nil {
 		return nil, &notDispatchedError{cause: err}
 	}
-	release, err := transport.governor.Acquire(request.Context(), scope, endpoint)
+	admissionContext := request.Context()
+	if transport.admissionTimeout > 0 {
+		var cancel context.CancelFunc
+		admissionContext, cancel = context.WithTimeout(admissionContext, transport.admissionTimeout)
+		defer cancel()
+	}
+	release, err := transport.governor.Acquire(admissionContext, scope, endpoint)
 	if err != nil {
 		return nil, &notDispatchedError{cause: err}
 	}
@@ -285,7 +318,11 @@ func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Resp
 			release()
 			return nil, &notDispatchedError{cause: requestcontrol.ErrAdvertiserScopeMissing}
 		}
-		sharedRelease, err = transport.sharedQianchuanControl.Acquire(request.Context(), advertiserID)
+		if reads, ok := transport.sharedQianchuanControl.(requestcontrol.SharedReadController); ok && request.Method == http.MethodGet {
+			sharedRelease, err = reads.AcquireRead(admissionContext, advertiserID)
+		} else {
+			sharedRelease, err = transport.sharedQianchuanControl.Acquire(admissionContext, advertiserID)
+		}
 		if err != nil {
 			release()
 			return nil, &notDispatchedError{cause: err}
@@ -298,25 +335,43 @@ func (transport *governedTransport) RoundTrip(request *http.Request) (*http.Resp
 		release()
 		return nil, &notDispatchedError{cause: err}
 	}
-	response, requestErr := transport.base.RoundTrip(request)
-	if sharedRelease == nil {
-		if requestErr != nil || response == nil || response.Body == nil {
-			release()
-			return response, requestErr
-		}
-		response.Body = &releaseOnCloseBody{ReadCloser: response.Body, release: release}
-		return response, nil
+	var cancelDispatch context.CancelFunc
+	if transport.dispatchTimeout > 0 {
+		var dispatchContext context.Context
+		dispatchContext, cancelDispatch = context.WithTimeout(request.Context(), transport.dispatchTimeout)
+		request = request.Clone(dispatchContext)
 	}
+	response, requestErr := transport.base.RoundTrip(request)
 	if requestErr != nil || response == nil || response.Body == nil {
-		if releaseErr := sharedRelease(requestErr, response); requestErr == nil && releaseErr != nil {
-			requestErr = releaseErr
+		if cancelDispatch != nil {
+			cancelDispatch()
+		}
+		if sharedRelease != nil {
+			if releaseErr := sharedRelease(requestErr, response); requestErr == nil && releaseErr != nil {
+				requestErr = releaseErr
+			}
 		}
 		release()
 		return response, requestErr
 	}
-	response.Body = &sharedControlledBody{body: response.Body, response: response, release: sharedRelease}
+	if sharedRelease != nil {
+		response.Body = &sharedControlledBody{body: response.Body, response: response, release: sharedRelease}
+	}
 	response.Body = &releaseOnCloseBody{ReadCloser: response.Body, release: release}
+	if cancelDispatch != nil {
+		response.Body = &timeoutBody{ReadCloser: response.Body, cancel: cancelDispatch}
+	}
 	return response, nil
+}
+
+type timeoutBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (body *timeoutBody) Close() error {
+	defer body.cancel()
+	return body.ReadCloser.Close()
 }
 
 type releaseOnCloseBody struct {
@@ -407,13 +462,14 @@ func (transport *securityTransport) RoundTrip(request *http.Request) (*http.Resp
 		request.URL.Host != transport.host || request.URL.User != nil {
 		return nil, errors.New("Ocean Engine SDK request escaped the approved host profile")
 	}
+	endpoint, _ := endpointFamily(request.URL.Path)
 	response, err := transport.base.RoundTrip(request)
 	if err != nil {
 		var blocked *notDispatchedError
-		return nil, &SDKRequestError{cause: err, dispatched: !errors.As(err, &blocked)}
+		return nil, &SDKRequestError{cause: err, dispatched: !errors.As(err, &blocked), endpoint: endpoint}
 	}
 	if response == nil {
-		return nil, &SDKRequestError{cause: errors.New("transport returned no response"), dispatched: true}
+		return nil, &SDKRequestError{cause: errors.New("transport returned no response"), dispatched: true, endpoint: endpoint}
 	}
 	contentLength := response.ContentLength
 	if contentLength > transport.maxResponseBytes {
@@ -422,16 +478,17 @@ func (transport *securityTransport) RoundTrip(request *http.Request) (*http.Resp
 	}
 	response.Body = &boundedBody{
 		reader: io.LimitReader(response.Body, transport.maxResponseBytes+1),
-		closer: response.Body, limit: transport.maxResponseBytes,
+		closer: response.Body, limit: transport.maxResponseBytes, endpoint: endpoint,
 	}
 	return response, nil
 }
 
 type boundedBody struct {
-	reader io.Reader
-	closer io.Closer
-	limit  int64
-	read   int64
+	reader   io.Reader
+	closer   io.Closer
+	limit    int64
+	read     int64
+	endpoint string
 }
 
 func (body *boundedBody) Read(target []byte) (int, error) {
@@ -440,10 +497,18 @@ func (body *boundedBody) Read(target []byte) (int, error) {
 	if body.read > body.limit {
 		return count, errors.New("Ocean Engine SDK response body exceeded its limit")
 	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		err = &SDKRequestError{cause: err, dispatched: true, endpoint: body.endpoint}
+	}
 	return count, err
 }
 
-func (body *boundedBody) Close() error { return body.closer.Close() }
+func (body *boundedBody) Close() error {
+	if err := body.closer.Close(); err != nil {
+		return &SDKRequestError{cause: err, dispatched: true, endpoint: body.endpoint}
+	}
+	return nil
+}
 
 func Redact(message string) string {
 	result := message

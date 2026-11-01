@@ -266,7 +266,7 @@ func (runner Runner) buildMarketingCreateComponents(
 	materials := runtime.MaterialService
 	if materials == nil {
 		materials = applicationmaterials.Service{
-			Tokens: tokenManager,
+			Tokens: runner.guardTokens(tokenManager, "marketing"),
 			Reader: oceanengine.MarketingMaterialsAdapter{Factory: factory, Retry: runtime.Retry},
 			Now:    runtime.Now,
 		}
@@ -274,7 +274,7 @@ func (runner Runner) buildMarketingCreateComponents(
 	discoveryService := runtime.Discovery
 	if discoveryService == nil {
 		discoveryService = discovery.Service{
-			Tokens: tokenManager,
+			Tokens: runner.guardTokens(tokenManager, "marketing"),
 			Reader: oceanengine.MarketingDiscoveryAdapter{Factory: factory, Retry: runtime.Retry},
 		}
 	}
@@ -287,7 +287,7 @@ func (runner Runner) buildMarketingCreateComponents(
 	preparer.RuntimeAssets = runtimeAssets
 	credentialProvider := runtime.Credentials
 	if credentialProvider == nil {
-		credentialProvider = sharedplans.TokenCredentialProvider{Tokens: tokenManager}
+		credentialProvider = sharedplans.TokenCredentialProvider{Tokens: runner.guardTokens(tokenManager, "marketing")}
 	}
 	locker := runtime.Locker
 	if locker == nil {

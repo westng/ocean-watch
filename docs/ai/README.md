@@ -4,7 +4,7 @@
 
 ## 权威边界
 
-- 当前运行行为以代码、配置、测试、`.codex-plugin/plugin.json`、两个 Skill 及正式文档为准；
+- 当前运行行为以代码、配置、测试、`.codex-plugin/plugin.json`、三个 Skill 及正式文档为准；
 - 过程文档中的状态、版本、行号、测试结果、环境事实和完成度在引用前必须重新核对；
 - 已确认并长期有效的结论应落实到代码、测试、契约或正式文档，不能只保留在本目录；
 - 未实施的设计不得写入 `README.md` 或 `docs/README.md` 作为现有能力。
@@ -23,11 +23,26 @@
 
 - [Ocean Watch 开源产品重构 PRD](../product/prd.md)：正式产品需求、目标技术方案和 M0–M5/WB1 阶段验收要求，不在本索引重复维护完成度。
 
+## 当前设计
+
+- [千川作品投放流程重构方案](designs/qianchuan-workflow-refactor-2026-11-01.md)：F2 批量解析、账户范围共享读取、达人独立预检及唯一已有目标的追加预览已实施并通过隔离验证；宿主执行接入和真实业务验收待完成，当前行为见正式流程说明。
+- [千川 Skill 与官方 MCP 全量查询接入方案](designs/qianchuan-official-mcp-skill-integration-2026-11-01.md)：实施修订版 1.2，正式策略、156 项受控映射、任务与 D1 已落地；三项分页限制及实际 Host 验收独立记录。
+
+## 当前调研
+
+- [千川官方 MCP 查询目录与证据](research/qianchuan-official-mcp-catalog-2026-11-01.md)：公开 156 项原始快照；三项最小 PoC 与全目录合同/可用性分开统计，引用前需重新核对。
+- [千川官方 MCP P0.5 最小真实联调](research/qianchuan-official-mcp-poc-2026-11-01.md)：单账户余额、配额和两页商品全域计划的脱敏 Schema、精度、SDK 对照、预算及自然频控记录；不替代正式客户端/Host 验收。
+
 ## 当前计划
 
 - [授权与广告账户获取流程重构](plans/authorization-flow-refactor-2026-10-29.md)：按官方用户身份保存授权、按角色发现账户及失败恢复的本地实施与验证记录；产品行为见正式授权合同。
 - [V3 架构整改实施计划](plans/v3-architecture-remediation-plan.md)：维护 W0–W10 的实施范围、迁移期兼容验证和 Alpha 开放门禁；PRD 的整体验收要求仍以正式 PRD 为准。
+- [千川官方 MCP 与 Skill 接入实施计划](plans/qianchuan-official-mcp-integration-2026-11-01.md)：正式实现快照、范围决定 A_Q1/A_D1 与阶段门禁；有界读取、完整分页、实际 Host 和发布分别记录。
 
 ## 历史文档清理
 
 被代码、正式文档或当前实施计划取代的旧架构设计、审计快照、一次性修复说明和重复交接单应直接删除，不在 `docs/ai/` 保留副本。当前运行行为仍以代码、测试、Plugin 清单、Skill 和正式文档为准。
+
+## 实施验收
+
+- [千川官方 MCP 实施验收记录](reviews/qianchuan-official-mcp-implementation-2026-11-01.md)：本地测试、五平台产物、只读真实样本及当前 Codex 发现状态；不等于线上发布或所有角色可用。

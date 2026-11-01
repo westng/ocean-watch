@@ -1,6 +1,6 @@
 ---
 name: qc-plan-monitor
-description: Dedicated 巨量千川 skill for first-run setup, local OAuth and Token refresh, F2 Cookie configuration, responsible or commonly managed accounts, product/live templates, creator/work/product discovery, product or live all-domain plans, material changes, safe Douyin-work preflight and batch create/append, plan status/budget/ROI updates, and account/plan/product/room/author reports across 全域与乘方. Use for 配置F2、初始化F2、更新抖音Cookie、千川初始化、授权、同步广告主、常用户、模板、达人/作品/商品/计划/素材、批量建计划或追加素材、消耗/ROI/GMV 报表 and official payload validation, including colloquial, abbreviated, misspelled, or contextual follow-ups.
+description: Dedicated 巨量千川 skill for setup, local OAuth and Token refresh, F2 Cookie configuration, responsible accounts, product/live templates, creator/work/product discovery, all-domain plans, safe Douyin-work preflight and batch create/append, account balance/budget/quota, plan diagnosis, material quality, official delivery suggestions, approved official GET queries, and 全域/乘方 reports. Optional API documentation, Schema and Go/Java examples support plugin development. Use for 千川、配置F2、授权、常用户、模板、达人/作品/商品/计划/素材、预检、批量建计划、追加素材、余额/配额、诊断、首发/低效、建议ROI、消耗/ROI/GMV、自定义报表 and contextual follow-ups.
 ---
 
 # QC Plan Monitor
@@ -19,7 +19,7 @@ On DeepSeek Harness, use the absolute directory of the loaded `SKILL.md` to reso
 | List local Marketing or Qianchuan templates | MCP `list_templates` |
 | Show one exact template | MCP `get_template` |
 | List accounts I manage/use | MCP `list_managed_accounts` |
-| Query spend/performance for my managed Qianchuan account set | `./run accounts report --channel qianchuan` |
+| Query spend/performance for my managed Qianchuan account set | MCP `report_qianchuan_managed_accounts` |
 | Inspect Qianchuan Token/app/advertiser mapping | MCP `get_qianchuan_authorization` |
 | Search selectable Qianchuan products | MCP `search_qianchuan_products` |
 | List Qianchuan product all-domain plans | MCP `list_qianchuan_plans` |
@@ -30,14 +30,22 @@ On DeepSeek Harness, use the absolute directory of the loaded `SKILL.md` to reso
 | Preflight Douyin works without creating or changing a plan | MCP `preflight_qianchuan_works` |
 | Configure or initialize F2 Douyin Cookie | MCP `start_f2_configuration` |
 | Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
+| Check account balance, daily budget and available plan quota | MCP `get_qianchuan_account_health` |
+| Diagnose one exact plan with its current delivery scene | MCP `diagnose_qianchuan_plan` |
+| Inspect original or inefficient labels of exact materials | MCP `inspect_qianchuan_material_quality` |
+| Get official budget, ROI or bid suggestions without changing delivery | MCP `get_qianchuan_delivery_suggestions` |
+| Discover exact unified report topics, dimensions and metrics | MCP `get_qianchuan_report_schema` |
+| Run a custom material, product, author or room report | MCP `report_qianchuan_custom` |
 <!-- capability-routes:end -->
 
 | User outcome | Exact route |
 | --- | --- |
 | Authorize or recover expired Qianchuan access | MCP `start_authorization` with `channel=qianchuan` and the original advertiser if known |
 | Retry saved authorization account discovery | MCP `start_account_sync` with `channel=qianchuan` and the exact authorization ID |
+| Approved official query outside the task routes above | MCP `get_qianchuan_official_capabilities` with a narrow keyword, then exact `query_id`; MCP `query_qianchuan_official` with its approved contract |
+| Explicit API-documentation, Schema or SDK-example request | The fixed optional MCP route in `references/developer-docs.md` |
 | Confirmed Ocean Watch goal not matched above | MCP `get_capabilities` once with `channel=qianchuan`, then use its unique command |
-| Initialize, mutate templates/accounts/plans/materials, custom reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
+| Initialize, mutate templates/accounts/plans/materials, explicitly advanced CLI reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
 
 When a row matches, call that exact MCP tool immediately. MCP declarations may be deferred from the visible prompt: never enumerate `ALL_TOOLS`, inspect caches, or read memory to decide whether a named tool exists. Treat it as unavailable only when the direct call itself returns a Host-level unknown-tool or unavailable error; then report that error and stop without a CLI fallback. Do not call `get_capabilities` when a preceding row already matches.
 
@@ -55,12 +63,17 @@ On `ACCOUNT_SYNC_REQUIRED`, obtain the exact pending authorization ID from the l
 
 - This Skill owns only `qianchuan`. Route Star Map requests to `$xt-plan-monitor`. Never reuse Marketing or Star Map apps, credentials, templates, account mappings, endpoints, or creation transactions.
 - Interpret “我负责的/常用的/管理的户” and contextual paraphrases as responsible-account intent. Membership means `list_managed_accounts`; spend, ROI, GMV, orders, or dated performance requires a fresh report.
+- “这个户余额/日预算/还能建几条” uses `get_qianchuan_account_health`; “我负责的户” selects `managed_accounts=true` only when that is the user's intended set. Balance, budget and quota failures remain separate. `OFFICIAL_API_ERROR` or an absent value does not prove the account is healthy.
+- “这条计划为什么不跑/审核/学习期/成本保障” uses `diagnose_qianchuan_plan` with the exact plan ID. Keep the verified `uni`, `overall` or `legacy` scene and skipped checks; legacy-only endpoints cannot describe all-domain learning status.
+- “首发/低效/素材质量” uses `inspect_qianchuan_material_quality` with exact material IDs, or structured `works[]` containing `url`, product and creator hints. A Douyin work ID, creator UID, video ID and material ID are distinct. Labels do not prove ownership or create-plan eligibility.
+- “官方建议预算/ROI/出价” uses `get_qianchuan_delivery_suggestions` with its explicit scene and kind. Suggestions preserve the official object and observation time and do not authorize a modification. Use `references/official-queries.md` only for missing task parameters or a long-tail official query.
 - Generic Qianchuan template creation must ask `商品全域` or `直播全域`; never silently default one kind. Generic cross-channel template creation must first ask Marketing or Qianchuan.
 - “预检/校验这些作品创建计划” without explicit write permission is read-only `preflight_qianchuan_works`, even when rows include plan type or business owner. Never replace it with CLI batch creation or submission.
-- `ok=true` and a `preflight_id` alone do not mean a group passed. Check each group's `status`, `counts`, `failed_results`, `skipped`, and `query_failures`; only `would_create`, `would_append`, or `already_present` describe a completed group preflight. Report failed or pending groups explicitly. Warm owner hints may skip F2; plan naming can use the nickname returned by the current official creator check when no row nickname was supplied.
+- `ok=true` and a `preflight_id` alone do not mean a group passed. Check each group's `status`, `counts`, `failed_results`, `skipped`, and `query_failures`; only `would_create`, `would_append`, or `already_present` describe a completed group preflight. Report failed or pending groups explicitly. Resolve this batch's F2 metadata before using warm owner hints; neither cached nor supplied identity hints skip the current public lookup or official authorization, ownership, and product checks. Plan naming can use the nickname returned by the current official creator check when no row nickname was supplied.
 - For mixed-product or mixed-advertiser work links, use the same MCP preflight with all structured `items[]` and omit a global `plan_template` unless the user actually selected one template for the whole batch. Preserve each row's explicit `product_id` or exact configured `product_name`, `plan_template`, and `advertiser_id` when supplied. Core resolves a unique active product template and splits advertiser/template batches; never pick the first account or send all links under one template. Rows without explicit routing use public product hints; missing, multiple-product, unmatched, or ambiguous rows stay in `pending` for only the missing choice.
 - If F2 cannot provide an identity, accept a user-supplied exact `creator_douyin_id` and a naming-only `creator_name` on that row; `creator_uid` is optional. Core must recover a unique numeric UID through an exact official visible-ID match, then still verify authorization, work ownership, and product. Nicknames never identify or authorize a creator. Do not explain an unknown F2 failure as a proven login or anti-bot block.
-- For ordinary 全域/乘方 custom material, product, room, author, title, or creative reports, choose the exact official topic/dimensions with `qc-reports schema` before `qc-reports custom`; do not substitute legacy material reports or plan-list statistics.
+- For ordinary 全域/乘方 custom material, product, room, author, title, or creative reports, use `get_qianchuan_report_schema` when the exact topic/dimensions/metrics are unknown, then `report_qianchuan_custom` for that advertiser. Responsible-account fixed spend/ROI uses `report_qianchuan_managed_accounts`. Preserve dates, the selected topic and partial failures.
+- For another approved official query, discover only its narrow catalog entry. `enabled=true` means local policy and contract allow a call; current OAuth availability remains unverified until the scoped query succeeds. Reuse a contract already established in this conversation. Do not invent an upstream tool, URL, credential, subject relationship or optional parameter.
 - If one required identifier or business choice is genuinely missing, ask only for that item. Do not enumerate or scan unrelated creators/accounts.
 
 ## Execution Boundary
@@ -79,9 +92,10 @@ When `routed=true`, label each `batches[]` entry with its advertiser and templat
 
 ## On-Demand Detail
 
-Read `references/workflow-reference.md` only after the route is known and only for setup/OAuth, template lifecycle, creator discovery, batch submission, material removal, plan settings, custom reports, runs, or advanced output rules. Read `references/unified-report-routing.md` only for custom report routing. Do not read the full reference for the eleven direct business MCP routes or `get_capabilities`.
+Read `references/workflow-reference.md` only after the route is known and only for setup/OAuth, template lifecycle, creator discovery, batch submission, material removal, plan settings, explicitly advanced CLI reports, runs, or advanced output rules. Read `references/unified-report-routing.md` for custom reporting, `references/official-queries.md` for official task parameters and catalog queries, or `references/developer-docs.md` for an explicit optional documentation request. Direct task MCP calls with known arguments do not require the full manual.
 
 ## Output
 
 - Preserve required Presentation, time range, report scope (`overall` includes 乘方; `uni` is 全域), channel, advertiser, partial failures, and true source.
+- Preserve official query `columns[].unit`, decimal-string cells, nulls, `observed_at` and `completeness`. Raw units such as `1/100000 CNY` must not be presented as yuan without an exact decimal conversion. A partial slice cannot prove absence, a complete inventory or an account-wide total. Continue only with the returned bound cursor and the unchanged parameters; `contract_limited` queries may expose only the first upstream batch.
 - Do not create files unless `--out` is explicit. Do not expose configuration paths, source links in stored snapshots, raw F2/official responses, credentials, or internal errors.

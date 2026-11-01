@@ -65,9 +65,9 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 千川作品批量预检使用 MCP `preflight_qianchuan_works`，输入 1–100 条结构化 `items[]`；全局 `plan_template` 可选。每行可携带自己的 `work_url`、`plan_type`、`business`，也可指定 `product_id`、精确商品全称/简称 `product_name`、`advertiser_id` 和行级 `plan_template`。混合商品/账户根据启用模板的既有绑定唯一匹配后拆成独立子批次，无需新增映射表；缺少商品、多个商品、无匹配或多个候选均进入待确认，不自动选择账户。可选 `concurrency` 为 1–10、默认 8。该工具不接受顶层 `work_urls`、顶层 `plan_type/business`、配置路径、`submit` 或 payload 输出开关；它不会写入官方业务数据，但会访问各匹配账户的官方只读接口、必要时刷新其授权、更新非敏感作品身份提示缓存，并为各子批次保存最长 30 分钟且不跨上海业务日的独立预检快照。完整字段和流程见[混合商品作品路由](../reference/qianchuan-work-routing.md)。
 
-预检先解析短链，再读取广告主与作品 ID 绑定的 owner hint。热缓存可以跳过该作品的 F2，但不能跳过当前官方授权、作品归属、商品匹配、计划和素材复核；冷缓存或缓存损坏只让缺失项回到 F2，缓存错误默认降级并记录指标。只读预检不持有广告主写锁，批量读取与普通千川读取共用跨调用限流和 `Retry-After` 冷却。
+单条和批量预检先统一解析短链及 F2 元数据，再按模板确定账户范围。路由取得的元数据供各子批次复用；owner hint 只补充缺失身份，热缓存或用户身份提示不跳过本批 F2，也不代替官方授权、作品归属、商品匹配、计划和素材复核。缓存错误降级并记录指标。账户子批次并行共享命令级容量，同账户同授权共享一次计划扫描；实际读取允许两个保守的在途槽位，并保留跨调用节流和 `Retry-After` 冷却。只读预检不持有广告主业务写锁。
 
-命名优先使用逐行 `creator_name` 或 F2 返回的昵称；缓存命中而没有公开昵称时，使用本次官方核验返回的达人昵称。两者都缺失且模板需要昵称时才要求补充，不能用抖音号或 UID 冒充昵称。工具返回 `ok=true` 或生成预检快照不代表所有分组通过，需逐组检查状态及失败、跳过和查询错误。
+命名优先使用逐行 `creator_name` 或 F2 返回的昵称；缺少公开命名字段时，使用本次官方核验返回的达人昵称。两者都缺失且模板需要昵称时才要求补充，不能用抖音号或 UID 冒充昵称。工具返回 `ok=true` 或生成预检快照不代表所有分组通过，需逐组检查状态及失败、跳过和查询错误。
 
 结构化行可用准确 `creator_douyin_id` 和命名 `creator_name` 补充 F2 未获取的身份/昵称；只有可见抖音号时，必须经该账户官方定向查询取得唯一精确匹配的数字 UID。可选 `creator_uid` 不能脱离可见抖音号单独使用。昵称和公开商品提示都不证明投放授权，官方归属、目标商品核验始终保留。
 
@@ -77,7 +77,38 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 常用巨量营销查询由五个任务型 MCP 工具承载：`get_marketing_authorization` 只读本地授权和广告主映射，不刷新 Token、不调用官方 API；`search_marketing_videos`、`search_marketing_creator_materials`、`report_marketing_materials` 和 `report_marketing_plans` 使用广告主绑定授权并读取现有素材或固定报表用例。达人素材查询按 `page` 单页读取，`limit` 直接作为官方 `page_size`，最多 100 条，不会先扫描最多 100 页再截断输出。
 
-这些工具只覆盖高频固定查询。跨渠道负责账户效果、营销报表字段发现和自定义主题、营销图片/商品，以及千川素材/商品/直播间/达人等高级报表仍使用明确的 CLI 路由；缺失某个已工具化 MCP 能力时必须停止该常用查询，不能静默改走等价 CLI。
+千川另有官方目录、受控查询、账户健康、计划诊断、素材检查、投放建议、报表字段、自定义报表和负责账户报表九个 MCP 入口；高级报表按当前账户支持的主题与字段构造。跨渠道负责账户效果、营销高级查询以及尚未工具化的管理/写入仍使用明确的 CLI 路由。缺失某个已工具化 MCP 能力时必须停止该查询，不能静默改走等价 CLI。查询范围与分页限制见[千川官方 MCP 查询合同](../reference/qianchuan-official-mcp.md)。
+
+## 固定实例策略与可选开发资料
+
+用户管理的配置可包含以下非秘密策略；示例只允许一个明确广告主，省略 `allowed_subjects` 时仍受真实授权范围约束：
+
+```json
+{
+  "business_policy": {
+    "mode": "plan",
+    "toolsets": ["core", "marketing", "qianchuan", "reports"],
+    "allowed_subjects": {
+      "qianchuan": {"advertiser": ["ADVERTISER_ID"]}
+    }
+  }
+}
+```
+
+将 `ADVERTISER_ID` 替换为规范十进制字符串后使用。`read` 只允许查询，`plan` 还允许预检，`execute` 仍要求原有用例的提交和授权条件；本次官方查询工具始终不写业务数据。未配置策略时默认 `plan` 与上述四个工具集，开发资料关闭。空工具集、未知模式、未知主体或额外字段会拒绝启动。
+
+`allowed_subjects` 可按渠道限制 `advertiser/agent/shop/customer_center/organization/authorization`；配置某渠道的主体范围后，未列出的独立主体类型不会自动放行。授权 ID 白名单是额外边界；已验证父主体可访问的子账户仍要满足独立子账户白名单。策略在实例启动时固定，模型请求不能更改；配置变更后重新启动 Runtime 并在新聊天核对工具发现，不能由旧连接隐式升权。
+
+可选官方开发资料需要把 `developer_docs` 加入 `toolsets`，并在系统凭据库配置独立 App/开发者元数据。用户明确提供开发者 ID 时，可以引用一个已授权应用，不需要 Secret 或 Token：
+
+```bash
+skills/qc-plan-monitor/run developer-docs status
+skills/qc-plan-monitor/run developer-docs configure --authorization-id AUTHORIZATION_ID --developer-id DEVELOPER_ID
+```
+
+独立应用使用 `--app-id APP_ID --developer-id DEVELOPER_ID`，无需业务 OAuth。两条配置路径都先核对三个远端工具 Schema 再保存并回读。引用的 App 改变后旧绑定失效，需重新配置；授权引用不进入文档查询 DTO。配置状态不返回 App/开发者元数据，不写入普通配置文件，系统凭据库不可用时拒绝保存。
+
+三个可选 MCP 工具只接受检索词、精确 `/open_api/` 路径和明确的 `language=go|java`。开发资料缺配置或服务失败不阻断千川业务，不通过重新业务 OAuth 修复。工具发现、元数据准备和真实文档查询是不同验收项。
 
 ## 本地状态
 

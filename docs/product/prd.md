@@ -701,6 +701,7 @@ Capability API 是逻辑请求/响应合同，不是第三种网络服务。允�
 | `marketing` | 营销模板、素材、计划的查询/预检/变更 | 按启用模式和每个用例风险分级 |
 | `qianchuan` | 作品预检、计划组、绑定与千川变更 | 复用稳定业务身份、官方校验和恢复合同 |
 | `reports` | 受已授权渠道/账户范围约束的报表 | 不因启用报表而获得对应渠道写入权 |
+| `developer_docs` | 独立官方开发资料查询与 Go/Java 示例，默认关闭 | 使用系统保护的 App/开发者元数据，不读取业务 Token，不执行示例或业务接口 |
 
 | 模式 | 允许行为 | 不允许行为 |
 | --- | --- | --- |
@@ -708,8 +709,8 @@ Capability API 是逻辑请求/响应合同，不是第三种网络服务。允�
 | `plan`（预检） | 包含查询，计算方案并保存本地操作/快照、展示差异 | 派发官方投放写入、消费审批执行 |
 | `execute`（执行） | 包含查询/预检，可请求可信交互并消费有效回执执行精确操作 | 绕过账户范围、摘要/有效期、防重放、租约、OS 锁或未知项对账 |
 
-- 新安装默认 `plan`，启用 `core` 与用户选择的业务工具集；一次注册同一作用域的逻辑服务，不因两个 Skill 重复注册。`plan` 仍会写本地状态，不得宣传成文件系统/数据库只读。
-- `setup mode set --mode read|plan|execute`（具体宿主可映射为等价显式配置入口）是执行模式的管理动作；切换后启动新的固定 Runtime，不能在一次 MCP/CLI 请求中隐式升权。`plan` 默认不等于 `execute`，用户必须显式选择后者且仍须经过审批验证。
+- 当前源码缺省为 `plan`，启用 `core/marketing/qianchuan/reports`，保留已有查询与预检；用户可用 `business_policy.toolsets` 明确缩小范围，`developer_docs` 默认关闭。一次注册同一作用域的逻辑服务，不因两个 Skill 重复注册。`plan` 仍会写本地状态，不得宣传成文件系统/数据库只读。
+- 当前模式管理入口是用户配置 `business_policy.mode=read|plan|execute`；`allowed_subjects` 可同时限制主体与授权引用。切换后启动新的固定 Runtime，不能在一次 MCP/CLI 请求中隐式升权。`plan` 默认不等于 `execute`，用户必须显式选择后者且仍受用例门禁。完整 V3 可信审批仍按第 7 节作为独立目标，不由本批查询实施宣告完成。
 - 模式与工具集由用户控制的安装/启动配置确定，连接初始化时固定并返回实际值；模型参数、Skill 或普通调用不能提高模式、选择信任根或扩展工具集。未知配置值、合同不匹配默认报错，不静默全开。
 - `execute` 只有在第 7 节可信通道验证通过后才可用于在线写入；缺失时禁用写入并明确报告实际支持为查询/预检，不能仅提示警告后仍执行。独立 CLI 调用也受相同 Core 校验，不靠工具是否注册控制权限。
 - Go Core 每次调用均复核实际模式、能力启用情况、渠道/账户、操作中的全部子项及审批；`core` 内的通用 Execute 也不能执行未启用业务工具集的操作。拿到其他宿主的 `operation_id` 或审批引用不会自动获得跨范围执行权。
@@ -768,30 +769,39 @@ group_id = "qcg_" + hex(sha256(canonical_json(identity)))
 
 - `items[]` 每行携带自己的 `work_url`、`plan_type` 和 `business`。
 - 同一达人可以有多个计划组。
-- 未绑定的历史候选不自动追加。
+- 当前作品预检采用 `unique_existing`：无绑定且完整查询找到唯一兼容目标时，固定该计划 ID 进入追加预览；确认提交并重新核对成功后保存绑定。已有绑定优先核对原目标，多个候选或跨组占用不自动选择。
 - 绑定身份、模板摘要、素材集合或业务日漂移时返回阻断，不猜测。
 - F2 只提供身份提示；官方授权、作品归属、商品匹配和计划确认必须由官方 API 完成。
 
 ### 9.2 预检执行图
 
 ```text
-normalize items
-   ├── resolve short links
-   ├── read authorization lease
-   └── load template
-          │
-          ├── owner hint / F2 for missing metadata
-          ├── official creator / work / product verification
-          └── plan inventory by group identity
+normalize single/batch items + load templates
+                   │
+       shared short-link / F2 metadata pass
+                   │
+       route by template and advertiser
+                   │
+    parallel account scopes + immutable leases
+          ├── shared complete plan inventory
+          └── per-creator authorization / work / product checks
                          │
-                 candidate detail + material diff
+          each creator joins its required facts
                          │
-                persist operation + snapshot digest
+        candidate UID / full product set + material diff
+                         │
+       create / append / already present / blocked
+                         │
+       separate child snapshots + final batch summary
 ```
 
 约束：
 
-- 读取并发默认 8、最大 10；这是连接/任务并发，不是 QPS 承诺。
+- 读取任务并发默认 8、最大 10；路由子批次共享命令级容量。同账户固定最多两个读取在途，短状态锁控制派发间隔和共享冷却；旧版排他请求及写请求与新读取互斥。这些是本地限制，不是 QPS 或官方配额承诺。
+- F2 先于账户查询；账户范围明确后共享一次不可变租约。缓存只补身份字段，不跳过本批 F2，也不代替官方事实；不同授权范围不共享官方事实。
+- 商品全域列表在锁定 SDK 中没有 UID 筛选，按账户和授权范围完整扫描一次，再按每段最多 200 个并行核对全部必要详情。清单仍限制在 100 页、10000 条计划内；数字 UID、完整商品集合或分页覆盖未核实，以及任一段查询失败时，不能决定新建。
+- 明确目标商品的作品只查询该商品；未明确目标仍核验模板候选集合。必要查询失败时不能采用部分商品集合。
+- 当前快照 v3 显式保存选择策略；旧 v2 保留 `bound_only` 语义，v1 只读，旧执行器拒绝 v3。工具仍返回整批汇总，统一 V3 Operation/可信审批和宿主执行接入范围见第 6–8 节。
 - 预检不持有广告主写锁；提交时才获取写锁并重新核对计划和素材差集。
 - 千川预检按 `Asia/Shanghai` 业务日，最多有效 30 分钟且不跨业务日；不是到期删除审计数据。过期后创建新 operation version，旧内容保持只读，不能续期复用旧审批。
 - 结果按组保存成功、阻断、跳过、失败和未知，不因单组失败丢失其他组事实。

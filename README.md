@@ -53,7 +53,11 @@ Ocean Watch 通过巨量引擎官方 API 提供授权、账户、素材、模板
 
 `xt-plan-monitor` 是星图 Skill 的对外名称，`star_map` 是其运行时渠道键。三个 Skill 都按统一能力合同调用共享 Go Core，星图账号使用 `star_account` 类型。
 
-当前能力目录包含 **77 条 CLI 能力和 26 个 MCP 工具**，两者有重叠。MCP 提供本地查询、官方素材与报表读取、千川作品预检，以及授权、账户同步和 F2 本机配置；计划创建、素材变更、预算、ROI、出价与状态调整仍使用 CLI。**WorkBuddy 当前仅接入 MCP 能力，不通过 Shell 补执行 CLI 写入。** 新增的三项 F2 工具已在 WorkBuddy 核实原生发现与连接，其他宿主需重新加载声明并分别验收。
+当前能力目录包含 **81 条 CLI 能力和默认 35 个 MCP 工具**，两者有重叠；启用可选开发资料后为 38 个。MCP 提供查询、官方素材与报表、千川作品预检，以及授权、账户同步和 F2 本机配置；计划创建、素材变更、预算、ROI、出价与状态调整仍使用 CLI。**WorkBuddy 当前仅接入 MCP 能力，不通过 Shell 补执行 CLI 写入。** 新增工具与 Skill 合同需要重新加载并按实际宿主分别验收。
+
+千川官方 GET 目录新增 156 项受控查询映射，以及账户健康、计划诊断、素材检查、投放建议和自定义报表等对话入口；3 项保留明确分页限制。已有报表和作品预检继续复用 SDK，开发资料默认关闭且独立于业务 OAuth。见[官方查询合同](docs/reference/qianchuan-official-mcp.md)。
+
+千川作品先通过 F2 批量解析，再按广告账户并行预检，同账户同授权共享计划查询。唯一可复用计划进入追加预览，完整查询无目标时才新建；多候选、身份未核实或绑定漂移会阻断该组。见[作品投放流程](docs/reference/qianchuan-work-routing.md)。
 
 ### 当前功能支持
 
@@ -181,6 +185,8 @@ flowchart TB
 仓库预置 macOS Intel / Apple Silicon、Linux x86_64 / ARM64、Windows x86_64 五种 Runtime 二进制。逐层职责、完整请求链路、状态与进程归属及当前落点见 [V3 项目运行架构](docs/architecture/overview.md)；目标约束见 [PRD](docs/product/prd.md)。交叉构建、单个功能通过或宿主工具发现均不代表完整 V3 已验收。
 
 ## 操作与安全边界
+
+从 Git checkout 或 worktree 运行仓库启动器时，Runtime 使用该目录的已校验构建，快照和选择状态按 checkout 独立保存；授权、账户和业务配置继续使用共享状态根。修改 Runtime、F2 或 Skill 后先重建产物，已安装插件通过对应宿主更新。详见[开发说明](CONTRIBUTING.md)。
 
 - 查询账户、素材、模板、计划详情和报表属于只读操作。
 - 创建、追加、删除和预算、ROI、状态调整必须先预览；没有明确确认，不执行在线写入。

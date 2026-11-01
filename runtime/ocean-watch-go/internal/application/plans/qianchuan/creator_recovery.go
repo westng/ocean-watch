@@ -3,9 +3,6 @@ package qianchuan
 import (
 	"context"
 	"strings"
-
-	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
-	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
 )
 
 // Recovery searches only the exact, explicitly supplied visible Douyin ID.
@@ -26,12 +23,7 @@ func (verifier WorkVerifier) recoverVisibleCreatorHints(ctx context.Context, req
 			complete := false
 			for page := 1; page <= maxPages; page++ {
 				result.OwnerHintSummary.AuthorizedHintQueryCount++
-				response, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.AuthorizedCreatorPage, error) {
-					return verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
-						AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-						SearchKeyword: showID, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE", Page: page, PageSize: 100,
-					})
-				})
+				response, err := verifier.authorizationPage(ctx, request, showID, page)
 				if err != nil || response.PageInfo.Page != page || response.PageInfo.TotalPages < 0 || response.PageInfo.TotalNumber < 0 {
 					result.OwnerHintSummary.AuthorizedHintFailureCount++
 					match.reason, match.message = "creator_query_incomplete", "达人身份定向查询未完成，授权状态未知"

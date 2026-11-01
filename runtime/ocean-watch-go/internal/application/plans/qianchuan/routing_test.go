@@ -33,8 +33,8 @@ func TestRoutedWorksKeepAccountsProductsCredentialsAndSnapshotsIsolated(t *testi
 	if !reflect.DeepEqual(result.Batches[0].InputIndexes, []int{0, 2}) || !reflect.DeepEqual(result.Batches[1].InputIndexes, []int{1}) {
 		t.Fatalf("input rows crossed batches: %#v", result.Batches)
 	}
-	if writer.createCalls != 0 || writer.addCalls != 0 || links.metadataCalls != 0 {
-		t.Fatalf("preflight wrote plans or required F2 despite explicit identities: writer=%#v metadata=%d", writer, links.metadataCalls)
+	if writer.createCalls != 0 || writer.addCalls != 0 || links.metadataCalls != 1 || links.linkCalls != 1 {
+		t.Fatalf("preflight wrote plans or repeated F2: writer=%#v metadata=%d", writer, links.metadataCalls)
 	}
 	if len(tokens.queries) != 2 {
 		t.Fatalf("credential lookups=%#v", tokens.queries)
@@ -79,7 +79,7 @@ func TestRoutingAmbiguityAndConflictingBindingsNeverProbeAccounts(t *testing.T) 
 	if result.Pending[0].Reason != "routing_ambiguous" || len(result.Pending[0].Candidates) != 2 || result.Pending[1].Reason != "routing_not_found" || result.Pending[2].Reason != "routing_not_found" {
 		t.Fatalf("incorrect routing decisions: %#v", result.Pending)
 	}
-	if len(tokens.queries) != 0 || links.linkCalls != 0 {
+	if len(tokens.queries) != 0 || links.linkCalls != 1 {
 		t.Fatalf("unresolved routing crossed read boundary: tokens=%#v links=%d", tokens.queries, links.linkCalls)
 	}
 }
@@ -143,7 +143,7 @@ func TestRoutingConflictingAuthorizationSelectorsStayPending(t *testing.T) {
 	left, right := routingTestItem(0, "测试商品"), routingTestItem(1, "测试商品")
 	left.AuthAccountID, right.AuthAccountID = "grant-a", "grant-b"
 	result, err := service.BatchWorks(context.Background(), BatchWorksCommand{Items: []domainqianchuan.BatchItem{left, right}})
-	if err != nil || len(result.Batches) != 0 || len(result.Pending) != 2 || len(tokens.queries) != 0 || links.linkCalls != 0 {
+	if err != nil || len(result.Batches) != 0 || len(result.Pending) != 2 || len(tokens.queries) != 0 || links.linkCalls != 1 {
 		t.Fatalf("conflicting grants reached official reads: result=%#v err=%v", result, err)
 	}
 	for _, pending := range result.Pending {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
@@ -105,8 +104,9 @@ type BatchWorksCommand struct {
 }
 
 type PreflightStageError struct {
-	Stage string
-	cause error
+	Stage       string
+	Performance *BatchPerformance
+	cause       error
 }
 
 func (err *PreflightStageError) Error() string {
@@ -187,6 +187,7 @@ type BatchCommandResult struct {
 	PreflightID string              `json:"preflight_id,omitempty"`
 	ExpiresAt   string              `json:"expires_at,omitempty"`
 	Warnings    []string            `json:"warnings,omitempty"`
+	snapshot    *preparedBatchSnapshot
 }
 
 type RemoveWorksCommand struct {
@@ -248,8 +249,16 @@ func (service CommandService) CreatePlan(
 func (service CommandService) BatchWorks(
 	ctx context.Context,
 	command BatchWorksCommand,
-) (BatchCommandResult, error) {
+) (out BatchCommandResult, commandErr error) {
 	started := service.now()
+	defer func() {
+		var stage *PreflightStageError
+		if commandErr != nil && errors.As(commandErr, &stage) && stage.Performance == nil {
+			performance := out.Performance
+			performance.Stages.TotalRuntimeSeconds = durationSeconds(started, service.now())
+			stage.Performance = &performance
+		}
+	}()
 	command.PreflightID = strings.TrimSpace(command.PreflightID)
 	if command.PreflightID != "" {
 		return service.submitBatchPreflight(ctx, command, started)
@@ -257,6 +266,26 @@ func (service CommandService) BatchWorks(
 	if needsBatchRouting(command) {
 		return service.routeBatchWorks(ctx, command)
 	}
+	return service.batchWorks(ctx, command, nil)
+}
+
+func (service CommandService) batchWorks(ctx context.Context, command BatchWorksCommand, reads *batchReadSession) (out BatchCommandResult, commandErr error) {
+	started := service.now()
+	progress := BatchPerformance{}
+	var result BatchResult
+	var linkPerformance batchLinkPerformance
+	defer func() {
+		if commandErr == nil {
+			return
+		}
+		progress.Stages.TotalRuntimeSeconds = durationSeconds(started, service.now())
+		progress.Requests = batchRequestCounts(ctx, result, command.Items, linkPerformance)
+		out.Performance = progress
+		var stage *PreflightStageError
+		if errors.As(commandErr, &stage) {
+			stage.Performance = &out.Performance
+		}
+	}()
 	if service.Config == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch command dependencies are incomplete")
 	}
@@ -274,7 +303,7 @@ func (service CommandService) BatchWorks(
 	if err := validateBatchCommandItems(command.Items); err != nil {
 		return BatchCommandResult{}, err
 	}
-	readPool, err := NewReadPool(concurrency)
+	readPool, err := newAccountReadPool(concurrency)
 	if err != nil {
 		return BatchCommandResult{}, err
 	}
@@ -291,7 +320,15 @@ func (service CommandService) BatchWorks(
 	if !exported.Active {
 		return BatchCommandResult{}, errors.New("Qianchuan product template is not active")
 	}
+	if reads != nil {
+		readPool = reads.pool(exported.AdvertiserID, command.AuthAccountID)
+		service.Tokens = reads
+	}
 	metadata := LinkMetadataPerformance{Provider: "f2_cli", Enabled: true}
+	if reads != nil {
+		metadata.Provider = "f2_shared"
+	}
+	progress.LinkMetadata = metadata
 	linkResolver := service.Links
 	if linkResolver == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
@@ -304,6 +341,7 @@ func (service CommandService) BatchWorks(
 		TemplatePayload:  exported.Payload,
 		PlanNameTemplate: exported.PlanNameTemplate,
 		IncludePayloads:  command.IncludePayloads, ReadPool: readPool,
+		SelectionPolicy: PlanSelectionUniqueExisting,
 	}
 	type linkOutcome struct {
 		result           applicationworkmetadata.ResolveResult
@@ -311,75 +349,42 @@ func (service CommandService) BatchWorks(
 		linkPerformance  batchLinkPerformance
 		err              error
 	}
-	type leaseOutcome struct {
-		lease    authapplication.TokenLease
-		ctx      context.Context
-		err      error
-		finished time.Time
-	}
-	linkChannel := make(chan linkOutcome, 1)
-	leaseChannel := make(chan leaseOutcome, 1)
-	parallelContext, cancelParallel := context.WithCancel(ctx)
-	var preparation sync.WaitGroup
-	preparation.Add(2)
-	defer func() {
-		cancelParallel()
-		preparation.Wait()
-	}()
 	inputFinished := service.now()
-	go func() {
-		defer preparation.Done()
-		resolved, cache, linkPerf, resolveErr := resolveBatchLinks(parallelContext, linkResolver, applicationworkmetadata.ResolveRequest{
-			URLs: batchItemURLs(command.Items), Concurrency: concurrency,
-		}, exported.AdvertiserID, service.OwnerHints, service.now)
-		linkChannel <- linkOutcome{result: resolved, cachePerformance: cache, linkPerformance: linkPerf, err: resolveErr}
-	}()
-	go func() {
-		defer preparation.Done()
-		lease, scopedContext, leaseErr := service.readLease(parallelContext, exported.AdvertiserID, command.AuthAccountID)
-		leaseChannel <- leaseOutcome{lease: lease, ctx: scopedContext, err: leaseErr, finished: service.now()}
-	}()
-	linksReady := false
-	linkPerformance := batchLinkPerformance{}
-	linksResult := linkOutcome{}
-	leaseResult := leaseOutcome{}
-	select {
-	case linksResult = <-linkChannel:
-		linksReady = true
-		if linksResult.err != nil {
-			cancelParallel()
-			return BatchCommandResult{}, preflightStageError("work_metadata", linksResult.err)
-		}
-		baseRequest.Skipped = qianchuanBatchSkippedLinks(linksResult.result.Skipped, command.Items)
-		cachePerformance = linksResult.cachePerformance
-		linkPerformance = linksResult.linkPerformance
-		if len(linksResult.result.Resolved) == 0 {
-			cancelParallel()
-			result, executeErr := service.Batch.Execute(ctx, baseRequest)
-			finished := service.now()
-			return BatchCommandResult{
-				BatchResult: result,
-				Performance: batchPerformance(
-					started, finished, metadata, cachePerformance,
-					BatchStagePerformance{InputNormalizationSeconds: durationSeconds(started, inputFinished), LinkResolutionSeconds: linksResult.linkPerformance.LinkSeconds, F2ResolutionSeconds: linksResult.linkPerformance.F2Seconds, TotalRuntimeSeconds: durationSeconds(started, finished)},
-					BatchRequestCounts{ShortLinkCount: len(command.Items), F2Count: linksResult.linkPerformance.F2Count, CacheHitCount: linksResult.linkPerformance.CacheHits, CacheMissCount: linksResult.linkPerformance.CacheMisses},
-				),
-			}, executeErr
-		}
-		leaseResult = <-leaseChannel
-	case leaseResult = <-leaseChannel:
+	progress.Stages.InputNormalizationSeconds = durationSeconds(started, inputFinished)
+	resolved, cache, linkPerf, resolveErr := resolveBatchLinks(ctx, linkResolver, applicationworkmetadata.ResolveRequest{
+		URLs: batchItemURLs(command.Items), Concurrency: concurrency,
+	}, exported.AdvertiserID, service.OwnerHints, service.now)
+	linksResult := linkOutcome{result: resolved, cachePerformance: cache, linkPerformance: linkPerf, err: resolveErr}
+	linkPerformance = linkPerf
+	progress.OwnerHintCache = cache
+	progress.Stages.LinkResolutionSeconds, progress.Stages.F2ResolutionSeconds = linkPerf.LinkSeconds, linkPerf.F2Seconds
+	if resolveErr != nil {
+		return BatchCommandResult{}, preflightStageError("work_metadata", resolveErr)
 	}
-	if leaseResult.err != nil {
-		cancelParallel()
-		return BatchCommandResult{}, preflightStageError("authorization", leaseResult.err)
+	baseRequest.Skipped = qianchuanBatchSkippedLinks(resolved.Skipped, command.Items)
+	cachePerformance, linkPerformance = cache, linkPerf
+	if len(resolved.Resolved) == 0 {
+		result, executeErr := service.Batch.Execute(ctx, baseRequest)
+		finished := service.now()
+		return BatchCommandResult{BatchResult: result, Performance: batchPerformance(
+			started, finished, metadata, cachePerformance,
+			BatchStagePerformance{InputNormalizationSeconds: durationSeconds(started, inputFinished), LinkResolutionSeconds: linkPerf.LinkSeconds, F2ResolutionSeconds: linkPerf.F2Seconds, TotalRuntimeSeconds: durationSeconds(started, finished)},
+			BatchRequestCounts{ShortLinkCount: len(command.Items), F2Count: linkPerf.F2Count, CacheHitCount: linkPerf.CacheHits, CacheMissCount: linkPerf.CacheMisses},
+		)}, executeErr
 	}
-	lease, scopedContext := leaseResult.lease, leaseResult.ctx
-	credentialsFinished := leaseResult.finished
+	parallelContext, cancelParallel := context.WithCancel(ctx)
+	defer cancelParallel()
+	credentialsStarted := service.now()
+	lease, scopedContext, leaseErr := service.readLease(parallelContext, exported.AdvertiserID, command.AuthAccountID)
+	credentialsFinished := service.now()
+	progress.Stages.CredentialResolutionSeconds = durationSeconds(credentialsStarted, credentialsFinished)
+	if leaseErr != nil {
+		return BatchCommandResult{}, preflightStageError("authorization", leaseErr)
+	}
 	cachePerformance = linksResult.cachePerformance
 	if command.Submit && service.Locks == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch advertiser lock is required")
 	}
-	var result BatchResult
 	var executeErr error
 	verificationSeconds := 0.0
 	inventorySeconds := 0.0
@@ -389,65 +394,78 @@ func (service CommandService) BatchWorks(
 		LockFamily: domainplans.LockQianchuanWorks,
 	}
 	coordinate := func(lockedContext context.Context) error {
-		inventoryChannel := make(chan struct {
+		seedRequest := baseRequest
+		seedRequest.Submit = false
+		seed, seedErr := service.Batch.Execute(lockedContext, seedRequest)
+		if seedErr != nil {
+			return preflightStageError("template", seedErr)
+		}
+		baseRequest.BusinessDate = seed.BusinessDate
+		inventoryReady := make(chan struct{})
+		var inventoryResult struct {
 			inventory CurrentPlanInventory
 			err       error
 			finished  time.Time
-		}, 1)
+		}
 		scanner, canScan := service.Batch.Reconciler.(CurrentPlanScanner)
 		inventoryStarted := time.Time{}
 		if canScan {
 			inventoryStarted = service.now()
 			go func() {
 				inventory, scanErr := scanner.ScanCurrentPlans(lockedContext, CurrentPlanScanRequest{
-					AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken, ReadPool: readPool,
+					AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken, ReadPool: readPool, BusinessDate: baseRequest.BusinessDate,
 				})
-				inventoryChannel <- struct {
-					inventory CurrentPlanInventory
-					err       error
-					finished  time.Time
-				}{inventory: inventory, err: scanErr, finished: service.now()}
+				inventoryResult.inventory, inventoryResult.err, inventoryResult.finished = inventory, scanErr, service.now()
+				close(inventoryReady)
 			}()
 		}
-		if !linksReady {
-			linksResult = <-linkChannel
-			cachePerformance = linksResult.cachePerformance
-			linkPerformance = linksResult.linkPerformance
-		}
-		if linksResult.err != nil {
-			cancelParallel()
-			if canScan {
-				<-inventoryChannel
+		var awaitInventory func(context.Context) (*CurrentPlanInventory, error)
+		if canScan {
+			awaitInventory = func(ctx context.Context) (*CurrentPlanInventory, error) {
+				select {
+				case <-inventoryReady:
+					return &inventoryResult.inventory, inventoryResult.err
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
 			}
-			return preflightStageError("work_metadata", linksResult.err)
 		}
 		links := linksResult.result
 		baseRequest.Skipped = qianchuanBatchSkippedLinks(links.Skipped, command.Items)
-		if len(links.Resolved) == 0 {
-			if canScan {
-				<-inventoryChannel
-			}
-			result, executeErr = service.Batch.Execute(lockedContext, baseRequest)
-			return executeErr
-		}
 		ownerHints := ownerHintsFromResolvedLinks(links.Resolved)
 		verificationStarted := service.now()
-		verification, verifyErr := service.Verifier.Verify(lockedContext, WorkVerificationRequest{
+		verificationRequest := WorkVerificationRequest{
 			AdvertiserID: exported.AdvertiserID, AccessToken: lease.AccessToken,
 			ProductIDs: append([]string(nil), exported.ProductIDs...), Works: qianchuanWorkInputs(links.Resolved, ownerHints, command.Items),
 			ReadPool: readPool,
-		})
-		verificationSeconds = durationSeconds(verificationStarted, service.now())
+		}
+		baseRequest.ReadAccessToken = lease.AccessToken
+		var verification WorkVerificationResult
+		var verifyErr error
+		if command.Submit {
+			verification, verifyErr = service.Verifier.Verify(lockedContext, verificationRequest)
+			verificationSeconds = durationSeconds(verificationStarted, service.now())
+		} else {
+			var timing BatchTiming
+			result, verification, timing, verificationSeconds, verifyErr = service.preflightCreators(lockedContext, baseRequest, verificationRequest, awaitInventory)
+			*batchTiming = timing
+		}
+		progress.OwnerHintCache.OwnerHintSummary = verification.OwnerHintSummary
+		progress.Stages.OfficialVerificationSeconds = verificationSeconds
+		progress.Stages.GroupReconciliationSeconds = batchTiming.GroupReconciliationSeconds
+		progress.Stages.MaterialDiffSeconds = batchTiming.MaterialDiffSeconds
 		if verifyErr != nil {
+			progress.Stages.OfficialVerificationSeconds = durationSeconds(verificationStarted, service.now())
 			cancelParallel()
 			if canScan {
-				<-inventoryChannel
+				<-inventoryReady
 			}
 			return preflightStageError("work_verification", verifyErr)
 		}
 		if canScan {
-			inventoryResult := <-inventoryChannel
+			<-inventoryReady
 			inventorySeconds = durationSeconds(inventoryStarted, inventoryResult.finished)
+			progress.Stages.PlanInventorySeconds = inventorySeconds
 			if inventoryResult.err != nil {
 				return preflightStageError("plan_inventory", inventoryResult.err)
 			}
@@ -468,6 +486,11 @@ func (service CommandService) BatchWorks(
 		baseRequest.Works = verification.Matched
 		baseRequest.Skipped = append(baseRequest.Skipped, verification.Skipped...)
 		baseRequest.QueryFailures = verification.QueryFailures
+		if !command.Submit {
+			baseRequest.Skipped = result.Skipped
+			baseRequest.BusinessDate = result.BusinessDate
+			return nil
+		}
 		batch := service.Batch
 		if command.Submit {
 			batch.Guard.Credentials = commandLeaseCredentials{lease: lease, advertiserID: exported.AdvertiserID}
@@ -494,7 +517,7 @@ func (service CommandService) BatchWorks(
 			started, finished, metadata, cachePerformance,
 			BatchStagePerformance{
 				InputNormalizationSeconds: durationSeconds(started, inputFinished), LinkResolutionSeconds: linkPerformance.LinkSeconds,
-				F2ResolutionSeconds: linkPerformance.F2Seconds, CredentialResolutionSeconds: durationSeconds(inputFinished, credentialsFinished),
+				F2ResolutionSeconds: linkPerformance.F2Seconds, CredentialResolutionSeconds: durationSeconds(credentialsStarted, credentialsFinished),
 				OfficialVerificationSeconds: verificationSeconds, PlanInventorySeconds: inventorySeconds,
 				GroupReconciliationSeconds: batchTiming.GroupReconciliationSeconds, MaterialDiffSeconds: batchTiming.MaterialDiffSeconds,
 				TotalRuntimeSeconds: durationSeconds(started, finished),
@@ -511,6 +534,22 @@ func (service CommandService) BatchWorks(
 	}
 	if !eligible {
 		return commandResult, nil
+	}
+	commandResult.snapshot = &snapshot
+	if reads != nil {
+		return commandResult, nil
+	}
+	return service.persistBatchSnapshot(ctx, commandResult)
+}
+
+func (service CommandService) persistBatchSnapshot(ctx context.Context, commandResult BatchCommandResult) (BatchCommandResult, error) {
+	if commandResult.snapshot == nil {
+		return commandResult, nil
+	}
+	snapshot := *commandResult.snapshot
+	finished, snapshotErr := time.Parse(time.RFC3339Nano, snapshot.CreatedAt)
+	if snapshotErr != nil {
+		return commandResult, preflightStageError("snapshot", snapshotErr)
 	}
 	if service.Journals == nil {
 		return BatchCommandResult{}, errors.New("Qianchuan batch preflight journal store is required")
@@ -534,7 +573,8 @@ func (service CommandService) BatchWorks(
 	completed := service.now()
 	commandResult.PreflightID, commandResult.ExpiresAt = preflightID, snapshot.ExpiresAt
 	commandResult.Performance.Stages.SnapshotPersistenceSeconds = durationSeconds(snapshotStarted, completed)
-	commandResult.Performance.Stages.TotalRuntimeSeconds = durationSeconds(started, completed)
+	commandResult.Performance.Stages.TotalRuntimeSeconds += durationSeconds(finished, completed)
+	commandResult.snapshot = nil
 	return commandResult, nil
 }
 
@@ -559,7 +599,7 @@ func (service CommandService) submitBatchPreflight(
 	if concurrency < 1 || concurrency > applicationworkmetadata.MaxConcurrency {
 		return BatchCommandResult{}, errors.New("concurrency must be between 1 and 10")
 	}
-	readPool, err := NewReadPool(concurrency)
+	readPool, err := newAccountReadPool(concurrency)
 	if err != nil {
 		return BatchCommandResult{}, err
 	}
@@ -1026,27 +1066,22 @@ func resolveBatchLinks(
 		}
 	}
 
-	staged, isStaged := resolver.(StagedWorkLinkResolver)
-	if !isStaged {
-		result, err := resolver.Resolve(ctx, request)
-		if err != nil {
-			return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
+	var result applicationworkmetadata.ResolveResult
+	var err error
+	if staged, ok := resolver.(StagedWorkLinkResolver); ok {
+		result, err = staged.ResolveLinks(ctx, request)
+		linksFinished := clockNow(now)
+		linkPerformance.LinkSeconds = durationSeconds(started, linksFinished)
+		if err == nil && len(result.Resolved) != 0 {
+			linkPerformance.F2Count = len(resolvedWorkIDs(result.Resolved))
+			result, err = staged.ResolveMetadata(ctx, cloneResolveResult(result), request.Concurrency)
+			linkPerformance.F2Seconds = durationSeconds(linksFinished, clockNow(now))
 		}
-		result = cloneResolveResult(result)
-		cached := loadHints(resolvedWorkIDs(result.Resolved))
-		linkHints := ownerHintsFromResolvedLinks(result.Resolved)
-		merged := mergeOwnerHints(cached, linkHints)
-		applyHints(result.Resolved, merged)
-		performance.Loaded = len(merged)
-		performance.LoadedFromLinkMetadata = len(linkHints)
+	} else {
+		result, err = resolver.Resolve(ctx, request)
 		linkPerformance.LinkSeconds = durationSeconds(started, clockNow(now))
-		linkPerformance.F2Count = len(result.Resolved)
-		linkPerformance.CacheHits = len(cached)
-		linkPerformance.CacheMisses = len(result.Resolved) - len(cached)
-		return result, performance, linkPerformance, nil
+		linkPerformance.F2Count = len(resolvedWorkIDs(result.Resolved))
 	}
-
-	result, err := staged.ResolveLinks(ctx, request)
 	if err != nil {
 		return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
 	}
@@ -1054,56 +1089,12 @@ func resolveBatchLinks(
 	cached := loadHints(resolvedWorkIDs(result.Resolved))
 	linkHints := ownerHintsFromResolvedLinks(result.Resolved)
 	merged := mergeOwnerHints(cached, linkHints)
-	performance.Loaded = len(merged)
-	performance.LoadedFromLinkMetadata = len(linkHints)
-	linkPerformance.CacheHits = len(cached)
 	applyHints(result.Resolved, merged)
-
-	missing := make([]domain.ResolvedWorkLink, 0, len(result.Resolved))
-	for _, row := range result.Resolved {
-		if hint, ok := merged[row.AwemeItemID]; !ok || hint.AwemeShowID == "" || !validPositiveID(hint.AwemeID) && row.CreatorName == "" {
-			missing = append(missing, row)
-		}
+	performance.Loaded, performance.LoadedFromLinkMetadata = len(merged), len(linkHints)
+	linkPerformance.CacheHits, linkPerformance.CacheMisses = len(cached), max(0, len(result.Resolved)-len(cached))
+	if shared, ok := resolver.(*routedLinkResolver); ok && shared.complete {
+		linkPerformance.F2Count, linkPerformance.F2Seconds = 0, 0
 	}
-	linkPerformance.CacheMisses = len(missing)
-	if len(missing) == 0 {
-		linkPerformance.LinkSeconds = durationSeconds(started, clockNow(now))
-		return result, performance, linkPerformance, nil
-	}
-	f2Started := clockNow(now)
-	linkPerformance.LinkSeconds = durationSeconds(started, f2Started)
-	enriched, err := staged.ResolveMetadata(ctx, applicationworkmetadata.ResolveResult{Resolved: missing}, request.Concurrency)
-	if err != nil {
-		return applicationworkmetadata.ResolveResult{}, performance, linkPerformance, err
-	}
-	linkPerformance.F2Seconds = durationSeconds(f2Started, clockNow(now))
-	linkPerformance.F2Count = len(missing)
-	enrichedByID := map[string]domain.ResolvedWorkLink{}
-	for _, row := range enriched.Resolved {
-		enrichedByID[row.AwemeItemID] = row
-	}
-	failedByID := map[string]domain.SkippedWorkLink{}
-	for _, row := range enriched.Skipped {
-		if row.AwemeItemID != "" {
-			failedByID[row.AwemeItemID] = row
-		}
-	}
-	resolved := make([]domain.ResolvedWorkLink, 0, len(result.Resolved))
-	for _, row := range result.Resolved {
-		if enrichedRow, ok := enrichedByID[row.AwemeItemID]; ok {
-			resolved = append(resolved, enrichedRow)
-			continue
-		}
-		if _, ok := merged[row.AwemeItemID]; ok {
-			resolved = append(resolved, row)
-			continue
-		}
-		if skipped, ok := failedByID[row.AwemeItemID]; ok {
-			result.Skipped = append(result.Skipped, skipped)
-		}
-	}
-	result.Resolved = resolved
-	result.MetadataPerformance = enriched.MetadataPerformance
 	return result, performance, linkPerformance, nil
 }
 

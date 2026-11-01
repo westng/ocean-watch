@@ -7,9 +7,11 @@ import (
 )
 
 type ReadPool struct {
-	slots chan struct{}
-	mu    sync.Mutex
-	reads map[string]*sharedRead
+	slots        chan struct{}
+	accountSlots chan struct{}
+	sharedRoot   context.Context
+	mu           sync.Mutex
+	reads        map[string]*sharedRead
 }
 
 type sharedRead struct {
@@ -35,6 +37,14 @@ func runRead[T any](ctx context.Context, pool *ReadPool, action func(context.Con
 	}
 	if pool == nil {
 		return action(ctx)
+	}
+	if pool.accountSlots != nil {
+		select {
+		case pool.accountSlots <- struct{}{}:
+			defer func() { <-pool.accountSlots }()
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		}
 	}
 	select {
 	case pool.slots <- struct{}{}:
@@ -86,12 +96,32 @@ func runReadOnce[T any](
 		}
 	}
 
-	value, err := action(ctx)
+	sharedContext, cancel := sharedReadContext(ctx, pool.sharedRoot)
+	defer cancel()
+	value, err := action(sharedContext)
 	pool.mu.Lock()
 	call.value, call.err = value, err
 	close(call.done)
 	pool.mu.Unlock()
 	return value, err
+}
+
+// A routed child may fail while another child still needs the same query.
+// Shared facts follow the operation cancellation, retaining the caller's
+// immutable authorization and request-budget values.
+func sharedReadContext(ctx, root context.Context) (context.Context, func()) {
+	if root == nil {
+		return ctx, func() {}
+	}
+	shared, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(root, cancel)
+	if root.Err() != nil {
+		cancel()
+	}
+	return shared, func() {
+		stop()
+		cancel()
+	}
 }
 
 func (pool *ReadPool) forgetRead(key string) {

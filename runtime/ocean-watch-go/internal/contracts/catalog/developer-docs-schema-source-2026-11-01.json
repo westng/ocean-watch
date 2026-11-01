@@ -1,0 +1,63 @@
+{
+  "observed_on": "2026-11-01",
+  "schema_only": true,
+  "source_url": "https://open.oceanengine.com/sse",
+  "tools": [
+    {
+      "name": "open_api_doc_gen",
+      "description": "",
+      "input_schema": {
+        "properties": {
+          "query": {
+            "description": "用户输入的问题",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "source_digest": "cd9c2bd6912e9bc521b9ac747eaea71c29e2e67cae0803c0a9e7f1bc7f2627a1"
+    },
+    {
+      "name": "open_api_schema_gen",
+      "description": "",
+      "input_schema": {
+        "properties": {
+          "path": {
+            "description": "巨量引擎开放平台的接口path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "source_digest": "30c938140469899b2997f7240a1a2cf0c48500a0916ffc5b023f0cbda6b06a87"
+    },
+    {
+      "name": "open_sdk_example_code_tool",
+      "description": "",
+      "input_schema": {
+        "properties": {
+          "code_type": {
+            "description": "sdk调用代码风格，目前支持的风格有：Go、Java(区分大小写)",
+            "type": "string"
+          },
+          "path": {
+            "description": "巨量引擎开放平台的接口path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "code_type"
+        ],
+        "type": "object"
+      },
+      "source_digest": "4d1df7ce4e72185564ac4a574ad8138dedd265b0d2c88a65295ca27be598b6d9"
+    }
+  ]
+}

@@ -209,10 +209,10 @@ func (runner Runner) runMarketingPlan(
 		}
 		credentialProvider := runtime.Credentials
 		if credentialProvider == nil {
-			credentialProvider = sharedplans.TokenCredentialProvider{Tokens: &authapplication.TokenManager{
+			credentialProvider = sharedplans.TokenCredentialProvider{Tokens: runner.guardTokens(&authapplication.TokenManager{
 				Credentials: credentialsStore, Authorizations: authorizations,
 				Locks: refreshLocker, OAuth: oauth, Now: runtime.Now,
-			}}
+			}, "marketing")}
 		}
 		locker := runtime.Locker
 		if locker == nil {

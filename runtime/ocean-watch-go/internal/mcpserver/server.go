@@ -20,11 +20,15 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/localauth"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/officialmcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
+	developerdocs "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/developerdocs"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/f2config"
 	applicationmaterials "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/materials"
+	applicationofficial "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/official"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	applicationqianchuanread "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/qianchuan"
 	applicationreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
@@ -76,6 +80,12 @@ type QianchuanReportService interface {
 }
 
 type Runtime struct {
+	DeveloperDocs         *developerdocs.Service
+	Policy                *policy.Instance
+	OfficialQueries       *applicationofficial.Service
+	OfficialTasks         *applicationofficial.Tasks
+	UnifiedReports        QianchuanUnifiedTaskReports
+	AccountReports        ManagedAccountReports
 	Query                 applicationtemplates.Query
 	ManagedAccounts       ManagedAccountReader
 	MarketingAuth         MarketingAuthorizationReader
@@ -197,14 +207,16 @@ func RunManaged(ctx context.Context, version string) error {
 	}
 	runtimeRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Clean(executable))))
 	if hostRoot := strings.TrimSpace(os.Getenv("PWD")); hostRoot != "" {
-		manager := runtimeupdate.Manager{
-			CodexRoot: filesystem.CodexHome(os.Getenv, userHome), PluginRoot: hostRoot,
-		}
+		manager := runtimeupdate.NewManager(filesystem.CodexHome(os.Getenv, userHome), hostRoot)
 		if err := manager.PreserveInstalledHostRoot(ctx); err != nil {
 			return err
 		}
 	}
 	store, err := filesystem.NewManagedConfigStore(os.Getenv, userHome)
+	if err != nil {
+		return err
+	}
+	instance, err := bootstrap.StartupPolicy(ctx, store, os.Getenv(bootstrap.StartupPolicyEnv))
 	if err != nil {
 		return err
 	}
@@ -214,6 +226,7 @@ func RunManaged(ctx context.Context, version string) error {
 	stateRoot := filepath.Join(store.Root, "state")
 	credentialStore := credentials.Store{Root: store.Root, Getenv: os.Getenv}
 	qianchuanRuntime, err := bootstrap.NewQianchuanRuntime(bootstrap.QianchuanOptions{
+		Policy: &instance,
 		Config: store, StateRoot: stateRoot,
 		CredentialStore: credentialStore,
 		RuntimeVersion:  version,
@@ -223,6 +236,7 @@ func RunManaged(ctx context.Context, version string) error {
 	if err != nil {
 		return err
 	}
+	defer qianchuanRuntime.Close()
 	marketingRuntime, err := bootstrap.NewMarketingRuntime(bootstrap.MarketingOptions{
 		StateRoot: stateRoot, CredentialStore: credentialStore,
 	})
@@ -236,7 +250,14 @@ func RunManaged(ctx context.Context, version string) error {
 	defer recovery.Close()
 	f2Configuration := localauth.NewF2(ctx, localauth.F2Options{Settings: f2config.Settings{Store: credentials.SystemStore{}}})
 	defer f2Configuration.Close()
+	managedReports, err := bootstrap.NewManagedAccountReporter(store, stateRoot, credentialStore, qianchuanRuntime.Policy)
+	if err != nil {
+		return err
+	}
 	runtime := Runtime{
+		Policy: &qianchuanRuntime.Policy, OfficialQueries: &qianchuanRuntime.Official,
+		OfficialTasks: &qianchuanRuntime.Tasks, UnifiedReports: qianchuanRuntime.Reports,
+		AccountReports:        managedReports,
 		Query:                 applicationtemplates.Query{Store: store, VersionedStore: store},
 		ManagedAccounts:       filesystem.AccountStore{Path: store.Path},
 		MarketingAuth:         marketingRuntime.Auth,
@@ -251,6 +272,8 @@ func RunManaged(ctx context.Context, version string) error {
 		F2Configuration:       f2Configuration,
 		LogWriter:             os.Stderr,
 	}
+	docClient := officialmcp.NewDeveloperClient()
+	runtime.DeveloperDocs = &developerdocs.Service{Policy: qianchuanRuntime.Policy, Settings: developerdocs.Settings{Store: credentials.SystemStore{}, Backend: docClient, AppReferences: bootstrap.DeveloperAppReferences{Authorizations: filesystem.AuthorizationStore{Root: stateRoot}, Policy: qianchuanRuntime.Policy}}, Backend: docClient}
 	server := runtime.NewServer(version)
 	err = server.Run(ctx, &mcp.StdioTransport{})
 	if errors.Is(err, context.Canceled) {
@@ -305,6 +328,8 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	runtime.addAuthorizationTools(server)
 	runtime.addF2ConfigurationTools(server)
 	runtime.addStarMapTools(server)
+	runtime.addOfficialTools(server)
+	runtime.addDeveloperTools(server)
 	readOnly, closedWorld := false, false
 	annotations := &mcp.ToolAnnotations{
 		DestructiveHint: &readOnly, IdempotentHint: true,
@@ -330,7 +355,7 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Name: "get_capabilities", Annotations: &capabilityAnnotations,
 		Description: "仅当用户目标未命中已知高频工具，或需要了解 Ocean Watch 当前完整能力时调用。只返回当前本地 Runtime 的命令、渠道和副作用等级，不读取业务数据、不执行操作。",
 		InputSchema: json.RawMessage(capabilitiesInputSchema), OutputSchema: json.RawMessage(capabilitiesOutputSchema),
-	}, runtime.handler(capabilitiesHandler(version)))
+	}, runtime.handler(capabilitiesHandler(version, runtime.Policy)))
 	preflightReadOnly, openWorld := false, true
 	preflightAnnotations := &mcp.ToolAnnotations{
 		Title: "预检千川作品计划", DestructiveHint: &readOnly, IdempotentHint: false,
@@ -443,6 +468,16 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 		Description: "当用户需要巨量营销项目级消耗、曝光、点击、转化、订单、GMV 或 ROI 时调用。使用固定指标集并保留应用服务生成的完整 Markdown 表格。",
 		InputSchema: json.RawMessage(marketingPlanReportInputSchema), OutputSchema: json.RawMessage(marketingPlanReportOutputSchema),
 	}, runtime.handler(withBoundedRequestBudget(runtime.reportMarketingPlans)))
+	if runtime.Policy != nil {
+		for _, spec := range contracts.DefaultCapabilityRegistry.All() {
+			if spec.MCPTool != "" && runtime.Policy.Check(spec.RequiredToolsets, contracts.QueryModeRead) != nil {
+				server.RemoveTools(spec.MCPTool)
+			}
+		}
+		if runtime.Policy.Check([]string{"qianchuan", "reports"}, contracts.QueryModeRead) != nil {
+			server.RemoveTools("report_qianchuan_managed_accounts")
+		}
+	}
 	return server
 }
 
@@ -458,10 +493,24 @@ func addCapabilityTool(server *mcp.Server, capabilityID string, tool *mcp.Tool, 
 }
 
 func (runtime Runtime) handler(local mcp.ToolHandler) mcp.ToolHandler {
+	handler := local
 	if runtime.Forward != nil {
-		return runtime.Forward
+		handler = runtime.Forward
 	}
-	return local
+	return func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		instance := policy.Default()
+		if runtime.Policy != nil {
+			instance = *runtime.Policy
+		}
+		spec, ok := contracts.DefaultCapabilityRegistry.ByMCPTool(request.Params.Name)
+		if !ok || instance.CheckCapability(spec.ID) != nil {
+			return runtime.failureResult(runtime.now(), runtime.requestID(), request.Params.Name, toolFailure{Code: "POLICY_DENIED", Message: "当前实例未启用此能力。", Details: map[string]any{}}), nil
+		}
+		if request.Params.Name == "report_qianchuan_managed_accounts" && instance.Check([]string{"qianchuan", "reports"}, contracts.QueryModeRead) != nil {
+			return runtime.failureResult(runtime.now(), runtime.requestID(), request.Params.Name, toolFailure{Code: "POLICY_DENIED", Message: "当前实例未启用千川报表。", Details: map[string]any{}}), nil
+		}
+		return handler(ctx, request)
+	}
 }
 
 func withBoundedRequestBudget(handler mcp.ToolHandler) mcp.ToolHandler {
@@ -581,15 +630,7 @@ func decodeStrict(raw json.RawMessage, target any) error {
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		return errors.New("arguments must contain one JSON object")
-	}
-	return nil
+	return contracts.DecodeStrictJSON(raw, target)
 }
 
 func encodeCursor(cursor cursorPayload) (string, error) {

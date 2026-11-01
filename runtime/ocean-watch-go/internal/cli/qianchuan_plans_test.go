@@ -194,7 +194,7 @@ func TestRunnerWritesQianchuanPartialResultBeforeNonzeroExit(t *testing.T) {
 	out := filepath.Join(root, "partial.json")
 	stdout := new(bytes.Buffer)
 	runner := Runner{
-		Routes: manifest, Stdout: stdout,
+		Policy: executeFixturePolicy(t), Routes: manifest, Stdout: stdout,
 		Cwd: root, UserHome: root, Getenv: func(string) string { return "" },
 		QianchuanPlans: QianchuanPlanRuntime{Commands: service},
 	}

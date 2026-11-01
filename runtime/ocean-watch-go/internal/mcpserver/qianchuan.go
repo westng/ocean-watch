@@ -68,22 +68,23 @@ type preflightTemplate struct {
 }
 
 type preflightGroup struct {
-	GroupID          string   `json:"group_id"`
-	CreatorID        string   `json:"creator_id"`
-	DouyinID         string   `json:"douyin_id,omitempty"`
-	CreatorName      string   `json:"creator_name,omitempty"`
-	ExistingPlanID   string   `json:"existing_plan_id,omitempty"`
-	PlanName         string   `json:"plan_name,omitempty"`
-	PlanStatus       string   `json:"plan_status,omitempty"`
-	ProductIDs       []string `json:"product_ids"`
-	InputItemIDs     []string `json:"input_item_ids"`
-	AlreadyPresent   []string `json:"already_present_item_ids"`
-	CompletedItemIDs []string `json:"completed_item_ids"`
-	Status           string   `json:"status"`
-	PlanType         string   `json:"plan_type"`
-	Business         string   `json:"business"`
-	ErrorCode        string   `json:"error_code,omitempty"`
-	Error            string   `json:"error,omitempty"`
+	GroupID          string         `json:"group_id"`
+	CreatorID        string         `json:"creator_id"`
+	DouyinID         string         `json:"douyin_id,omitempty"`
+	CreatorName      string         `json:"creator_name,omitempty"`
+	ExistingPlanID   string         `json:"existing_plan_id,omitempty"`
+	PlanName         string         `json:"plan_name,omitempty"`
+	PlanStatus       string         `json:"plan_status,omitempty"`
+	ProductIDs       []string       `json:"product_ids"`
+	InputItemIDs     []string       `json:"input_item_ids"`
+	AlreadyPresent   []string       `json:"already_present_item_ids"`
+	CompletedItemIDs []string       `json:"completed_item_ids"`
+	Status           string         `json:"status"`
+	PlanType         string         `json:"plan_type"`
+	Business         string         `json:"business"`
+	ErrorCode        string         `json:"error_code,omitempty"`
+	Error            string         `json:"error,omitempty"`
+	ErrorDetails     map[string]any `json:"error_details,omitempty"`
 }
 
 type preflightSkipped struct {
@@ -413,8 +414,14 @@ func presentPreflightGroups(rows []applicationqianchuan.BatchGroupResult, failed
 	result := make([]preflightGroup, 0, len(rows))
 	for _, row := range rows {
 		failure := ""
+		code := row.ErrorCode
+		var details map[string]any
 		if failed || row.Status == "failed" || row.Status == "preflight_changed" {
 			failure = "creator preflight did not complete"
+			if row.Failure != nil {
+				classified := mapQianchuanPreflightError(row.Failure)
+				code, failure, details = classified.Code, classified.Message, classified.Details
+			}
 		}
 		result = append(result, preflightGroup{
 			GroupID: row.GroupID, CreatorID: row.AwemeID, DouyinID: row.DouyinID, CreatorName: row.CreatorName,
@@ -422,7 +429,7 @@ func presentPreflightGroups(rows []applicationqianchuan.BatchGroupResult, failed
 			ProductIDs: append([]string(nil), row.ProductIDs...), InputItemIDs: append([]string(nil), row.InputItemIDs...),
 			AlreadyPresent:   append([]string(nil), row.AlreadyPresent...),
 			CompletedItemIDs: append([]string(nil), row.CompletedItemIDs...), Status: row.Status,
-			PlanType: row.PlanType, Business: row.Business, ErrorCode: row.ErrorCode, Error: failure,
+			PlanType: row.PlanType, Business: row.Business, ErrorCode: code, Error: failure, ErrorDetails: details,
 		})
 	}
 	return result
@@ -464,7 +471,56 @@ func cloneCounts(source map[string]int) map[string]int {
 	return result
 }
 
-func mapQianchuanPreflightError(err error) toolFailure {
+func mapQianchuanPreflightError(err error) (failure toolFailure) {
+	var stageError *applicationqianchuan.PreflightStageError
+	hasStage := errors.As(err, &stageError)
+	defer func() {
+		if !hasStage || !safePreflightStage(stageError.Stage) {
+			return
+		}
+		if failure.Details == nil {
+			failure.Details = map[string]any{}
+		}
+		failure.Details["stage"] = stageError.Stage
+		if stageError.Performance != nil {
+			failure.Details["performance"] = presentPreflightPerformance(*stageError.Performance)
+		}
+		var timeout interface{ Timeout() bool }
+		if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &timeout) && timeout.Timeout() {
+			failure.Details["cause"] = "request_timeout"
+		} else if errors.Is(err, context.Canceled) {
+			failure.Details["cause"] = "request_cancelled"
+		}
+		var dispatch interface {
+			Dispatched() bool
+			EndpointFamily() string
+		}
+		if errors.As(err, &dispatch) {
+			endpoint := dispatch.EndpointFamily()
+			if (strings.HasPrefix(endpoint, "/v1.0/") || strings.HasPrefix(endpoint, "/v3.0/")) &&
+				len(endpoint) <= 512 && !strings.ContainsAny(endpoint, "?#@") && !strings.Contains(endpoint, "..") {
+				failure.Details["endpoint_family"] = endpoint
+			}
+			failure.Details["dispatched"] = dispatch.Dispatched()
+		}
+		var official interface{ AuthorizationFailureMetadata() (int64, string, int) }
+		if errors.As(err, &official) {
+			code, _, status := official.AuthorizationFailureMetadata()
+			if code > 0 {
+				failure.Details["official_code"] = code
+			}
+			if status >= 100 && status <= 599 {
+				failure.Details["http_status"] = status
+			}
+		}
+		var inventory *applicationqianchuan.PlanInventoryError
+		if errors.As(err, &inventory) {
+			switch inventory.Reason {
+			case "official_query", "pagination_changed", "count_mismatch", "duplicate_plan", "pagination_metadata", "invalid_plan", "safety_cap", "identity_safety_cap", "identity_incomplete":
+				failure.Details["inventory_reason"] = inventory.Reason
+			}
+		}
+	}()
 	// Inspect the full cause chain before a preflight stage turns an invalid
 	// refresh token into a generic authorization/inventory retry.
 	var invalid authapplication.InvalidRefreshError
@@ -472,7 +528,7 @@ func mapQianchuanPreflightError(err error) toolFailure {
 		return authorizationFailure("qianchuan", false)
 	}
 	switch {
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case !hasStage && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
 		return toolFailure{Code: "UPSTREAM_QUERY_FAILED", Message: "Qianchuan preflight was interrupted", Retryable: true, Details: map[string]any{}}
 	case errors.Is(err, os.ErrPermission):
 		return toolFailure{Code: "LOCAL_ACCESS_DENIED", Message: "local Ocean Watch state is not accessible", Details: map[string]any{}}
@@ -503,8 +559,7 @@ func mapQianchuanPreflightError(err error) toolFailure {
 			return toolFailure{Code: "F2_QUERY_FAILED", Message: "F2 work metadata query failed", Retryable: true, Details: map[string]any{}}
 		}
 	}
-	var stageError *applicationqianchuan.PreflightStageError
-	if errors.As(err, &stageError) {
+	if hasStage {
 		var inventoryError *applicationqianchuan.PlanInventoryError
 		if errors.As(err, &inventoryError) {
 			switch inventoryError.Reason {
@@ -512,9 +567,9 @@ func mapQianchuanPreflightError(err error) toolFailure {
 				return toolFailure{Code: "PLAN_INVENTORY_QUERY_FAILED", Message: "current Qianchuan plan inventory query failed", Retryable: true, Details: map[string]any{}}
 			case "pagination_changed", "count_mismatch", "duplicate_plan":
 				return toolFailure{Code: "PLAN_INVENTORY_CHANGED", Message: "current Qianchuan plan inventory changed during pagination", Retryable: true, Details: map[string]any{}}
-			case "pagination_metadata", "invalid_plan":
+			case "pagination_metadata", "invalid_plan", "identity_incomplete":
 				return toolFailure{Code: "PLAN_INVENTORY_INVALID", Message: "current Qianchuan plan inventory response is invalid", Retryable: true, Details: map[string]any{}}
-			case "safety_cap":
+			case "safety_cap", "identity_safety_cap":
 				return toolFailure{Code: "PLAN_INVENTORY_TOO_LARGE", Message: "current Qianchuan plan inventory exceeds the safety limit", Details: map[string]any{}}
 			}
 		}
@@ -533,6 +588,8 @@ func mapQianchuanPreflightError(err error) toolFailure {
 			return toolFailure{Code: "PLAN_INVENTORY_FAILED", Message: "current Qianchuan plan inventory query failed", Retryable: true, Details: map[string]any{}}
 		case "plan_reconciliation":
 			return toolFailure{Code: "PLAN_RECONCILIATION_FAILED", Message: "Qianchuan plan reconciliation failed", Retryable: true, Details: map[string]any{}}
+		case "material_diff":
+			return toolFailure{Code: "MATERIAL_QUERY_FAILED", Message: "Qianchuan existing plan material query failed", Retryable: true, Details: map[string]any{}}
 		case "local_coordination":
 			return toolFailure{Code: "LOCAL_COORDINATION_FAILED", Message: "local Qianchuan preflight coordination failed", Retryable: true, Details: map[string]any{}}
 		case "snapshot":
@@ -551,6 +608,16 @@ func mapQianchuanPreflightError(err error) toolFailure {
 		return toolFailure{Code: "CONFIG_UNAVAILABLE", Message: "local Ocean Watch configuration is unavailable", Details: map[string]any{}}
 	}
 	return toolFailure{Code: "UPSTREAM_QUERY_FAILED", Message: "Qianchuan preflight could not complete", Retryable: true, Details: map[string]any{}}
+}
+
+func safePreflightStage(stage string) bool {
+	switch stage {
+	case "configuration", "template", "work_metadata", "authorization", "work_verification",
+		"plan_inventory", "plan_reconciliation", "material_diff", "local_coordination", "snapshot":
+		return true
+	default:
+		return false
+	}
 }
 
 func mapQianchuanSnapshotError(err error) toolFailure {

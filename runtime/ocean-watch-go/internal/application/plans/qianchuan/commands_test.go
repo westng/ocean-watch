@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,24 +29,33 @@ func TestQianchuanCommandBoundaries(t *testing.T) {
 	t.Run("single plan validation error has no partial result", testCreateCommandValidationError)
 	t.Run("batch dry-run uses one scoped token and preserves presentation", testBatchCommandReadScope)
 	t.Run("metadata owner hint overrides cache and cache failure only warns", testBatchOwnerHintCacheBoundary)
-	t.Run("staged resolver skips F2 only for hot owner hints", testBatchStagedOwnerHintCache)
+	t.Run("staged resolver runs F2 once for every work before using owner hints", testBatchStagedOwnerHintCache)
 	t.Run("read-only preflight does not acquire advertiser write lock", testBatchReadOnlyLockBoundary)
 	t.Run("delete requires both confirmations before links or credentials", testRemoveCommandDoubleConfirmation)
 	t.Run("unknown create preserves reconciliation result without replay", testCreateCommandUnknownResult)
 }
 
-func TestBatchPlanScanStartsBeforeSlowLinkResolutionFinishes(t *testing.T) {
+func TestBatchF2CompletesBeforeOfficialReadsStart(t *testing.T) {
 	scanStarted := make(chan struct{})
 	reconciler := &commandSnapshotReconciler{scanStarted: scanStarted}
-	links := &blockingCommandLinkResolver{
-		scanStarted: scanStarted,
-		result: applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{
+	linkEntered, releaseLinks, credentialsStarted := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseLinks) }) }
+	defer release()
+	links := preparationLinkResolver{resolve: func(ctx context.Context) (applicationworkmetadata.ResolveResult, error) {
+		close(linkEntered)
+		select {
+		case <-releaseLinks:
+		case <-ctx.Done():
+			return applicationworkmetadata.ResolveResult{}, ctx.Err()
+		}
+		return applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{
 			InputIndex: 0, InputURL: "https://www.douyin.com/video/6000000000000001",
 			AwemeItemID: "6000000000000001", CreatorName: "F2 达人",
 			OwnerHint: &domain.WorkOwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID},
-		}}},
-	}
-	tokens := &commandTokenProvider{}
+		}}}, nil
+	}}
+	tokens := &commandTokenProvider{onEnsure: func() { close(credentialsStarted) }}
 	service := CommandService{
 		Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens, Links: links,
 		Verifier: WorkVerifier{Reader: &commandReader{}},
@@ -56,21 +66,43 @@ func TestBatchPlanScanStartsBeforeSlowLinkResolutionFinishes(t *testing.T) {
 		},
 		Now: func() time.Time { return time.Date(2026, 8, 16, 4, 0, 0, 0, time.UTC) },
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	result, err := service.BatchWorks(ctx, BatchWorksCommand{
-		PlanTemplate: "qcpt_command", Items: batchCommandItems("https://www.douyin.com/video/6000000000000001"),
-	})
-	if err != nil {
-		t.Fatal(err)
+	type outcome struct {
+		result BatchCommandResult
+		err    error
 	}
-	if links.calls != 1 || reconciler.scanCalls != 1 || result.PreflightID != "qianchuan-preflight-overlap" {
-		t.Fatalf("plan scan and slow link branch did not overlap: links=%d scans=%d result=%#v",
-			links.calls, reconciler.scanCalls, result)
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := service.BatchWorks(ctx, BatchWorksCommand{
+			PlanTemplate: "qcpt_command", Items: batchCommandItems("https://www.douyin.com/video/6000000000000001"),
+		})
+		done <- outcome{result, err}
+	}()
+	select {
+	case <-linkEntered:
+	case <-ctx.Done():
+		t.Fatal("metadata resolution did not start")
+	}
+	select {
+	case <-credentialsStarted:
+		t.Fatal("credential lookup started before F2 finished")
+	case <-scanStarted:
+		t.Fatal("plan scan started before F2 finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+	release()
+	select {
+	case value := <-done:
+		if value.err != nil || reconciler.scanCalls != 1 || tokens.calls != 1 || value.result.PreflightID != "qianchuan-preflight-overlap" {
+			t.Fatalf("F2-first preparation failed: result=%#v scans=%d err=%v", value.result, reconciler.scanCalls, value.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("preflight did not finish after F2 completed")
 	}
 }
 
-func TestBatchWarmOwnerCacheUsesOfficialNicknameForPlanName(t *testing.T) {
+func TestBatchWarmOwnerCacheStillObtainsF2Metadata(t *testing.T) {
 	url := "https://www.douyin.com/video/6000000000000001"
 	resolver := &stagedCommandLinkResolver{result: applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{
 		InputIndex: 0, InputURL: url, AwemeItemID: "6000000000000001",
@@ -94,11 +126,11 @@ func TestBatchWarmOwnerCacheUsesOfficialNicknameForPlanName(t *testing.T) {
 	if result.Counts["would_create"] != 1 || len(result.FailedResults) != 0 || len(result.Skipped) != 0 || len(result.Presentation.Rows) != 1 {
 		t.Fatalf("warm owner cache lost the plan naming metadata: %+v", result)
 	}
-	if resolver.metadataCalls != 0 || reader.authorizedCalls != 1 || reader.videoCalls == 0 || reader.unscopedCalls != 0 || writer.createCalls != 0 {
+	if resolver.metadataCalls != 1 || reader.authorizedCalls != 1 || reader.videoCalls == 0 || reader.unscopedCalls != 0 || writer.createCalls != 0 {
 		t.Fatalf("warm cache bypassed official checks or wrote a plan: resolver=%+v reader=%+v writer=%+v", resolver, reader, writer)
 	}
-	if !strings.Contains(result.Results[0].PlanName, "fixture-creator") {
-		t.Fatal("official nickname was not used for plan naming")
+	if !strings.Contains(result.Results[0].PlanName, "F2 达人") {
+		t.Fatal("fresh F2 nickname was not used for plan naming")
 	}
 }
 
@@ -153,84 +185,51 @@ func TestBatchEmptyLinkResultSkipsCredentialsLockAndPlanScan(t *testing.T) {
 	}
 	select {
 	case <-tokens.started:
-	case <-time.After(time.Second):
-		t.Fatal("parallel credential preparation did not start")
+		t.Fatal("empty F2 result started credential lookup")
+	default:
 	}
 }
 
-func TestBatchPreparationWaitsForCancelledPeer(t *testing.T) {
+func TestBatchPreparationFailuresStopBeforeDependentReads(t *testing.T) {
 	for _, branch := range []string{"authorization", "work_metadata", "empty_links"} {
 		t.Run(branch, func(t *testing.T) {
-			started := make(chan struct{})
-			cancelled := make(chan struct{})
-			release := make(chan struct{})
-			finished := make(chan struct{})
-			var releaseOnce sync.Once
-			unblock := func() { releaseOnce.Do(func() { close(release) }) }
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			defer unblock()
-			waitForCancellation := func(ctx context.Context) error {
-				defer close(finished)
-				close(started)
-				<-ctx.Done()
-				close(cancelled)
-				<-release
-				return ctx.Err()
-			}
-			service := CommandService{Config: commandConfigReader{config: commandProductConfig()}}
-			if branch == "authorization" {
-				service.Links = preparationLinkResolver{resolve: func(ctx context.Context) (applicationworkmetadata.ResolveResult, error) {
-					return applicationworkmetadata.ResolveResult{}, waitForCancellation(ctx)
-				}}
-				service.Tokens = &commandTokenProvider{onEnsure: func() { <-started }, err: errors.New("fixture authorization failure")}
-			} else {
-				service.Tokens = preparationTokenProvider{ensure: waitForCancellation}
-				service.Links = preparationLinkResolver{resolve: func(context.Context) (applicationworkmetadata.ResolveResult, error) {
-					<-started
+			tokens := &commandTokenProvider{}
+			reconciler := &commandSnapshotReconciler{}
+			metadataCalls := 0
+			service := CommandService{
+				Config: commandConfigReader{config: commandProductConfig()}, Tokens: tokens,
+				Batch: BatchService{Reconciler: reconciler},
+				Links: preparationLinkResolver{resolve: func(context.Context) (applicationworkmetadata.ResolveResult, error) {
+					metadataCalls++
 					if branch == "work_metadata" {
 						return applicationworkmetadata.ResolveResult{}, errors.New("fixture metadata failure")
 					}
-					return applicationworkmetadata.ResolveResult{Skipped: []domain.SkippedWorkLink{{InputIndex: 0, Reason: "invalid_url"}}}, nil
-				}}
-			}
-			done := make(chan error, 1)
-			go func() {
-				_, err := service.BatchWorks(ctx, BatchWorksCommand{
-					PlanTemplate: "qcpt_command", Items: batchCommandItems("https://www.douyin.com/video/6000000000000001"),
-				})
-				done <- err
-			}()
-			select {
-			case <-cancelled:
-			case <-time.After(time.Second):
-				t.Fatal("failed preparation did not cancel its peer")
-			}
-			select {
-			case err := <-done:
-				t.Fatalf("batch returned before its cancelled peer finished: %v", err)
-			case <-time.After(20 * time.Millisecond):
-			}
-			unblock()
-			select {
-			case err := <-done:
-				if branch == "empty_links" {
-					if err != nil {
-						t.Fatal(err)
+					if branch == "empty_links" {
+						return applicationworkmetadata.ResolveResult{Skipped: []domain.SkippedWorkLink{{InputIndex: 0, Reason: "invalid_url"}}}, nil
 					}
-				} else {
-					var stageErr *PreflightStageError
-					if !errors.As(err, &stageErr) || stageErr.Stage != branch {
-						t.Fatalf("preparation failure changed: %v", err)
-					}
+					return applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{{InputIndex: 0, AwemeItemID: "6000000000000001"}}}, nil
+				}},
+			}
+			tokens.err = errors.New("fixture authorization failure")
+			_, err := service.BatchWorks(context.Background(), BatchWorksCommand{
+				PlanTemplate: "qcpt_command", Items: batchCommandItems("https://www.douyin.com/video/6000000000000001"),
+			})
+			if branch == "empty_links" {
+				if err != nil {
+					t.Fatal(err)
 				}
-			case <-time.After(time.Second):
-				t.Fatal("batch did not finish after its peer exited")
+			} else {
+				var stage *PreflightStageError
+				if !errors.As(err, &stage) || stage.Stage != branch {
+					t.Fatalf("failure stage=%v", err)
+				}
 			}
-			select {
-			case <-finished:
-			default:
-				t.Fatal("cancelled peer is still running")
+			wantTokens := 0
+			if branch == "authorization" {
+				wantTokens = 1
+			}
+			if metadataCalls != 1 || tokens.calls != wantTokens || reconciler.scanCalls != 0 {
+				t.Fatalf("failed prerequisite started dependent reads: metadata=%d tokens=%d scans=%d", metadataCalls, tokens.calls, reconciler.scanCalls)
 			}
 		})
 	}
@@ -336,6 +335,10 @@ func TestBatchGlobalFailuresBlockTheWholeBatchBeforeWrites(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			writer := &commandWriter{}
 			service := test.build(writer)
+			var clock atomic.Int64
+			service.Now = func() time.Time {
+				return time.Date(2026, 8, 16, 4, 0, 0, 0, time.UTC).Add(time.Duration(clock.Add(1)) * time.Millisecond)
+			}
 			templateID := "qcpt_command"
 			if test.name == "template" {
 				templateID = "missing-template"
@@ -346,6 +349,16 @@ func TestBatchGlobalFailuresBlockTheWholeBatchBeforeWrites(t *testing.T) {
 			var stageErr *PreflightStageError
 			if !errors.As(err, &stageErr) || stageErr.Stage != test.stage || result.PreflightID != "" || writer.createCalls != 0 {
 				t.Fatalf("global failure escaped fail-closed boundary: result=%#v err=%v writes=%d", result, err, writer.createCalls)
+			}
+			if stageErr.Performance == nil || stageErr.Performance.Stages.TotalRuntimeSeconds <= 0 ||
+				result.Performance.Stages.TotalRuntimeSeconds != stageErr.Performance.Stages.TotalRuntimeSeconds {
+				t.Fatal("failed preflight lost its elapsed runtime")
+			}
+			if test.stage == "plan_inventory" && (stageErr.Performance.Requests.F2Count != 2 ||
+				stageErr.Performance.Stages.LinkResolutionSeconds <= 0 ||
+				stageErr.Performance.Stages.PlanInventorySeconds <= 0 ||
+				!stageErr.Performance.LinkMetadata.Enabled) {
+				t.Fatalf("failed inventory lost completed metadata and scan diagnostics: %#v", stageErr.Performance)
 			}
 		})
 	}
@@ -670,8 +683,8 @@ func testBatchStagedOwnerHintCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolver.metadataCalls != 1 || !reflect.DeepEqual(resolver.metadataIDs, []string{"6000000000000002"}) {
-		t.Fatalf("staged resolver did not restrict F2 to cache misses: calls=%d ids=%v", resolver.metadataCalls, resolver.metadataIDs)
+	if resolver.metadataCalls != 1 || !reflect.DeepEqual(resolver.metadataIDs, []string{"6000000000000001", "6000000000000002"}) {
+		t.Fatalf("staged resolver repeated F2 or skipped cached works: calls=%d ids=%v", resolver.metadataCalls, resolver.metadataIDs)
 	}
 	if cache.loadCalls != 1 || result.Performance.OwnerHintCache.LoadedFromCache != 1 || locks.acquires != 0 {
 		t.Fatalf("cache/lock boundary changed: cache=%#v locks=%d", result.Performance.OwnerHintCache, locks.acquires)
@@ -761,12 +774,18 @@ func (reader commandConfigReader) Read(context.Context) (map[string]any, error) 
 }
 
 type commandJournalStore struct {
+	mu       sync.Mutex
 	journals map[string]domainplans.Journal
 	onSave   func()
 }
 
 func (store *commandJournalStore) Load(_ context.Context, runID string) (domainplans.Journal, error) {
-	if store == nil || store.journals == nil {
+	if store == nil {
+		return domainplans.Journal{}, errors.New("fixture journal not found")
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.journals == nil {
 		return domainplans.Journal{}, errors.New("fixture journal not found")
 	}
 	journal, exists := store.journals[runID]
@@ -777,6 +796,8 @@ func (store *commandJournalStore) Load(_ context.Context, runID string) (domainp
 }
 
 func (store *commandJournalStore) Save(_ context.Context, runID string, journal domainplans.Journal) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	if store.onSave != nil {
 		store.onSave()
 	}
@@ -861,13 +882,12 @@ func (resolver *stagedCommandLinkResolver) ResolveLinks(context.Context, applica
 
 func (resolver *stagedCommandLinkResolver) ResolveMetadata(_ context.Context, result applicationworkmetadata.ResolveResult, _ int) (applicationworkmetadata.ResolveResult, error) {
 	resolver.metadataCalls++
-	for _, row := range result.Resolved {
+	for index := range result.Resolved {
+		row := &result.Resolved[index]
 		resolver.metadataIDs = append(resolver.metadataIDs, row.AwemeItemID)
 		row.CreatorName = "F2 达人"
 		row.OwnerHint = &domain.WorkOwnerHint{AwemeID: batchCreatorID, AwemeShowID: batchVisibleID}
 		row.ProductHint = &domain.WorkProductHint{ProductID: batchProductID, ProductName: "测试商品"}
-		result.Resolved = []domain.ResolvedWorkLink{row}
-		break
 	}
 	return result, nil
 }

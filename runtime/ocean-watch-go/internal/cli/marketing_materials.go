@@ -360,10 +360,10 @@ func (runner Runner) runMarketingMaterials(
 			reader = oceanengine.MarketingMaterialsAdapter{Factory: factory, Retry: runtime.Retry}
 		}
 		service = applicationmaterials.Service{
-			Tokens: &authapplication.TokenManager{
+			Tokens: runner.guardTokens(&authapplication.TokenManager{
 				Credentials: credentialStore, Authorizations: authorizations,
 				Locks: refreshLocker, OAuth: oauth, Now: runtime.Now,
-			},
+			}, "marketing"),
 			Reader: reader, Now: runtime.Now,
 		}
 	}

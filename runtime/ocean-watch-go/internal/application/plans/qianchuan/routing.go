@@ -10,6 +10,7 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 )
 
 // Every routed batch retains its own advertiser-bound snapshot. There is no
@@ -53,10 +54,12 @@ type routedWorkBatch struct {
 	items         []domainqianchuan.BatchItem
 	indexes       []int
 	prepared      map[string]domain.ResolvedWorkLink
+	failures      map[string]domain.SkippedWorkLink
 	conflict      bool
 }
 
 func (service CommandService) routeBatchWorks(ctx context.Context, command BatchWorksCommand) (BatchCommandResult, error) {
+	started := service.now()
 	if command.Submit {
 		return BatchCommandResult{}, errors.New("mixed work routing requires preflight; submit each confirmed child preflight_id separately")
 	}
@@ -85,21 +88,17 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 	result := BatchCommandResult{Routed: true, Batches: []RoutedBatchResult{}, Pending: []RoutingPending{}, BatchResult: BatchResult{
 		Mode: "dry_run", Channel: "qianchuan", Counts: map[string]int{"input_works": len(command.Items)},
 	}}
-	// Only rows without an explicit product/template need public metadata for
-	// routing. One shared call resolves those rows, and children reuse its data.
-	unknown := []domainqianchuan.BatchItem{}
-	for _, item := range command.Items {
-		if item.PlanTemplate == "" && command.PlanTemplate == "" && item.ProductID == "" && item.ProductName == "" {
-			unknown = append(unknown, item)
-		}
-	}
+	// Resolve the whole input once before any account query. Both explicitly
+	// selected and automatically routed rows reuse this immutable public result.
+	metadataItems := command.Items
+	metadataStarted := service.now()
 	prepared := map[int]domain.ResolvedWorkLink{}
 	metadataFailures := map[int]string{}
-	if len(unknown) > 0 {
+	if len(metadataItems) > 0 {
 		if service.Links == nil {
 			return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
 		}
-		metadata, resolveErr := service.Links.Resolve(ctx, applicationworkmetadata.ResolveRequest{URLs: batchItemURLs(unknown), Concurrency: command.Concurrency})
+		metadata, resolveErr := service.Links.Resolve(ctx, applicationworkmetadata.ResolveRequest{URLs: batchItemURLs(metadataItems), Concurrency: command.Concurrency})
 		if ctx.Err() != nil {
 			return BatchCommandResult{}, ctx.Err()
 		}
@@ -109,31 +108,32 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 			if errors.As(resolveErr, &metadataError) {
 				reason = routingMetadataReason(metadataError.Code)
 			}
-			for _, item := range unknown {
+			for _, item := range metadataItems {
 				metadataFailures[item.InputIndex] = reason
 			}
 		} else {
 			byWorkID := map[string]domain.ResolvedWorkLink{}
 			for _, row := range metadata.Resolved {
-				if row.InputIndex >= 0 && row.InputIndex < len(unknown) {
-					prepared[unknown[row.InputIndex].InputIndex] = row
+				if row.InputIndex >= 0 && row.InputIndex < len(metadataItems) {
+					prepared[metadataItems[row.InputIndex].InputIndex] = row
 					byWorkID[row.AwemeItemID] = row
 				}
 			}
 			for _, row := range metadata.Skipped {
-				if row.InputIndex >= 0 && row.InputIndex < len(unknown) {
+				if row.InputIndex >= 0 && row.InputIndex < len(metadataItems) {
 					// Keep duplicate rows until the child checks all row settings.
 					// Otherwise a public-resolution dedupe could hide a conflict.
 					if shared, exists := byWorkID[row.AwemeItemID]; exists && row.Reason == "duplicate_input" {
 						shared.InputURL = row.InputURL
-						prepared[unknown[row.InputIndex].InputIndex] = shared
+						prepared[metadataItems[row.InputIndex].InputIndex] = shared
 						continue
 					}
-					metadataFailures[unknown[row.InputIndex].InputIndex] = routingMetadataReason(row.Reason)
+					metadataFailures[metadataItems[row.InputIndex].InputIndex] = routingMetadataReason(row.Reason)
 				}
 			}
 		}
 	}
+	metadataFinished := service.now()
 	batches := []routedWorkBatch{}
 	for _, item := range command.Items {
 		if item.ProductID != "" && !validPositiveID(item.ProductID) || item.AdvertiserID != "" && !validPositiveID(item.AdvertiserID) || item.CreatorUID != "" && !validPositiveID(item.CreatorUID) {
@@ -232,7 +232,8 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 		}
 		if batchIndex == -1 {
 			batchIndex = len(batches)
-			batches = append(batches, routedWorkBatch{template: template, authAccountID: authAccountID, prepared: map[string]domain.ResolvedWorkLink{}})
+			batches = append(batches, routedWorkBatch{template: template, authAccountID: authAccountID,
+				prepared: map[string]domain.ResolvedWorkLink{}, failures: map[string]domain.SkippedWorkLink{}})
 		}
 		batch := &batches[batchIndex]
 		if batch.authAccountID != authAccountID {
@@ -242,51 +243,92 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 		batch.items = append(batch.items, item)
 		if row, ok := prepared[item.InputIndex]; ok {
 			batch.prepared[item.WorkURL] = row
+		} else if reason := metadataFailures[item.InputIndex]; reason != "" {
+			batch.failures[item.WorkURL] = domain.SkippedWorkLink{
+				InputIndex: item.InputIndex, InputURL: item.WorkURL, Reason: reason,
+				Message: "作品信息获取未完成", Status: "skipped",
+			}
 		}
 	}
-	// Serial child execution bounds reads across the whole operation and keeps
-	// each credential, owner cache, snapshot and reconciliation advertiser scoped.
+	operationContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	reads, err := newBatchReadSession(operationContext, command.Concurrency, service.Tokens)
+	if err != nil {
+		return BatchCommandResult{}, err
+	}
+	valid := make([]routedWorkBatch, 0, len(batches))
 	for _, batch := range batches {
-		if err := ctx.Err(); err != nil {
-			return BatchCommandResult{}, err
-		}
 		if batch.conflict {
 			for _, index := range batch.indexes {
 				result.Pending = append(result.Pending, RoutingPending{InputIndex: index, Reason: "authorization_selector_conflict", Candidates: []RoutingCandidate{}})
 			}
 			continue
 		}
-		childService := service
-		childService.Config = routeConfigSnapshot{config: config}
-		childService.Links = &routedLinkResolver{base: service.Links, prepared: batch.prepared, items: batch.items}
-		items := make([]domainqianchuan.BatchItem, len(batch.items))
-		for index, item := range batch.items {
-			items[index] = domainqianchuan.BatchItem{InputIndex: index, WorkURL: item.WorkURL, PlanType: item.PlanType, Business: item.Business}
-		}
-		child, childErr := childService.BatchWorks(ctx, BatchWorksCommand{PlanTemplate: batch.template.TemplateID, Items: items, Concurrency: command.Concurrency, AuthAccountID: batch.authAccountID, IncludePayloads: command.IncludePayloads})
-		entry := RoutedBatchResult{InputIndexes: batch.indexes, Template: BatchTemplateSummary{TemplateID: batch.template.TemplateID, Name: batch.template.DisplayName, AdvertiserID: batch.template.AdvertiserID, ProductIDs: append([]string(nil), batch.template.ProductIDs...)}, Status: "preflight_complete"}
-		if childErr != nil {
-			entry.Cause = childErr
-			entry.Status, entry.FailureStage = "preflight_failed", "preflight"
-			var stage *PreflightStageError
-			if errors.As(childErr, &stage) {
-				entry.FailureStage = stage.Stage
+		valid = append(valid, batch)
+	}
+	type completedBatch struct {
+		index int
+		entry RoutedBatchResult
+	}
+	completed := make(chan completedBatch, len(valid))
+	for index, batch := range valid {
+		go func() {
+			childService := service
+			childService.Config = routeConfigSnapshot{config: config}
+			childService.Links = &routedLinkResolver{prepared: batch.prepared, failures: batch.failures, complete: true, items: batch.items}
+			items := make([]domainqianchuan.BatchItem, len(batch.items))
+			for index, item := range batch.items {
+				items[index] = domainqianchuan.BatchItem{InputIndex: index, WorkURL: item.WorkURL, PlanType: item.PlanType, Business: item.Business}
 			}
-			result.ExitCode = 1
-		}
-		if child.Mode != "" {
-			for index := range child.Skipped {
-				local := child.Skipped[index].InputIndex
-				if local >= 0 && local < len(batch.indexes) {
-					child.Skipped[index].InputIndex = batch.indexes[local]
+			child, childErr := childService.batchWorks(operationContext, BatchWorksCommand{PlanTemplate: batch.template.TemplateID, Items: items, Concurrency: command.Concurrency, AuthAccountID: batch.authAccountID, IncludePayloads: command.IncludePayloads}, reads)
+			entry := RoutedBatchResult{InputIndexes: batch.indexes, Template: BatchTemplateSummary{TemplateID: batch.template.TemplateID, Name: batch.template.DisplayName, AdvertiserID: batch.template.AdvertiserID, ProductIDs: append([]string(nil), batch.template.ProductIDs...)}, Status: "preflight_complete"}
+			if childErr != nil {
+				entry.Cause = childErr
+				entry.Status, entry.FailureStage = "preflight_failed", "preflight"
+				var stage *PreflightStageError
+				if errors.As(childErr, &stage) {
+					entry.FailureStage = stage.Stage
 				}
 			}
-			entry.Result = &child
-			if child.ExitCode != 0 {
-				result.ExitCode = 1
+			if child.Mode != "" {
+				for index := range child.Skipped {
+					local := child.Skipped[index].InputIndex
+					if local >= 0 && local < len(batch.indexes) {
+						child.Skipped[index].InputIndex = batch.indexes[local]
+					}
+				}
+				entry.Result = &child
 			}
+			completed <- completedBatch{index: index, entry: entry}
+		}()
+	}
+	result.Batches = make([]RoutedBatchResult, len(valid))
+	for range valid {
+		done := <-completed
+		result.Batches[done.index] = done.entry
+		if done.entry.Status == "preflight_failed" || done.entry.Result != nil && done.entry.Result.ExitCode != 0 {
+			result.ExitCode = 1
 		}
-		result.Batches = append(result.Batches, entry)
+	}
+	if err := ctx.Err(); err != nil {
+		return BatchCommandResult{}, err
+	}
+	blockRoutedPlanConflicts(result.Batches)
+	for index := range result.Batches {
+		entry := &result.Batches[index]
+		if entry.Result == nil {
+			continue
+		}
+		persisted, persistErr := service.persistBatchSnapshot(ctx, *entry.Result)
+		if persistErr != nil {
+			entry.Cause, entry.Status, entry.FailureStage = persistErr, "preflight_failed", "snapshot"
+			result.ExitCode = 1
+		} else {
+			entry.Result = &persisted
+		}
+		if entry.Result.ExitCode != 0 {
+			result.ExitCode = 1
+		}
 	}
 	if len(result.Pending) > 0 {
 		result.ExitCode = 1
@@ -300,9 +342,19 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 		}
 		if batch.Result != nil {
 			for key, count := range batch.Result.Counts {
+				if key == "input_works" {
+					continue
+				}
 				result.Counts[key] += count
 			}
 		}
+	}
+	result.Performance = batchPerformance(started, service.now(), LinkMetadataPerformance{Provider: "f2_cli", Enabled: true}, OwnerHintCachePerformance{},
+		BatchStagePerformance{F2ResolutionSeconds: durationSeconds(metadataStarted, metadataFinished), TotalRuntimeSeconds: durationSeconds(started, service.now())},
+		BatchRequestCounts{ShortLinkCount: len(command.Items), F2Count: len(prepared)})
+	if metrics, ok := requestcontrol.MetricsFrom(ctx); ok {
+		counts := metrics.Snapshot()
+		result.Performance.Requests.OfficialRequestCount, result.Performance.Requests.RetryCount = counts.Attempts, counts.Retries
 	}
 	return result, nil
 }

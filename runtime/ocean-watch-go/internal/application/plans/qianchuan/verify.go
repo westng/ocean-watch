@@ -3,6 +3,8 @@ package qianchuan
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
@@ -299,7 +301,13 @@ func (verifier WorkVerifier) Verify(
 			continue
 		}
 		for _, productID := range productIDs {
-			for _, batch := range stringBatches(workInputIDs(creatorWorks), WorkQueryBatchSize) {
+			itemIDs := make([]string, 0, len(creatorWorks))
+			for _, work := range creatorWorks {
+				if work.TargetProductID == "" || work.TargetProductID == productID {
+					itemIDs = append(itemIDs, work.AwemeItemID)
+				}
+			}
+			for _, batch := range stringBatches(itemIDs, WorkQueryBatchSize) {
 				productTasks = append(productTasks, productQueryTask{
 					creator: creator, productID: productID, items: batch,
 				})
@@ -342,6 +350,10 @@ func (verifier WorkVerifier) Verify(
 		if !ok {
 			continue
 		}
+		if failedProductWorks[work.AwemeItemID] {
+			result.Skipped = append(result.Skipped, skippedFromWork(work, "product_query_incomplete", "作品商品复核不完整，未将部分结果视为完整商品集合", nil))
+			continue
+		}
 		productSet := matchedProducts[work.AwemeItemID]
 		if work.TargetProductID != "" {
 			if _, matched := productSet[work.TargetProductID]; matched {
@@ -352,9 +364,6 @@ func (verifier WorkVerifier) Verify(
 		}
 		if len(productSet) == 0 {
 			reason, message := "product_mismatch", "作品与模板绑定商品不匹配"
-			if failedProductWorks[work.AwemeItemID] {
-				reason, message = "product_query_incomplete", "作品商品复核不完整，未将作品视为商品不匹配"
-			}
 			result.Skipped = append(result.Skipped, skippedFromWork(work, reason, message, nil))
 			continue
 		}
@@ -399,13 +408,7 @@ func (verifier WorkVerifier) resolveAuthorizedHint(
 		completed := false
 		for page := 1; page <= maxPages; page++ {
 			totalPagesRead++
-			result, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.AuthorizedCreatorPage, error) {
-				return verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
-					AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-					SearchKeyword: searchKeyword, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE",
-					Page: page, PageSize: 100,
-				})
-			})
+			result, err := verifier.authorizationPage(ctx, request, searchKeyword, page)
 			if err != nil {
 				return domainqianchuan.AuthorizedCreator{}, false, totalPagesRead, err
 			}
@@ -445,19 +448,42 @@ func (verifier WorkVerifier) queryWorks(
 	productID string,
 	itemIDs []string,
 ) ([]domainqianchuan.CreatorVideo, error) {
-	result, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.CreatorVideoPage, error) {
-		return verifier.Reader.FetchCreatorVideos(ctx, portqianchuan.CreatorVideoPageRequest{
-			AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
-			AwemeID: awemeID, ProductID: productID, AwemeItemIDs: itemIDs, Count: WorkQueryBatchSize,
+	ids := append([]string(nil), itemIDs...)
+	sort.Strings(ids)
+	key := "creator-videos\x00" + request.AdvertiserID + "\x00" + awemeID + "\x00" + productID + "\x00" + strings.Join(ids, "\x00")
+	return runReadOnce(ctx, request.ReadPool, key, func(ctx context.Context) ([]domainqianchuan.CreatorVideo, error) {
+		result, err := runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.CreatorVideoPage, error) {
+			return verifier.Reader.FetchCreatorVideos(ctx, portqianchuan.CreatorVideoPageRequest{
+				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+				AwemeID: awemeID, ProductID: productID, AwemeItemIDs: ids, Count: WorkQueryBatchSize,
+			})
+		})
+		if err != nil {
+			return nil, err
+		}
+		if result.HasMore {
+			return nil, errors.New("filtered Qianchuan work query unexpectedly requires cursor pagination")
+		}
+		requested := stringSetFrom(ids)
+		for _, row := range result.Rows {
+			if _, ok := requested[row.AwemeItemID]; !ok {
+				return nil, errors.New("Qianchuan work query returned an unrequested work")
+			}
+		}
+		return result.Rows, nil
+	})
+}
+
+func (verifier WorkVerifier) authorizationPage(ctx context.Context, request WorkVerificationRequest, keyword string, page int) (domainqianchuan.AuthorizedCreatorPage, error) {
+	key := fmt.Sprintf("authorized-creators\x00%s\x00%s\x00VIDEO_PROM_GOODS\x00CREATE\x00%d\x00100", request.AdvertiserID, keyword, page)
+	return runReadOnce(ctx, request.ReadPool, key, func(ctx context.Context) (domainqianchuan.AuthorizedCreatorPage, error) {
+		return runRead(ctx, request.ReadPool, func(ctx context.Context) (domainqianchuan.AuthorizedCreatorPage, error) {
+			return verifier.Reader.FetchAuthorizedCreators(ctx, portqianchuan.AuthorizedCreatorPageRequest{
+				AdvertiserID: request.AdvertiserID, AccessToken: request.AccessToken,
+				SearchKeyword: keyword, MarketingGoal: "VIDEO_PROM_GOODS", Scene: "CREATE", Page: page, PageSize: 100,
+			})
 		})
 	})
-	if err != nil {
-		return nil, err
-	}
-	if result.HasMore {
-		return nil, errors.New("filtered Qianchuan work query unexpectedly requires cursor pagination")
-	}
-	return result.Rows, nil
 }
 
 func normalizeWorkInputs(values []WorkInput) ([]WorkInput, []SkippedWork, error) {

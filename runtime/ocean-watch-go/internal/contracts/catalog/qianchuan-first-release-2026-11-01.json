@@ -1,0 +1,736 @@
+{
+  "manifest_version": "S_R1-draft-2026-11-01",
+  "catalog_version": "qianchuan-public-2026-11-01",
+  "status": "draft",
+  "tasks": [
+    {
+      "task_id": "official_capabilities",
+      "target_mcp_tool": "get_qianchuan_official_capabilities",
+      "capability_id": "qianchuan.official_capabilities",
+      "existing_capability": false,
+      "backend": "local_catalog",
+      "required_queries": [],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "official_query",
+      "target_mcp_tool": "query_qianchuan_official",
+      "capability_id": "qianchuan.official_query",
+      "existing_capability": false,
+      "backend": "official_mcp",
+      "required_queries": [
+        "qianchuan_account_balance_get_v1",
+        "qianchuan_ad_quota_get_v1",
+        "qianchuan_uni_promotion_list_v1"
+      ],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "account_health",
+      "target_mcp_tool": "get_qianchuan_account_health",
+      "capability_id": "qianchuan.account_health",
+      "existing_capability": false,
+      "backend": "official_mcp",
+      "required_queries": [
+        "qianchuan_account_balance_get_v1",
+        "qianchuan_account_budget_get_v1",
+        "qianchuan_ad_quota_get_v1"
+      ],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "plan_diagnosis",
+      "target_mcp_tool": "diagnose_qianchuan_plan",
+      "capability_id": "qianchuan.plan_diagnose",
+      "existing_capability": false,
+      "backend": "sdk_and_official_mcp",
+      "required_queries": [
+        "qianchuan_uni_promotion_ad_detail_v1"
+      ],
+      "conditional_queries": [
+        "qianchuan_uni_promotion_ad_suggestion_v1",
+        "qianchuan_ad_reject_reason_v1",
+        "qianchuan_ad_learing_status_get_v1",
+        "qianchuan_ad_compensate_status_get_v1"
+      ],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "material_quality",
+      "target_mcp_tool": "inspect_qianchuan_material_quality",
+      "capability_id": "qianchuan.material_quality",
+      "existing_capability": false,
+      "backend": "sdk_and_official_mcp",
+      "required_queries": [
+        "qianchuan_file_video_original_get_v1",
+        "qianchuan_file_video_efficiency_get_v1"
+      ],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "delivery_suggestions",
+      "target_mcp_tool": "get_qianchuan_delivery_suggestions",
+      "capability_id": "qianchuan.delivery_suggestions",
+      "existing_capability": false,
+      "backend": "official_mcp",
+      "required_queries": [],
+      "conditional_queries": [
+        "qianchuan_suggest_budget_v1",
+        "qianchuan_suggest_roi_goal_v1",
+        "qianchuan_suggest_bid_v1",
+        "qianchuan_uni_aweme_suggest_budget_v1",
+        "qianchuan_uni_promotion_ad_suggestion_v1"
+      ],
+      "required_toolsets": [
+        "qianchuan"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "report_schema",
+      "target_mcp_tool": "get_qianchuan_report_schema",
+      "capability_id": "qianchuan.report_schema",
+      "existing_capability": true,
+      "backend": "sdk",
+      "required_queries": [],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "reports"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "custom_report",
+      "target_mcp_tool": "report_qianchuan_custom",
+      "capability_id": "qianchuan.custom_report",
+      "existing_capability": true,
+      "backend": "sdk",
+      "required_queries": [],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "reports"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "task_id": "managed_accounts_report",
+      "target_mcp_tool": "report_qianchuan_managed_accounts",
+      "capability_id": "shared.managed_account_report",
+      "existing_capability": true,
+      "backend": "sdk",
+      "required_queries": [],
+      "conditional_queries": [],
+      "required_toolsets": [
+        "reports"
+      ],
+      "minimum_mode": "read",
+      "status": "planned",
+      "contract_version": "S_R1-draft-2026-11-01",
+      "scene_validation": "pending",
+      "missing_evidence": [
+        "shared_core_policy",
+        "task_input_output_mapping",
+        "scene_and_subject_validation",
+        "host_tool_registration",
+        "isolated_and_real_acceptance"
+      ]
+    }
+  ],
+  "query_candidates": [
+    {
+      "query_id": "qianchuan_account_balance_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_account_balance_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "GET",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ],
+      "method_evidence": "ad_open_sdk_go@v1.1.92/api/api_qianchuan_account_balance_get_v10.go (GET verified in source; MCP schema not yet verified)"
+    },
+    {
+      "query_id": "qianchuan_account_budget_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_account_budget_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "GET",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ],
+      "method_evidence": "ad_open_sdk_go@v1.1.92/api/api_qianchuan_account_budget_get_v10.go (GET verified in source; MCP schema not yet verified)"
+    },
+    {
+      "query_id": "qianchuan_ad_compensate_status_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_ad_compensate_status_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_ad_learing_status_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_ad_learing_status_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_ad_quota_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_ad_quota_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "GET",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ],
+      "method_evidence": "ad_open_sdk_go@v1.1.92/api/api_qianchuan_ad_quota_get_v10.go (GET verified in source; MCP schema not yet verified)"
+    },
+    {
+      "query_id": "qianchuan_ad_reject_reason_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_ad_reject_reason_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_file_video_efficiency_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_file_video_efficiency_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_file_video_original_get_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_file_video_original_get_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_suggest_bid_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_suggest_bid_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_suggest_budget_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_suggest_budget_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_suggest_roi_goal_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_suggest_roi_goal_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_uni_aweme_suggest_budget_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_uni_aweme_suggest_budget_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_detail_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.plan_get",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_ad_suggestion_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.official.qianchuan_uni_promotion_ad_suggestion_v1",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "business_get_method",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ]
+    },
+    {
+      "query_id": "qianchuan_uni_promotion_list_v1",
+      "proposed_policy": {
+        "capability_id": "qianchuan.plan_list",
+        "required_toolsets": [
+          "qianchuan"
+        ],
+        "minimum_mode": "read",
+        "channel": "qianchuan",
+        "effect": "official_read",
+        "business_method": "GET",
+        "scope_resolver": "pending",
+        "subject_fields": [],
+        "roles": [],
+        "scenes": [],
+        "input_schema": null,
+        "output_schema": null,
+        "source_digest": "",
+        "contract_fingerprint": ""
+      },
+      "contract_version": "S_R1-draft-2026-11-01",
+      "status": "contract_pending",
+      "missing_evidence": [
+        "correct_list_api_documentation",
+        "upstream_mcp_input_output_schema",
+        "all_subject_paths_and_relationships",
+        "roles_and_scenes",
+        "pagination",
+        "units_and_precision",
+        "approved_contract_fingerprint",
+        "isolated_and_real_acceptance"
+      ],
+      "method_evidence": "ad_open_sdk_go@v1.1.92/api/api_qianchuan_uni_promotion_list_v10.go (GET verified in source; MCP schema not yet verified)"
+    }
+  ]
+}

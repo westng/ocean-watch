@@ -413,7 +413,7 @@ func (runner Runner) runQianchuanRead(
 			Locks: refreshLocker, OAuth: oauth, Now: runtime.Now,
 		}
 		service = applicationqianchuan.Service{
-			Tokens: tokens, Reader: reader, Now: runtime.Now,
+			Tokens: runner.guardTokens(tokens, "qianchuan"), Reader: reader, Now: runtime.Now,
 			Templates: applicationtemplates.Query{
 				Store: filesystem.ConfigStore{Path: filepath.Clean(configPath)},
 			},

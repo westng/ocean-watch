@@ -9,6 +9,7 @@ import (
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	domainplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/plans"
 	domainqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/qianchuan"
 	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
@@ -57,7 +58,10 @@ func TestNewQianchuanRuntimeSharesInjectedDependencies(t *testing.T) {
 	if runtime.Preflights.Verifier.Reader != batchReader || runtime.Preflights.Batch.Reader != batchReader {
 		t.Fatal("batch preflight did not use the dedicated concurrent reader")
 	}
-	if runtime.Preflights.Tokens != runtime.Reads.Tokens || runtime.Preflights.Tokens != runtime.Reports.Tokens {
+	preflight, preflightOK := runtime.Preflights.Tokens.(policy.Tokens)
+	reads, readOK := runtime.Reads.Tokens.(policy.Tokens)
+	reports, reportOK := runtime.Reports.Tokens.(policy.Tokens)
+	if !preflightOK || !readOK || !reportOK || preflight.Provider != reads.Provider || reads.Provider != reports.Provider || runtime.Official.Tokens != reads.Provider {
 		t.Fatal("Qianchuan services did not share one token manager")
 	}
 }

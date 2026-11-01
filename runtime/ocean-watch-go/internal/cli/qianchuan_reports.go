@@ -489,7 +489,7 @@ func (runner Runner) runQianchuanReport(
 		}
 		unified, _ := reader.(portreports.QianchuanUnifiedReader)
 		service = applicationreports.Service{
-			Tokens: tokens, Reader: reader, UnifiedReader: unified, Now: runtime.Now,
+			Tokens: runner.guardTokens(tokens, "qianchuan", "reports"), Reader: reader, UnifiedReader: unified, Now: runtime.Now,
 		}
 	}
 	return RunQianchuanReport(ctx, action, args, service, stdout, runtime.Now)

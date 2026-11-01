@@ -86,6 +86,11 @@ type Manager struct {
 	ProbeVersion   func(context.Context, string) ([]byte, error)
 	ProbeTimeout   time.Duration
 	AlwaysDiscover bool
+	// Explicit checkout versions only affect their isolated runtime state.
+	LocalSource bool
+	// Quarantine and selection belong to an immutable host tool contract.
+	// Slots, installation locks and active-runtime leases remain shared.
+	hostContractSHA256 string
 }
 
 func (manager Manager) Resolve(ctx context.Context) (Candidate, error) {
@@ -385,9 +390,17 @@ func (manager Manager) PruneObsoleteRuntimes(ctx context.Context, keep Candidate
 	}
 	defer lock.Release()
 	state, stateErr := manager.readState()
+	if stateErr != nil && !os.IsNotExist(stateErr) {
+		return stateErr
+	}
 	if stateErr == nil && manager.isRuntimeSlot(state.Current) {
 		keep = state.Current
 	}
+	protected, err := manager.otherHostRuntimeReferences()
+	if err != nil {
+		return err
+	}
+	protected[keep.SHA256] = true
 	versionsRoot := filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "versions")
 	entries, err := os.ReadDir(versionsRoot)
 	if err != nil {
@@ -397,7 +410,7 @@ func (manager Manager) PruneObsoleteRuntimes(ctx context.Context, keep Candidate
 		return fmt.Errorf("read Ocean Watch runtime slots: %w", err)
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || entry.Name() == keep.SHA256 || !validSHA256(entry.Name()) {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || protected[entry.Name()] || !validSHA256(entry.Name()) {
 			continue
 		}
 		lease, acquired, acquireErr := filesystem.TryAcquireLock(manager.runtimeLeasePath(entry.Name()))
@@ -421,6 +434,59 @@ func (manager Manager) PruneObsoleteRuntimes(ctx context.Context, keep Candidate
 		}
 	}
 	return nil
+}
+
+// Call under the shared resolve lock. An idle host must retain its selected
+// bundle even when another contract no longer needs that bundle.
+func (manager Manager) otherHostRuntimeReferences() (map[string]bool, error) {
+	protected := make(map[string]bool)
+	runtimeRoot := filepath.Join(manager.CodexRoot, "ocean-watch", "runtime")
+	paths := []string{filepath.Join(runtimeRoot, "state.json")}
+	contractsRoot := filepath.Join(runtimeRoot, "host-contracts")
+	info, err := os.Lstat(contractsRoot)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || runtime.GOOS != "windows" && info.Mode().Perm()&0o022 != 0 {
+			return nil, errors.New("Ocean Watch host contract directory is unsafe")
+		}
+		entries, err := os.ReadDir(contractsRoot)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			if !validSHA256(entry.Name()) {
+				continue
+			}
+			entryInfo, err := entry.Info()
+			if err != nil {
+				return nil, err
+			}
+			if !entryInfo.IsDir() || entryInfo.Mode()&os.ModeSymlink != 0 || runtime.GOOS != "windows" && entryInfo.Mode().Perm()&0o022 != 0 {
+				return nil, errors.New("Ocean Watch host contract directory is unsafe")
+			}
+			paths = append(paths, filepath.Join(contractsRoot, entry.Name(), "state.json"))
+		}
+	}
+	for _, path := range paths {
+		if path == manager.statePath() {
+			continue
+		}
+		state, err := readStateFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read Ocean Watch host contract state: %w", err)
+		}
+		candidate := state.Current
+		if !validSHA256(candidate.SHA256) || filepath.Clean(candidate.PluginRoot) != filepath.Join(runtimeRoot, "versions", candidate.SHA256) {
+			return nil, errors.New("Ocean Watch host contract runtime reference is invalid")
+		}
+		protected[candidate.SHA256] = true
+	}
+	return protected, nil
 }
 
 func (manager Manager) InstalledCacheRoot() string {
@@ -1000,6 +1066,9 @@ func sameCandidateIdentity(left, right Candidate) bool {
 }
 
 func (manager Manager) acceptInstalled(ctx context.Context, current, installed Candidate) bool {
+	if manager.LocalSource {
+		return true
+	}
 	if current.Version == "" || manager.validateRecorded(ctx, current) != nil {
 		return true
 	}
@@ -1064,7 +1133,11 @@ func (manager Manager) binaryName() (string, error) {
 }
 
 func (manager Manager) readState() (State, error) {
-	payload, err := readRegularFile(manager.statePath())
+	return readStateFile(manager.statePath())
+}
+
+func readStateFile(path string) (State, error) {
+	payload, err := readRegularFile(path)
 	if err != nil {
 		return State{}, err
 	}
@@ -1086,6 +1159,9 @@ func (manager Manager) writeState(state State) error {
 }
 
 func (manager Manager) statePath() string {
+	if manager.hostContractSHA256 != "" {
+		return filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "host-contracts", manager.hostContractSHA256, "state.json")
+	}
 	return filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "state.json")
 }
 

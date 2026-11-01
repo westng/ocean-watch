@@ -181,7 +181,7 @@ func (runner Runner) runAccountReport(
 			Locks: refreshLocker, OAuth: oauth, Now: runtime.Now,
 		}
 		service = applicationaccounts.Reporter{
-			Store: store, Tokens: tokens,
+			Store: store, Tokens: runner.guardTokens(tokens, "reports"),
 			Marketing: oceanengine.MarketingAccountReportAdapter{Factory: factory},
 			Qianchuan: oceanengine.QianchuanAccountReportAdapter{Factory: factory},
 		}

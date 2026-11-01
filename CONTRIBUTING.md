@@ -31,6 +31,10 @@ python3 -m pip install -e ".[dev]"
 - 示例只使用明显占位符，不提交真实账户、商品、链接、Cookie 或凭据。
 - 修改 Plugin/Skill 后运行仓库分发校验；本地开发重装使用 Plugin Creator 的 cachebuster 流程，不手改 Marketplace 配置。
 
+从 Git checkout 或 worktree 运行仓库启动器时，CLI 与 MCP 使用该目录的已校验构建，运行时快照和选择状态按 checkout 独立保存，授权、账户及业务配置继续使用共享状态根。修改 Runtime、F2 或 Skill 后先运行 `go -C runtime/ocean-watch-go run ./cmd/build-runtime --all` 重建二进制与资源清单，再运行仓库入口验证。已安装插件仍按宿主的安装更新流程加载。
+
+稳定代理按固定工具合同隔离选择和拒绝状态，版本槽位、安装锁及活跃租约继续共享。可在隔离状态下运行 `go -C runtime/ocean-watch-go run ./cmd/mcp-probe --binary /absolute/path/to/ocean-watch --proxy-root /absolute/plugin/root --developer-docs --reject-legacy-runtime`，核对 38 项合同及旧合同拒绝不影响新合同。这两个 fixture 参数不能与真实 `--codex-home` 同用，也不会请求业务或资料网络接口。
+
 ## 验证
 
 ```bash

@@ -3,7 +3,8 @@
     "ocean-watch": {
       "command": "./bin/ocean-watch-launcher",
       "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
-      "cwd": "."
+      "cwd": ".",
+      "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-02.official-get-r1"}
     }
   }
 }

@@ -26,6 +26,16 @@ func boundedRequestBudget(limit int64) requestBudgetProfile {
 
 func commandRequestBudgetProfile(command contracts.Command) (requestBudgetProfile, error) {
 	switch command.Domain {
+	case "developer-docs":
+		if command.Action == "status" {
+			return boundedRequestBudget(localCommandRequestLimit), nil
+		}
+		return boundedRequestBudget(16), nil
+	case "qc-official":
+		if command.Action == "catalog" {
+			return boundedRequestBudget(localCommandRequestLimit), nil
+		}
+		return boundedRequestBudget(16), nil
 	case "setup", "runs", "templates", "qc-templates":
 		return boundedRequestBudget(localCommandRequestLimit), nil
 	case "accounts":

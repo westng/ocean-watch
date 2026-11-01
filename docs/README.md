@@ -12,6 +12,8 @@
 8. [宿主内授权恢复](reference/authorization-recovery.md)：官方 OAuth、本机账户同步确认、会话状态与原请求恢复合同。
 9. [WorkBuddy 本机接入](../hosts/workbuddy/README.md)：安装、更新、共享状态和 MCP 能力范围；已验证 macOS arm64 安装与工具 / Skill 发现，完整业务验收待完成。
 10. [千川混合商品作品建计划](reference/qianchuan-work-routing.md)：逐行商品与账户路由、待确认行、独立预检快照和按账户提交。
+11. [当前项目详细流程图](architecture/workflows.md)：19 张图、247 个步骤的用途、方法、条件分支与源码；包括千川账户共享读取、达人独立预检、真实串并行关系及全部 CLI/MCP 能力。
+12. [千川官方 MCP 查询合同](reference/qianchuan-official-mcp.md)：156 项受控 GET 映射、任务入口、实例策略、精度/分页及可选开发资料；真实宿主和授权支持单独验收。
 
 仓库级文档包括[贡献指南](../CONTRIBUTING.md)、[安全说明](../SECURITY.md)和[更新日志](../CHANGELOG.md)。阶段性迁移稿不再作为当前事实源；历史设计可从 Git 历史追溯。AI 过程文档只记录计划和验收边界，不替代代码、测试或正式文档。
 

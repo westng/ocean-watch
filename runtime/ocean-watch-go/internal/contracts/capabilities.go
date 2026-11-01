@@ -41,6 +41,8 @@ type CapabilitySpec struct {
 	PrimarySurface     Surface
 	FastRoute          bool
 	CommandDescription string
+	RequiredToolsets   []string
+	MinimumMode        QueryExecutionMode
 }
 
 func (spec CapabilitySpec) Route() string {
@@ -73,6 +75,9 @@ func mustCapabilityRegistry(specs []CapabilitySpec, fastRoutes []FastRouteSpec) 
 		fastRoutes: append([]FastRouteSpec(nil), fastRoutes...),
 	}
 	for _, spec := range registry.specs {
+		if len(spec.RequiredToolsets) == 0 {
+			spec.RequiredToolsets, spec.MinimumMode = capabilityPolicy(spec)
+		}
 		if spec.ID == "" || (spec.Channel != "shared" && spec.Channel != "marketing" && spec.Channel != "qianchuan" && spec.Channel != "star_map") {
 			panic(fmt.Sprintf("invalid capability identity: %#v", spec))
 		}
@@ -108,6 +113,9 @@ func mustCapabilityRegistry(specs []CapabilitySpec, fastRoutes []FastRouteSpec) 
 			registry.byMCP[spec.MCPTool] = spec
 		}
 	}
+	for index, spec := range registry.specs {
+		registry.specs[index] = registry.byID[spec.ID]
+	}
 	fastCapabilityIDs := map[string]bool{}
 	for _, route := range registry.fastRoutes {
 		spec, ok := registry.byID[route.CapabilityID]
@@ -116,11 +124,11 @@ func mustCapabilityRegistry(specs []CapabilitySpec, fastRoutes []FastRouteSpec) 
 		}
 		switch route.Surface {
 		case SurfaceMCP:
-			if spec.PrimarySurface != SurfaceMCP || route.Route != spec.MCPTool {
+			if spec.MCPTool == "" || route.Route != spec.MCPTool {
 				panic("fast MCP route does not match capability: " + route.CapabilityID)
 			}
 		case SurfaceCLI:
-			if spec.PrimarySurface != SurfaceCLI || !strings.HasPrefix(route.Route, "./run "+spec.CLICommand) {
+			if spec.CLICommand == "" || !strings.HasPrefix(route.Route, "./run "+spec.CLICommand) {
 				panic("fast CLI route does not match capability: " + route.CapabilityID)
 			}
 		default:
@@ -136,8 +144,36 @@ func mustCapabilityRegistry(specs []CapabilitySpec, fastRoutes []FastRouteSpec) 
 	return registry
 }
 
+func capabilityPolicy(spec CapabilitySpec) ([]string, QueryExecutionMode) {
+	toolset := spec.Channel
+	if toolset == "shared" || toolset == "star_map" {
+		toolset = "core"
+	}
+	if strings.Contains(spec.ID, "report") {
+		if spec.Channel == "qianchuan" || spec.Channel == "marketing" {
+			return []string{spec.Channel, "reports"}, QueryModeRead
+		}
+		toolset = "reports"
+	}
+	mode := QueryModeRead
+	if spec.ID == "qianchuan.work_preflight" {
+		mode = QueryModePlan
+	}
+	switch spec.Effect {
+	case EffectLocalWrite:
+		mode = QueryModePlan
+	case EffectOnlineWrite:
+		mode = QueryModeExecute
+	}
+	return []string{toolset}, mode
+}
+
 func (registry CapabilityRegistry) All() []CapabilitySpec {
-	return append([]CapabilitySpec(nil), registry.specs...)
+	result := make([]CapabilitySpec, len(registry.specs))
+	for index, spec := range registry.specs {
+		result[index] = cloneCapabilitySpec(spec)
+	}
+	return result
 }
 
 func (registry CapabilityRegistry) FastRoutes() []FastRouteSpec {
@@ -146,17 +182,22 @@ func (registry CapabilityRegistry) FastRoutes() []FastRouteSpec {
 
 func (registry CapabilityRegistry) ByID(id string) (CapabilitySpec, bool) {
 	spec, ok := registry.byID[id]
-	return spec, ok
+	return cloneCapabilitySpec(spec), ok
 }
 
 func (registry CapabilityRegistry) ByCLICommand(command string) (CapabilitySpec, bool) {
 	spec, ok := registry.byCLI[command]
-	return spec, ok
+	return cloneCapabilitySpec(spec), ok
 }
 
 func (registry CapabilityRegistry) ByMCPTool(tool string) (CapabilitySpec, bool) {
 	spec, ok := registry.byMCP[tool]
-	return spec, ok
+	return cloneCapabilitySpec(spec), ok
+}
+
+func cloneCapabilitySpec(spec CapabilitySpec) CapabilitySpec {
+	spec.RequiredToolsets = append([]string(nil), spec.RequiredToolsets...)
+	return spec
 }
 
 func (registry CapabilityRegistry) Command(name string) (Command, bool) {
@@ -207,7 +248,7 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	cli("shared.managed_account_remove", "shared", EffectLocalWrite, "accounts remove", "Remove a responsible account"),
 	cli("shared.managed_account_enable", "shared", EffectLocalWrite, "accounts enable", "Enable a responsible account"),
 	cli("shared.managed_account_disable", "shared", EffectLocalWrite, "accounts disable", "Disable a responsible account"),
-	{ID: "shared.managed_account_report", Channel: "shared", Effect: EffectOfficialRead, CLICommand: "accounts report", PrimarySurface: SurfaceCLI, FastRoute: true, CommandDescription: "Query spend for responsible accounts"},
+	{ID: "shared.managed_account_report", Channel: "shared", Effect: EffectOfficialRead, CLICommand: "accounts report", MCPTool: "report_qianchuan_managed_accounts", PrimarySurface: SurfaceMCP, FastRoute: true, CommandDescription: "Query spend for responsible accounts; Qianchuan MCP, other channels CLI"},
 	cliMCP("shared.template_list", "shared", EffectLocalRead, "templates list", "List Marketing and Qianchuan templates", "list_templates"),
 	cliMCP("shared.template_get", "shared", EffectLocalRead, "templates show", "Show one Marketing or Qianchuan template", "get_template"),
 	cli("shared.template_create", "shared", EffectLocalWrite, "templates create", "Create a channel-specific template"),
@@ -258,8 +299,8 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	cli("qianchuan.material_report", "qianchuan", EffectOfficialRead, "qc-reports materials", "Qianchuan material performance"),
 	cli("qianchuan.account_report", "qianchuan", EffectOfficialRead, "qc-reports account", "Qianchuan all-domain and overall account performance"),
 	cliMCP("qianchuan.uni_account_report", "qianchuan", EffectOfficialRead, "qc-reports uni-account", "Qianchuan all-domain account performance", "report_qianchuan_uni_account"),
-	cli("qianchuan.report_schema", "qianchuan", EffectOfficialRead, "qc-reports schema", "Qianchuan unified report dimensions and metrics"),
-	cli("qianchuan.custom_report", "qianchuan", EffectOfficialRead, "qc-reports custom", "Qianchuan custom all-domain or overall report"),
+	cliMCP("qianchuan.report_schema", "qianchuan", EffectOfficialRead, "qc-reports schema", "Qianchuan unified report dimensions and metrics", "get_qianchuan_report_schema"),
+	cliMCP("qianchuan.custom_report", "qianchuan", EffectOfficialRead, "qc-reports custom", "Qianchuan custom all-domain or overall report", "report_qianchuan_custom"),
 	cli("qianchuan.product_report", "qianchuan", EffectOfficialRead, "qc-reports products", "Qianchuan product-dimension performance"),
 	cli("qianchuan.room_report", "qianchuan", EffectOfficialRead, "qc-reports rooms", "Qianchuan live-room dimension performance"),
 	cli("qianchuan.author_report", "qianchuan", EffectOfficialRead, "qc-reports authors", "Qianchuan Douyin-author dimension performance"),
@@ -284,6 +325,17 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	mcpOnly("marketing.authorization_inspect", "marketing", EffectLocalRead, "get_marketing_authorization", true),
 	mcpOnly("star_map.authorization_inspect", "star_map", EffectLocalRead, "get_star_map_authorization", true),
 	mcpOnly("qianchuan.account_report_fixed", "qianchuan", EffectOfficialRead, "report_qianchuan_account", true),
+	{ID: "qianchuan.official_capabilities", Channel: "qianchuan", Effect: EffectLocalRead, CLICommand: "qc-official catalog", MCPTool: "get_qianchuan_official_capabilities", PrimarySurface: SurfaceMCP, CommandDescription: "Discover approved official query contracts and local availability"},
+	{ID: "qianchuan.official_query", Channel: "qianchuan", Effect: EffectOfficialRead, CLICommand: "qc-official query", MCPTool: "query_qianchuan_official", PrimarySurface: SurfaceMCP, CommandDescription: "Execute one approved, scoped official GET query"},
+	mcpOnly("qianchuan.account_health", "qianchuan", EffectOfficialRead, "get_qianchuan_account_health", true),
+	mcpOnly("qianchuan.plan_diagnose", "qianchuan", EffectOfficialRead, "diagnose_qianchuan_plan", true),
+	mcpOnly("qianchuan.material_quality", "qianchuan", EffectOfficialRead, "inspect_qianchuan_material_quality", true),
+	mcpOnly("qianchuan.delivery_suggestions", "qianchuan", EffectOfficialRead, "get_qianchuan_delivery_suggestions", true),
+	{ID: "qianchuan.developer_docs_search", Channel: "qianchuan", Effect: EffectPublicRead, MCPTool: "search_oceanengine_api_docs", PrimarySurface: SurfaceMCP, RequiredToolsets: []string{"developer_docs"}, MinimumMode: QueryModeRead, CommandDescription: "Search public API documentation for plugin development"},
+	{ID: "qianchuan.developer_docs_schema", Channel: "qianchuan", Effect: EffectPublicRead, MCPTool: "get_oceanengine_api_schema", PrimarySurface: SurfaceMCP, RequiredToolsets: []string{"developer_docs"}, MinimumMode: QueryModeRead, CommandDescription: "Read the OpenAPI schema for an exact official API path"},
+	{ID: "qianchuan.developer_docs_example", Channel: "qianchuan", Effect: EffectPublicRead, MCPTool: "get_oceanengine_sdk_example", PrimarySurface: SurfaceMCP, RequiredToolsets: []string{"developer_docs"}, MinimumMode: QueryModeRead, CommandDescription: "Read an example for an explicitly selected SDK language"},
+	cli("shared.developer_docs_configure", "shared", EffectLocalWrite, "developer-docs configure", "Validate and store separate protected developer documentation metadata"),
+	cli("shared.developer_docs_status", "shared", EffectLocalRead, "developer-docs status", "Read developer documentation metadata readiness without business OAuth"),
 }, []FastRouteSpec{
 	{Skill: "ads-plan-monitor", Outcome: "List local Marketing or Qianchuan templates", CapabilityID: "shared.template_list", Surface: SurfaceMCP, Route: "list_templates"},
 	{Skill: "ads-plan-monitor", Outcome: "Show one exact template", CapabilityID: "shared.template_get", Surface: SurfaceMCP, Route: "get_template"},
@@ -298,7 +350,7 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	{Skill: "qc-plan-monitor", Outcome: "List local Marketing or Qianchuan templates", CapabilityID: "shared.template_list", Surface: SurfaceMCP, Route: "list_templates"},
 	{Skill: "qc-plan-monitor", Outcome: "Show one exact template", CapabilityID: "shared.template_get", Surface: SurfaceMCP, Route: "get_template"},
 	{Skill: "qc-plan-monitor", Outcome: "List accounts I manage/use", CapabilityID: "shared.managed_account_list", Surface: SurfaceMCP, Route: "list_managed_accounts"},
-	{Skill: "qc-plan-monitor", Outcome: "Query spend/performance for my managed Qianchuan account set", CapabilityID: "shared.managed_account_report", Surface: SurfaceCLI, Route: "./run accounts report --channel qianchuan"},
+	{Skill: "qc-plan-monitor", Outcome: "Query spend/performance for my managed Qianchuan account set", CapabilityID: "shared.managed_account_report", Surface: SurfaceMCP, Route: "report_qianchuan_managed_accounts"},
 	{Skill: "qc-plan-monitor", Outcome: "Inspect Qianchuan Token/app/advertiser mapping", CapabilityID: "qianchuan.authorization_inspect", Surface: SurfaceMCP, Route: "get_qianchuan_authorization"},
 	{Skill: "qc-plan-monitor", Outcome: "Search selectable Qianchuan products", CapabilityID: "qianchuan.product_search", Surface: SurfaceMCP, Route: "search_qianchuan_products"},
 	{Skill: "qc-plan-monitor", Outcome: "List Qianchuan product all-domain plans", CapabilityID: "qianchuan.plan_list", Surface: SurfaceMCP, Route: "list_qianchuan_plans"},
@@ -309,6 +361,12 @@ var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
 	{Skill: "qc-plan-monitor", Outcome: "Preflight Douyin works without creating or changing a plan", CapabilityID: "qianchuan.work_preflight", Surface: SurfaceMCP, Route: "preflight_qianchuan_works"},
 	{Skill: "qc-plan-monitor", Outcome: "Configure or initialize F2 Douyin Cookie", CapabilityID: "shared.f2_configuration_start", Surface: SurfaceMCP, Route: "start_f2_configuration"},
 	{Skill: "qc-plan-monitor", Outcome: "Inspect one exact preflight snapshot", CapabilityID: "qianchuan.preflight_get", Surface: SurfaceMCP, Route: "get_qianchuan_preflight"},
+	{Skill: "qc-plan-monitor", Outcome: "Check account balance, daily budget and available plan quota", CapabilityID: "qianchuan.account_health", Surface: SurfaceMCP, Route: "get_qianchuan_account_health"},
+	{Skill: "qc-plan-monitor", Outcome: "Diagnose one exact plan with its current delivery scene", CapabilityID: "qianchuan.plan_diagnose", Surface: SurfaceMCP, Route: "diagnose_qianchuan_plan"},
+	{Skill: "qc-plan-monitor", Outcome: "Inspect original or inefficient labels of exact materials", CapabilityID: "qianchuan.material_quality", Surface: SurfaceMCP, Route: "inspect_qianchuan_material_quality"},
+	{Skill: "qc-plan-monitor", Outcome: "Get official budget, ROI or bid suggestions without changing delivery", CapabilityID: "qianchuan.delivery_suggestions", Surface: SurfaceMCP, Route: "get_qianchuan_delivery_suggestions"},
+	{Skill: "qc-plan-monitor", Outcome: "Discover exact unified report topics, dimensions and metrics", CapabilityID: "qianchuan.report_schema", Surface: SurfaceMCP, Route: "get_qianchuan_report_schema"},
+	{Skill: "qc-plan-monitor", Outcome: "Run a custom material, product, author or room report", CapabilityID: "qianchuan.custom_report", Surface: SurfaceMCP, Route: "report_qianchuan_custom"},
 	{Skill: "xt-plan-monitor", Outcome: "List local managed Star Map accounts", CapabilityID: "shared.managed_account_list", Surface: SurfaceMCP, Route: "list_managed_accounts"},
 	{Skill: "xt-plan-monitor", Outcome: "Inspect Star Map app/token/account authorization", CapabilityID: "star_map.authorization_inspect", Surface: SurfaceMCP, Route: "get_star_map_authorization"},
 	{Skill: "xt-plan-monitor", Outcome: "Make current Star Map user's account coverage match official access", CapabilityID: "shared.authorization_sync_start", Surface: SurfaceMCP, Route: "start_account_sync"},

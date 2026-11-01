@@ -1,31 +1,42 @@
 package bootstrap
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	credentialadapter "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/credentials"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/officialmcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	adapterworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/workmetadata"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/f2config"
+	applicationofficial "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/official"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	applicationqianchuanread "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/qianchuan"
 	applicationreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
 	applicationworkmetadata "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/workmetadata"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 	platformretry "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/retry"
+	portofficial "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/official"
 	portqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/qianchuan"
 	portreports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/reports"
 )
 
 type QianchuanOptions struct {
+	Policy               *policy.Instance
+	OfficialBackend      portofficial.Backend
+	ManagedAccounts      applicationofficial.ManagedAccountReader
 	Config               applicationqianchuan.CommandConfigReader
 	StateRoot            string
 	CredentialStore      authapplication.CredentialStore
@@ -55,6 +66,10 @@ type QianchuanOptions struct {
 }
 
 type QianchuanRuntime struct {
+	Policy     policy.Instance
+	Official   applicationofficial.Service
+	Tasks      applicationofficial.Tasks
+	Close      func() error
 	Preflights applicationqianchuan.CommandService
 	Reads      applicationqianchuanread.Service
 	Reports    applicationreports.Service
@@ -62,6 +77,21 @@ type QianchuanRuntime struct {
 }
 
 func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
+	instance := policy.Default()
+	if options.Policy != nil {
+		instance = *options.Policy
+	} else if options.Config != nil {
+		config, err := options.Config.Read(context.Background())
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return QianchuanRuntime{}, err
+		}
+		if err == nil {
+			instance, err = policy.FromConfig(config)
+			if err != nil {
+				return QianchuanRuntime{}, err
+			}
+		}
+	}
 	factory := options.ClientFactory
 	var err error
 	if factory == nil {
@@ -111,6 +141,7 @@ func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
 	}
 	reportReader := oceanengine.QianchuanReportAdapter{Factory: factory, Retry: options.Retry}
 	commandOptions := options
+	commandOptions.Policy = &instance
 	commandOptions.ClientFactory = factory
 	commandOptions.Authorizations = authorizations
 	commandOptions.RefreshLocker = refreshLocker
@@ -125,13 +156,29 @@ func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
 	templateQuery := applicationtemplates.Query{Store: options.Config}
 	var reportsReader portreports.QianchuanReader = reportReader
 	var unifiedReader portreports.QianchuanUnifiedReader = reportReader
+	backend := options.OfficialBackend
+	closeClient := func() error { return nil }
+	if backend == nil {
+		client := officialmcp.NewClient(filesystem.OfficialReadController{Advertisers: filesystem.QianchuanRequestController{Root: options.StateRoot}})
+		backend, closeClient = client, client.Close
+	}
+	official := applicationofficial.Service{Policy: instance, Authorizations: authorizations, Tokens: tokens, Backend: backend, AppTokens: &oceanengine.OfficialAppTokens{Credentials: options.CredentialStore, Factory: factory}, Now: options.Now}
+	links := applicationworkmetadata.Resolver{Links: adapterworkmetadata.DouyinRedirectResolver{Client: options.HTTPClient}, Metadata: adapterworkmetadata.F2Resolver{Python: options.PythonResolver, Directory: options.PluginRoot, Cookie: (f2config.Settings{Store: credentialadapter.SystemStore{}}).Cookie}}
+	accounts := options.ManagedAccounts
+	if accounts == nil {
+		if config, ok := options.Config.(filesystem.ManagedConfigStore); ok {
+			accounts = filesystem.AccountStore{Path: config.Path}
+		}
+	}
 	return QianchuanRuntime{
+		Policy: instance, Official: official, Close: closeClient,
+		Tasks:      applicationofficial.Tasks{Queries: official, Accounts: accounts, Materials: applicationofficial.WorkLocator{Queries: official, Links: links, Reader: batchReader}},
 		Preflights: preflights,
 		Reads: applicationqianchuanread.Service{
-			Tokens: tokens, Reader: reader, Templates: templateQuery, Now: options.Now,
+			Tokens: policy.Tokens{Instance: instance, Provider: tokens, Required: []string{"qianchuan"}, Authorizations: authorizations}, Reader: reader, Templates: templateQuery, Now: options.Now,
 		},
 		Reports: applicationreports.Service{
-			Tokens: tokens, Reader: reportsReader, UnifiedReader: unifiedReader, Now: options.Now,
+			Tokens: policy.Tokens{Instance: instance, Provider: tokens, Required: []string{"qianchuan", "reports"}, Authorizations: authorizations}, Reader: reportsReader, UnifiedReader: unifiedReader, Now: options.Now,
 		},
 		Auth: authapplication.QueryService{
 			Credentials: options.CredentialStore, Authorizations: authorizations,
@@ -151,6 +198,14 @@ func newQianchuanBatchReadFactory(concurrency int, stateRoot string) (*oceanengi
 }
 
 func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.CommandService, error) {
+	instance := policy.Default()
+	if options.Policy != nil {
+		instance = *options.Policy
+	}
+	minimum := contracts.QueryModePlan
+	if options.Submit {
+		minimum = contracts.QueryModeExecute
+	}
 	service := applicationqianchuan.CommandService{
 		Config: options.Config, Links: options.Links,
 		Journals: options.Journals, Now: options.Now,
@@ -201,6 +256,7 @@ func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.
 			Locks: refreshLocker, OAuth: oauth, Now: options.Now,
 		}
 	}
+	tokens = policy.Tokens{Instance: instance, Provider: tokens, Required: []string{"qianchuan"}, Minimum: minimum, Authorizations: authorizations}
 	credentials := options.Credentials
 	if credentials == nil {
 		credentials = sharedplans.TokenCredentialProvider{Tokens: tokens}

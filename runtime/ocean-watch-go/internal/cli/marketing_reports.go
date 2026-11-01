@@ -503,7 +503,7 @@ func (runner Runner) runMarketingReport(
 			Credentials: credentialsStore, Authorizations: authorizations,
 			Locks: refreshLocker, OAuth: oauth, Now: runtime.Now,
 		}
-		service = applicationreports.MarketingService{Tokens: tokens, Reader: reader, Now: runtime.Now}
+		service = applicationreports.MarketingService{Tokens: runner.guardTokens(tokens, "marketing", "reports"), Reader: reader, Now: runtime.Now}
 	}
 	return runMarketingReportQuery(ctx, action, options, service, stdout)
 }

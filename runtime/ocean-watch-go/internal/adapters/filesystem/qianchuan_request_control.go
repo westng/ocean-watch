@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,40 +38,24 @@ func (controller QianchuanRequestController) Acquire(
 	ctx context.Context,
 	advertiserID string,
 ) (func(error, *http.Response) error, error) {
-	if ctx == nil {
-		return nil, errors.New("Qianchuan request context is required")
-	}
-	advertiserID = strings.TrimSpace(advertiserID)
-	if !positiveDecimalID(advertiserID) {
-		return nil, errors.New("Qianchuan request advertiser_id is invalid")
-	}
-	root := filepath.Clean(controller.Root)
-	if root == "." || root == string(filepath.Separator) {
-		return nil, errors.New("Qianchuan request state root is invalid")
-	}
-	directory := filepath.Join(root, "request-control")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return nil, fmt.Errorf("create Qianchuan request-control directory: %w", err)
-	}
-	if info, err := os.Lstat(directory); err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, errors.New("Qianchuan request-control root must be a managed directory")
-	}
-	statePath := filepath.Join(directory, "qianchuan-"+advertiserID+".json")
-	lockPath := strings.TrimSuffix(statePath, ".json") + ".lock"
-	if info, statErr := os.Lstat(lockPath); statErr == nil {
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return nil, errors.New("Qianchuan request-control lock must be a regular managed file")
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return nil, statErr
-	}
-	lock, err := AcquireLock(ctx, lockPath, 0)
+	paths, err := controller.requestPaths(ctx, advertiserID)
 	if err != nil {
 		return nil, err
 	}
+	intent, err := AcquireLock(ctx, paths.writeIntent, 0)
+	if err != nil {
+		return nil, err
+	}
+	lock, err := AcquireLock(ctx, paths.legacyLock, 0)
+	if err != nil {
+		_ = intent.Release()
+		return nil, err
+	}
+	statePath := paths.state
 	state, err := readQianchuanRequestState(statePath)
 	if err != nil {
 		_ = lock.Release()
+		_ = intent.Release()
 		return nil, err
 	}
 	now := controller.now()
@@ -83,6 +66,7 @@ func (controller QianchuanRequestController) Acquire(
 	if delay := durationUntil(waitUntil, now); delay > 0 {
 		if err := controller.sleep(ctx, delay); err != nil {
 			_ = lock.Release()
+			_ = intent.Release()
 			return nil, err
 		}
 		now = controller.now()
@@ -90,25 +74,27 @@ func (controller QianchuanRequestController) Acquire(
 	state.NextRequestAt = unixSeconds(now.Add(controller.minimumInterval()))
 	if err := writeQianchuanRequestState(statePath, state); err != nil {
 		_ = lock.Release()
+		_ = intent.Release()
 		return nil, err
 	}
+	var once sync.Once
+	var releaseErr error
 	return func(requestErr error, response *http.Response) error {
-		state, readErr := readQianchuanRequestState(statePath)
-		if readErr == nil && qianchuanRateLimited(requestErr, response) {
-			cooldown := controller.defaultCooldown()
-			if retryAfter := boundedRetryAfter(response, controller.now()); retryAfter > cooldown {
-				cooldown = retryAfter
+		once.Do(func() {
+			state, readErr := readQianchuanRequestState(statePath)
+			if readErr == nil && qianchuanRateLimited(requestErr, response) {
+				cooldown := controller.defaultCooldown()
+				if retryAfter := boundedRetryAfter(response, controller.now()); retryAfter > cooldown {
+					cooldown = retryAfter
+				}
+				until := unixSeconds(controller.now().Add(cooldown))
+				if until > state.CooldownUntil {
+					state.CooldownUntil = until
+					readErr = writeQianchuanRequestState(statePath, state)
+				}
 			}
-			until := unixSeconds(controller.now().Add(cooldown))
-			if until > state.CooldownUntil {
-				state.CooldownUntil = until
-				readErr = writeQianchuanRequestState(statePath, state)
-			}
-		}
-		releaseErr := lock.Release()
-		if readErr != nil {
-			return readErr
-		}
+			releaseErr = errors.Join(readErr, lock.Release(), intent.Release())
+		})
 		return releaseErr
 	}, nil
 }
@@ -194,7 +180,7 @@ func qianchuanRateLimited(requestErr error, response *http.Response) bool {
 	if response != nil && response.StatusCode == http.StatusTooManyRequests {
 		return true
 	}
-	return requestErr != nil && strings.Contains(requestErr.Error(), "40100")
+	return requestErr != nil && (strings.Contains(requestErr.Error(), "40100") || strings.Contains(requestErr.Error(), "40110") || strings.Contains(requestErr.Error(), "40130"))
 }
 
 func boundedRetryAfter(response *http.Response, now time.Time) time.Duration {

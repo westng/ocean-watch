@@ -62,7 +62,7 @@ func TestProxyInitializesRuntimeOnlyWhenAToolIsCalled(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 26 || connections.Load() != 0 {
+	if err != nil || len(listed.Tools) != 35 || connections.Load() != 0 {
 		t.Fatalf("handshake must expose the stable catalog without preparing a runtime: tools=%v connections=%d err=%v", listed, connections.Load(), err)
 	}
 	for range 2 {
@@ -222,8 +222,14 @@ func TestProxyRejectsFirstRuntimeContractMismatchWithoutRetryingIt(t *testing.T)
 			return []byte("ocean-watch " + strings.SplitN(manifest.Version, "+", 2)[0]), nil
 		},
 	}
+	expected, err := stableToolCatalog(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyManager := manager
+	manager = manager.ForHostContract(expected)
 	var connections atomic.Int32
-	proxy := &Proxy{Manager: manager, Connect: func(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
+	proxy := &Proxy{Manager: manager, expected: expected, Connect: func(ctx context.Context, candidate runtimeupdate.Candidate) (*mcp.ClientSession, []*mcp.Tool, error) {
 		connections.Add(1)
 		clientTransport, serverTransport := mcp.NewInMemoryTransports()
 		server := Runtime{}.NewServer(candidate.Version)
@@ -255,6 +261,9 @@ func TestProxyRejectsFirstRuntimeContractMismatchWithoutRetryingIt(t *testing.T)
 	}
 	if connections.Load() != 1 {
 		t.Fatalf("rejected runtime was connected %d times", connections.Load())
+	}
+	if _, err := legacyManager.Status(); !os.IsNotExist(err) {
+		t.Fatalf("contract mismatch affected legacy/global runtime state: %v", err)
 	}
 }
 

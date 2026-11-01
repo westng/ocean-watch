@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
 
 const fixture = `{
@@ -58,6 +59,8 @@ func main() {
 	binaryFlag := flag.String("binary", "", "existing Ocean Watch binary to probe")
 	proxyRoot := flag.String("proxy-root", "", "start the stable proxy for this plugin root")
 	codexHome := flag.String("codex-home", "", "use an existing Codex home for a runtime-switch probe")
+	developerDocs := flag.Bool("developer-docs", false, "enable optional documentation tools in isolated probe state")
+	rejectLegacyRuntime := flag.Bool("reject-legacy-runtime", false, "seed a legacy contract rejection before probing an isolated stable proxy")
 	expectInitialRuntime := flag.String("expect-initial-runtime", "", "require this initial Runtime version")
 	waitRuntime := flag.String("wait-runtime", "", "wait for this Runtime version in the same MCP session")
 	waitTimeout := flag.Duration("wait-timeout", 30*time.Second, "maximum runtime-switch wait")
@@ -69,7 +72,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "MCP stdio probe failed: preflight template and work URL must be provided together")
 		os.Exit(2)
 	}
-	if err := run(*binaryFlag, *proxyRoot, *codexHome, *expectInitialRuntime, *waitRuntime, *waitTimeout, *preflightTemplate, preflightWorkURLs); err != nil {
+	if err := run(*binaryFlag, *proxyRoot, *codexHome, *expectInitialRuntime, *waitRuntime, *waitTimeout, *preflightTemplate, preflightWorkURLs, *developerDocs, *rejectLegacyRuntime); err != nil {
 		fmt.Fprintln(os.Stderr, "MCP stdio probe failed:", err)
 		os.Exit(1)
 	}
@@ -80,7 +83,7 @@ func main() {
 	fmt.Println("MCP stdio process probe passed")
 }
 
-func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime string, waitTimeout time.Duration, preflightTemplate string, preflightWorkURLs []string) error {
+func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime string, waitTimeout time.Duration, preflightTemplate string, preflightWorkURLs []string, developerDocs, rejectLegacyRuntime bool) error {
 	moduleRoot, err := findModuleRoot()
 	if err != nil {
 		return err
@@ -116,6 +119,12 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	configPath := filepath.Join(configRoot, "config.json")
 	before := ""
 	isolatedState := strings.TrimSpace(codexHome) == ""
+	if (developerDocs || rejectLegacyRuntime) && !isolatedState {
+		return errors.New("documentation and legacy-rejection fixtures require isolated probe state")
+	}
+	if rejectLegacyRuntime && strings.TrimSpace(proxyRoot) == "" {
+		return errors.New("legacy-rejection fixture requires --proxy-root")
+	}
 	if !isolatedState {
 		resolvedCodexHome, err = filepath.Abs(codexHome)
 		if err != nil {
@@ -127,7 +136,19 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		if err := os.MkdirAll(configRoot, 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(configPath, []byte(fixture), 0o600); err != nil {
+		fixturePayload := []byte(fixture)
+		if developerDocs {
+			var config map[string]any
+			if err := json.Unmarshal(fixturePayload, &config); err != nil {
+				return err
+			}
+			config["business_policy"] = map[string]any{"mode": "plan", "toolsets": []string{"core", "marketing", "qianchuan", "reports", "developer_docs"}}
+			fixturePayload, err = json.Marshal(config)
+			if err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile(configPath, fixturePayload, 0o600); err != nil {
 			return err
 		}
 		before, err = snapshotManagedState(configRoot, configPath)
@@ -137,11 +158,16 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	}
 
 	probeTimeout := 15 * time.Second
+	if rejectLegacyRuntime {
+		probeTimeout = 30 * time.Second
+	}
 	if switchProbe {
 		probeTimeout = waitTimeout + 10*time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
+	var legacyManager runtimeupdate.Manager
+	var legacyBefore []byte
 	arguments := []string{"mcp", "serve", "--stdio"}
 	if strings.TrimSpace(proxyRoot) != "" {
 		resolvedRoot, resolveErr := filepath.Abs(proxyRoot)
@@ -149,10 +175,33 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 			return resolveErr
 		}
 		arguments = []string{"mcp", "proxy", "--stdio", "--plugin-root", resolvedRoot}
+		if rejectLegacyRuntime {
+			legacyManager = runtimeupdate.NewManager(resolvedCodexHome, resolvedRoot)
+			selected, err := legacyManager.Resolve(ctx)
+			if err != nil {
+				return fmt.Errorf("prepare legacy fixture: %w", err)
+			}
+			if _, err := legacyManager.Reject(ctx, selected); err != nil && !errors.Is(err, runtimeupdate.ErrNoPreviousRuntime) {
+				return fmt.Errorf("quarantine legacy fixture: %w", err)
+			}
+			state, err := legacyManager.Status()
+			if err != nil {
+				return err
+			}
+			legacyBefore, err = json.Marshal(state)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	command := exec.Command(binary, arguments...)
 	command.Dir = filepath.Dir(moduleRoot)
 	command.Env = replaceEnvironment(os.Environ(), "CODEX_HOME", resolvedCodexHome)
+	command.Env = replaceEnvironment(command.Env, "OCEAN_WATCH_HOME", resolvedCodexHome)
+	if isolatedState {
+		command.Env = replaceEnvironment(command.Env, "ADS_PLAN_MONITOR_CONFIG", "")
+		command.Env = replaceEnvironment(command.Env, "OCEAN_WATCH_STARTUP_BUSINESS_POLICY", "")
+	}
 	if strings.TrimSpace(proxyRoot) == "" {
 		command.Env = replaceEnvironment(command.Env, "OCEAN_WATCH_MANAGED_RUNTIME", "1")
 	}
@@ -184,22 +233,31 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	expectedNames := []string{
 		"cancel_authorization_session",
 		"cancel_f2_configuration_session",
+		"diagnose_qianchuan_plan",
 		"get_authorization_session",
 		"get_capabilities",
 		"get_f2_configuration_session",
 		"get_marketing_authorization",
+		"get_qianchuan_account_health",
 		"get_qianchuan_authorization",
+		"get_qianchuan_delivery_suggestions",
+		"get_qianchuan_official_capabilities",
 		"get_qianchuan_plan",
 		"get_qianchuan_preflight",
+		"get_qianchuan_report_schema",
 		"get_star_map_authorization",
 		"get_template",
+		"inspect_qianchuan_material_quality",
 		"list_managed_accounts",
 		"list_qianchuan_plans",
 		"list_templates",
 		"preflight_qianchuan_works",
+		"query_qianchuan_official",
 		"report_marketing_materials",
 		"report_marketing_plans",
 		"report_qianchuan_account",
+		"report_qianchuan_custom",
+		"report_qianchuan_managed_accounts",
 		"report_qianchuan_plans",
 		"report_qianchuan_uni_account",
 		"search_marketing_creator_materials",
@@ -208,6 +266,10 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		"start_account_sync",
 		"start_authorization",
 		"start_f2_configuration",
+	}
+	if developerDocs {
+		expectedNames = append(expectedNames, "get_oceanengine_api_schema", "get_oceanengine_sdk_example", "search_oceanengine_api_docs")
+		sort.Strings(expectedNames)
 	}
 	if strings.Join(names, ",") != strings.Join(expectedNames, ",") {
 		_ = session.Close()
@@ -291,6 +353,42 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 		_ = session.Close()
 		return fmt.Errorf("invalid tools/call did not fail closed: result_error=%t error=%v", invalid != nil && invalid.IsError, err)
 	}
+	catalog, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_qianchuan_official_capabilities", Arguments: map[string]any{"query_id": "qianchuan_account_balance_get_v1"}})
+	if err != nil || catalog == nil || catalog.IsError {
+		_ = session.Close()
+		return errors.New("local official contract discovery failed")
+	}
+	var catalogOutput struct {
+		Result struct {
+			Items []struct {
+				QueryID string `json:"query_id"`
+				Enabled bool   `json:"enabled"`
+			} `json:"items"`
+		} `json:"result"`
+	}
+	encodedCatalog, _ := json.Marshal(catalog.StructuredContent)
+	if json.Unmarshal(encodedCatalog, &catalogOutput) != nil || len(catalogOutput.Result.Items) != 1 || catalogOutput.Result.Items[0].QueryID != "qianchuan_account_balance_get_v1" || !catalogOutput.Result.Items[0].Enabled {
+		_ = session.Close()
+		return errors.New("local official catalog contract changed")
+	}
+	invalid, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "query_qianchuan_official", Arguments: map[string]any{"query_id": "qianchuan_account_balance_get_v1", "scope": map[string]any{"kind": "advertiser", "id": "2000000000000001"}, "token": "synthetic-forbidden-token"}})
+	if err != nil || invalid == nil || !invalid.IsError {
+		_ = session.Close()
+		return errors.New("official query accepted a credential argument")
+	}
+	if developerDocs {
+		for _, call := range []*mcp.CallToolParams{
+			{Name: "search_oceanengine_api_docs", Arguments: map[string]any{"query": "synthetic query", "token": "synthetic-forbidden-token"}},
+			{Name: "get_oceanengine_api_schema", Arguments: map[string]any{"api_path": "/open_api/v1.0/qianchuan/account/balance/get/", "token": "synthetic-forbidden-token"}},
+			{Name: "get_oceanengine_sdk_example", Arguments: map[string]any{"api_path": "/open_api/v1.0/qianchuan/account/balance/get/", "language": "go", "token": "synthetic-forbidden-token"}},
+		} {
+			invalid, err := session.CallTool(ctx, call)
+			if err != nil || invalid == nil || !invalid.IsError {
+				_ = session.Close()
+				return fmt.Errorf("documentation tool %s accepted a credential argument", call.Name)
+			}
+		}
+	}
 
 	canceledContext, cancelCall := context.WithCancel(ctx)
 	cancelCall()
@@ -300,6 +398,16 @@ func run(binaryFlag, proxyRoot, codexHome, expectInitialRuntime, waitRuntime str
 	}
 	if err := session.Close(); err != nil {
 		return fmt.Errorf("normal shutdown: %w", err)
+	}
+	if rejectLegacyRuntime {
+		state, err := legacyManager.Status()
+		if err != nil {
+			return err
+		}
+		after, err := json.Marshal(state)
+		if err != nil || !bytes.Equal(legacyBefore, after) {
+			return errors.New("stable proxy changed another host contract's rejection state")
+		}
 	}
 	if isolatedState {
 		after, err := snapshotManagedState(configRoot, configPath)

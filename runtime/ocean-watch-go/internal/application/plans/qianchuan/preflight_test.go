@@ -52,7 +52,7 @@ func TestGetBatchPreflightReturnsStableSanitizedSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tokens.calls != 0 || summary.SchemaVersion != 2 || summary.PreflightID != preflightID || !summary.ReadyForSubmit ||
+	if tokens.calls != 0 || summary.SchemaVersion != batchPreflightSchemaVersion || summary.PreflightID != preflightID || !summary.ReadyForSubmit ||
 		summary.BusinessDate != "2026-08-16" ||
 		summary.EligibleWorks != 2 || summary.SkippedWorks != 1 ||
 		!reflect.DeepEqual(summary.ProductIDs, []string{batchProductID, "5000000000000002"}) ||

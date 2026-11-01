@@ -128,6 +128,7 @@ def validate_mcp():
         "command": "./bin/ocean-watch-launcher",
         "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
         "cwd": ".",
+        "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-02.official-get-r1"},
     }
     if server != expected:
         fail("MCP server must use the stable local runtime proxy")
@@ -190,6 +191,16 @@ def validate_skill(name):
             "get_qianchuan_plan",
             "report_qianchuan_account",
             "report_qianchuan_plans",
+            "report_qianchuan_uni_account",
+            "get_qianchuan_official_capabilities",
+            "query_qianchuan_official",
+            "get_qianchuan_account_health",
+            "diagnose_qianchuan_plan",
+            "inspect_qianchuan_material_quality",
+            "get_qianchuan_delivery_suggestions",
+            "get_qianchuan_report_schema",
+            "report_qianchuan_custom",
+            "report_qianchuan_managed_accounts",
         )
         missing = [tool for tool in query_tools if f"MCP `{tool}`" not in content]
         if missing:

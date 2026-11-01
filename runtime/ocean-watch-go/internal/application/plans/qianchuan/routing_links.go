@@ -15,6 +15,8 @@ import (
 type routedLinkResolver struct {
 	base     WorkLinkResolver
 	prepared map[string]domain.ResolvedWorkLink
+	failures map[string]domain.SkippedWorkLink
+	complete bool
 	items    []domainqianchuan.BatchItem
 }
 
@@ -33,6 +35,14 @@ func (resolver *routedLinkResolver) ResolveLinks(ctx context.Context, request ap
 		if row, ok := resolver.prepared[url]; ok {
 			row.InputIndex = index
 			result.Resolved = append(result.Resolved, row)
+		} else if failure, ok := resolver.failures[url]; ok {
+			failure.InputIndex, failure.InputURL = index, url
+			result.Skipped = append(result.Skipped, failure)
+		} else if resolver.complete {
+			result.Skipped = append(result.Skipped, domain.SkippedWorkLink{
+				InputIndex: index, InputURL: url, Reason: "f2_incomplete_work_metadata", Status: "skipped",
+				Message: "作品信息获取未完成",
+			})
 		} else {
 			missing = append(missing, url)
 			indexes = append(indexes, index)
@@ -114,6 +124,9 @@ func (resolver *routedLinkResolver) applyHint(row *domain.ResolvedWorkLink) {
 }
 
 func (resolver *routedLinkResolver) ResolveMetadata(ctx context.Context, input applicationworkmetadata.ResolveResult, concurrency int) (applicationworkmetadata.ResolveResult, error) {
+	if resolver.complete {
+		return cloneResolveResult(input), ctx.Err()
+	}
 	result := applicationworkmetadata.ResolveResult{Resolved: []domain.ResolvedWorkLink{}, Skipped: append([]domain.SkippedWorkLink(nil), input.Skipped...)}
 	missing := []domain.ResolvedWorkLink{}
 	for _, row := range input.Resolved {

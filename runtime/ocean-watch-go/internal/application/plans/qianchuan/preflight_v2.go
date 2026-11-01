@@ -30,6 +30,7 @@ type PreparedGroup struct {
 
 type preparedBatchSnapshot struct {
 	SchemaVersion    int                      `json:"schema_version"`
+	SelectionPolicy  string                   `json:"selection_policy,omitempty"`
 	CreatedAt        string                   `json:"created_at"`
 	ExpiresAt        string                   `json:"expires_at"`
 	TemplateDigest   string                   `json:"template_digest"`
@@ -139,6 +140,11 @@ func prepareBatchSnapshot(request BatchRequest, result BatchResult, now time.Tim
 			}
 		}
 		if prepared.BindingDigest == "" {
+			if !prepared.SubmitEligible {
+				prepared.BindingDigest = absentBindingDigest
+				groups[groupID] = prepared
+				continue
+			}
 			switch prepared.ExpectedAction {
 			case "would_create", "legacy_binding_required":
 				prepared.BindingDigest = absentBindingDigest
@@ -160,14 +166,18 @@ func prepareBatchSnapshot(request BatchRequest, result BatchResult, now time.Tim
 		skipped[index].InputURL = ""
 	}
 	snapshot := preparedBatchSnapshot{
-		SchemaVersion: batchPreflightSchemaVersion,
-		CreatedAt:     now.Format(time.RFC3339Nano), ExpiresAt: expiresAt.Format(time.RFC3339Nano),
+		SchemaVersion:   batchPreflightSchemaVersion,
+		SelectionPolicy: request.SelectionPolicy,
+		CreatedAt:       now.Format(time.RFC3339Nano), ExpiresAt: expiresAt.Format(time.RFC3339Nano),
 		TemplateDigest: batchTemplateDigest(request), AdvertiserID: request.AdvertiserID,
 		AuthAccountID: request.AuthAccountID, TemplateID: request.TemplateID,
 		TemplateName: request.TemplateName, ProductName: request.ProductName,
 		ProductShortName: request.ProductShortName, PlanNameTemplate: request.PlanNameTemplate,
 		IncludePayloads: request.IncludePayloads, BusinessDate: businessDate,
 		Groups: groups, Skipped: skipped,
+	}
+	if snapshot.SelectionPolicy == "" {
+		snapshot.SelectionPolicy = PlanSelectionBoundOnly
 	}
 	snapshot.InputDigest, err = batchInputDigest(snapshot.Groups)
 	if err != nil {
@@ -207,8 +217,16 @@ func (snapshot preparedBatchSnapshot) batchRequest(
 		TemplatePayload:  append(json.RawMessage(nil), template.TemplatePayload...),
 		IncludePayloads:  snapshot.IncludePayloads, Works: works,
 		Skipped: append([]SkippedWork(nil), snapshot.Skipped...), ReadPool: pool,
-		PreparedGroups: preparedGroups,
+		PreparedGroups:  preparedGroups,
+		SelectionPolicy: snapshot.planSelectionPolicy(),
 	}, nil
+}
+
+func (snapshot preparedBatchSnapshot) planSelectionPolicy() string {
+	if snapshot.SchemaVersion == batchPreflightBoundOnlySchemaVersion {
+		return PlanSelectionBoundOnly
+	}
+	return snapshot.SelectionPolicy
 }
 
 func batchInputDigest(groups map[string]PreparedGroup) (string, error) {
@@ -297,7 +315,7 @@ func decodeBatchPreflight(journal domainplans.Journal, now time.Time) (preparedB
 	if schemaVersion == 1 {
 		return preparedBatchSnapshot{}, fmt.Errorf("%w; run preflight again", ErrBatchPreflightSchemaObsolete)
 	}
-	if schemaVersion != batchPreflightSchemaVersion {
+	if schemaVersion != batchPreflightSchemaVersion && schemaVersion != batchPreflightBoundOnlySchemaVersion {
 		return preparedBatchSnapshot{}, errors.New("Qianchuan batch preflight snapshot schema is unsupported")
 	}
 	return decodeBatchPreflightV2(journal, now)
@@ -312,7 +330,7 @@ func decodeBatchPreflightForRead(journal domainplans.Journal, now time.Time) (de
 	case 1:
 		snapshot, decodeErr := decodeLegacyBatchPreflight(journal, now)
 		return decodedBatchPreflight{legacy: &snapshot}, decodeErr
-	case batchPreflightSchemaVersion:
+	case batchPreflightSchemaVersion, batchPreflightBoundOnlySchemaVersion:
 		snapshot, decodeErr := decodeBatchPreflightV2(journal, now)
 		return decodedBatchPreflight{v2: &snapshot}, decodeErr
 	default:
@@ -358,10 +376,14 @@ func decodeBatchPreflightV2(journal domainplans.Journal, now time.Time) (prepare
 }
 
 func validatePreparedBatchSnapshot(snapshot preparedBatchSnapshot, journal domainplans.Journal) error {
-	if snapshot.SchemaVersion != batchPreflightSchemaVersion || len(snapshot.Groups) == 0 ||
+	if snapshot.SchemaVersion != batchPreflightSchemaVersion && snapshot.SchemaVersion != batchPreflightBoundOnlySchemaVersion || len(snapshot.Groups) == 0 ||
 		!sha256Hex(snapshot.TemplateDigest) || !sha256Hex(snapshot.InputDigest) ||
 		!validPositiveID(snapshot.AdvertiserID) || strings.TrimSpace(snapshot.TemplateID) == "" {
 		return errors.New("Qianchuan batch preflight snapshot schema is unsupported")
+	}
+	if snapshot.SchemaVersion == batchPreflightBoundOnlySchemaVersion && snapshot.SelectionPolicy != "" ||
+		snapshot.SchemaVersion == batchPreflightSchemaVersion && snapshot.SelectionPolicy != PlanSelectionBoundOnly && snapshot.SelectionPolicy != PlanSelectionUniqueExisting {
+		return errors.New("Qianchuan batch preflight selection policy is unsupported")
 	}
 	if len(journal.Jobs) != len(snapshot.Groups) {
 		return errors.New("Qianchuan batch preflight jobs do not match the snapshot")

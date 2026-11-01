@@ -53,7 +53,11 @@ Marketing, Qianchuan, and Star Map manage separate applications, authorizations,
 
 `xt-plan-monitor` is the public Star Map Skill name; `star_map` remains its internal Runtime channel key. All three Skills use the same capability contract and shared Go core. Star Map accounts use the `star_account` subject type.
 
-The current catalog contains **77 CLI capabilities and 26 MCP tools**, with overlap between the two. MCP provides local queries, official material and report reads, Qianchuan work preflight, authorization/account-sync management, and local F2 Cookie setup. Plan creation, material changes, budgets, ROI targets, bids, and status updates still use CLI. **WorkBuddy currently exposes MCP capabilities only and does not execute CLI writes through a shell.** Native discovery and connection of the three new F2 tools have been verified in WorkBuddy; other hosts require a reload and separate acceptance.
+The current catalog contains **81 CLI capabilities and 35 default MCP tools**, with overlap between the two; enabling optional developer documentation exposes 38 tools. MCP provides queries, materials and reports, Qianchuan work preflight, authorization/account sync, and local F2 setup. Plan creation, material changes, budgets, ROI targets, bids, and status updates still use CLI. **WorkBuddy currently exposes MCP capabilities only and does not execute CLI writes through a shell.** New tools and Skill contracts require reloading and acceptance in each actual host.
+
+Qianchuan now maps 156 official GET queries through a scoped catalog and offers account health, plan diagnosis, material checks, delivery suggestions, and custom reports. Three entries retain explicit pagination limits. Existing reports and work preflight continue using the SDK; optional developer documentation stays separate from business OAuth. See the [official query contract](docs/reference/qianchuan-official-mcp.md).
+
+Qianchuan work preflight resolves batch metadata with F2 first, then processes advertiser scopes concurrently and shares plan reads within each account and authorization scope. A uniquely reusable plan receives an append preview; creation requires a complete query proving no compatible target. Multiple candidates, unverified identities, or binding drift block the affected group. See the [work-delivery workflow](docs/reference/qianchuan-work-routing.md).
 
 ### Current Feature Support
 
@@ -181,6 +185,8 @@ flowchart TB
 The repository bundles five Runtime binaries: macOS Intel / Apple Silicon, Linux x86_64 / ARM64, and Windows x86_64. See [V3 Project Runtime Architecture](docs/architecture/overview.md) for layer responsibilities, complete request paths, state and process ownership, and implementation mapping; see the [PRD](docs/product/prd.md) for target requirements. Cross-compilation, one feature passing, or host tool discovery does not establish complete V3 acceptance.
 
 ## Operational and Security Boundaries
+
+Launching from a Git checkout or worktree uses that directory's validated Runtime build, with separate runtime snapshots and selection state for each checkout. Authorization, accounts, and business configuration keep using the shared state home. Rebuild artifacts after Runtime, F2, or Skill changes, and update installed plugins through their host. See [Contributing](CONTRIBUTING.md).
 
 - Account, material, template, plan-detail, and report queries are read-only.
 - Create, append, remove, budget, ROI, and status changes must preview first; no explicit confirmation means no online write.

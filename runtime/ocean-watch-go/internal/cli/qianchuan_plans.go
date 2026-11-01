@@ -563,6 +563,7 @@ func (runner Runner) qianchuanCommandService(
 		return runtime.Commands, nil
 	}
 	service, err := bootstrap.NewQianchuanCommandService(bootstrap.QianchuanOptions{
+		Policy: runner.Policy,
 		Config: filesystem.ConfigStore{Path: configPath}, StateRoot: stateRoot,
 		CredentialStore: credentialsStore, Links: runtime.Links, OwnerHints: runtime.OwnerHints,
 		Authorizations: runtime.Authorizations, RefreshLocker: runtime.RefreshLocker, OAuth: runtime.OAuth,

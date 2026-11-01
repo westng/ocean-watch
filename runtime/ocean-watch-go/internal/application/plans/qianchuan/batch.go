@@ -51,6 +51,7 @@ type BatchRequest struct {
 	ReadPool         *ReadPool
 	PlanInventory    *CurrentPlanInventory
 	PreparedGroups   map[string]PreparedGroup
+	SelectionPolicy  string
 }
 
 type BatchTemplateSummary struct {
@@ -91,6 +92,7 @@ type BatchGroupResult struct {
 	Error            string         `json:"error,omitempty"`
 	ErrorCode        string         `json:"error_code,omitempty"`
 	BindingDigest    string         `json:"-"`
+	Failure          error          `json:"-"`
 }
 
 type BatchResult struct {
@@ -240,12 +242,16 @@ func (service BatchService) execute(
 	discovery, err := service.Reconciler.FindCurrentPlans(ctx, CurrentPlanRequest{
 		AdvertiserID: request.AdvertiserID, AccessToken: accessToken, Targets: targets,
 		ReadPool: request.ReadPool, Inventory: request.PlanInventory,
+		SelectionPolicy: request.SelectionPolicy,
 	})
-	if err != nil {
-		return BatchResult{}, fmt.Errorf("reconcile Qianchuan batch plans: %w", err)
-	}
 	if timing := batchTimingFrom(ctx); timing != nil {
 		timing.GroupReconciliationSeconds += durationSeconds(reconcileStarted, service.now())
+	}
+	if err != nil {
+		return BatchResult{}, preflightStageError("plan_reconciliation", err)
+	}
+	if request.SelectionPolicy == PlanSelectionUniqueExisting {
+		blockConflictingPlanSelections(&discovery)
 	}
 	presentationRows := make([]map[string]any, 0)
 	type groupPreparation struct {
@@ -265,7 +271,7 @@ func (service BatchService) execute(
 		if request.preflightDecisionChanged(group.groupID, plans, policy) {
 			return groupPreparation{plans: plans, policy: policy}
 		}
-		if policy.Status != "bound" || len(plans) != 1 || len(filterWorksForProducts(group.works, plans[0].ProductIDs)) == 0 {
+		if (policy.Status != "bound" && policy.Status != "unbound_existing") || len(plans) != 1 || len(filterWorksForProducts(group.works, plans[0].ProductIDs)) == 0 {
 			return groupPreparation{plans: plans, policy: policy}
 		}
 		snapshot, prepareErr := service.planMaterialsWithPool(
@@ -325,19 +331,45 @@ func (service BatchService) execute(
 			groupResult, err = service.executeNewGroup(
 				ctx, request, group, groupResult, accessToken, dispatcher, capability,
 			)
-		case "bound":
+		case "bound", "unbound_existing":
+			if preparation.policy.Status == "unbound_existing" && request.Submit && len(request.PreparedGroups) == 0 {
+				groupResult.Status, groupResult.ErrorCode = "preflight_required", "PREFLIGHT_REQUIRED"
+				groupResult.Error = "confirm the exact existing plan through a preflight snapshot before submission"
+				break
+			}
+			if preparation.policy.Status == "unbound_existing" && request.Submit && service.Bindings == nil {
+				groupResult.Status, groupResult.ErrorCode = "binding_failed", "BINDING_WRITE_REQUIRED"
+				groupResult.Error = "Qianchuan plan binding writer is required before adopting an existing plan"
+				break
+			}
 			if preparation.err != nil || len(plans) != 1 {
 				if preparation.err == nil {
 					preparation.err = errors.New("bound Qianchuan plan is unavailable")
 				}
-				groupResult.Status, groupResult.Error = "failed", preparation.err.Error()
+				groupResult.Failure = preflightStageError("material_diff", preparation.err)
+				groupResult.Status, groupResult.Error = "failed", groupResult.Failure.Error()
 				err = preparation.err
 			} else {
 				groupResult, err = service.executeExistingGroup(
 					ctx, request, group, groupResult, plans[0], preparation.material,
 					accessToken, dispatcher, capability,
 				)
+				if err == nil && preparation.policy.Status == "unbound_existing" && request.Submit &&
+					(groupResult.Status == "appended" || groupResult.Status == "already_present") {
+					if bindErr := service.adoptExistingPlan(ctx, request, group, plans[0].AdID, accessToken); bindErr != nil {
+						groupResult.Status, groupResult.ErrorCode, groupResult.Error = "binding_failed", "BINDING_WRITE_FAILED", bindErr.Error()
+						err = bindErr
+					}
+				}
 			}
+		case "plan_selection_required":
+			groupResult.Status, groupResult.ErrorCode = "plan_selection_required", "PLAN_SELECTION_REQUIRED"
+			groupResult.Error = "multiple compatible plans require an explicit selection"
+			groupResult.CandidatePlans = append([]ExistingPlan(nil), preparation.policy.Candidates...)
+		case "plan_group_conflict":
+			groupResult.Status, groupResult.ErrorCode = "plan_group_conflict", "PLAN_GROUP_CONFLICT"
+			groupResult.Error = "the selected plan belongs to another group or was selected by multiple groups"
+			groupResult.CandidatePlans = append([]ExistingPlan(nil), preparation.policy.Candidates...)
 		case "legacy_binding_required":
 			groupResult.Status = "legacy_binding_required"
 			groupResult.ErrorCode = "LEGACY_BINDING_REQUIRED"
@@ -766,6 +798,13 @@ func normalizeBatchRequest(request BatchRequest) (normalizedBatchRequest, error)
 	request.PlanType = strings.TrimSpace(request.PlanType)
 	request.Business = strings.TrimSpace(request.Business)
 	request.PreparedGroups = clonePreparedGroups(request.PreparedGroups)
+	request.SelectionPolicy = strings.TrimSpace(request.SelectionPolicy)
+	if request.SelectionPolicy == "" {
+		request.SelectionPolicy = PlanSelectionBoundOnly
+	}
+	if request.SelectionPolicy != PlanSelectionBoundOnly && request.SelectionPolicy != PlanSelectionUniqueExisting {
+		return normalizedBatchRequest{}, errors.New("Qianchuan plan selection policy is invalid")
+	}
 	if !validPositiveID(request.AdvertiserID) {
 		return normalizedBatchRequest{}, errors.New("advertiser_id must be a positive decimal ID")
 	}
@@ -918,7 +957,9 @@ func (request normalizedBatchRequest) preflightDecisionChanged(
 	if expected.ExpectedAction == "would_create" {
 		return policy.Status != "would_create" || len(plans) != 0
 	}
-	return policy.Status != "bound" || len(plans) != 1 || plans[0].AdID != expected.ExpectedAdID
+	compatible := policy.Status == "bound" ||
+		(request.SelectionPolicy == PlanSelectionUniqueExisting && policy.Status == "unbound_existing")
+	return !compatible || len(plans) != 1 || plans[0].AdID != expected.ExpectedAdID
 }
 
 func (request normalizedBatchRequest) emptyResult(mode string) BatchResult {

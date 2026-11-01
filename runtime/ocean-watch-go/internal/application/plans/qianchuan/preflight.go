@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	batchPreflightKind          = "qianchuan_batch_preflight"
-	batchPreflightSchemaVersion = 2
-	batchPreflightLifetime      = 30 * time.Minute
+	batchPreflightKind                   = "qianchuan_batch_preflight"
+	batchPreflightSchemaVersion          = 3
+	batchPreflightBoundOnlySchemaVersion = 2
+	batchPreflightLifetime               = 30 * time.Minute
 )
 
 var (

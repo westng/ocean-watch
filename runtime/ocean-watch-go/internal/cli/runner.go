@@ -14,7 +14,10 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/python"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/onboarding"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/bootstrap"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/configuration"
@@ -27,6 +30,8 @@ import (
 var Version = "dev"
 
 type Runner struct {
+	Policy             *policy.Instance
+	Official           OfficialRuntime
 	Routes             application.RouteManifest
 	RuntimeVersion     string
 	Stdout             io.Writer
@@ -122,6 +127,31 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		userHome, _ = os.UserHomeDir()
 	}
 	codexRoot := filesystem.CodexHome(getenv, userHome)
+	instance := policy.Default()
+	if runner.Policy != nil {
+		instance = *runner.Policy
+	} else {
+		managed, configErr := filesystem.NewManagedConfigStore(getenv, userHome)
+		if configErr == nil {
+			config, readErr := managed.Read(ctx)
+			if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+				WriteDomainError(stdout, domain.NewError("policy_configuration_invalid", "failed to read startup business policy", 2, nil))
+				return 2
+			}
+			if readErr == nil {
+				instance, configErr = policy.FromConfig(config)
+			}
+		}
+		if configErr != nil {
+			WriteDomainError(stdout, domain.NewError("policy_configuration_invalid", "invalid startup business policy", 2, nil))
+			return 2
+		}
+	}
+	runner.Policy = &instance
+	if spec, exists := contracts.DefaultCapabilityRegistry.ByCLICommand(invocation.Command.Name()); !exists || checkCLIInstance(instance, spec, invocation.Arguments) != nil {
+		WriteDomainError(stdout, domain.NewError("policy_denied", "startup business policy denied this capability", 2, nil))
+		return 2
+	}
 	credentialStore := runner.Credentials
 	if credentialStore == nil {
 		credentialStore = credentials.Store{
@@ -133,6 +163,11 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		authorizations = filesystem.AuthorizationStore{Root: filepath.Join(codexRoot, "ads-plan-monitor", "state")}
 	}
 	switch invocation.Command.Domain {
+	case "developer-docs":
+		grantStore, _ := authorizations.(auth.AuthorizationStore)
+		return runDeveloperDocs(ctx, invocation.Command.Action, invocation.Arguments, stdout, bootstrap.DeveloperAppReferences{Authorizations: grantStore, Policy: instance})
+	case "qc-official":
+		return runner.runOfficial(ctx, invocation.Command.Action, invocation.Arguments, codexRoot, credentialStore, stdin, stdout)
 	case "setup":
 		return runner.runSetup(
 			ctx, invocation.Command.Action, invocation.Arguments,
@@ -269,7 +304,7 @@ func (runner Runner) runSetup(
 	doctor := onboarding.Doctor{Probe: probe, RuntimeVersion: runner.RuntimeVersion, StateInspector: runner.StateInspector}
 	if runner.RuntimeVersion != "" {
 		doctor.RuntimeCheck = func(ctx context.Context) onboarding.Check {
-			manager := runtimeupdate.Manager{CodexRoot: codexRoot, PluginRoot: filesystem.ResolvePluginRoot(cwd)}
+			manager := runtimeupdate.NewManager(codexRoot, filesystem.ResolvePluginRoot(cwd))
 			diagnostic := manager.Diagnose(ctx)
 			count := 0
 			for _, spec := range contracts.DefaultCapabilityRegistry.All() {

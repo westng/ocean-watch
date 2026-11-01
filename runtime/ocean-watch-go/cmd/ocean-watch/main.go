@@ -99,9 +99,7 @@ func runRuntimeCommand(ctx context.Context, arguments []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	manager := runtimeupdate.Manager{
-		CodexRoot: filesystem.CodexHome(os.Getenv, userHome), PluginRoot: filepath.Clean(pluginRoot),
-	}
+	manager := runtimeupdate.NewManager(filesystem.CodexHome(os.Getenv, userHome), pluginRoot)
 	if len(arguments) == 0 {
 		fmt.Fprintln(os.Stderr, "runtime command requires resolve, status, or exec")
 		return 2

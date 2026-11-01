@@ -60,38 +60,47 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listedTools.Tools) != 26 || listedTools.Tools[0].Annotations == nil {
+	if len(listedTools.Tools) != 35 || listedTools.Tools[0].Annotations == nil {
 		t.Fatalf("unexpected tools: %#v", listedTools.Tools)
 	}
 	wantAnnotations := map[string]struct {
 		readOnly, idempotent, openWorld bool
 	}{
-		"start_authorization":                {readOnly: false, idempotent: false, openWorld: true},
-		"start_f2_configuration":             {readOnly: false, idempotent: false},
-		"get_f2_configuration_session":       {readOnly: true, idempotent: true},
-		"cancel_f2_configuration_session":    {readOnly: false, idempotent: false},
-		"start_account_sync":                 {readOnly: false, idempotent: false, openWorld: true},
-		"get_authorization_session":          {readOnly: true, idempotent: true},
-		"cancel_authorization_session":       {readOnly: false, idempotent: false, openWorld: true},
-		"list_templates":                     {readOnly: true, idempotent: true},
-		"get_template":                       {readOnly: true, idempotent: true},
-		"get_capabilities":                   {readOnly: true, idempotent: true},
-		"preflight_qianchuan_works":          {readOnly: false, idempotent: false, openWorld: true},
-		"get_qianchuan_preflight":            {readOnly: true, idempotent: true},
-		"list_managed_accounts":              {readOnly: true, idempotent: true},
-		"get_qianchuan_authorization":        {readOnly: true, idempotent: true},
-		"search_qianchuan_products":          {readOnly: false, idempotent: false, openWorld: true},
-		"list_qianchuan_plans":               {readOnly: false, idempotent: false, openWorld: true},
-		"get_qianchuan_plan":                 {readOnly: false, idempotent: false, openWorld: true},
-		"report_qianchuan_account":           {readOnly: false, idempotent: false, openWorld: true},
-		"report_qianchuan_uni_account":       {readOnly: false, idempotent: false, openWorld: true},
-		"report_qianchuan_plans":             {readOnly: false, idempotent: false, openWorld: true},
-		"get_marketing_authorization":        {readOnly: true, idempotent: true},
-		"get_star_map_authorization":         {readOnly: true, idempotent: true},
-		"search_marketing_videos":            {readOnly: false, idempotent: false, openWorld: true},
-		"search_marketing_creator_materials": {readOnly: false, idempotent: false, openWorld: true},
-		"report_marketing_materials":         {readOnly: false, idempotent: false, openWorld: true},
-		"report_marketing_plans":             {readOnly: false, idempotent: false, openWorld: true},
+		"start_authorization":                 {readOnly: false, idempotent: false, openWorld: true},
+		"start_f2_configuration":              {readOnly: false, idempotent: false},
+		"get_f2_configuration_session":        {readOnly: true, idempotent: true},
+		"cancel_f2_configuration_session":     {readOnly: false, idempotent: false},
+		"start_account_sync":                  {readOnly: false, idempotent: false, openWorld: true},
+		"get_authorization_session":           {readOnly: true, idempotent: true},
+		"cancel_authorization_session":        {readOnly: false, idempotent: false, openWorld: true},
+		"list_templates":                      {readOnly: true, idempotent: true},
+		"get_template":                        {readOnly: true, idempotent: true},
+		"get_capabilities":                    {readOnly: true, idempotent: true},
+		"preflight_qianchuan_works":           {readOnly: false, idempotent: false, openWorld: true},
+		"get_qianchuan_preflight":             {readOnly: true, idempotent: true},
+		"list_managed_accounts":               {readOnly: true, idempotent: true},
+		"get_qianchuan_authorization":         {readOnly: true, idempotent: true},
+		"search_qianchuan_products":           {readOnly: false, idempotent: false, openWorld: true},
+		"list_qianchuan_plans":                {readOnly: false, idempotent: false, openWorld: true},
+		"get_qianchuan_plan":                  {readOnly: false, idempotent: false, openWorld: true},
+		"report_qianchuan_account":            {readOnly: false, idempotent: false, openWorld: true},
+		"report_qianchuan_uni_account":        {readOnly: false, idempotent: false, openWorld: true},
+		"report_qianchuan_plans":              {readOnly: false, idempotent: false, openWorld: true},
+		"get_marketing_authorization":         {readOnly: true, idempotent: true},
+		"get_star_map_authorization":          {readOnly: true, idempotent: true},
+		"search_marketing_videos":             {readOnly: false, idempotent: false, openWorld: true},
+		"search_marketing_creator_materials":  {readOnly: false, idempotent: false, openWorld: true},
+		"report_marketing_materials":          {readOnly: false, idempotent: false, openWorld: true},
+		"report_marketing_plans":              {readOnly: false, idempotent: false, openWorld: true},
+		"get_qianchuan_official_capabilities": {readOnly: true, idempotent: true},
+		"query_qianchuan_official":            {openWorld: true},
+		"get_qianchuan_account_health":        {openWorld: true},
+		"diagnose_qianchuan_plan":             {openWorld: true},
+		"inspect_qianchuan_material_quality":  {openWorld: true},
+		"get_qianchuan_delivery_suggestions":  {openWorld: true},
+		"get_qianchuan_report_schema":         {openWorld: true},
+		"report_qianchuan_custom":             {openWorld: true},
+		"report_qianchuan_managed_accounts":   {openWorld: true},
 	}
 	for _, tool := range listedTools.Tools {
 		annotations := tool.Annotations
@@ -298,6 +307,7 @@ type preflightServiceStub struct {
 	getCalls    int
 	lastCommand applicationqianchuan.BatchWorksCommand
 	batchResult applicationqianchuan.BatchCommandResult
+	batchErr    error
 	summary     applicationqianchuan.BatchPreflightSummary
 	budget      requestcontrol.BudgetSnapshot
 }
@@ -311,7 +321,103 @@ func (service *preflightServiceStub) BatchWorks(
 	if budget, ok := requestcontrol.BudgetFrom(ctx); ok {
 		service.budget = budget.Snapshot()
 	}
-	return service.batchResult, nil
+	return service.batchResult, service.batchErr
+}
+
+type preflightDispatchFailure struct {
+	endpoint string
+}
+
+func (failure preflightDispatchFailure) Error() string          { return "PRIVATE_TOKEN_COOKIE_RESPONSE" }
+func (failure preflightDispatchFailure) Unwrap() error          { return context.DeadlineExceeded }
+func (failure preflightDispatchFailure) Dispatched() bool       { return true }
+func (failure preflightDispatchFailure) EndpointFamily() string { return failure.endpoint }
+
+func TestPreflightFailurePreservesStageAndPerformanceWithoutPrivateDetails(t *testing.T) {
+	for _, endpoint := range []string{
+		"/v1.0/qianchuan/uni_promotion/list",
+		"/v1.0/qianchuan/uni_promotion/list?access_token=PRIVATE_TOKEN_COOKIE_RESPONSE",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			stage := &applicationqianchuan.PreflightStageError{
+				Stage: "plan_inventory",
+				Performance: &applicationqianchuan.BatchPerformance{
+					OwnerHintCache: applicationqianchuan.OwnerHintCachePerformance{Warning: "PRIVATE_TOKEN_COOKIE_RESPONSE"},
+					Stages: applicationqianchuan.BatchStagePerformance{
+						F2ResolutionSeconds: 2, PlanInventorySeconds: 30, TotalRuntimeSeconds: 33,
+					},
+					Requests: applicationqianchuan.BatchRequestCounts{F2Count: 1, OfficialRequestCount: 3},
+				},
+			}
+			service := &preflightServiceStub{batchErr: errors.Join(stage, preflightDispatchFailure{endpoint: endpoint})}
+			logs := new(bytes.Buffer)
+			session := connectTestServer(t, Runtime{QianchuanPreflights: service, LogWriter: logs})
+			defer session.Close()
+			result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+				Name: "preflight_qianchuan_works", Arguments: map[string]any{
+					"plan_template": "qcpt_test", "items": []map[string]any{{"work_url": "https://v.douyin.com/input/"}},
+				},
+			})
+			if err != nil || !result.IsError {
+				t.Fatalf("preflight failure was accepted: result=%#v err=%v", result, err)
+			}
+			failure := decodeStructured[errorEnvelope](t, result).Error
+			if failure.Code != "PLAN_INVENTORY_FAILED" || failure.Details["stage"] != "plan_inventory" ||
+				failure.Details["cause"] != "request_timeout" || failure.Details["dispatched"] != true {
+				t.Fatalf("timeout hid its failed stage or dispatch evidence: %#v", failure)
+			}
+			performance, _ := json.Marshal(failure.Details["performance"])
+			var timings preflightPerformance
+			if err := json.Unmarshal(performance, &timings); err != nil || timings.Requests.F2Count != 1 ||
+				timings.Stages.F2ResolutionSeconds != 2 || timings.Stages.PlanInventorySeconds != 30 ||
+				timings.Stages.TotalRuntimeSeconds != 33 {
+				t.Fatalf("completed phase timing was lost: %s", performance)
+			}
+			encoded, _ := json.Marshal(result)
+			if bytes.Contains(encoded, []byte("PRIVATE_TOKEN_COOKIE_RESPONSE")) || bytes.Contains(logs.Bytes(), []byte("PRIVATE_TOKEN_COOKIE_RESPONSE")) ||
+				service.lastCommand.Submit || service.lastCommand.IncludePayloads {
+				t.Fatalf("diagnostics leaked private details or enabled a write: %s", encoded)
+			}
+			if endpoint == "/v1.0/qianchuan/uni_promotion/list" && failure.Details["endpoint_family"] != endpoint {
+				t.Fatal("safe endpoint family was lost")
+			}
+			if strings.Contains(endpoint, "?") {
+				if _, found := failure.Details["endpoint_family"]; found {
+					t.Fatal("endpoint diagnostics accepted credential-bearing query data")
+				}
+			}
+		})
+	}
+}
+
+func TestCreatorPreflightFailureKeepsSafeDiagnostics(t *testing.T) {
+	failure := errors.Join(&applicationqianchuan.PreflightStageError{Stage: "plan_reconciliation"},
+		preflightDispatchFailure{endpoint: "/v1.0/qianchuan/uni_promotion/ad/detail"})
+	row := applicationqianchuan.BatchGroupResult{Status: "failed", Error: "PRIVATE_TOKEN_COOKIE_RESPONSE", Failure: failure}
+	service := &preflightServiceStub{batchResult: applicationqianchuan.BatchCommandResult{
+		BatchResult: applicationqianchuan.BatchResult{Mode: "dry_run", Results: []applicationqianchuan.BatchGroupResult{row}, FailedResults: []applicationqianchuan.BatchGroupResult{row}},
+	}}
+	logs := new(bytes.Buffer)
+	session := connectTestServer(t, Runtime{QianchuanPreflights: service, LogWriter: logs})
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "preflight_qianchuan_works", Arguments: map[string]any{
+		"plan_template": "qcpt_test", "items": []map[string]any{{"work_url": "https://v.douyin.com/input/"}},
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("creator failure hid the partial result: result=%#v err=%v", result, err)
+	}
+	output := decodeStructured[preflightOutput](t, result)
+	for _, rows := range [][]preflightGroup{output.Results, output.FailedResults} {
+		if len(rows) != 1 || rows[0].ErrorCode != "PLAN_RECONCILIATION_FAILED" ||
+			rows[0].ErrorDetails["stage"] != "plan_reconciliation" || rows[0].ErrorDetails["cause"] != "request_timeout" ||
+			rows[0].ErrorDetails["endpoint_family"] != "/v1.0/qianchuan/uni_promotion/ad/detail" {
+			t.Fatalf("creator diagnostics were lost: %#v", rows)
+		}
+	}
+	encoded, _ := json.Marshal(result)
+	if bytes.Contains(encoded, []byte("PRIVATE_TOKEN_COOKIE_RESPONSE")) || bytes.Contains(logs.Bytes(), []byte("PRIVATE_TOKEN_COOKIE_RESPONSE")) {
+		t.Fatal("creator diagnostics leaked the raw error")
+	}
 }
 
 func (service *preflightServiceStub) GetBatchPreflight(

@@ -104,7 +104,7 @@ func TestRunnerMarketingCreateUsesSharedServiceAndPreservesFailureResult(t *test
 	}
 	stdout := new(bytes.Buffer)
 	runner := Runner{
-		Routes: manifest, Stdout: stdout,
+		Policy: executeFixturePolicy(t), Routes: manifest, Stdout: stdout,
 		Cwd: t.TempDir(), UserHome: t.TempDir(), Getenv: func(string) string { return "" },
 		MarketingPlans: MarketingPlanRuntime{CreateService: service},
 	}
@@ -470,7 +470,7 @@ func TestRunnerMarketingMutationReturnsPartialFailureExitCode(t *testing.T) {
 	}}
 	stdout := new(bytes.Buffer)
 	runner := Runner{
-		Routes: manifest, Stdout: stdout,
+		Policy: executeFixturePolicy(t), Routes: manifest, Stdout: stdout,
 		Cwd: t.TempDir(), UserHome: t.TempDir(), Getenv: func(string) string { return "" },
 		MarketingPlans: MarketingPlanRuntime{MutationService: service},
 	}
