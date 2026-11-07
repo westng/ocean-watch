@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ocean-watch"
-version = "1.0.9"
+version = "3.0.0a1"
 description = "Codex plugin metadata and F2 dependency boundary for Ocean Engine operations"
 readme = "README.md"
 requires-python = ">=3.10"

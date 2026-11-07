@@ -41,6 +41,8 @@ Ocean Watch uses official Ocean Engine APIs for authorization, accounts, materia
 
 This page describes the current source, including [unreleased changes](CHANGELOG.md#未发布). Published versions are listed in [Releases](https://github.com/westng/ocean-watch/releases). Parts of V3 are implemented; the complete architecture and host business acceptance remain in progress.
 
+The current mainline targets **3.0.0-alpha.1, an experimental prerelease**: the former `V3` becomes `main`, and the former mainline is retained as `2.0`. Actual host, human Broker, and business-flow acceptance remain open, and budget units still require verification. See the [alpha.1 scope and limitations](docs/release/alpha1.md).
+
 ## What It Does
 
 | Entry point | Channel | Main capabilities |

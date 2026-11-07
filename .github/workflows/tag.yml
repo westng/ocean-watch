@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   release:
-    if: github.repository == 'westng/ocean-watch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/V3')
+    if: github.repository == 'westng/ocean-watch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

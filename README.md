@@ -41,6 +41,8 @@ Ocean Watch 通过巨量引擎官方 API 提供授权、账户、素材、模板
 
 本页描述当前源码，包括[未发布改动](CHANGELOG.md#未发布)；已发布版本见 [Releases](https://github.com/westng/ocean-watch/releases)。V3 的部分能力已落地，完整架构目标和各宿主业务验收仍在推进。
 
+当前主线版本为 **3.0.0-alpha.1 实验性预发布**：原 `V3` 成为 `main`，原主线保留在 `2.0`。真实宿主、人工 Broker 与业务闭环验收仍开放，预算金额单位待核实；使用范围、状态迁移和限制见 [alpha.1 说明](docs/release/alpha1.md)。
+
 ## 能做什么
 
 | 入口 | 渠道 | 主要能力 |

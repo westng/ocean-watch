@@ -53,7 +53,7 @@ def local_checks() -> list[dict[str, object]]:
 
 def external_checks() -> list[dict[str, object]]:
     return [
-        check("github_ci", False, "requires a pushed V3 commit and green CI for its exact SHA"),
+        check("github_ci", False, "requires a pushed release-candidate commit and green CI for its exact SHA"),
         check("host_acceptance", False, "requires new-task loading evidence for Codex, Claude, Harness, Doubao, and CLI"),
         check("real_business_acceptance", False, "requires the user-provided 25-link read-only Qianchuan acceptance"),
         check("five_platform_sqlite", False, "requires actual engine/concurrency/crash/backup evidence on the supported platform matrix"),

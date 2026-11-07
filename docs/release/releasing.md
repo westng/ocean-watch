@@ -47,7 +47,7 @@ python3 scripts/version_tag.py release-check --latest-tag "${latest_tag}"
 
 预发布准备使用显式 `--version X.Y.Z-alpha.1`，其余参数相同；`X.Y.Z` 必须由维护者确定，目标版本高于最新正式版，并有相应 Changelog 内容。未明确正式发布准备前，日常开发继续保留“未发布”和原版本。首发功能范围与验收见 [alpha.1 合同](alpha1.md)。
 
-CI 监听 `main` 和 `V3` 推送。Release 可从 `V3` 发布预发布版，稳定版仍仅从 `main` 发布；必须匹配当前分支精确 SHA 的最新成功 CI 和全部规定作业。预发布创建时显式使用 `--prerelease --latest=false`，不可替换正式 latest。跨 Python/SemVer 表示的版本以版本工具输出为准，不能通过仅修改 Release 标题假装预发布。
+从 `3.0.0-alpha.1` 起，原 `V3` 开发线成为默认分支 `main`，原 `main` 保留为 `2.0` 历史分支；分支名不改变历史 Tag 或发布版本。CI 监听 `main` 推送，Release 仅从 `main` 发布；必须匹配当前分支精确 SHA 的最新成功 CI 和全部规定作业。预发布创建时显式使用 `--prerelease --latest=false`，不可替换正式 latest。跨 Python/SemVer 表示的版本以版本工具输出为准，不能通过仅修改 Release 标题假装预发布。
 
 稳定 Runtime 排除预发布候选；显式安装的预发布实例固定该分发版本，选择/拒绝状态与稳定实例隔离，共享数据和 OS 写锁仍复用。旧稳定 Runtime 不支持预发布版本解析，因此首次 alpha 必须通过显式新安装及新进程加载，不能要求旧任务热切换到 alpha。
 
@@ -102,7 +102,7 @@ Harness 的桌面兼容验收另在安装了目标 macOS 桌面版的开发机�
 
 只有用户或维护者明确授权正式发布时，才手动运行 GitHub Actions 的 `Release`：
 
-1. 固定当前发布分支提交；稳定版为 `origin/main`，预发布可为 `origin/V3`。
+1. 固定当前 `origin/main` 提交，稳定版和预发布版均由该主线发布。
 2. 对照线上最新正式 Release 做只读版本校验。
 3. 运行 Go 测试/vet、F2 测试、启动器与分发校验。
 4. 临时重建五个平台二进制并逐字节核对仓库产物。
