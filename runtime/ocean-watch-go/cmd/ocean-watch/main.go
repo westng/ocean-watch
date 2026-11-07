@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/approvalbroker"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application"
@@ -29,6 +30,13 @@ func main() {
 	_ = gitCommit
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "internal-approval-broker" {
+		if len(os.Args) != 2 || approvalbroker.RunHelper(ctx, os.Stdin) != nil {
+			// Never print a challenge, review document, or untrusted child error.
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "runtime" {
 		os.Exit(runRuntimeCommand(ctx, os.Args[2:]))
 	}

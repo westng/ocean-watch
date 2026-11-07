@@ -29,7 +29,7 @@ func (store *Store) MarkAwaitingApproval(ctx context.Context, operationID string
 	if err != nil {
 		return err
 	}
-	if current.Status == domain.StatusAwaitingApproval || current.Status == domain.StatusApproved {
+	if current.Status == domain.StatusAwaitingApproval {
 		return store.commitOperationTx(tx)
 	}
 	if err := domain.ValidateTransition(current.Status, domain.StatusAwaitingApproval); err != nil {

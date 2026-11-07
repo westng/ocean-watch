@@ -28,6 +28,12 @@ func TestOfficialSDKImportsStayInsideOceanEngineAdapter(t *testing.T) {
 				!strings.Contains(filepath.ToSlash(path), "/adapters/oceanengine/") {
 				t.Errorf("official SDK import escaped adapter boundary: %s", path)
 			}
+			if strings.Contains(filepath.ToSlash(path), "/adapters/approvalbroker/") &&
+				strings.Contains(value, "/internal/") &&
+				!strings.HasSuffix(value, "/internal/domain/operations") &&
+				!strings.HasSuffix(value, "/internal/ports/approval") {
+				t.Errorf("approval broker imported a business, state or credential implementation: %s: %s", path, value)
+			}
 		}
 		return nil
 	})

@@ -14,10 +14,18 @@ type Request struct {
 	SnapshotDigest string
 	ScopeDigest    string
 	ExpiresAt      time.Time
+	Summary        operations.ConfirmationSummary
 }
 
 type Provider interface {
 	Request(context.Context, Request) error
+}
+
+// EvidenceSource is a protected, in-process delivery channel. It is never
+// exposed as a tool or populated from CLI/MCP arguments.
+type EvidenceSource interface {
+	Receive(context.Context, Request) (Evidence, error)
+	Discard(Request)
 }
 
 type Evidence struct {

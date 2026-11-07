@@ -22,11 +22,11 @@ func (store *Store) ClaimExecution(ctx context.Context, request domain.ClaimExec
 	if err := checkOperationLegacyBlockers(ctx, tx, request.OperationID); err != nil {
 		return domain.ExecutionLease{}, err
 	}
-	persistedDigest, _, err := readOperationVersion(ctx, tx, request.OperationID, request.Version)
+	snapshot, err := currentOperationSnapshot(ctx, tx, request.OperationID, request.Version, request.Now)
 	if err != nil {
 		return domain.ExecutionLease{}, err
 	}
-	if persistedDigest != request.SnapshotDigest {
+	if snapshot.SnapshotDigest != request.SnapshotDigest {
 		return domain.ExecutionLease{}, fmt.Errorf("%w: snapshot digest mismatch", domain.ErrOperationNotExecutable)
 	}
 	state, err := readOperationState(ctx, tx, request.OperationID, request.Version)

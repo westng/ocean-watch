@@ -14,6 +14,9 @@ type Clock func() time.Time
 
 type Service struct {
 	Repository state.OperationRepository
+	Snapshots  state.Snapshots
+	Provider   approval.Provider
+	Evidence   approval.EvidenceSource
 	Verifier   approval.Verifier
 	Now        Clock
 }
