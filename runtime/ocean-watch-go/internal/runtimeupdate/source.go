@@ -14,6 +14,14 @@ import (
 // state. Business configuration and credentials keep using the shared home.
 func NewManager(codexRoot, pluginRoot string) Manager {
 	manager := Manager{CodexRoot: codexRoot, PluginRoot: pluginRoot}
+	manager.releaseAnchor = manager.anchorVersion()
+	manager.anchorFixed = true
+	if isPrerelease(manager.releaseAnchor) {
+		manager.releaseManifestSHA256, _ = runtimeManifestHash(pluginRoot)
+		if manager.releaseManifestSHA256 == "" {
+			manager.releaseManifestSHA256 = "invalid"
+		}
+	}
 	if strings.TrimSpace(codexRoot) == "" || strings.TrimSpace(pluginRoot) == "" {
 		return manager
 	}

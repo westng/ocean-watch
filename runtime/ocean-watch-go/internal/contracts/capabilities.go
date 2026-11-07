@@ -234,6 +234,12 @@ func mcpOnly(id, channel string, effect Effect, tool string, fast bool) Capabili
 }
 
 var DefaultCapabilityRegistry = mustCapabilityRegistry([]CapabilitySpec{
+	{ID: "shared.operation_state_upgrade", Channel: "shared", Effect: EffectLocalWrite, CLICommand: "operations upgrade-state", PrimarySurface: SurfaceCLI, CommandDescription: "Preview or explicitly upgrade local operation state with a protected backup", RequiredToolsets: []string{"core"}, MinimumMode: QueryModePlan},
+	{ID: "qianchuan.operation_prepare", Channel: "qianchuan", Effect: EffectOfficialRead, CLICommand: "operations prepare", MCPTool: "prepare_qianchuan_operation", PrimarySurface: SurfaceMCP, CommandDescription: "Persist an immutable Qianchuan execution preview", RequiredToolsets: []string{"qianchuan"}, MinimumMode: QueryModePlan},
+	{ID: "qianchuan.operation_get", Channel: "qianchuan", Effect: EffectLocalRead, CLICommand: "operations get", MCPTool: "get_operation", PrimarySurface: SurfaceMCP, CommandDescription: "Read a saved operation and durable outcomes", RequiredToolsets: []string{"qianchuan"}, MinimumMode: QueryModeRead},
+	{ID: "qianchuan.operation_confirm", Channel: "qianchuan", Effect: EffectLocalWrite, CLICommand: "operations confirm", MCPTool: "request_operation_confirmation", PrimarySurface: SurfaceMCP, CommandDescription: "Request protected local user confirmation", RequiredToolsets: []string{"qianchuan"}, MinimumMode: QueryModeExecute},
+	{ID: "qianchuan.operation_execute", Channel: "qianchuan", Effect: EffectOnlineWrite, RequiresSubmit: true, CLICommand: "operations execute", MCPTool: "execute_operation", PrimarySurface: SurfaceMCP, CommandDescription: "Execute an exact operation with verified approval", RequiredToolsets: []string{"qianchuan"}, MinimumMode: QueryModeExecute},
+	{ID: "qianchuan.operation_reconcile", Channel: "qianchuan", Effect: EffectOfficialRead, CLICommand: "operations reconcile", MCPTool: "reconcile_operation", PrimarySurface: SurfaceMCP, CommandDescription: "Recover operation facts without dispatching writes", RequiredToolsets: []string{"qianchuan"}, MinimumMode: QueryModePlan},
 	cli("shared.setup_doctor", "shared", EffectLocalRead, "setup doctor", "Check local runtime requirements"),
 	cli("shared.setup_initialize", "shared", EffectLocalWrite, "setup init", "Initialize local configuration"),
 	cli("shared.setup_validate", "shared", EffectLocalRead, "setup validate", "Validate configuration readiness"),

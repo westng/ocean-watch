@@ -25,6 +25,20 @@ func (store *Store) BeginDispatch(ctx context.Context, request domain.DispatchIn
 	if err := checkOperationLegacyBlockers(ctx, tx, request.OperationID); err != nil {
 		return domain.DispatchAttempt{}, err
 	}
+	// An unresolved request in another operation is not made safe by issuing
+	// a new preflight or approval. Only verified readback clears this blocker.
+	var unresolved int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM operation_items i
+		JOIN operations o ON o.id=i.operation_id JOIN operations current ON current.id=?
+		LEFT JOIN operation_readbacks r ON r.operation_id=i.operation_id AND r.operation_version=i.operation_version AND r.item_id=i.item_id
+		WHERE o.channel=current.channel AND o.subject_id=current.subject_id AND i.group_id=?
+		AND (i.operation_id<>? OR i.operation_version<>?) AND i.status IN ('intent','unknown','acknowledged') AND r.item_id IS NULL`,
+		request.OperationID, request.GroupID, request.OperationID, request.Version).Scan(&unresolved); err != nil {
+		return domain.DispatchAttempt{}, err
+	}
+	if unresolved > 0 {
+		return domain.DispatchAttempt{}, domain.ErrDispatchUnknown
+	}
 	snapshot, err := currentOperationSnapshot(ctx, tx, request.OperationID, request.Version, request.Now)
 	if err != nil {
 		return domain.DispatchAttempt{}, err
@@ -139,9 +153,9 @@ func (store *Store) CompleteDispatch(ctx context.Context, outcome domain.Dispatc
 		return domain.ErrInvalidDispatch
 	}
 	finished := outcome.Now.UTC()
-	if _, err := tx.ExecContext(ctx, `UPDATE dispatch_attempts SET state=?, official_request_id=?, finished_at=?, response_digest=?
+	if _, err := tx.ExecContext(ctx, `UPDATE dispatch_attempts SET state=?, official_request_id=?, finished_at=?, response_digest=?, object_id=?
 		WHERE operation_id=? AND operation_version=? AND item_id=? AND attempt_no=? AND state='intent'`,
-		string(outcome.State), outcome.OfficialRequestID, operationTime(finished), nullableDigest(outcome.ResponseDigest),
+		string(outcome.State), outcome.OfficialRequestID, operationTime(finished), nullableDigest(outcome.ResponseDigest), outcome.ObjectID,
 		outcome.OperationID, outcome.Version, outcome.ItemID, attemptNo); err != nil {
 		return err
 	}

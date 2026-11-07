@@ -151,3 +151,44 @@ func TestUpgradeCannotRunWhileAnotherStoreIsOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUpgradeSchemaFivePreservesOperationAndAddsReadback(t *testing.T) {
+	old := versionOneStore(t)
+	steps, err := migrationSteps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.applyMigrations(context.Background(), steps[:5], "fixture_v5", "fixture_backup"); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.validateVersion(context.Background(), 5); err != nil {
+		t.Fatal(err)
+	}
+	path := old.path
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(context.Background(), Options{Path: path}); !errors.Is(err, ErrIncompatible) {
+		t.Fatalf("v5 opened without explicit upgrade: %v", err)
+	}
+	current, err := Upgrade(context.Background(), Options{Path: path, RuntimeVersion: "1.1.0-alpha.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer current.Close()
+	if _, err := current.GetSnapshot(context.Background(), "op_sqlite_test", 1); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := current.db.QueryRow(`SELECT COUNT(*) FROM operation_readbacks`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("readback table: %d %v", count, err)
+	}
+	var backup string
+	if err := current.db.QueryRow(`SELECT backup_reference FROM schema_migrations WHERE version=6`).Scan(&backup); err != nil {
+		t.Fatal(err)
+	}
+	record, err := readBackupRecord(filepath.Join(filepath.Dir(path), "backups", backup) + ".manifest.json")
+	if err != nil || record.SchemaVersion != 5 {
+		t.Fatalf("v5 protected backup: %+v %v", record, err)
+	}
+}

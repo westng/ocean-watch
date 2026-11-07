@@ -304,7 +304,7 @@ func (runner Runner) buildMarketingCreateComponents(
 	}
 	executor := applicationmarketing.Executor{
 		Guard: sharedplans.GuardedExecutor{
-			Credentials: credentialProvider, Locks: locker, Now: runtime.Now,
+			Credentials: credentialProvider, Locks: locker, Now: runtime.Now, RuntimeVersion: runner.RuntimeVersion,
 		},
 		Writer: writer, Reconciler: reconciler,
 	}

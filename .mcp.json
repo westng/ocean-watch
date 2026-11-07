@@ -4,7 +4,7 @@
       "command": "./bin/ocean-watch-launcher",
       "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
       "cwd": ".",
-      "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-02.official-get-r1"}
+      "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-07.operation-r1"}
     }
   }
 }

@@ -76,6 +76,8 @@ skills/qc-plan-monitor/run plans batch-qianchuan-works \
 
 ## 结果与提交
 
+新的可信执行路径使用 `prepare_qianchuan_operation → request_operation_confirmation → execute_operation`，详细参数、状态迁移和只读恢复见 [Operation 合同](operation-approval.md)。以下 `--submit --preflight-id` 仅描述稳定版旧兼容路径；预发布 Runtime 会拒绝该旧在线写入。新路径保持原预检五列展示，另展示完整不可变确认摘要，并重新核验官方作品/商品与目标。
+
 混合路由结果带 `routed=true`，包含：
 
 - `batches[]`：每项有广告主/模板摘要、原始零起始 `input_indexes`、状态和独立预检结果。MCP 位于 `preflight`，CLI 位于 `result`；可提交的子结果带自己的 `preflight_id`、`expires_at` 和 `presentation`。

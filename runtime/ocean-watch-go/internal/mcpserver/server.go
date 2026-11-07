@@ -80,6 +80,7 @@ type QianchuanReportService interface {
 }
 
 type Runtime struct {
+	OperationFactory      func(context.Context, string) (applicationqianchuan.OperationService, func() error, error)
 	DeveloperDocs         *developerdocs.Service
 	Policy                *policy.Instance
 	OfficialQueries       *applicationofficial.Service
@@ -255,6 +256,9 @@ func RunManaged(ctx context.Context, version string) error {
 		return err
 	}
 	runtime := Runtime{
+		OperationFactory: func(ctx context.Context, action string) (applicationqianchuan.OperationService, func() error, error) {
+			return bootstrap.NewQianchuanOperations(ctx, bootstrap.QianchuanOptions{Config: store, StateRoot: stateRoot, CredentialStore: credentialStore, Policy: &instance, RuntimeVersion: version}, action)
+		},
 		Policy: &qianchuanRuntime.Policy, OfficialQueries: &qianchuanRuntime.Official,
 		OfficialTasks: &qianchuanRuntime.Tasks, UnifiedReports: qianchuanRuntime.Reports,
 		AccountReports:        managedReports,
@@ -330,6 +334,7 @@ func (runtime Runtime) NewServer(version string) *mcp.Server {
 	runtime.addStarMapTools(server)
 	runtime.addOfficialTools(server)
 	runtime.addDeveloperTools(server)
+	runtime.addOperationTools(server)
 	readOnly, closedWorld := false, false
 	annotations := &mcp.ToolAnnotations{
 		DestructiveHint: &readOnly, IdempotentHint: true,

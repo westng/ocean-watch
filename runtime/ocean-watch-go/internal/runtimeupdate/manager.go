@@ -13,11 +13,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/productversion"
 )
 
 const (
@@ -90,7 +90,10 @@ type Manager struct {
 	LocalSource bool
 	// Quarantine and selection belong to an immutable host tool contract.
 	// Slots, installation locks and active-runtime leases remain shared.
-	hostContractSHA256 string
+	hostContractSHA256    string
+	releaseAnchor         string
+	anchorFixed           bool
+	releaseManifestSHA256 string
 }
 
 func (manager Manager) Resolve(ctx context.Context) (Candidate, error) {
@@ -235,6 +238,12 @@ func (manager Manager) isRuntimeSlot(candidate Candidate) bool {
 }
 
 func (manager Manager) quickValidateRecorded(candidate Candidate) error {
+	if !manager.allowVersion(candidate.Version) {
+		return errors.New("runtime belongs to another release channel")
+	}
+	if manager.releaseManifestSHA256 != "" && candidate.SHA256 != manager.releaseManifestSHA256 {
+		return errors.New("prerelease runtime differs from the startup bundle")
+	}
 	if candidate.BinaryPath == "" || candidate.PluginRoot == "" || candidate.SHA256 == "" {
 		return errors.New("recorded Ocean Watch runtime is empty")
 	}
@@ -652,6 +661,11 @@ func (manager Manager) isAllowedAliasTarget(path string) bool {
 }
 
 func (manager Manager) discoverInstalled() (string, string, error) {
+	// A prerelease explicitly installed by the user remains on that exact
+	// distribution. It never joins automatic stable-version discovery.
+	if anchor := manager.anchorVersion(); isPrerelease(anchor) {
+		return manager.PluginRoot, anchor, nil
+	}
 	if manager.Discover != nil {
 		return manager.Discover()
 	}
@@ -668,7 +682,7 @@ func (manager Manager) discoverInstalled() (string, string, error) {
 			continue
 		}
 		version := entry.Name()
-		if _, err := productVersion(version); err != nil {
+		if _, err := productVersion(version); err != nil || !manager.allowVersion(version) {
 			continue
 		}
 		info, err := entry.Info()
@@ -710,6 +724,12 @@ func (manager Manager) validateCandidate(ctx context.Context, root, expectedVers
 	if err != nil {
 		return Candidate{}, fmt.Errorf("read Ocean Watch runtime manifest: %w", err)
 	}
+	if manager.releaseManifestSHA256 != "" {
+		digest := sha256.Sum256(manifestBytes)
+		if hex.EncodeToString(digest[:]) != manager.releaseManifestSHA256 {
+			return Candidate{}, errors.New("prerelease runtime differs from the startup bundle")
+		}
+	}
 	var manifest Manifest
 	decoder := json.NewDecoder(strings.NewReader(string(manifestBytes)))
 	decoder.DisallowUnknownFields()
@@ -718,6 +738,9 @@ func (manager Manager) validateCandidate(ctx context.Context, root, expectedVers
 	}
 	if manifest.Version == "" || expectedVersion != "" && manifest.Version != expectedVersion {
 		return Candidate{}, errors.New("Ocean Watch runtime version does not match the installed plugin")
+	}
+	if !manager.allowVersion(manifest.Version) {
+		return Candidate{}, errors.New("runtime belongs to another release channel")
 	}
 	if manifest.SchemaVersion != 1 || manifest.Plugin.Name != pluginName ||
 		manifest.Plugin.Version != manifest.Version {
@@ -1077,40 +1100,11 @@ func (manager Manager) acceptInstalled(ctx context.Context, current, installed C
 }
 
 func compareProductVersions(left, right string) (int, error) {
-	leftParts, err := productVersion(left)
-	if err != nil {
-		return 0, err
-	}
-	rightParts, err := productVersion(right)
-	if err != nil {
-		return 0, err
-	}
-	for index := range leftParts {
-		if leftParts[index] < rightParts[index] {
-			return -1, nil
-		}
-		if leftParts[index] > rightParts[index] {
-			return 1, nil
-		}
-	}
-	return 0, nil
+	return productversion.Compare(left, right)
 }
 
-func productVersion(version string) ([3]int, error) {
-	base := strings.SplitN(strings.TrimSpace(version), "+", 2)[0]
-	parts := strings.Split(base, ".")
-	if len(parts) != 3 {
-		return [3]int{}, errors.New("Ocean Watch runtime version is invalid")
-	}
-	result := [3]int{}
-	for index, part := range parts {
-		value, err := strconv.Atoi(part)
-		if err != nil || value < 0 {
-			return [3]int{}, errors.New("Ocean Watch runtime version is invalid")
-		}
-		result[index] = value
-	}
-	return result, nil
+func productVersion(version string) (productversion.Version, error) {
+	return productversion.Parse(version)
 }
 
 func (manager Manager) binaryName() (string, error) {
@@ -1159,6 +1153,10 @@ func (manager Manager) writeState(state State) error {
 }
 
 func (manager Manager) statePath() string {
+	if anchor := manager.anchorVersion(); isPrerelease(anchor) {
+		digest := sha256.Sum256([]byte("prerelease:" + anchor + ":" + manager.releaseManifestSHA256 + ":" + manager.hostContractSHA256))
+		return filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "host-contracts", hex.EncodeToString(digest[:]), "state.json")
+	}
 	if manager.hostContractSHA256 != "" {
 		return filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "host-contracts", manager.hostContractSHA256, "state.json")
 	}

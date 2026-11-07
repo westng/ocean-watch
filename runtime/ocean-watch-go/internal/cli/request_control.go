@@ -26,6 +26,11 @@ func boundedRequestBudget(limit int64) requestBudgetProfile {
 
 func commandRequestBudgetProfile(command contracts.Command) (requestBudgetProfile, error) {
 	switch command.Domain {
+	case "operations":
+		if command.Action == "get" || command.Action == "confirm" || command.Action == "upgrade-state" {
+			return boundedRequestBudget(localCommandRequestLimit), nil
+		}
+		return boundedRequestBudget(mutationCommandRequestLimit), nil
 	case "developer-docs":
 		if command.Action == "status" {
 			return boundedRequestBudget(localCommandRequestLimit), nil

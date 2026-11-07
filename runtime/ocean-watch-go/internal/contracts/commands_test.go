@@ -32,8 +32,8 @@ func TestCommandsAreUniqueAndExcludeRemovedCompatibilityDomains(t *testing.T) {
 		}
 		seen[command.Name()] = true
 	}
-	if len(Commands) != 81 {
-		t.Fatalf("command count = %d, want 81", len(Commands))
+	if len(Commands) != 87 {
+		t.Fatalf("command count = %d, want 87", len(Commands))
 	}
 }
 
@@ -62,7 +62,7 @@ func TestCapabilityRegistryMapsEveryTransportExactlyOnce(t *testing.T) {
 			t.Fatalf("submit contract drift: %#v", spec)
 		}
 	}
-	if len(seenCommands) != 81 || len(seenTools) != 38 {
+	if len(seenCommands) != 87 || len(seenTools) != 43 {
 		t.Fatalf("transport inventory changed: commands=%d tools=%d", len(seenCommands), len(seenTools))
 	}
 }

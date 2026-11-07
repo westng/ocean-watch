@@ -44,6 +44,8 @@ On DeepSeek Harness, use the absolute directory of the loaded `SKILL.md` to reso
 | Retry saved authorization account discovery | MCP `start_account_sync` with `channel=qianchuan` and the exact authorization ID |
 | Approved official query outside the task routes above | MCP `get_qianchuan_official_capabilities` with a narrow keyword, then exact `query_id`; MCP `query_qianchuan_official` with its approved contract |
 | Explicit API-documentation, Schema or SDK-example request | The fixed optional MCP route in `references/developer-docs.md` |
+| Execute a reviewed Qianchuan work preflight | MCP `prepare_qianchuan_operation`, then the protected confirmation/execution flow in `references/operations.md` |
+| Inspect or recover an exact execution operation | MCP `get_operation`; unknown results use MCP `reconcile_operation` before any new preflight |
 | Confirmed Ocean Watch goal not matched above | MCP `get_capabilities` once with `channel=qianchuan`, then use its unique command |
 | Initialize, mutate templates/accounts/plans/materials, explicitly advanced CLI reports, or inspect runs | the unique `./run <domain> <action>` route in `references/workflow-reference.md` |
 
@@ -82,11 +84,12 @@ On `ACCOUNT_SYNC_REQUIRED`, obtain the exact pending authorization ID from the l
 - All business Runtime, MCP, OAuth state, Token, cache, config, F2 execution, and preflight snapshots stay on the user's machine. MCP is local stdio; never publish it to the public network.
 - Never ask the user to paste a Secret, Token, refresh token, auth code, or Cookie into chat; never print one.
 - All plan/material/settings mutations default to dry-run. Submit only after explicit permission for the exact advertiser, plan/material IDs, endpoint, and payload. Qianchuan delete additionally requires `--confirm-delete`.
+- For the trusted Qianchuan batch flow, preserve `operation_id`, `version` and `snapshot_digest`, show the returned summary, then call `request_operation_confirmation`. Only a successful protected user decision returns `approval_id`; pass those exact references to `execute_operation`. Never manufacture approval, reuse a different version or fall back to `--submit`. Preview runtimes reject legacy online writes. Missing Broker or tools means execution is unavailable.
 - F2 public metadata is only an identity/product hint. Official Qianchuan targeted authorization, ownership, product, plan, and material checks remain authoritative.
 
 ## Mandatory Batch Presentation
 
-For every work-link preflight or submitted batch result, when `presentation.required=true`, output `presentation.rendered_markdown` verbatim. Preserve exactly `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题` in that order. Show skipped, query failures, and failed results after the table; never replace it with an operational summary table. A write-capable `preflight_id` may be submitted only after exact user confirmation and before expiry.
+For every work-link preflight or submitted batch result, when `presentation.required=true`, output `presentation.rendered_markdown` verbatim. Preserve exactly `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题` in that order. Show skipped, query failures, and failed results after the table; never replace it with an operational summary table. A `preflight_id` identifies the preview; trusted execution requires a separately prepared immutable operation and protected confirmation before expiry.
 
 When `routed=true`, label each `batches[]` entry with its advertiser and template, then apply that same contract to `batches[].preflight.presentation`. Show `pending` and child failures after the tables. There is no cross-account submit ID: preserve every successful child's own `preflight_id` and expiry. On a child authorization failure, use `batches[].failure.error` for recovery and retry only that child's original rows; do not rerun successful children or submit them again. CLI diagnostic results use `batches[].result` for the same child data.
 

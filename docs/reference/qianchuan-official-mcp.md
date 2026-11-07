@@ -38,7 +38,7 @@
 | `report_qianchuan_custom` | 按已确认的主题、维度、指标和有界日期/分页查询，复用 SDK 报表服务。 |
 | `report_qianchuan_managed_accounts` | 复用 SDK 负责账户报表，只遍历本地启用的千川负责账户。 |
 
-默认 MCP 合同包含 35 个工具；启用可选 `developer_docs` 后为 38 个。新增工具或 Skill 合同要求宿主重新加载，在 Codex 新聊天中发现。已有计划列表、报表及作品预检继续使用其既有 SDK 用例。CLI 的 `qc-official catalog` 和 `qc-official query --input-json -` 映射同一正式查询服务，不是模型可指定任意 URL 的网关。
+默认 MCP 合同包含 40 个工具（含五个独立千川操作入口）；启用可选 `developer_docs` 后为 43 个。新增工具或 Skill 合同要求宿主重新加载，在 Codex 新聊天中发现。已有计划列表、报表及作品预检继续使用其既有 SDK 用例。CLI 的 `qc-official catalog` 和 `qc-official query --input-json -` 映射同一正式查询服务，不是模型可指定任意 URL 的网关。
 
 稳定代理按固定工具合同隔离 Runtime 选择和拒绝记录；旧聊天的合同不匹配不能把新版 Runtime 全局隔离。版本槽位、安装锁和活跃租约仍共享，其他合同的当前版本在清理时保留。启动配置的公开修订标识用于宿主重新加载代理，不改变业务模式或工具集；仅发现工具不代表其实际调用已通过验收。
 

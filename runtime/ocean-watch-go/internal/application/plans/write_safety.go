@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/operations"
 	domainplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/plans"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/productversion"
 )
 
 type CredentialProvider interface {
@@ -96,9 +98,10 @@ type MutationResult struct {
 }
 
 type GuardedExecutor struct {
-	Credentials CredentialProvider
-	Locks       AdvertiserLocker
-	Now         func() time.Time
+	Credentials    CredentialProvider
+	Locks          AdvertiserLocker
+	Now            func() time.Time
+	RuntimeVersion string
 }
 
 func (executor GuardedExecutor) Execute(
@@ -120,6 +123,9 @@ func (executor GuardedExecutor) Execute(
 	}
 	if !request.Submit {
 		return MutationResult{Mode: "dry_run", Value: request.Preview}, nil
+	}
+	if version, err := productversion.Parse(executor.RuntimeVersion); err == nil && version.Prerelease() && !trustedOperationDispatch(ctx) {
+		return MutationResult{}, errors.New("preview online writes require a verified operation")
 	}
 	if executor.Credentials == nil || executor.Locks == nil || action == nil {
 		return MutationResult{}, errors.New("write executor dependencies are incomplete")
@@ -174,6 +180,22 @@ type DispatchReceipt struct {
 	State domainplans.DispatchState
 	Value any
 	Error error
+}
+
+type trustedOperationContextKey struct{}
+
+// Called after Core consumes the approval and issues the execution lease.
+// This marker is internal only, never decoded from transport parameters.
+func WithVerifiedOperation(ctx context.Context, lease operations.ExecutionLease) (context.Context, error) {
+	if err := lease.Validate(); err != nil {
+		return nil, err
+	}
+	return context.WithValue(ctx, trustedOperationContextKey{}, lease), nil
+}
+
+func trustedOperationDispatch(ctx context.Context) bool {
+	lease, ok := ctx.Value(trustedOperationContextKey{}).(operations.ExecutionLease)
+	return ok && lease.Validate() == nil
 }
 
 type OnceDispatcher struct {

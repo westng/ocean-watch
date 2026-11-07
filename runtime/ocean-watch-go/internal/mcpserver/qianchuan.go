@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
@@ -472,6 +473,9 @@ func cloneCounts(source map[string]int) map[string]int {
 }
 
 func mapQianchuanPreflightError(err error) (failure toolFailure) {
+	if errors.Is(err, sqlite.ErrIncompatible) {
+		return operationStateFailure()
+	}
 	var stageError *applicationqianchuan.PreflightStageError
 	hasStage := errors.As(err, &stageError)
 	defer func() {
@@ -621,6 +625,9 @@ func safePreflightStage(stage string) bool {
 }
 
 func mapQianchuanSnapshotError(err error) toolFailure {
+	if errors.Is(err, sqlite.ErrIncompatible) {
+		return operationStateFailure()
+	}
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return toolFailure{Code: "PREFLIGHT_READ_FAILED", Message: "preflight snapshot read was interrupted", Retryable: true, Details: map[string]any{}}

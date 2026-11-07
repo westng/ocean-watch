@@ -12,8 +12,13 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 C
     import tomli as tomllib
 
 
-TAG_PATTERN = re.compile(r"v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\Z")
-VERSION_PATTERN = re.compile(r"(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)\Z")
+NUMBER = r"(?:0|[1-9][0-9]*)"
+VERSION_TEXT = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?"
+TAG_PATTERN = re.compile(rf"v(?P<version>{VERSION_TEXT})\Z")
+VERSION_PATTERN = re.compile(
+    rf"(?P<major>{NUMBER})\.(?P<minor>{NUMBER})\.(?P<patch>{NUMBER})"
+    r"(?:-(?P<stage>alpha|beta|rc)\.(?P<serial>[1-9][0-9]*))?\Z"
+)
 CACHEBUSTER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*\Z")
 
 
@@ -40,26 +45,43 @@ def plugin_version(root):
 
 def validate_tag_version(value):
     if TAG_PATTERN.fullmatch(f"v{value}") is None:
-        raise VersionTagError("project version must use MAJOR.MINOR.PATCH")
+        raise VersionTagError("version must use MAJOR.MINOR.PATCH[-alpha.N|-beta.N|-rc.N]")
     return value
 
 
 def version_tuple(value):
     match = VERSION_PATTERN.fullmatch(value)
     if match is None:
-        raise VersionTagError("version must use MAJOR.MINOR.PATCH")
-    return tuple(int(match.group(name)) for name in ("major", "minor", "patch"))
+        raise VersionTagError("invalid product version")
+    numbers = tuple(int(match.group(name)) for name in ("major", "minor", "patch"))
+    if any(number > 2147483647 for number in numbers) or int(match.group("serial") or 0) > 2147483647:
+        raise VersionTagError("version number exceeds the runtime limit")
+    return numbers + (
+        {"alpha": 0, "beta": 1, "rc": 2, None: 3}[match.group("stage")],
+        int(match.group("serial") or 0),
+    )
+
+
+def semantic_version(value):
+    """Normalize canonical Python prereleases to the distribution's SemVer spelling."""
+    value = re.sub(r"(a|b|rc)([1-9][0-9]*)$", lambda m: "-" + {"a": "alpha", "b": "beta", "rc": "rc"}[m[1]] + "." + m[2], value)
+    return validate_tag_version(value)
+
+
+def python_version(value):
+    validate_tag_version(value)
+    return re.sub(r"-(alpha|beta|rc)\.([1-9][0-9]*)$", lambda m: {"alpha": "a", "beta": "b", "rc": "rc"}[m[1]] + m[2], value)
 
 
 def next_patch_version(value):
-    major, minor, patch = version_tuple(value)
+    major, minor, patch = version_tuple(value)[:3]
     return f"{major}.{minor}.{patch + 1}"
 
 
 def tag_version(tag):
     match = TAG_PATTERN.fullmatch(tag)
     if match is None:
-        raise VersionTagError("latest release tag must use vMAJOR.MINOR.PATCH")
+        raise VersionTagError("release tag must use vMAJOR.MINOR.PATCH[-alpha.N|-beta.N|-rc.N]")
     return match.group("version")
 
 
@@ -126,7 +148,7 @@ def replace_once(value, pattern, replacement, label):
     return result
 
 
-def prepare_release(root, latest_tag, release_date, cachebuster):
+def prepare_release(root, latest_tag, release_date, cachebuster, target_version=None):
     root = Path(root)
     versions = validate_versions(root)
     latest_version = tag_version(latest_tag)
@@ -140,11 +162,16 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
     changelog_path = root / "CHANGELOG.md"
     changelog = changelog_path.read_text(encoding="utf-8")
     unreleased, section_end, section, substantive = changelog_sections(changelog)
-    current_version = versions["project"]
+    current_version = versions["product"]
     expected_version = next_patch_version(latest_version)
+    requested = validate_tag_version(target_version) if target_version else None
+    if requested and version_tuple(requested) <= version_tuple(latest_version):
+        raise VersionTagError("target version must be newer than the latest stable release")
+    if requested and version_tuple(requested) < version_tuple(current_version):
+        raise VersionTagError("release preparation cannot downgrade the current product version")
 
     if not substantive:
-        if version_tuple(current_version) >= version_tuple(latest_version):
+        if (requested is None or requested == current_version) and version_tuple(current_version) >= version_tuple(latest_version):
             validate_tag_changelog(changelog, current_version)
             return {
                 "version": current_version,
@@ -153,7 +180,9 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
             }
         raise VersionTagError("CHANGELOG.md 未发布段落没有可发布内容")
 
-    if current_version == latest_version:
+    if requested:
+        target_version = requested
+    elif current_version == latest_version:
         target_version = expected_version
     elif current_version == expected_version:
         target_version = current_version
@@ -177,7 +206,7 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
         replace_once(
             pyproject_path.read_text(encoding="utf-8"),
             r'^version = "[^"]+"$',
-            f'version = "{target_version}"',
+            f'version = "{python_version(target_version)}"',
             "pyproject.toml project.version",
         ),
         encoding="utf-8",
@@ -198,6 +227,18 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
         json.dumps(harness_data, ensure_ascii=True, indent=2) + "\n",
         encoding="utf-8",
     )
+    claude_path = root / ".claude-plugin/plugin.json"
+    if claude_path.is_file():
+        claude = json.loads(claude_path.read_text(encoding="utf-8"))
+        claude["version"] = plugin_data["version"]
+        claude_path.write_text(json.dumps(claude, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    marketplace_path = root / ".claude-plugin/marketplace.json"
+    if marketplace_path.is_file():
+        marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+        for entry in marketplace["plugins"]:
+            if entry["name"] == "ocean-watch":
+                entry["version"] = plugin_data["version"]
+        marketplace_path.write_text(json.dumps(marketplace, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     validate_versions(root, tag=f"v{target_version}")
     return {
         "version": target_version,
@@ -209,15 +250,11 @@ def prepare_release(root, latest_tag, release_date, cachebuster):
 def validate_release_candidate(root, latest_tag):
     root = Path(root)
     versions = validate_versions(root)
-    current_version = versions["project"]
+    current_version = versions["product"]
     if latest_tag:
         latest_version = tag_version(latest_tag)
-        expected_version = next_patch_version(latest_version)
-        if current_version not in {latest_version, expected_version}:
-            raise VersionTagError(
-                f"release version {current_version} must equal latest release {latest_tag} "
-                f"or its next patch {expected_version}"
-            )
+        if "-" in latest_version or version_tuple(current_version) < version_tuple(latest_version):
+            raise VersionTagError("candidate must not precede the latest stable release")
         already_released = current_version == latest_version
     else:
         already_released = False
@@ -228,6 +265,7 @@ def validate_release_candidate(root, latest_tag):
         "tag": version_tag,
         "latest_tag": latest_tag or None,
         "already_released": already_released,
+        "prerelease": "-" in current_version,
     }
 
 
@@ -239,28 +277,41 @@ def validate_versions(root, tag=None):
         "harness": json.loads((root / "package.json").read_text(encoding="utf-8")).get("version"),
     }
     plugin_base = versions["plugin"].split("+", 1)[0]
-    if versions["project"] != plugin_base or versions["harness"] != versions["project"]:
+    product = semantic_version(versions["project"])
+    if versions["project"] != python_version(product):
+        raise VersionTagError("pyproject.toml must use the canonical PEP 440 version")
+    if product != plugin_base or versions["harness"] != product:
         raise VersionTagError(f"version tag metadata does not match: {versions}")
-    validate_tag_version(versions["project"])
+    validate_tag_version(product)
+    version_tuple(product)
+    claude_path = root / ".claude-plugin/plugin.json"
+    if claude_path.is_file() and json.loads(claude_path.read_text(encoding="utf-8")).get("version") != versions["plugin"]:
+        raise VersionTagError("Claude plugin version does not match Codex")
+    marketplace_path = root / ".claude-plugin/marketplace.json"
+    if marketplace_path.is_file():
+        entries = json.loads(marketplace_path.read_text(encoding="utf-8")).get("plugins", [])
+        matched = [entry for entry in entries if entry.get("name") == "ocean-watch"]
+        if len(matched) != 1 or matched[0].get("version") != versions["plugin"]:
+            raise VersionTagError("Claude marketplace version does not match Codex")
     if tag:
         match = TAG_PATTERN.fullmatch(tag)
         if match is None:
-            raise VersionTagError("version tag must use vMAJOR.MINOR.PATCH")
-        if match.group("version") != versions["project"]:
+            raise VersionTagError("invalid release tag")
+        if match.group("version") != product:
             raise VersionTagError(f"tag {tag} does not match project version {versions['project']}")
         changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-        validate_tag_changelog(changelog, versions["project"])
-    return {**versions, "plugin_base": plugin_base, "tag": tag}
+        validate_tag_changelog(changelog, product)
+    return {**versions, "product": product, "plugin_base": plugin_base, "tag": tag}
 
 
 def derive_version_tag(root):
-    return f"v{validate_versions(root)['project']}"
+    return f"v{validate_versions(root)['product']}"
 
 
 def release_notes(root, tag):
     versions = validate_versions(root, tag=tag)
     changelog = (Path(root) / "CHANGELOG.md").read_text(encoding="utf-8")
-    return validate_tag_changelog(changelog, versions["project"])
+    return validate_tag_changelog(changelog, versions["product"])
 
 
 def repository_root():
@@ -285,6 +336,7 @@ def build_parser():
     prepare.add_argument("--latest-tag", required=True)
     prepare.add_argument("--date", required=True)
     prepare.add_argument("--cachebuster", required=True)
+    prepare.add_argument("--version", help="explicit target, including alpha.N/beta.N/rc.N")
 
     release_check = commands.add_parser(
         "release-check",
@@ -315,6 +367,7 @@ def main(argv=None):
                 latest_tag=args.latest_tag,
                 release_date=args.date,
                 cachebuster=args.cachebuster,
+                target_version=args.version,
             )
         elif args.command == "release-check":
             result = validate_release_candidate(root, latest_tag=args.latest_tag)

@@ -1,6 +1,24 @@
 # Operation 确认基础合同
 
-本文维护统一操作确认的源码合同。当前为 M1 基础实现：已提供 Core 协调器、本地 Broker 和 SQLite 审批消费；既有 CLI/MCP 投放入口尚未切换到这条链路，不能据此声称千川端到端可信写入或 M1/M2 验收完成。
+本文维护统一操作确认的源码合同。Core、本地 Broker 和 SQLite 审批消费已接入新的千川操作入口；旧投放入口尚未全部迁移。预发布运行时阻断旧在线写入。隔离测试不替代真实交互和业务验收，不能据此声称 M1/M2 外部验收完成。
+
+## 千川操作入口
+
+| CLI | MCP | 行为 |
+| --- | --- | --- |
+| `operations prepare --preflight-id ID` | `prepare_qianchuan_operation` | 重新核验官方作品授权/归属/商品、模板、目标及素材差异，持久化实际载荷和不可变确认摘要；无投放写入 |
+| `operations get --operation-id ID --version N --snapshot-digest DIGEST` | `get_operation` | 本地读取摘要、每项派发与读回事实 |
+| `operations confirm` + 精确操作三元组 | `request_operation_confirmation` | 独立 Broker 确认；只返回安全审批引用 |
+| `operations execute` + 三元组 + `--approval-id ID --submit` | `execute_operation` | 消费审批后逐项派发；MCP 不接收 submit 布尔值 |
+| `operations reconcile` + 三元组 | `reconcile_operation` | 只读对账并持久化事实，不重发或自动续发 |
+
+确认与执行要求启动时已选择 `execute` 模式；准备和对账要求 `plan`，本地查看允许 `read`。执行前再次核对授权身份、业务日、模板、完整目标和作品/素材状态，实际载荷必须与已批准载荷逐字节规范化一致。审批等待期间不持广告主写锁。
+
+新建计划名包含固定操作后缀用于未知结果对账。首发一次新建组最多 100 条作品；已有计划追加仍以每请求 100 条分批。超限或无法完整展示时阻断，不在批准后重新拆分。预算展示保留 `budget` 原值，金额单位的官方证据和人类可读展示仍需在真实业务验收前核实。
+
+SQLite Schema 6 保存派发目标和独立读回事实。官方返回成功仍须读回身份、素材并保存当日绑定后才算 applied。未知/在途/尚未读回的同组记录会阻断其他操作重复派发。重启后可查询旧操作；对账等待旧租约结束或正常收尾释放，只有官方读回证实已应用才记录成功。部分成功的未派发项需重新预检与确认，不复用已消费审批。
+
+升级旧状态需先执行 `operations upgrade-state` 查看预览，再显式 `operations upgrade-state --submit`。迁移器先做受保护备份，活动状态使用者阻断升级；普通查询不自动迁移。升级后的数据库不能交给旧 Runtime 写入，回退前必须使用对应备份和兼容 Runtime，并核对已经发生的线上操作。
 
 ## 调用与数据边界
 
@@ -32,4 +50,4 @@ Provider 只保留当前请求的一份短期证据，受保护的 `EvidenceSour
 | Linux 图形会话 | Unix socket + 固定 `/usr/bin/zenity`；缺少程序或图形会话则不可用 | 真实图形界面和宿主验收 |
 | Windows | 明确返回 Broker 不可用，不降级到 TCP 或终端确认 | 受保护 named pipe、原生界面及其隔离和人工验收 |
 
-现有宿主没有因此被认证为可信原生审批 Provider。本地隔离测试可以验证协议、Verifier、SQLite 一次性消费、版本漂移及未知派发事实；它们不能证明真实用户界面或五平台准入通过。尚未切换的业务入口继续遵循其既有合同，不得将当前 `--submit` 描述为已使用本 Broker。
+现有宿主没有因此被认证为可信原生审批 Provider。本地隔离测试验证协议、Verifier、SQLite 一次性消费、版本漂移及未知派发事实；它们不能证明真实用户界面或五平台准入通过。只有新的操作入口使用本 Broker；稳定版旧 `--submit` 路径保持既有合同，预发布则拒绝这些旧在线写入。

@@ -29,7 +29,7 @@ def validate_manifest():
     if manifest.get("mcpServers") != "./.mcp.json":
         fail("plugin manifest MCP contract is invalid")
     version = str(manifest.get("version") or "")
-    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:\+codex\.[A-Za-z0-9.-]+)?", version) is None:
+    if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?(?:\+codex\.[A-Za-z0-9.-]+)?", version) is None:
         fail("plugin manifest version is invalid")
 
 
@@ -43,7 +43,7 @@ def validate_claude_manifest():
     if manifest.get("version") != codex.get("version"):
         fail("Claude plugin manifest version must match the Codex manifest")
     if re.fullmatch(
-        r"[0-9]+\.[0-9]+\.[0-9]+(?:\+codex\.[A-Za-z0-9.-]+)?", str(manifest.get("version") or "")
+        r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?(?:\+codex\.[A-Za-z0-9.-]+)?", str(manifest.get("version") or "")
     ) is None:
         fail("Claude plugin manifest version is invalid")
     servers = manifest.get("mcpServers")
@@ -128,7 +128,7 @@ def validate_mcp():
         "command": "./bin/ocean-watch-launcher",
         "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
         "cwd": ".",
-        "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-02.official-get-r1"},
+        "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-07.operation-r1"},
     }
     if server != expected:
         fail("MCP server must use the stable local runtime proxy")

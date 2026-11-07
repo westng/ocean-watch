@@ -25,11 +25,12 @@ func (runner Runner) guardTokens(provider auth.TokenProvider, required ...string
 
 func submitted(args []string) bool {
 	for _, arg := range args {
-		if arg == "--submit" {
+		if arg == "--submit" || arg == "-submit" {
 			return true
 		}
-		if strings.HasPrefix(arg, "--submit=") {
-			value, err := strconv.ParseBool(strings.TrimPrefix(arg, "--submit="))
+		if strings.HasPrefix(arg, "--submit=") || strings.HasPrefix(arg, "-submit=") {
+			_, text, _ := strings.Cut(arg, "=")
+			value, err := strconv.ParseBool(text)
 			if err != nil || value {
 				return true
 			}
@@ -40,7 +41,7 @@ func submitted(args []string) bool {
 
 func checkCLIInstance(instance policy.Instance, spec contracts.CapabilitySpec, args []string) error {
 	minimum := spec.MinimumMode
-	if spec.Effect == contracts.EffectOnlineWrite && spec.RequiresSubmit && !submitted(args) {
+	if spec.Effect == contracts.EffectOnlineWrite && spec.RequiresSubmit && !submitted(args) && spec.CLICommand != "operations execute" {
 		minimum = contracts.QueryModePlan
 	}
 	if err := instance.Check(spec.RequiredToolsets, minimum); err != nil {

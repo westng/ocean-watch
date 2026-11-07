@@ -62,7 +62,7 @@ func TestProxyInitializesRuntimeOnlyWhenAToolIsCalled(t *testing.T) {
 	}
 	defer session.Close()
 	listed, err := session.ListTools(ctx, nil)
-	if err != nil || len(listed.Tools) != 35 || connections.Load() != 0 {
+	if err != nil || len(listed.Tools) != 40 || connections.Load() != 0 {
 		t.Fatalf("handshake must expose the stable catalog without preparing a runtime: tools=%v connections=%d err=%v", listed, connections.Load(), err)
 	}
 	for range 2 {

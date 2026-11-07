@@ -23,6 +23,7 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/configuration"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/platform/requestcontrol"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/ports/state"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/productversion"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/resources"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/runtimeupdate"
 )
@@ -148,6 +149,12 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		}
 	}
 	runner.Policy = &instance
+	if spec, exists := contracts.DefaultCapabilityRegistry.ByCLICommand(invocation.Command.Name()); exists && spec.Effect == contracts.EffectOnlineWrite && submitted(invocation.Arguments) && invocation.Command.Name() != "operations execute" {
+		if version, err := productversion.Parse(runner.RuntimeVersion); err == nil && version.Prerelease() {
+			WriteDomainError(stdout, domain.NewError("preview_write_unavailable", "this preview requires the verified Qianchuan operation flow for online writes", 2, nil))
+			return 2
+		}
+	}
 	if spec, exists := contracts.DefaultCapabilityRegistry.ByCLICommand(invocation.Command.Name()); !exists || checkCLIInstance(instance, spec, invocation.Arguments) != nil {
 		WriteDomainError(stdout, domain.NewError("policy_denied", "startup business policy denied this capability", 2, nil))
 		return 2
@@ -163,6 +170,8 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		authorizations = filesystem.AuthorizationStore{Root: filepath.Join(codexRoot, "ads-plan-monitor", "state")}
 	}
 	switch invocation.Command.Domain {
+	case "operations":
+		return runner.runOperations(ctx, invocation.Command.Action, invocation.Arguments, codexRoot, credentialStore, stdout)
 	case "developer-docs":
 		grantStore, _ := authorizations.(auth.AuthorizationStore)
 		return runDeveloperDocs(ctx, invocation.Command.Action, invocation.Arguments, stdout, bootstrap.DeveloperAppReferences{Authorizations: grantStore, Policy: instance})

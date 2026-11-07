@@ -60,7 +60,7 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listedTools.Tools) != 35 || listedTools.Tools[0].Annotations == nil {
+	if len(listedTools.Tools) != 40 || listedTools.Tools[0].Annotations == nil {
 		t.Fatalf("unexpected tools: %#v", listedTools.Tools)
 	}
 	wantAnnotations := map[string]struct {
@@ -101,12 +101,17 @@ func TestToolsExposeStrictContractsAndStructuredResults(t *testing.T) {
 		"get_qianchuan_report_schema":         {openWorld: true},
 		"report_qianchuan_custom":             {openWorld: true},
 		"report_qianchuan_managed_accounts":   {openWorld: true},
+		"prepare_qianchuan_operation":         {openWorld: true},
+		"get_operation":                       {readOnly: true, idempotent: true},
+		"request_operation_confirmation":      {},
+		"execute_operation":                   {openWorld: true},
+		"reconcile_operation":                 {openWorld: true},
 	}
 	for _, tool := range listedTools.Tools {
 		annotations := tool.Annotations
 		want, ok := wantAnnotations[tool.Name]
 		if !ok || annotations.ReadOnlyHint != want.readOnly || annotations.IdempotentHint != want.idempotent ||
-			annotations.DestructiveHint == nil || *annotations.DestructiveHint ||
+			annotations.DestructiveHint == nil || *annotations.DestructiveHint != (tool.Name == "execute_operation") ||
 			annotations.OpenWorldHint == nil || *annotations.OpenWorldHint != want.openWorld {
 			t.Fatalf("unsafe annotations for %s: %#v", tool.Name, annotations)
 		}

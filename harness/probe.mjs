@@ -78,7 +78,7 @@ try {
   }
 
   const tools = ctx.tools.schemas().filter((item) => item.name.startsWith('mcp__ocean-watch__'));
-  assert.equal(tools.length, 26, 'Harness must register the entire MCP tool catalog');
+  assert.equal(tools.length, 40, 'Harness must register the entire MCP tool catalog');
   for (const channel of ['marketing', 'qianchuan', 'star_map', 'shared', 'all']) {
     const result = await ctx.tools.execute({
       signal: AbortSignal.timeout(30_000), callId: `ocean-watch-harness-probe-${channel}`,

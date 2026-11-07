@@ -6,14 +6,14 @@ own client. The identifier selects public documentation; it is not a credential.
 Examples, headers and raw HTML are deliberately excluded from the saved facts.
 """
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
-from html.parser import HTMLParser
 import json
-from pathlib import Path
 import re
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from html.parser import HTMLParser
+from pathlib import Path
 
 
 class Node:

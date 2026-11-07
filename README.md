@@ -53,7 +53,7 @@ Ocean Watch 通过巨量引擎官方 API 提供授权、账户、素材、模板
 
 `xt-plan-monitor` 是星图 Skill 的对外名称，`star_map` 是其运行时渠道键。三个 Skill 都按统一能力合同调用共享 Go Core，星图账号使用 `star_account` 类型。
 
-当前能力目录包含 **81 条 CLI 能力和默认 35 个 MCP 工具**，两者有重叠；启用可选开发资料后为 38 个。MCP 提供查询、官方素材与报表、千川作品预检，以及授权、账户同步和 F2 本机配置；计划创建、素材变更、预算、ROI、出价与状态调整仍使用 CLI。**WorkBuddy 当前仅接入 MCP 能力，不通过 Shell 补执行 CLI 写入。** 新增工具与 Skill 合同需要重新加载并按实际宿主分别验收。
+当前能力目录包含 **87 条 CLI 能力和默认 40 个 MCP 工具**，两者有重叠；启用可选开发资料后为 43 个。新增千川操作准备、查询、Broker 确认、执行和只读对账入口，CLI 与 MCP 共用不可变操作及 SQLite 派发事实。预发布阻断未迁移的旧在线写入；真实桌面确认及首发宿主验收仍待完成。**WorkBuddy 只使用 MCP，不通过 Shell 补执行 CLI。** 新增工具与 Skill 合同需要重新加载，详见[操作合同](docs/reference/operation-approval.md)与 [alpha.1 范围](docs/release/alpha1.md)。
 
 千川官方 GET 目录新增 156 项受控查询映射，以及账户健康、计划诊断、素材检查、投放建议和自定义报表等对话入口；3 项保留明确分页限制。已有报表和作品预检继续复用 SDK，开发资料默认关闭且独立于业务 OAuth。见[官方查询合同](docs/reference/qianchuan-official-mcp.md)。
 
@@ -128,7 +128,7 @@ bash scripts/install-doubao.sh
 
 ## V3 运行架构
 
-V3 采用本地优先的模块化单体：**薄宿主适配 + 共享 Skill + 统一能力合同 + 唯一 Go Core + 共享持久状态与系统凭据**。项目运行包括安装启动、业务调用、操作确认与恢复、进程退出和版本迁移。下图覆盖这些系统边界；虚线框表示尚未完成生产接入的统一操作控制与可信审批。
+V3 采用本地优先的模块化单体：**薄宿主适配 + 共享 Skill + 统一能力合同 + 唯一 Go Core + 共享持久状态与系统凭据**。项目运行包括安装启动、业务调用、操作确认与恢复、进程退出和版本迁移。下图覆盖这些系统边界；虚线框表示尚未全面接入及完成外部验收的统一操作控制与可信审批。
 
 ```mermaid
 flowchart TB
@@ -146,11 +146,11 @@ flowchart TB
     Terminal --> CLI
     subgraph Runtime["共享 Go Core：各实例独立运行"]
         App["Application：完整用例<br/>授权账户 / 模板素材<br/>计划 / 报表 / 管理"] --> Domain["Domain / Ports<br/>规则 / 状态 / 依赖接口"]
-        App -.-> Operations["统一操作控制（待接入）<br/>模式 / 快照 / 租约<br/>派发 / 对账 / 恢复"]
+        App -.-> Operations["统一操作控制（千川已接入）<br/>模式 / 快照 / 租约<br/>派发 / 对账 / 恢复"]
         Operations -.-> Domain
     end
     Capability --> App
-    Operations -. 请求确认 .-> Approval["可信审批（待接入）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
+    Operations -. 请求确认 .-> Approval["可信审批（千川已接入，待外部验收）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
     Approval -. 验证回执 .-> Operations
     Domain --> Infrastructure["基础设施 Adapters<br/>SDK / REST / 存储 / 凭据"]
     Infrastructure --> API["巨量引擎官方 API"]
@@ -178,7 +178,7 @@ flowchart TB
 
 | 项目部分 | 当前运行方式 | 完整 V3 目标 |
 | --- | --- | --- |
-| 操作与审批 | 已有操作领域模型、审批验证端口和 SQLite 基础；现有生产写入仍走各用例的 dry-run / `--submit` 门禁。 | 投放写入接入统一操作状态机与 `read / plan / execute` 模式；经验证的宿主审批优先，本地 Broker 按需兜底。配置、授权和迁移保留独立管理边界。 |
+| 操作与审批 | 新的千川操作入口已接入 Broker、SQLite 审批消费及派发/读回；稳定版旧用例仍有 dry-run / `--submit`，预发布阻断旧在线写入。 | 投放写入接入统一操作状态机与 `read / plan / execute` 模式；经验证的宿主审批优先，本地 Broker 按需兜底。配置、授权和迁移保留独立管理边界。 |
 | 持久化 | 千川预检 Journal 默认写入 SQLite；授权索引、模板、计划绑定等仍有文件存储。 | 事务性业务状态统一持久化，完成凭据引用轮换、备份、迁移与未结操作恢复；秘密仍只在系统凭据库。 |
 | Runtime 与升级 | Codex 兼容代理仍可切换合同兼容的 Runtime；Claude 更新后新建任务，WorkBuddy 使用安装器固定目录。 | 每个进程绑定不可变 Runtime，显式更新；操作格式、能力合同和数据库 Schema 分别校验兼容性，再恢复或迁移。 |
 

@@ -12,11 +12,12 @@ permissions:
 
 jobs:
   release:
-    if: github.repository == 'westng/ocean-watch' && github.ref == 'refs/heads/main'
+    if: github.repository == 'westng/ocean-watch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/V3')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: write
+      actions: read
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -33,11 +34,11 @@ jobs:
           python-version: "3.12"
       - name: Install validation dependencies
         run: python -m pip install --disable-pip-version-check "f2==0.0.1.7" "socksio>=1,<2" PyYAML
-      - name: Verify current main revision
+      - name: Verify current release branch revision
         shell: bash
         run: |
-          if [[ "$(git rev-parse refs/remotes/origin/main)" != "${GITHUB_SHA}" ]]; then
-            echo "Release must use the current origin/main commit." >&2
+          if [[ "$(git rev-parse "refs/remotes/origin/${GITHUB_REF_NAME}")" != "${GITHUB_SHA}" ]]; then
+            echo "Release must use the current remote branch commit." >&2
             exit 1
           fi
       - name: Validate prepared release
@@ -52,6 +53,31 @@ jobs:
           version_tag="$(python -c 'import json,sys; print(json.load(sys.stdin)["tag"])' \
             < "${RUNNER_TEMP}/release.json")"
           echo "version_tag=${version_tag}" >> "${GITHUB_OUTPUT}"
+          prerelease="$(python -c 'import json,sys; print(str(json.load(sys.stdin)["prerelease"]).lower())' < "${RUNNER_TEMP}/release.json")"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          if [[ "${GITHUB_REF_NAME}" != main && "${prerelease}" != true ]]; then
+            echo "Stable releases must use main." >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&per_page=1" > "${RUNNER_TEMP}/ci-run.json"
+          run_id="$(python - "${RUNNER_TEMP}/ci-run.json" "${GITHUB_SHA}" <<'PY'
+          import json, sys
+          runs = json.load(open(sys.argv[1]))["workflow_runs"]
+          if not runs or runs[0]["head_sha"] != sys.argv[2] or runs[0]["status"] != "completed" or runs[0]["conclusion"] != "success":
+              raise SystemExit("The latest CI run for this exact commit has not succeeded.")
+          print(runs[0]["id"])
+          PY
+          )"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?filter=latest&per_page=100" --paginate --slurp \
+            --jq '[.[].jobs[] | {name, conclusion, head_sha}]' > "${RUNNER_TEMP}/checks.json"
+          python - "${RUNNER_TEMP}/checks.json" "${GITHUB_SHA}" <<'PY'
+          import json, sys
+          checks = json.loads(open(sys.argv[1]).read())
+          required = {"Go / ubuntu-latest", "Go / macos-latest", "Go / windows-latest", "F2 / Python 3.10", "F2 / Python 3.12", "Harness package / ubuntu-latest", "Harness package / macos-latest", "Harness package / windows-latest", "Plugin contracts"}
+          passed = {c["name"] for c in checks if c["head_sha"] == sys.argv[2] and c["conclusion"] == "success"}
+          if required - passed:
+              raise SystemExit("Missing successful CI checks: " + ", ".join(sorted(required - passed)))
+          PY
       - name: Run release quality checks
         shell: bash
         run: |
@@ -74,9 +100,9 @@ jobs:
             echo "Release validation modified the checked-out source." >&2
             exit 1
           fi
-          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq '.object.sha')"
           if [[ "${current_main}" != "${GITHUB_SHA}" ]]; then
-            echo "origin/main advanced while this release was running." >&2
+            echo "Release branch advanced while this release was running." >&2
             exit 1
           fi
       - name: Publish immutable version Tag
@@ -111,13 +137,18 @@ jobs:
         env:
           VERSION_TAG: ${{ steps.release.outputs.version_tag }}
           RELEASE_SHA: ${{ github.sha }}
+          IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
           if ! gh release view "${VERSION_TAG}" --json tagName,name,isDraft,isPrerelease,body > "${RUNNER_TEMP}/release-metadata.json"; then
+            flags=()
+            if [[ "${IS_PRERELEASE}" == true ]]; then
+              flags+=(--prerelease --latest=false)
+            fi
             gh release create "${VERSION_TAG}" --verify-tag --target "${RELEASE_SHA}" \
-              --title "${VERSION_TAG}" --notes-file "${RUNNER_TEMP}/release-notes.md"
+              --title "${VERSION_TAG}" --notes-file "${RUNNER_TEMP}/release-notes.md" "${flags[@]}"
           fi
           gh release view "${VERSION_TAG}" --json tagName,name,isDraft,isPrerelease,body > "${RUNNER_TEMP}/release-metadata.json"
-          python - "${RUNNER_TEMP}/release-metadata.json" "${RUNNER_TEMP}/release-notes.md" "${VERSION_TAG}" <<'PY'
+          python - "${RUNNER_TEMP}/release-metadata.json" "${RUNNER_TEMP}/release-notes.md" "${VERSION_TAG}" "${IS_PRERELEASE}" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -127,8 +158,8 @@ jobs:
           version_tag = sys.argv[3]
           if metadata.get("tagName") != version_tag or metadata.get("name") != version_tag:
               raise SystemExit("Existing Release identity does not match the version Tag.")
-          if metadata.get("isDraft") or metadata.get("isPrerelease"):
-              raise SystemExit("Existing Release is a draft or prerelease.")
+          if metadata.get("isDraft") or metadata.get("isPrerelease") != (sys.argv[4] == "true"):
+              raise SystemExit("Existing Release draft/prerelease state does not match the candidate.")
           if str(metadata.get("body") or "").rstrip() != expected_notes:
               raise SystemExit("Existing Release notes do not match CHANGELOG.md.")
           PY

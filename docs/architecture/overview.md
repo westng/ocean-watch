@@ -23,11 +23,11 @@ flowchart TB
     subgraph Runtime["共享 Go Core：各实例独立运行"]
         App["Application：完整用例<br/>授权账户 / 模板素材<br/>计划 / 报表 / 管理"] --> Domain["Domain / Ports<br/>规则 / 状态 / 依赖接口"]
         App --> Policy["固定实例策略<br/>模式 / 工具集<br/>主体 / 授权范围"]
-        App -.-> Operations["统一操作控制（待接入）<br/>快照 / 租约<br/>派发 / 对账 / 恢复"]
+        App -.-> Operations["统一操作控制（千川已接入）<br/>快照 / 租约<br/>派发 / 对账 / 恢复"]
         Operations -.-> Domain
     end
     Capability --> App
-    Operations -. 请求确认 .-> Approval["可信审批（待接入）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
+    Operations -. 请求确认 .-> Approval["可信审批（千川已接入，待外部验收）<br/>宿主 Approval Adapter<br/>按需本地 Broker"]
     Approval -. 验证回执 .-> Operations
     Domain --> Infrastructure["基础设施 Adapters<br/>SDK / REST / 官方 MCP<br/>存储 / 凭据"]
     Infrastructure --> API["巨量引擎官方 API"]
@@ -42,7 +42,7 @@ flowchart TB
     class Operations,Approval pending
 ```
 
-Ocean Watch 采用本地优先的模块化单体。图中实线表示当前主要调用关系，虚线框表示尚未完成生产接入的目标模块，交付节点的虚线表示安装与版本绑定关系。业务核心只有一套 Go Application/Domain 实现，各进程复用相同代码；“共享核心”不表示所有宿主连接到同一个常驻服务。
+Ocean Watch 采用本地优先的模块化单体。图中实线表示当前主要调用关系，虚线框表示尚未全面接入及完成外部验收的目标模块，交付节点的虚线表示安装与版本绑定关系。业务核心只有一套 Go Application/Domain 实现，各进程复用相同代码；“共享核心”不表示所有宿主连接到同一个常驻服务。
 
 Capability API 是逻辑业务合同，由 CLI 和 MCP 分别映射，不新增第三种网络服务。Go CLI 在自身进程内调用 Application；MCP Server 也直接调用 Application，不启动 CLI 或解析 CLI stdout。支持 CLI 的宿主可通过受控启动器调用稳定 JSON；WorkBuddy 仅使用 MCP。Python/F2 是公开作品元数据 Adapter 的外部进程依赖。
 
@@ -103,7 +103,7 @@ Capability API 是逻辑业务合同，由 CLI 和 MCP 分别映射，不新增�
 5. 明确成功项不重复派发，部分成功按项保存；超时或断开产生的未知项先官方读回对账，再决定后续动作，不能当作明确失败重放。
 6. 后续调用按精确操作身份查询或恢复，并重新检查版本、授权、审批和派发事实。持久操作 ID 不意味着存在后台执行器，进程重启也不自动恢复派发。
 
-操作模型、验证端口和 SQLite 已有基础实现。M1 现提供从不可变快照生成确认内容、独立本地 Broker、受保护证据交付和 Verifier 的源码链路；平台范围和未验收项见[Operation 确认基础合同](../reference/operation-approval.md)。上述端到端链路尚未接入全部生产写入，现有 CLI/MCP 投放入口也尚未切换到 Broker。当前 `--submit` 是既有提交门禁，不能描述成已实现的 V3 可信审批证据。
+千川新的五项操作入口已接入不可变快照、独立 Broker、Verifier、SQLite 一次性审批、派发和只读恢复。平台范围与外部验收边界见[Operation 合同](../reference/operation-approval.md)。其他用例尚未全部迁移；预发布拒绝旧在线写入，稳定版旧 `--submit` 不能描述成可信审批证据。
 
 ## 进程、资源与数据归属
 
@@ -122,9 +122,9 @@ Capability API 是逻辑业务合同，由 CLI 和 MCP 分别映射，不新增�
 
 | 部分 | 当前落点 | 尚未完成的完整 V3 目标 |
 | --- | --- | --- |
-| 共享核心与入口 | 广告业务已统一到 Go；三个渠道 Skill，81 条 CLI 能力与默认 35 个 MCP 工具；可选开发资料启用后 38 个。 | 新工具与 Skill 合同需重新加载；按宿主版本逐项验收完整生命周期、业务调用和能力等价合同。 |
+| 共享核心与入口 | 广告业务已统一到 Go；三个渠道 Skill，87 条 CLI 能力与默认 40 个 MCP 工具；可选开发资料启用后 43 个。 | 新工具与 Skill 合同需重新加载；按宿主版本逐项验收完整生命周期、业务调用和能力等价合同。 |
 | 能力与模式 | 用户配置固定 `read / plan / execute`、业务工具集、主体及授权范围，MCP/CLI/Token 准备共用 Core 检查。 | 统一 Operation、跨操作审批和全部生产写入的端到端门禁继续按完整 V3 落地。 |
-| 操作与审批 | 已有操作领域、Application Service、SQL 存储及 M1 本地 Broker 的源码确认链路；既有投放入口尚未切换。 | Broker 的 Windows 实现、实际界面和可信来源验收；生产写入统一接入操作状态机、审批、租约与逐项恢复。 |
+| 操作与审批 | 新的千川操作入口已接入不可变载荷、Broker、SQLite 审批和派发/读回；预发布阻断旧在线写入。 | Broker 的 Windows 实现、实际界面和可信来源验收；生产写入统一接入操作状态机、审批、租约与逐项恢复。 |
 | 状态存储 | 千川预检 Journal 默认接入 SQLite，旧 JSON 可回读；授权索引、模板、绑定等仍有文件实现。 | 事务性业务状态迁入 SQLite，完成备份、逐项迁移及未结操作处理。 |
 | 凭据轮换 | 使用系统凭据库，授权服务已有渠道/授权级跨进程锁和 revision 校验。 | SQL 凭据引用与跨存储轮换恢复基础接入现有 Token Manager，完成故障恢复验证。 |
 | Runtime 更新 | Codex 兼容代理可切换兼容版本；Claude 更新后需新任务；WorkBuddy 使用安装器固定目录。 | 每个进程固定不可变 Runtime、显式更新，分别校验能力合同、操作格式和 Schema；完成迁移前保留现有兼容路径。 |
@@ -134,7 +134,7 @@ Capability API 是逻辑业务合同，由 CLI 和 MCP 分别映射，不新增�
 
 显式从 Git checkout 或 worktree 启动时，CLI、MCP 代理与运行时诊断通过同一来源解析器固定到该目录的已校验构建。运行时快照、选择状态、回退记录和使用租约保存在共享状态根下按 checkout 路径摘要划分的独立目录，托管子进程从私有槽位恢复对应来源范围；授权、账户和业务配置仍按原共享状态根解析。仓库代码或资源变化后须先重建分发清单，完整性校验继续生效。已安装插件仍使用下述宿主兼容升级路径。
 
-Go 切换已经完成。本地 stdio MCP 默认注册 35 个工具：原有 26 个模板、授权、预检、查询与 F2 工具，加上 9 个千川官方查询/任务入口；可选开发资料另有 3 个。`get_capabilities` 在稳定代理内返回能力与实际模式/工具集，其余工具直接转发到固定 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout。能力登记包含 81 条 CLI 能力，CLI/MCP 复用能力身份。Skill 对高频目标直接选择唯一工具，千川长尾通过窄目录与精确查询合同路由。
+Go 切换已经完成。本地 stdio MCP 默认注册 40 个工具：原有查询/预检等 35 个工具，加上五个千川可信操作入口；可选开发资料另有 3 个。`get_capabilities` 在稳定代理内返回能力与实际模式/工具集，其余工具直接转发到固定 Runtime 的同名 MCP 服务，不启动 CLI 或解析 CLI stdout。能力登记包含 87 条 CLI 能力，CLI/MCP 复用能力身份。Skill 对高频目标直接选择唯一工具，千川长尾通过窄目录与精确查询合同路由。
 
 F2 配置页复用本机授权的回环地址与来源校验；Cookie 使用独立的系统凭据项，通过标准输入交给解析子进程。该路径禁止 OAuth 开发用文件回退，也不使用 Windows DPAPI 文件；详见[配置说明](../guides/configuration.md#f2)。新增工具改变 Host 合同，旧会话不会热切换，需重新加载声明。WorkBuddy 已核实 26 项工具的原生发现与连接，其他宿主原有的 23 工具验收记录不覆盖这三项新工具。
 

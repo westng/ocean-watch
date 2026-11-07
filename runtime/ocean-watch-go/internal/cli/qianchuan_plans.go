@@ -17,6 +17,7 @@ import (
 
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/filesystem"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/sqlite"
 	authapplication "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/auth"
 	sharedplans "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans"
 	applicationqianchuan "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/plans/qianchuan"
@@ -599,7 +600,7 @@ func (runner Runner) qianchuanMutationService(
 	}
 	return applicationqianchuan.MutationExecutor{
 		Guard: sharedplans.GuardedExecutor{
-			Credentials: components.credentials, Locks: components.locker, Now: runtime.Now,
+			Credentials: components.credentials, Locks: components.locker, Now: runtime.Now, RuntimeVersion: runner.RuntimeVersion,
 		},
 		Writer: components.writer, Reader: components.reader,
 	}, nil
@@ -786,6 +787,9 @@ func writeQianchuanPlanError(stdout io.Writer, err error) int {
 }
 
 func qianchuanPlanError(err error) *domain.Error {
+	if errors.Is(err, sqlite.ErrIncompatible) {
+		return domain.NewError("state_incompatible", "state format is incompatible; inspect operations upgrade-state before any explicit migration", 1, nil)
+	}
 	var domainErr *domain.Error
 	if errors.As(err, &domainErr) {
 		return domainErr

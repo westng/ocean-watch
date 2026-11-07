@@ -296,7 +296,7 @@ func NewQianchuanCommandService(options QianchuanOptions) (applicationqianchuan.
 		bindings = filesystem.QianchuanPlanBindingStore{Root: options.StateRoot}
 	}
 	reconciler := applicationqianchuan.CurrentDayReconciler{Reader: reader, Bindings: bindings, Now: options.Now}
-	guard := sharedplans.GuardedExecutor{Credentials: credentials, Locks: locker, Now: options.Now}
+	guard := sharedplans.GuardedExecutor{Credentials: credentials, Locks: locker, Now: options.Now, RuntimeVersion: options.RuntimeVersion}
 	service.Create = applicationqianchuan.CreateExecutor{Guard: guard, Writer: writer, Reconciler: reconciler}
 	service.Batch = applicationqianchuan.BatchService{
 		Guard: guard, Reader: reader, Writer: writer, Reconciler: reconciler, Bindings: bindings, Now: options.Now,

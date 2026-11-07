@@ -343,11 +343,15 @@ type DispatchOutcome struct {
 	FencingEpoch      int64
 	State             DispatchState
 	OfficialRequestID string
+	ObjectID          string
 	ResponseDigest    string
 	Now               time.Time
 }
 
 func (o DispatchOutcome) Validate() error {
+	if o.ObjectID != "" && !safeIDPattern.MatchString(o.ObjectID) {
+		return ErrInvalidDispatch
+	}
 	if !operationIDPattern.MatchString(o.OperationID) || o.Version < 1 {
 		return invalidDispatch("dispatch outcome operation binding is invalid")
 	}

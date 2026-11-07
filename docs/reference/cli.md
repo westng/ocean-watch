@@ -1,5 +1,9 @@
 # CLI 参考
 
+## 不可变操作与预发布
+
+`operations prepare/get/confirm/execute/reconcile` 提供千川准备、状态查询、独立 Broker 确认、精确执行和只读对账，参数与恢复规则见 [Operation 合同](operation-approval.md)。`operations upgrade-state` 默认只预览状态，`--submit` 才执行受保护备份与显式迁移。预发布版本阻断旧在线写入，新执行必须使用精确操作 ID、版本、快照摘要及审批引用。
+
 ## 入口
 
 macOS/Linux：

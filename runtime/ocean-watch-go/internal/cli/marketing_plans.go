@@ -229,7 +229,7 @@ func (runner Runner) runMarketingPlan(
 		}
 		service = applicationmarketing.MutationExecutor{
 			Guard: sharedplans.GuardedExecutor{
-				Credentials: credentialProvider, Locks: locker, Now: runtime.Now,
+				Credentials: credentialProvider, Locks: locker, Now: runtime.Now, RuntimeVersion: runner.RuntimeVersion,
 			},
 			Writer: writer, Reader: reader,
 		}
