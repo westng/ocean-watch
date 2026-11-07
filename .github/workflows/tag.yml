@@ -69,10 +69,10 @@ jobs:
           PY
           )"
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?filter=latest&per_page=100" --paginate --slurp \
-            --jq '[.[].jobs[] | {name, conclusion, head_sha}]' > "${RUNNER_TEMP}/checks.json"
+            > "${RUNNER_TEMP}/checks.json"
           python - "${RUNNER_TEMP}/checks.json" "${GITHUB_SHA}" <<'PY'
           import json, sys
-          checks = json.loads(open(sys.argv[1]).read())
+          checks = [check for page in json.load(open(sys.argv[1])) for check in page["jobs"]]
           required = {"Go / ubuntu-latest", "Go / macos-latest", "Go / windows-latest", "F2 / Python 3.10", "F2 / Python 3.12", "Harness package / ubuntu-latest", "Harness package / macos-latest", "Harness package / windows-latest", "Plugin contracts"}
           passed = {c["name"] for c in checks if c["head_sha"] == sys.argv[2] and c["conclusion"] == "success"}
           if required - passed:
