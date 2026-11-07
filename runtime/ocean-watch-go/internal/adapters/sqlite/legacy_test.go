@@ -299,6 +299,11 @@ func TestLegacyImportChecksBoundDatabaseIdentity(t *testing.T) {
 	ctx := context.Background()
 	store, _ := legacyStore(t)
 	mapping := legacyMapping(t, "identity", nil)
+	// Windows forbids renaming an open SQLite database. Keep the Store's
+	// captured identity but close its connection before replacing the path.
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Rename(store.path, store.path+".moved"); err != nil {
 		t.Fatal(err)
 	}

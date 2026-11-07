@@ -26,5 +26,11 @@ func unlockMaintenance(file *os.File) error {
 }
 
 func downgradeMaintenance(file *os.File) error {
-	return windows.LockFileEx(windows.Handle(file.Fd()), windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, new(windows.Overlapped))
+	// LockFileEx permits a shared lock over this handle's exclusive lock. The
+	// first UnlockFileEx then removes the exclusive lock, retaining the shared
+	// lock without a window in which a migration could acquire exclusivity.
+	if err := windows.LockFileEx(windows.Handle(file.Fd()), windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, new(windows.Overlapped)); err != nil {
+		return err
+	}
+	return unlockMaintenance(file)
 }

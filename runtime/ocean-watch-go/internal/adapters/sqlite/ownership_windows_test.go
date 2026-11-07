@@ -175,6 +175,22 @@ func TestPrivateDirectoryWindowsRequiresProtection(t *testing.T) {
 			}
 			path := filepath.Join(parent, "fixture")
 			info := createOwnershipFixture(t, path, true, "O:"+user.String()+dacl+"(A;;FA;;;"+user.String()+")")
+			// Creation beneath a protected parent can normalize the control
+			// flags. Explicitly set the inheritance state that this case tests.
+			descriptor := stateWindowsTestDescriptor(t, path)
+			acl, _, err := descriptor.DACL()
+			if err != nil {
+				t.Fatal(err)
+			}
+			protection := windows.SECURITY_INFORMATION(windows.UNPROTECTED_DACL_SECURITY_INFORMATION)
+			if protected {
+				protection = windows.PROTECTED_DACL_SECURITY_INFORMATION
+			}
+			if err := windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
+				windows.DACL_SECURITY_INFORMATION|protection, nil, nil, acl, nil); err != nil {
+				t.Fatal(err)
+			}
+			runtime.KeepAlive(descriptor)
 			if !owned(path, info) {
 				t.Fatal("trusted directory ACL was rejected")
 			}
