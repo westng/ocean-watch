@@ -71,7 +71,7 @@ func privateWindowsDescriptor(descriptor *windows.SECURITY_DESCRIPTOR, currentUs
 		return false
 	}
 	owner, _, err := descriptor.Owner()
-	if err != nil || owner == nil || !owner.IsValid() || !owner.Equals(currentUser) {
+	if err != nil || !trustedWindowsStateSID(owner, currentUser) {
 		return false
 	}
 	control, _, err := descriptor.Control()
@@ -101,13 +101,17 @@ func privateWindowsDescriptor(descriptor *windows.SECURITY_DESCRIPTOR, currentUs
 			return false
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		if !sid.IsValid() {
-			return false
-		}
-		if !sid.Equals(currentUser) && !sid.IsWellKnown(windows.WinLocalSystemSid) &&
-			!sid.IsWellKnown(windows.WinBuiltinAdministratorsSid) {
+		if !trustedWindowsStateSID(sid, currentUser) {
 			return false
 		}
 	}
 	return true
+}
+
+// Elevated processes can create SQLite sidecars with Administrators as their
+// default owner even when they inherit this directory's private DACL. Owners
+// and ACEs use the same trusted principals; arbitrary users remain forbidden.
+func trustedWindowsStateSID(sid, currentUser *windows.SID) bool {
+	return sid != nil && sid.IsValid() && (sid.Equals(currentUser) ||
+		sid.IsWellKnown(windows.WinLocalSystemSid) || sid.IsWellKnown(windows.WinBuiltinAdministratorsSid))
 }

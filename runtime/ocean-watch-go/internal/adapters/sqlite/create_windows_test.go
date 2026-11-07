@@ -112,7 +112,7 @@ func TestCreateStateWindowsInheritedSidecars(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !owned(path, info) {
-				t.Fatal("trusted inherited sidecar ACL was rejected")
+				t.Fatalf("trusted inherited sidecar ACL was rejected: %s", stateWindowsTestDescriptor(t, path).String())
 			}
 			descriptor := stateWindowsTestDescriptor(t, path)
 			assertStateWindowsDescriptor(t, descriptor, false)

@@ -20,6 +20,8 @@ SQLite Schema 6 保存派发目标和独立读回事实。官方返回成功仍�
 
 升级旧状态需先执行 `operations upgrade-state` 查看预览，再显式 `operations upgrade-state --submit`。迁移器先做受保护备份，活动状态使用者阻断升级；普通查询不自动迁移。升级后的数据库不能交给旧 Runtime 写入，回退前必须使用对应备份和兼容 Runtime，并核对已经发生的线上操作。
 
+Windows 状态目录要求受保护 DACL，数据库与 WAL/SHM 等旁路文件逐项核验实际所有者和 ACL；可信主体限定为当前用户、SYSTEM 与 Administrators。管理员进程的默认所有者可以是 Administrators，不能因此拒绝权限仍受限的继承文件；其他主体、缺失或 null DACL 和重解析点仍被拒绝。
+
 ## 调用与数据边界
 
 受保护组合根 `bootstrap.NewOperations` 固定 Provider、证据来源及 Verifier。`operations.Service.Confirm` 只接收精确操作 ID、版本和快照摘要，从 Repository 读取已经持久化的快照并生成确认内容。它不接受模型提供的说明、Provider、挑战、签名或“已批准”标志，也不派发官方写入。

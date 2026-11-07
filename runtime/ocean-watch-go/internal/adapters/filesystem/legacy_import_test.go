@@ -29,13 +29,17 @@ func TestLegacyReaderReadOnlyAndRestrictedPaths(t *testing.T) {
 	if err := os.WriteFile(name, payload, 0o400); err != nil {
 		t.Fatal(err)
 	}
+	before, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader := LegacyJournalReader{Root: root}
 	got, err := reader.ReadLegacyJournal(context.Background(), "runs/source.json")
 	if err != nil || string(got) != string(payload) {
 		t.Fatalf("got %s err=%v", got, err)
 	}
 	info, err := os.Stat(name)
-	if err != nil || info.Mode().Perm() != 0o400 {
+	if err != nil || info.Mode() != before.Mode() {
 		t.Fatal("source permissions mutated")
 	}
 	for _, name := range []string{"../source.json", filepath.Join(root, "runs", "source.json"), "runs/../source.json", "runs/sub/source.json", `runs\source.json`} {

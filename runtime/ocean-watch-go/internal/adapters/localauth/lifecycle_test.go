@@ -49,6 +49,29 @@ func awaitLifecycleSignal(t *testing.T, signal <-chan struct{}) {
 	}
 }
 
+// Trigger the deadline only after the tested worker stage has started. A short
+// wall-clock deadline can expire during setup on a busy CI runner instead.
+type lifecycleExpiryContext struct {
+	context.Context
+	done chan struct{}
+	once sync.Once
+}
+
+func newLifecycleExpiryContext() *lifecycleExpiryContext {
+	return &lifecycleExpiryContext{Context: context.Background(), done: make(chan struct{})}
+}
+
+func (ctx *lifecycleExpiryContext) Done() <-chan struct{} { return ctx.done }
+func (ctx *lifecycleExpiryContext) expire()               { ctx.once.Do(func() { close(ctx.done) }) }
+func (ctx *lifecycleExpiryContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
 type lifecycleOAuth struct{ gate *lifecycleGate }
 
 func (oauth lifecycleOAuth) ExchangeCode(ctx context.Context, _ string, _ domain.OAuthApp, _ string) (domain.OAuthToken, error) {
@@ -168,8 +191,11 @@ func TestAuthorizationStopWaitsForEveryInFlightStage(t *testing.T) {
 				gate := newLifecycleGate()
 				t.Cleanup(gate.release)
 				blockLifecycleStage(fixture, gate, stage)
+				var expiry *lifecycleExpiryContext
 				if stop == "expiry" {
-					fixture.manager.options.Lifetime = 250 * time.Millisecond
+					expiry = newLifecycleExpiryContext()
+					fixture.manager.parent = expiry
+					t.Cleanup(expiry.expire)
 				}
 				var cancelParent context.CancelFunc
 				if stop == "parent" {
@@ -191,6 +217,8 @@ func TestAuthorizationStopWaitsForEveryInFlightStage(t *testing.T) {
 					go func() { fixture.manager.Close(); stopped <- nil }()
 				case "parent":
 					cancelParent()
+				case "expiry":
+					expiry.expire()
 				}
 				awaitLifecycleSignal(t, gate.cancelled)
 				select {
@@ -267,8 +295,11 @@ func TestAccountSyncWaitsForWorkerBeforeReleasingListener(t *testing.T) {
 				} else {
 					fixture.manager.options.Syncer.Authorizations = &lifecycleStore{AuthorizationStore: fixture.store, gate: gate, blockAt: 1}
 				}
+				var expiry *lifecycleExpiryContext
 				if stop == "expiry" {
-					fixture.manager.options.Lifetime = 250 * time.Millisecond
+					expiry = newLifecycleExpiryContext()
+					fixture.manager.parent = expiry
+					t.Cleanup(expiry.expire)
 				}
 				view := fixture.syncStart(t, "1001", grant.AuthorizationID)
 				page := fixture.localURL(t, view)
@@ -291,6 +322,8 @@ func TestAccountSyncWaitsForWorkerBeforeReleasingListener(t *testing.T) {
 					}()
 				case "close":
 					go func() { fixture.manager.Close(); close(stopped) }()
+				case "expiry":
+					expiry.expire()
 				}
 				if stop != "complete" {
 					awaitLifecycleSignal(t, gate.cancelled)
