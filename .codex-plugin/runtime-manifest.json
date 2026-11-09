@@ -44,10 +44,10 @@
     "skills/xt-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "fcb5f94e79558cdcfbbde5fece8c1e5974a8d256bf27ced006f2c7b61f324321",
-    "ocean-watch_darwin_arm64": "2b4e70726e39c033ba0d7f52a4df79e476ef39bf0f60f25692de9a36c74e5ef9",
-    "ocean-watch_linux_amd64": "a15eca27e825c02749048693dac9affb4da59e7676be2ef59d94697abe34b8d7",
-    "ocean-watch_linux_arm64": "febe25bff73d6829c4809b83b0d363a43cf0b2f0523b36ebb3831ae42c8f262d",
-    "ocean-watch_windows_amd64.exe": "6a43572310387b4c37df52ceffa0b0439144531523c725923d7fb6fc53a0a2fb"
+    "ocean-watch_darwin_amd64": "7ea73a763576eb5e8c46315a779e50fa8bd8129c61dc925dedb3ff487ee1e0eb",
+    "ocean-watch_darwin_arm64": "1fcc482a296b2b128d470cb0782c96e625d734951a98dcaf5c585b142193b200",
+    "ocean-watch_linux_amd64": "3420dcd9b831f10e2b29711b53f1b70e22ac284e9501480da78fcee72aab8f71",
+    "ocean-watch_linux_arm64": "5d3848107cbdaa92445105a80c997bcb897b1524ebbff5af4ff0f490f7d8dd0e",
+    "ocean-watch_windows_amd64.exe": "27b279e4568482f5ccb8e005adc800b337250919a2725f33ce94aae5695411ca"
   }
 }

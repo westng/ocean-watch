@@ -123,10 +123,13 @@ func (runtime Runtime) authorizationHandler(name string) mcp.ToolHandler {
 		}
 		runtime.log(started, requestID, name, "ok", "")
 		diagnostics := view.FailureDiagnostics()
+		issueCount := view.DiscoveryIssueCount
 		// Optional protocol metadata preserves the existing structured tool
 		// contract, allowing an already-open chat to adopt compatible fixes.
 		view.FailureStage, view.FailureReason, view.OfficialRequestID = "", "", ""
 		view.OfficialCode, view.HTTPStatus = 0, 0
+		view.FailureEndpoint, view.FailureValidation = "", ""
+		view.DiscoveryIssueCount = 0
 		result := resultFor(struct {
 			OK        bool                 `json:"ok"`
 			RequestID string               `json:"request_id"`
@@ -136,6 +139,13 @@ func (runtime Runtime) authorizationHandler(name string) mcp.ToolHandler {
 			result.Meta = mcp.Meta{"ocean_watch.authorization_failure": diagnostics}
 			encoded, _ := json.Marshal(diagnostics)
 			result.Content = append(result.Content, &mcp.TextContent{Text: "授权失败诊断：" + string(encoded)})
+		}
+		if issueCount > 0 && issueCount <= 1_000_000 {
+			if result.Meta == nil {
+				result.Meta = mcp.Meta{}
+			}
+			result.Meta["ocean_watch.account_discovery"] = map[string]any{"issue_count": issueCount, "complete": false}
+			result.Content = append(result.Content, &mcp.TextContent{Text: "账户同步已保存已校验范围，但存在未展开的账户角色；不能据此声称全部角色已覆盖。"})
 		}
 		return result, nil
 	}

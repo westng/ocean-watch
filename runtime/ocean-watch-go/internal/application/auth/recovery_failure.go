@@ -28,6 +28,11 @@ type authorizationFailureMetadata interface {
 	AuthorizationFailureMetadata() (code int64, requestID string, httpStatus int)
 }
 
+type authorizationFailureContext interface {
+	error
+	AuthorizationFailureContext() (endpoint, validation string)
+}
+
 type authorizationStepError struct {
 	stage string
 	cause error
@@ -95,6 +100,35 @@ func (view *RecoverySession) retainFailure(err error, fallbackStage string) {
 			view.HTTPStatus = status
 		}
 	}
+	var accountContext authorizationFailureContext
+	if errors.As(err, &accountContext) {
+		endpoint, validation := accountContext.AuthorizationFailureContext()
+		if allowedAuthorizationEndpoint(endpoint) {
+			view.FailureEndpoint = endpoint
+		}
+		if allowedAccountValidation(validation) {
+			view.FailureValidation = validation
+		}
+	}
+}
+
+func allowedAuthorizationEndpoint(endpoint string) bool {
+	switch endpoint {
+	case "/oauth2/advertiser/get/", "/2/customer_center/advertiser/list/", "/2/ebp/advertiser/list/",
+		"/2/advertiser/info/", "/2/agent/advertiser/select/", "/v1.0/qianchuan/shop/advertiser/list/", "/2/star/info/":
+		return true
+	}
+	return false
+}
+
+func allowedAccountValidation(validation string) bool {
+	switch validation {
+	case "INVALID_REQUEST", "INVALID_RESPONSE", "INVALID_ACCOUNT_LIST", "INVALID_ACCOUNT_ID", "INVALID_ACCOUNT_VALIDITY",
+		"DUPLICATE_ACCOUNT_ID", "INVALID_ADVERTISER_ID", "INVALID_PAGINATION", "INVALID_ADVERTISER_INFO",
+		"DUPLICATE_ADVERTISER_ID", "INCOMPLETE_ADVERTISER_INFO":
+		return true
+	}
+	return false
 }
 
 func allowedAuthorizationFailureReason(reason string) bool {
@@ -130,6 +164,12 @@ func (view RecoverySession) FailureDiagnostics() map[string]any {
 	}
 	if view.HTTPStatus >= 100 && view.HTTPStatus <= 599 {
 		result["http_status"] = view.HTTPStatus
+	}
+	if allowedAuthorizationEndpoint(view.FailureEndpoint) {
+		result["failed_endpoint"] = view.FailureEndpoint
+	}
+	if allowedAccountValidation(view.FailureValidation) {
+		result["validation_reason"] = view.FailureValidation
 	}
 	return result
 }

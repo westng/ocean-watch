@@ -283,7 +283,7 @@ func (manager *Manager) confirm(writer http.ResponseWriter, request *http.Reques
 		}
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		err := confirmTemplate.Execute(writer, map[string]any{"Session": view, "Title": channelTitle(view.Channel), "Awaiting": view.Status == "awaiting_user", "Sync": view.Operation == "sync_accounts", "Rebind": current.input.RebindExisting,
-			"StatusText": statusText(view.Status), "ErrorMessage": recoveryErrorMessage(view), "Polling": view.Status == "authorizing" || view.Status == "syncing"})
+			"StatusText": recoveryStatusText(view), "ErrorMessage": recoveryErrorMessage(view), "Polling": view.Status == "authorizing" || view.Status == "syncing"})
 		if err == nil && terminal(view.Status) && http.NewResponseController(writer).Flush() == nil {
 			current.resultOnce.Do(func() { close(current.resultServed) })
 		}
@@ -354,12 +354,21 @@ func channelTitle(channel string) string {
 func statusText(status string) string {
 	return map[string]string{"awaiting_user": "等待你确认", "awaiting_callback": "等待完成官方授权", "authorizing": "正在确认授权", "syncing": "正在同步可访问账户", "completed": "授权和账户同步已完成", "failed": "授权恢复未完成", "cancelled": "已取消", "expired": "本次操作已过期，请回到会话重新发起"}[status]
 }
+func recoveryStatusText(view auth.RecoverySession) string {
+	if view.Status == "failed" && view.SyncRequired {
+		return "授权已保存，账户同步未完成"
+	}
+	if view.Status == "completed" && view.DiscoveryIssueCount > 0 {
+		return "授权已保存，已同步可校验的账户范围；部分账户角色未展开"
+	}
+	return statusText(view.Status)
+}
 func errorMessage(code string) string {
 	return map[string]string{
 		"OAUTH_REJECTED":                  "未完成官方授权，请回到会话重新发起。",
 		"AUTHORIZATION_FAILED":            "授权未完成，请回到会话查看失败原因。",
 		"OAUTH_APP_MISSING":               "本机尚未配置此渠道的 OAuth App，请先通过受控 CLI 配置 App。",
-		"ACCOUNT_SYNC_FAILED":             "账户同步暂未完成，请回到会话重试同步。",
+		"ACCOUNT_SYNC_FAILED":             "账户同步未完成，请回到会话查看具体失败原因。",
 		"AUTHORIZATION_SERVICE_FAILED":    "本机授权服务异常结束，请重新发起授权。",
 		"REAUTHORIZATION_REQUIRED":        "原授权已失效，请回到会话重新发起授权。",
 		"AUTHORIZATION_SCOPE_MISSING":     "这次授权未覆盖待恢复的账户，请使用有权访问该账户的身份重新授权。",
@@ -394,6 +403,24 @@ func recoveryErrorMessage(view auth.RecoverySession) string {
 	}
 	if reason != "" {
 		message += " 原因：" + reason + "。"
+	}
+	diagnostics := view.FailureDiagnostics()
+	endpoint, _ := diagnostics["failed_endpoint"].(string)
+	if label := map[string]string{
+		"/oauth2/advertiser/get/": "授权账户列表", "/2/customer_center/advertiser/list/": "客户中心广告主列表",
+		"/2/ebp/advertiser/list/": "企业工作台广告主列表", "/2/advertiser/info/": "广告主详情校验",
+		"/2/agent/advertiser/select/": "千川代理商广告主列表", "/v1.0/qianchuan/shop/advertiser/list/": "千川店铺广告主列表", "/2/star/info/": "星图账户详情校验",
+	}[endpoint]; label != "" {
+		message += " 失败接口：" + label + "。"
+	}
+	validation, _ := diagnostics["validation_reason"].(string)
+	if label := map[string]string{
+		"INVALID_REQUEST": "账户请求参数无效", "INVALID_RESPONSE": "账户响应格式无效", "INVALID_ACCOUNT_LIST": "账户列表字段缺失或格式无效",
+		"INVALID_ACCOUNT_ID": "广告账户缺少有效 ID", "INVALID_ACCOUNT_VALIDITY": "账户有效性字段无效", "DUPLICATE_ACCOUNT_ID": "授权账户 ID 重复",
+		"INVALID_ADVERTISER_ID": "广告主 ID 缺失或无效", "INVALID_PAGINATION": "分页信息缺失、矛盾或遍历不完整",
+		"INVALID_ADVERTISER_INFO": "广告主详情与请求范围不匹配", "DUPLICATE_ADVERTISER_ID": "广告主详情 ID 重复", "INCOMPLETE_ADVERTISER_INFO": "广告主详情返回不完整",
+	}[validation]; label != "" {
+		message += " 校验原因：" + label + "。"
 	}
 	if view.OfficialCode > 0 {
 		message += " 官方错误码：" + strconv.FormatInt(view.OfficialCode, 10) + "。"

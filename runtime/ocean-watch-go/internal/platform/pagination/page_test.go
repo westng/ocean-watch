@@ -140,3 +140,31 @@ func TestPageTraversalSupportsCompatibleStartAndSinglePage(t *testing.T) {
 		t.Fatalf("single-page traversal changed: sequence=%v rows=%v", sequence, rows)
 	}
 }
+
+func TestPageTraversalWithoutRowCountStillChecksProvidedTotals(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		finalTotal  int
+		known, fail bool
+	}{
+		{"all totals omitted", 0, false, false},
+		{"total supplied on last page", 2, true, false},
+		{"contradictory final total", 3, true, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rows, err := CollectPages(context.Background(), PageOptions[fixtureRow]{
+				Key: func(row fixtureRow) string { return row.ID },
+				Fetch: func(_ context.Context, page int) (Page[fixtureRow], error) {
+					result := Page[fixtureRow]{Number: page, TotalPages: 2, TotalNumberUnknown: true, Rows: []fixtureRow{{ID: string(rune('0' + page))}}}
+					if page == 2 && test.known {
+						result.TotalNumber, result.TotalNumberUnknown = test.finalTotal, false
+					}
+					return result, nil
+				},
+			})
+			if test.fail != (err != nil) || !test.fail && len(rows) != 2 {
+				t.Fatalf("unexpected traversal result: rows=%v err=%v", rows, err)
+			}
+		})
+	}
+}

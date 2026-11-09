@@ -14,7 +14,10 @@ type Page[T any] struct {
 	Number      int
 	TotalPages  int
 	TotalNumber int
-	Rows        []T
+	// Some account-discovery responses declare all pages but omit the row
+	// count. Traversal still verifies page stability and unique row identities.
+	TotalNumberUnknown bool
+	Rows               []T
 }
 
 type PageOptions[T any] struct {
@@ -79,9 +82,18 @@ func CollectPages[T any](ctx context.Context, options PageOptions[T]) ([]T, erro
 			return nil, fmt.Errorf("page %d exceeds declared total pages %d", pageNumber, page.TotalPages)
 		}
 		if expectedPages < 0 {
-			expectedPages, expectedTotal = page.TotalPages, page.TotalNumber
-		} else if page.TotalPages != expectedPages || page.TotalNumber != expectedTotal {
+			expectedPages = page.TotalPages
+		} else if page.TotalPages != expectedPages {
 			return nil, fmt.Errorf("page %d changed declared pagination totals", pageNumber)
+		}
+		if !page.TotalNumberUnknown {
+			if expectedTotal >= 0 && page.TotalNumber != expectedTotal {
+				return nil, fmt.Errorf("page %d changed declared pagination totals", pageNumber)
+			}
+			expectedTotal = page.TotalNumber
+		}
+		if page.TotalNumberUnknown && len(page.Rows) == 0 && page.TotalPages > 1 {
+			return nil, fmt.Errorf("page %d returned an empty page without a declared row count", pageNumber)
 		}
 		for _, row := range page.Rows {
 			key := options.Key(row)
@@ -101,10 +113,10 @@ func CollectPages[T any](ctx context.Context, options PageOptions[T]) ([]T, erro
 			break
 		}
 	}
-	if startPage == 1 && len(rows) != expectedTotal {
+	if expectedTotal >= 0 && startPage == 1 && len(rows) != expectedTotal {
 		return nil, fmt.Errorf("pagination returned %d unique rows but declared %d", len(rows), expectedTotal)
 	}
-	if startPage > 1 && len(rows) > expectedTotal {
+	if expectedTotal >= 0 && startPage > 1 && len(rows) > expectedTotal {
 		return nil, fmt.Errorf("pagination returned %d unique rows after page %d but declared %d total", len(rows), startPage, expectedTotal)
 	}
 	return rows, nil

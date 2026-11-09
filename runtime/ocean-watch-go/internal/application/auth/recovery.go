@@ -5,24 +5,27 @@ import "context"
 // RecoverySession exposes safe lifecycle metadata. Callback codes and credentials
 // remain inside the recovery flow and must never be added to this presenter.
 type RecoverySession struct {
-	SessionID         string `json:"session_id"`
-	Channel           string `json:"channel"`
-	Operation         string `json:"operation"`
-	Status            string `json:"status"`
-	AuthorizationURL  string `json:"authorization_url,omitempty"`
-	ExpiresAt         string `json:"expires_at"`
-	AdvertiserID      string `json:"advertiser_id,omitempty"`
-	AuthorizationID   string `json:"authorization_id,omitempty"`
-	AccountCount      int    `json:"authorized_account_count"`
-	AdvertiserCount   int    `json:"authorized_advertiser_count"`
-	CanResume         bool   `json:"can_resume"`
-	SyncRequired      bool   `json:"sync_required"`
-	ErrorCode         string `json:"error_code,omitempty"`
-	FailureStage      string `json:"failure_stage,omitempty"`
-	FailureReason     string `json:"failure_reason,omitempty"`
-	OfficialCode      int64  `json:"official_error_code,omitempty"`
-	OfficialRequestID string `json:"official_request_id,omitempty"`
-	HTTPStatus        int    `json:"http_status,omitempty"`
+	SessionID           string `json:"session_id"`
+	Channel             string `json:"channel"`
+	Operation           string `json:"operation"`
+	Status              string `json:"status"`
+	AuthorizationURL    string `json:"authorization_url,omitempty"`
+	ExpiresAt           string `json:"expires_at"`
+	AdvertiserID        string `json:"advertiser_id,omitempty"`
+	AuthorizationID     string `json:"authorization_id,omitempty"`
+	AccountCount        int    `json:"authorized_account_count"`
+	AdvertiserCount     int    `json:"authorized_advertiser_count"`
+	CanResume           bool   `json:"can_resume"`
+	SyncRequired        bool   `json:"sync_required"`
+	ErrorCode           string `json:"error_code,omitempty"`
+	FailureStage        string `json:"failure_stage,omitempty"`
+	FailureReason       string `json:"failure_reason,omitempty"`
+	OfficialCode        int64  `json:"official_error_code,omitempty"`
+	OfficialRequestID   string `json:"official_request_id,omitempty"`
+	HTTPStatus          int    `json:"http_status,omitempty"`
+	FailureEndpoint     string `json:"failed_endpoint,omitempty"`
+	FailureValidation   string `json:"validation_reason,omitempty"`
+	DiscoveryIssueCount int    `json:"account_discovery_issue_count,omitempty"`
 }
 
 type RecoveryRequest struct {

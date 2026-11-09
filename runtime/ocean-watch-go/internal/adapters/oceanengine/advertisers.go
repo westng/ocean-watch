@@ -2,8 +2,10 @@ package oceanengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -34,15 +36,11 @@ func (adapter AdvertiserDiscoveryAdapter) Discover(
 	if strings.TrimSpace(accessToken) == "" {
 		return domain.AdvertiserSnapshot{}, errors.New("advertiser discovery access token is required")
 	}
-	accounts, err := adapter.listAuthorizedAccounts(ctx, channel, accessToken)
+	accounts, issues, err := adapter.listAuthorizedAccounts(ctx, channel, accessToken)
 	if err != nil {
 		return domain.AdvertiserSnapshot{}, err
 	}
-	if channel == "star_map" {
-		accounts = filterStarMapAccounts(accounts)
-	}
 	candidates := []string{}
-	issues := []domain.AccountDiscoveryIssue{}
 	for index := range accounts {
 		account := &accounts[index]
 		if account.IsValid != nil && !*account.IsValid {
@@ -51,7 +49,7 @@ func (adapter AdvertiserDiscoveryAdapter) Discover(
 		}
 		advertiserIDs, issue, err := adapter.expandAccount(ctx, channel, accessToken, *account)
 		if err != nil {
-			return domain.AdvertiserSnapshot{}, err
+			return domain.AdvertiserSnapshot{}, discoveryFailure(roleEndpoint(*account), "", err)
 		}
 		account.AdvertiserIDs = advertiserIDs
 		candidates = append(candidates, advertiserIDs...)
@@ -86,45 +84,49 @@ func (adapter AdvertiserDiscoveryAdapter) listAuthorizedAccounts(
 	ctx context.Context,
 	channel string,
 	accessToken string,
-) ([]domain.AuthorizedAccount, error) {
+) ([]domain.AuthorizedAccount, []domain.AccountDiscoveryIssue, error) {
 	client, err := adapter.Factory.Client(channel, ProfileAccountDiscovery, TimeoutStandard)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	response, err := platformretry.Do(
 		ctx, adapter.readRetry(), ClassifyReadError,
-		func(ctx context.Context, _ int) (*models.Oauth2AdvertiserGetResponse, error) {
-			response, httpResponse, sdkErr := client.sdk.Oauth2AdvertiserGetApi().Get(ctx).
-				AccessToken(accessToken).Execute()
-			if response == nil {
-				return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-			}
-			if err := GuardEnvelope(
-				httpResponse, sdkErr, response.Code, response.Message, response.RequestId,
-				true, response.Data != nil,
-			); err != nil {
-				return nil, err
-			}
-			return response, nil
+		func(ctx context.Context, _ int) (any, error) {
+			return client.accountData(ctx, authorizedAccountsEndpoint, accessToken, nil)
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list authorized accounts: %w", err)
+		return nil, nil, err
 	}
-	accounts := make([]domain.AuthorizedAccount, 0, len(response.Data.List))
+	rows, err := discoveryRows(response, "list")
+	if err != nil {
+		return nil, nil, discoveryFailure(authorizedAccountsEndpoint, "INVALID_ACCOUNT_LIST", err)
+	}
+	accounts := make([]domain.AuthorizedAccount, 0, len(rows))
+	issues := []domain.AccountDiscoveryIssue{}
 	seen := map[string]struct{}{}
-	for _, row := range response.Data.List {
-		account, err := mapAuthorizedAccount(row)
+	for _, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, nil, discoveryFailure(authorizedAccountsEndpoint, "INVALID_ACCOUNT_LIST", errors.New("invalid authorized account row"))
+		}
+		account, issue, err := mapAuthorizedAccount(channel, row)
 		if err != nil {
-			return nil, err
+			return nil, nil, discoveryFailure(authorizedAccountsEndpoint, "INVALID_ACCOUNT_ID", err)
+		}
+		if issue != nil {
+			issues = append(issues, *issue)
+		}
+		if account == nil {
+			continue
 		}
 		if _, exists := seen[account.AccountID]; exists {
-			return nil, fmt.Errorf("authorized account %s is duplicated", account.AccountID)
+			return nil, nil, discoveryFailure(authorizedAccountsEndpoint, "DUPLICATE_ACCOUNT_ID", errors.New("duplicated authorized account identity"))
 		}
 		seen[account.AccountID] = struct{}{}
-		accounts = append(accounts, account)
+		accounts = append(accounts, *account)
 	}
-	return accounts, nil
+	return accounts, issues, nil
 }
 
 func (adapter AdvertiserDiscoveryAdapter) verifyAdvertisers(
@@ -150,48 +152,50 @@ func (adapter AdvertiserDiscoveryAdapter) verifyAdvertisers(
 			end = len(candidates)
 		}
 		chunk := candidates[start:end]
-		ids := make([]int64, len(chunk))
-		for index, candidate := range chunk {
-			ids[index], err = parsePositiveID(candidate, "advertiser_id")
-			if err != nil {
-				return nil, err
+		for _, id := range chunk {
+			if _, err := parsePositiveID(id, "advertiser_id"); err != nil {
+				return nil, discoveryFailure(advertiserInfoEndpoint, "INVALID_ADVERTISER_ID", err)
 			}
 		}
 		response, err := platformretry.Do(
 			ctx, adapter.readRetry(), ClassifyReadError,
-			func(ctx context.Context, _ int) (*models.AdvertiserInfoV2Response, error) {
-				response, httpResponse, sdkErr := client.sdk.AdvertiserInfoV2Api().Get(ctx).
-					AccessToken(accessToken).AdvertiserIds(ids).Execute()
-				if response == nil {
-					return nil, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-				}
-				if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
-					return nil, err
-				}
-				return response, nil
+			func(ctx context.Context, _ int) (any, error) {
+				return client.accountData(ctx, advertiserInfoEndpoint, accessToken, url.Values{"advertiser_ids": {encodedDiscoveryIDs(chunk)}})
 			},
 		)
 		if err != nil {
-			return nil, fmt.Errorf("verify advertiser batch %d: %w", start/50+1, err)
+			return nil, err
 		}
-		for _, row := range response.Data {
-			if row == nil || row.Id == nil || *row.Id <= 0 {
-				return nil, errors.New("advertiser info response contains an invalid ID")
+		rows, err := discoveryRows(response, "list", "data")
+		if err != nil {
+			return nil, discoveryFailure(advertiserInfoEndpoint, "INVALID_ADVERTISER_INFO", err)
+		}
+		batch := map[string]bool{}
+		for _, id := range chunk {
+			batch[id] = true
+		}
+		for _, raw := range rows {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				return nil, discoveryFailure(advertiserInfoEndpoint, "INVALID_ADVERTISER_INFO", errors.New("invalid advertiser detail row"))
 			}
-			value := strconv.FormatInt(*row.Id, 10)
+			value := discoveryID(row, "id", "advertiser_id")
+			if value == "" || !batch[value] {
+				return nil, discoveryFailure(advertiserInfoEndpoint, "INVALID_ADVERTISER_INFO", errors.New("advertiser detail does not belong to the requested batch"))
+			}
 			if _, duplicate := seen[value]; duplicate {
-				return nil, fmt.Errorf("advertiser info response duplicated %s", value)
+				return nil, discoveryFailure(advertiserInfoEndpoint, "DUPLICATE_ADVERTISER_ID", errors.New("duplicated advertiser detail identity"))
 			}
 			seen[value] = struct{}{}
 			verified = append(verified, value)
 		}
 	}
 	if len(verified) != len(candidates) {
-		return nil, fmt.Errorf("advertiser verification returned %d of %d candidates", len(verified), len(candidates))
+		return nil, discoveryFailure(advertiserInfoEndpoint, "INCOMPLETE_ADVERTISER_INFO", errors.New("advertiser verification is incomplete"))
 	}
 	for _, candidate := range candidates {
 		if _, exists := seen[candidate]; !exists {
-			return nil, fmt.Errorf("advertiser verification omitted %s", candidate)
+			return nil, discoveryFailure(advertiserInfoEndpoint, "INCOMPLETE_ADVERTISER_INFO", errors.New("advertiser verification omitted a candidate"))
 		}
 	}
 	return candidates, nil
@@ -268,74 +272,23 @@ func (adapter AdvertiserDiscoveryAdapter) readRetry() platformretry.Policy {
 	return readPolicy(adapter.Retry)
 }
 
-func mapAuthorizedAccount(row *models.Oauth2AdvertiserGetResponseDataListInner) (domain.AuthorizedAccount, error) {
-	if row == nil {
-		return domain.AuthorizedAccount{}, errors.New("authorized account response contains a null row")
-	}
-	accountID := ""
-	if row.AccountId != nil && *row.AccountId > 0 {
-		accountID = strconv.FormatInt(*row.AccountId, 10)
-	}
-	if accountID == "" && row.AccountStringId != nil {
-		candidate := strings.TrimSpace(*row.AccountStringId)
-		if _, err := parsePositiveID(candidate, "authorized account_id"); err == nil {
-			accountID = candidate
-		}
-	}
-	if accountID == "" && row.AdvertiserId != nil && *row.AdvertiserId > 0 {
-		accountID = strconv.FormatInt(*row.AdvertiserId, 10)
-	}
-	if _, err := parsePositiveID(accountID, "authorized account_id"); err != nil {
-		return domain.AuthorizedAccount{}, err
-	}
-	accountType := ""
-	if row.AccountType != nil {
-		accountType = string(*row.AccountType)
-	}
-	accountRole := stringValue(row.AccountRole)
-	advertiserIDs := []string(nil)
-	if row.AdvertiserId != nil && *row.AdvertiserId > 0 {
-		advertiserIDs = []string{strconv.FormatInt(*row.AdvertiserId, 10)}
-	}
-	account := domain.AuthorizedAccount{
-		AccountID: accountID, AccountStringID: stringValue(row.AccountStringId),
-		AccountName: stringValue(row.AccountName), AccountRole: accountRole,
-		AccountType: accountType, AdvertiserName: stringValue(row.AdvertiserName),
-		IsValid: row.IsValid, AdvertiserIDs: advertiserIDs,
-	}
-	if accountType == "PLATFORM_ROLE_SHOP_ACCOUNT" || accountRole == "PLATFORM_ROLE_SHOP_ACCOUNT" {
-		account.ShopID = accountID
-	}
-	return account, nil
-}
-
 func pageFromPointers[T any](
 	expected int,
 	page, totalPages, totalNumber *int64,
 	rows []T,
 ) (pagination.Page[T], error) {
-	maxInt := int64(^uint(0) >> 1)
-	if totalPages == nil || *totalPages < 0 || *totalPages > maxInt {
-		return pagination.Page[T]{}, errors.New("response contains malformed page_info")
-	}
-	if *totalPages == 0 && expected == 1 && len(rows) == 0 {
-		if page != nil && (*page < 0 || *page > maxInt || *page != 0 && *page != 1) {
-			return pagination.Page[T]{}, errors.New("response contains malformed page_info")
+	info := map[string]any{}
+	for key, value := range map[string]*int64{"page": page, "total_page": totalPages, "total_number": totalNumber} {
+		if value != nil {
+			info[key] = json.Number(strconv.FormatInt(*value, 10))
 		}
-		if totalNumber != nil && *totalNumber != 0 {
-			return pagination.Page[T]{}, errors.New("response contains malformed page_info")
-		}
-		return pagination.Page[T]{Number: expected, TotalPages: 0, TotalNumber: 0, Rows: rows}, nil
 	}
-	if page == nil || totalNumber == nil ||
-		*page < 0 || *totalNumber < 0 ||
-		*page > maxInt || *totalNumber > maxInt {
-		return pagination.Page[T]{}, errors.New("response contains malformed page_info")
+	identities := make([]string, len(rows))
+	result, err := discoveryPage(map[string]any{"page_info": info}, expected, identities)
+	if err != nil {
+		return pagination.Page[T]{}, err
 	}
-	result := pagination.Page[T]{
-		Number: int(*page), TotalPages: int(*totalPages), TotalNumber: int(*totalNumber), Rows: rows,
-	}
-	return result, nil
+	return pagination.Page[T]{Number: result.Number, TotalPages: result.TotalPages, TotalNumber: result.TotalNumber, TotalNumberUnknown: result.TotalNumberUnknown, Rows: rows}, nil
 }
 
 func stringIDs(values []int64, field string) ([]string, error) {
@@ -362,21 +315,6 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
-}
-
-func filterStarMapAccounts(accounts []domain.AuthorizedAccount) []domain.AuthorizedAccount {
-	result := make([]domain.AuthorizedAccount, 0, len(accounts))
-	for _, account := range accounts {
-		role := account.AccountRole
-		if role == "" {
-			role = account.AccountType
-		}
-		if role == "PLATFORM_ROLE_STAR" || role == "PLATFORM_ROLE_STAR_AGENT" ||
-			role == "PLATFORM_ROLE_STAR_MCN" || role == "PLATFORM_ROLE_STAR_ISV" {
-			result = append(result, account)
-		}
-	}
-	return result
 }
 
 func identityString(value string) string { return value }

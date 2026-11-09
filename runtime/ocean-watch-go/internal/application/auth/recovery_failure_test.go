@@ -24,10 +24,44 @@ func (err diagnosticFixtureError) AuthorizationFailureReason() string { return e
 func (err diagnosticFixtureError) AuthorizationFailureMetadata() (int64, string, int) {
 	return err.code, err.requestID, err.httpStatus
 }
+func (err diagnosticFixtureError) RequiresReauthorization() bool {
+	return err.code == 40103 || err.code == 40107
+}
 
 type diagnosticWriteFailure struct {
 	CredentialStore
 	err error
+}
+
+type diagnosticAccountFailure struct {
+	endpoint, validation string
+}
+
+func (diagnosticAccountFailure) Error() string { return "fixture-private-secret" }
+func (err diagnosticAccountFailure) AuthorizationFailureContext() (string, string) {
+	return err.endpoint, err.validation
+}
+
+func TestAccountDiscoveryFailureContextIsAllowlisted(t *testing.T) {
+	for _, test := range []struct {
+		name, endpoint, validation string
+		retained                   bool
+	}{
+		{"classified", "/2/advertiser/info/", "INCOMPLETE_ADVERTISER_INFO", true},
+		{"unsafe", "/2/advertiser/info/?access_token=fixture-private-secret", "fixture-private-secret", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			view := RecoverySession{}
+			view.retainFailure(diagnosticAccountFailure{test.endpoint, test.validation}, failureAccountSync)
+			if test.retained != (view.FailureEndpoint != "") || test.retained != (view.FailureValidation != "") {
+				t.Fatal("account context was not filtered through its stable allowlists")
+			}
+			encoded, _ := json.Marshal(view.FailureDiagnostics())
+			if strings.Contains(string(encoded), "fixture-private-secret") {
+				t.Fatal("raw account error or untrusted metadata escaped into retained diagnostics")
+			}
+		})
+	}
 }
 
 func (store diagnosticWriteFailure) Write(context.Context, string, map[string]any) (string, error) {
@@ -96,6 +130,11 @@ func TestRecoveryFailureIdentifiesTheFailedStageWithoutRetainingSecrets(t *testi
 				return domain.AdvertiserSnapshot{}, errors.New("fixture-private-secret fixture-access-token")
 			})
 		}},
+		{"expired discovery token", failureAccountSync, "OFFICIAL_API_ERROR", true, func(flow *Service) {
+			flow.Syncer.Discovery = recoveryDiscoveryFunc(func(context.Context) (domain.AdvertiserSnapshot, error) {
+				return domain.AdvertiserSnapshot{}, diagnosticFixtureError{reason: "OFFICIAL_API_ERROR", code: 40103}
+			})
+		}},
 		{"account snapshot validation", failureAccountSync, "ACCOUNT_SNAPSHOT_INVALID", true, func(flow *Service) {
 			flow.Syncer.Discovery = staticDiscovery{snapshot: domain.AdvertiserSnapshot{
 				Accounts: []domain.AuthorizedAccount{{AccountID: "9001", AdvertiserIDs: []string{"1001"}}},
@@ -128,6 +167,9 @@ func TestRecoveryFailureIdentifiesTheFailedStageWithoutRetainingSecrets(t *testi
 			}
 			if test.name == "identity mismatch" && view.ErrorCode != "AUTHORIZATION_IDENTITY_MISMATCH" {
 				t.Fatal("identity mismatch was reported as a storage failure")
+			}
+			if test.name == "expired discovery token" && view.ErrorCode != "REAUTHORIZATION_REQUIRED" {
+				t.Fatal("invalid discovery access was incorrectly sent back to account sync")
 			}
 			if view.FailureDiagnostics()["failure_reason"] != test.reason {
 				t.Fatal("transport diagnostics lost the classified failure reason")

@@ -145,6 +145,7 @@ func (coordinator *RecoveryCoordinator) finishLocked(result AuthorizationResult,
 	coordinator.view.Status, coordinator.view.ErrorCode = "failed", "AUTHORIZATION_FAILED"
 	if err == nil {
 		coordinator.view.AccountCount, coordinator.view.AdvertiserCount = result.AuthorizedAccounts, len(result.AdvertiserIDs)
+		coordinator.view.DiscoveryIssueCount = len(result.DiscoveryIssues)
 		coordinator.view.CanResume = coordinator.input.AdvertiserID == ""
 		for _, id := range result.AdvertiserIDs {
 			if id == coordinator.input.AdvertiserID {
@@ -173,6 +174,10 @@ func (coordinator *RecoveryCoordinator) finishLocked(result AuthorizationResult,
 		coordinator.view.retainFailure(err, "")
 		if coordinator.input.Operation == "sync_accounts" || coordinator.view.SyncRequired {
 			coordinator.view.ErrorCode = "ACCOUNT_SYNC_FAILED"
+		}
+		var invalidToken InvalidRefreshError
+		if errors.As(err, &invalidToken) && invalidToken.RequiresReauthorization() {
+			coordinator.view.ErrorCode = "REAUTHORIZATION_REQUIRED"
 		}
 		var domainErr *domain.Error
 		if errors.As(err, &domainErr) {

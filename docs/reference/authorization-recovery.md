@@ -34,18 +34,22 @@ macOS 凭据写入使用 `security -i`，完整的原位更新命令与十六进
 2. 使用新 Token 调用 `api.oceanengine.com/open_api/2/user/info/` 获取官方用户 UID。UID 必须有效；响应提供 App ID 时必须与本机配置一致。Token 响应中的广告主列表不能替代角色展开。
 3. 授权身份按 `channel + app_id + authorized_user_id` 区分。未指定授权 ID 时，只复用唯一匹配的已验证记录；指定 ID 时核验其已知 App/用户身份。缺少身份字段的旧 grant 不自动合并，可由用户显式指定旧 ID 重新授权并补齐身份；多个匹配记录返回 `AUTHORIZATION_AMBIGUOUS`。身份不匹配返回 `AUTHORIZATION_IDENTITY_MISMATCH`，不替换凭据。
 4. 将新凭据写入安全凭据库并核验，然后选中新的 revision、保存 App/UID，将 grant 标为 `pending_account_sync=true`。新授权和重新授权均先保存这一状态；此前的账户快照留作恢复依据，待同步期间不能用于业务请求。
-5. 调用 `api.oceanengine.com/open_api/oauth2/advertiser/get/` 获取授权根账户，以 `account_role` 分支；仅在缺少该字段时兼容 `account_type`。失效根账户不保留可用广告主映射。
+5. 调用 `api.oceanengine.com/open_api/oauth2/advertiser/get/` 获取授权根账户，先以 `account_role` 判断角色；仅在缺少该字段时兼容 `account_type`，然后校验该角色所需的账户 ID。失效根账户不保留可用广告主映射。ID 接受精确的 JSON 整数或十进制字符串，不经过浮点转换。
 
 | 根账户角色 | 广告主获取接口与参数 |
 | --- | --- |
 | `ADVERTISER` | 直接取有效的 `advertiser_id`，缺失时使用有效账户 ID |
-| `PLATFORM_ROLE_AWEME` | 抖音号保留 `non_advertiser_role` 提示，不映射为广告主，继续展开其他根账户 |
+| `PLATFORM_ROLE_AWEME` | 抖音号保留 `non_advertiser_role` 提示，不映射为广告主，继续展开其他根账户；只有非数字 `account_string_id`（如 sec_uid）时不创建十进制账户映射 |
 | `CUSTOMER_ADMIN` / `CUSTOMER_OPERATOR` | `/2/customer_center/advertiser/list/`，传 `cc_account_id` 和 `account_source` |
 | `PLATFORM_ROLE_ENTERPRISE_BP_ADMIN` / `PLATFORM_ROLE_ENTERPRISE_BP_OPERATOR` | `/2/ebp/advertiser/list/`，传 `enterprise_organization_id` 和 `account_source` |
-| `PLATFORM_ROLE_SHOP_ACCOUNT`（千川） | `/v1.0/qianchuan/shop/advertiser/list/`，传 `shop_id` 和 `permission=["QC_AWEME"]`；优先读取 `list`，为空时兼容 `adv_id_list`，不重复合并两种表示 |
+| `PLATFORM_ROLE_SHOP_ACCOUNT`（千川） | `/v1.0/qianchuan/shop/advertiser/list/`，传 `shop_id` 和 `permission=["QC_AWEME"]`；优先读取 `list`，为空时兼容 `adv_id_list`，不重复合并两种表示；营销渠道跳过并保留 `non_channel_role` 提示 |
 | `PLATFORM_ROLE_QIANCHUAN_AGENT`（千川） | 沿用既有 `/2/agent/advertiser/select/` 和官方代理域名；应用缺少权限 `40002` 时记录发现问题 |
 
-客户中心、EBP、店铺及广告主详情使用 `api.oceanengine.com`；客户中心与 EBP 的营销来源为 `AD`，千川为 `QIANCHUAN`。展开接口每页 100 条，读取全部分页后合并去重，以每批最多 50 个 ID 调用 `/2/advertiser/info/` 校验。分页或详情校验失败不替换账户快照；快照激活还必须确认当前凭据 revision 与发现时一致，旧请求不能覆盖新授权。
+客户中心、EBP、店铺及广告主详情使用 `api.oceanengine.com`；客户中心与 EBP 的营销来源为 `AD`，千川为 `QIANCHUAN`。营销跳过千川代理商，营销/千川跳过星图角色；这些其他渠道根账户不进入当前渠道账户索引。无法识别的角色保留 `unsupported_account_role` 问题（角色文本归一为 `UNKNOWN`），已支持角色继续展开，但不能据此声称完整覆盖。授权根账户数量表示进入当前渠道快照的有效格式记录，不等同于官方原始列表行数。
+
+授权账户、客户中心、EBP 与广告主详情使用固定的受控 GET 和既有 SDK HTTP 客户端；响应在 Adapter 中归一化，避免生成类型的数字/枚举解析提前中断角色判断。客户中心广告主 ID 兼容 `advertiser_id`/`account_id`，EBP 兼容 `account_id`/`advertiser_id`，详情兼容 `id`/`advertiser_id` 及数组、`list`、`data` 列表包装。其他业务 SDK 接口保持原合同。
+
+展开接口每页请求 100 条，必须提供 `page_info.total_page` 并遍历全部声明页面（最多 100 页）。`page` 缺省或为 null 时使用本次请求页码；`total_number` 可缺省或为 null，任何页面提供的总量都必须一致并与最终唯一行数相符。总页数变化、跨页重复 ID、稀疏元数据下的多页空页及矛盾空首页仍拒绝。仅完成全部分页后才合并不同根账户的重复广告主，以每批最多 50 个 ID 调用 `/2/advertiser/info/` 校验；详情必须属于本批请求且覆盖全部候选。分页或详情校验失败不替换账户快照；快照激活还必须确认当前凭据 revision 与发现时一致，旧请求不能覆盖新授权。
 
 星图保留独立边界：仅星图账户进入发现，详情使用 `/2/star/info/`；暂不支持展开的星图角色记录发现问题。明确识别的权限缺失或不支持角色通过 `account_discovery_issues` 报告，不表示该角色全部账户已经发现。
 
@@ -53,11 +57,11 @@ OAuth、用户核验、授权账户展开和账户信息批量校验只依赖渠
 
 ## 完成与恢复
 
-`completed` 表示指定 grant 的凭据和通过校验的账户快照已保存；已记录的发现问题仍需单独查看，不代表所有角色均已覆盖。指定 `advertiser_id` 时，必须确认新快照实际覆盖该广告主才返回 `can_resume=true`。
+`completed` 表示指定 grant 的凭据和通过校验的账户快照已保存；已记录的发现问题仍需单独查看，不代表所有角色均已覆盖。存在未展开角色时，本机页明确提示覆盖范围，MCP 通过 `_meta["ocean_watch.account_discovery"]` 返回 `issue_count` 与 `complete=false`，并附加安全提示文本；结构化 session 不新增字段。指定 `advertiser_id` 时，必须确认新快照实际覆盖该广告主才返回 `can_resume=true`。
 
 授权保存之前失败，本机原 revision 不变；官方平台是否仍接受旧 Token 不能由本机状态保证。保存之后账户发现失败或被取消，新授权和重新授权都保留新 revision、待同步状态及安全的 `authorization_id`，会话返回 `sync_required=true`。使用 `start_account_sync` 恢复，不再兑换授权码。补同步再次失败也保留待同步状态；原本可用授权的普通同步失败不会额外将其标为待同步。只有成功激活新快照后才解除业务限制。
 
-取消和过期分别返回 `AUTHORIZATION_CANCELLED`、`AUTHORIZATION_EXPIRED`；本机服务异常为 `AUTHORIZATION_SERVICE_FAILED`，只有后台收尾完成后才发布这些终态。官方刷新错误 `40103`、`40107` 统一为不可重试的 `REAUTHORIZATION_REQUIRED`，错误中给出 `start_authorization` 与渠道。账户快照待同步单独返回 `ACCOUNT_SYNC_REQUIRED`，不能把它当作必须重新 OAuth。
+取消和过期分别返回 `AUTHORIZATION_CANCELLED`、`AUTHORIZATION_EXPIRED`；本机服务异常为 `AUTHORIZATION_SERVICE_FAILED`，只有后台收尾完成后才发布这些终态。官方刷新或账户发现阶段的 `40103`、`40107` 统一为不可重试的 `REAUTHORIZATION_REQUIRED`，需使用原渠道及已知授权 ID 重新授权。账户快照待同步单独返回 `ACCOUNT_SYNC_REQUIRED`，不能把它当作必须重新 OAuth。
 
 Skill 保留原请求中的模板、链接和账户参数；授权/重新授权时让用户打开返回的官方 OAuth URL，账户同步时打开返回的本机确认页，查询会话直到终态，完成后重发同一个只读查询/预检。恢复不重复要求用户提供已有链接，不提交投放，也不使用 Shell/CLI 代替 WorkBuddy 的 MCP 业务路由。取消、超时、范围不符或失败都应停止自动恢复。
 
@@ -77,6 +81,8 @@ Skill 保留原请求中的模板、链接和账户参数；授权/重新授权�
 `failure_reason` 区分官方业务拒绝、HTTP 错误、请求失败、授权响应缺少字段、用户信息无有效 UID、授权身份不匹配或歧义、凭据写入失败和写入后核验失败等情况。账户同步进一步区分 `ACCOUNT_DISCOVERY_FAILED`（账户发现）、`ACCOUNT_SNAPSHOT_INVALID`（数据校验）、`ACCOUNT_ACTIVATION_FAILED`（快照保存）和 `ACCOUNT_MAPPING_CONFLICT`（账户已属于其他授权）。归属冲突不能靠重复同步解决，必须由用户明确决定是否传入 `rebind_existing=true`；确认页会显示账户改绑的实际影响。
 
 官方响应可附带正整数 `official_error_code`、100–599 的 `http_status`，以及最多 128 个字母、数字、下划线或连字符组成的 `official_request_id`。不合规字段被丢弃，不将错误消息或链接误作请求编号。
+
+账户发现诊断进一步保留白名单 `failed_endpoint` 和 `validation_reason`：接口限定为授权根账户、客户中心、EBP、广告主详情、千川代理商/店铺或星图详情路径；分类区分无效响应/账户列表/ID/有效性、重复 ID、分页无效、详情范围不匹配和详情不完整。接口中的查询参数、原始账户/响应、未知分类文本及凭据均不保留。本机页面把这些分类翻译为具体失败接口与校验原因，授权已保存时明确说明 OAuth 保存成功。
 
 MCP 继续返回原有 `session` 结构，诊断通过标准工具结果 `_meta["ocean_watch.authorization_failure"]` 和额外的安全文本内容提供，不修改工具输入、输出 Schema 或授权状态的含义。CLI 将同一白名单诊断写入错误 `details`，本机状态页显示失败环节、分类原因及可公开的官方错误码和请求编号。诊断不完整时应明确原因尚未核实，不能根据通用 `AUTHORIZATION_FAILED` 猜测应用密钥、网络或本地保存中的哪一项失败。
 

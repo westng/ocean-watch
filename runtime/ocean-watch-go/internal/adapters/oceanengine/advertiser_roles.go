@@ -3,9 +3,8 @@ package oceanengine
 import (
 	"context"
 	"errors"
-	"fmt"
+	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/oceanengine/ad_open_sdk_go/models"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
@@ -18,9 +17,9 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 	accessToken string,
 	account domain.AuthorizedAccount,
 ) ([]string, *domain.AccountDiscoveryIssue, error) {
-	role := account.AccountRole
-	if role == "" {
-		role = account.AccountType
+	role := effectiveAccountRole(account)
+	if issue := nonAdvertisingRole(channel, role, account.AccountID); issue != nil {
+		return []string{}, issue, nil
 	}
 	sourceID, err := parsePositiveID(account.AccountID, "authorized account_id")
 	if err != nil {
@@ -33,11 +32,6 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 			advertiserID = account.AdvertiserIDs[0]
 		}
 		return []string{advertiserID}, nil, nil
-	case "PLATFORM_ROLE_AWEME":
-		return []string{}, &domain.AccountDiscoveryIssue{
-			AccountID: account.AccountID, Role: role,
-			Code: "non_advertiser_role", Reason: "account_role_has_no_advertiser_expansion",
-		}, nil
 	case "PLATFORM_ROLE_STAR":
 		return []string{account.AccountID}, nil, nil
 	case "PLATFORM_ROLE_STAR_AGENT", "PLATFORM_ROLE_STAR_MCN", "PLATFORM_ROLE_STAR_ISV":
@@ -52,9 +46,6 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 		rows, err := adapter.listEBP(ctx, channel, accessToken, sourceID)
 		return rows, nil, err
 	case "PLATFORM_ROLE_QIANCHUAN_AGENT":
-		if channel != "qianchuan" {
-			return nil, nil, fmt.Errorf("role %s is invalid for channel %s", role, channel)
-		}
 		rows, err := adapter.listAgent(ctx, channel, accessToken, sourceID)
 		var envelope *EnvelopeError
 		if errors.As(err, &envelope) && envelope.Code == 40002 {
@@ -64,13 +55,12 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 		}
 		return rows, nil, err
 	case "PLATFORM_ROLE_SHOP_ACCOUNT":
-		if channel != "qianchuan" {
-			return nil, nil, fmt.Errorf("role %s is invalid for channel %s", role, channel)
-		}
 		rows, err := adapter.listShop(ctx, channel, accessToken, sourceID)
 		return rows, nil, err
 	default:
-		return nil, nil, fmt.Errorf("authorized account role %s is not supported for complete discovery", role)
+		return []string{}, &domain.AccountDiscoveryIssue{
+			AccountID: account.AccountID, Role: "UNKNOWN", Code: "unsupported_account_role", Reason: "account_role_expansion_not_supported",
+		}, nil
 	}
 }
 
@@ -83,44 +73,9 @@ func (adapter AdvertiserDiscoveryAdapter) listCustomerCenter(
 	if err != nil {
 		return nil, err
 	}
-	accountSource := models.AD_CustomerCenterAdvertiserListV2AccountSource
-	if channel == "qianchuan" {
-		accountSource = models.QIANCHUAN_CustomerCenterAdvertiserListV2AccountSource
-	}
-	return pagination.CollectPages(ctx, pagination.PageOptions[string]{
-		Retry: adapter.readRetry(), Classify: ClassifyReadError, Key: identityString,
-		Fetch: func(ctx context.Context, page int) (pagination.Page[string], error) {
-			response, httpResponse, sdkErr := client.sdk.CustomerCenterAdvertiserListV2Api().Get(ctx).
-				AccessToken(accessToken).AccountSource(accountSource).CcAccountId(accountID).
-				Page(int64(page)).PageSize(advertiserPageSize).Execute()
-			if response == nil {
-				return pagination.Page[string]{}, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-			}
-			if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
-				return pagination.Page[string]{}, err
-			}
-			rows := make([]string, 0, len(response.Data.List))
-			for _, row := range response.Data.List {
-				if row == nil {
-					return pagination.Page[string]{}, errors.New("customer center response contains a null row")
-				}
-				value := ""
-				if row.AdvertiserId != nil {
-					value = strconv.FormatInt(*row.AdvertiserId, 10)
-				} else if row.AccountId != nil {
-					value = strings.TrimSpace(*row.AccountId)
-				}
-				if _, err := parsePositiveID(value, "customer center advertiser_id"); err != nil {
-					return pagination.Page[string]{}, err
-				}
-				rows = append(rows, value)
-			}
-			if response.Data.PageInfo == nil {
-				return pagination.Page[string]{}, errors.New("customer center response is missing page_info")
-			}
-			return pageFromPointers(page, response.Data.PageInfo.Page, response.Data.PageInfo.TotalPage, response.Data.PageInfo.TotalNumber, rows)
-		},
-	})
+	return adapter.collectAccountIDs(ctx, client, accessToken, customerAccountsEndpoint,
+		url.Values{"cc_account_id": {strconv.FormatInt(accountID, 10)}, "account_source": {accountSource(channel)}},
+		[]string{"list"}, []string{"advertiser_id", "account_id"})
 }
 
 func (adapter AdvertiserDiscoveryAdapter) listEBP(
@@ -132,35 +87,59 @@ func (adapter AdvertiserDiscoveryAdapter) listEBP(
 	if err != nil {
 		return nil, err
 	}
-	accountSource := models.AD_EbpAdvertiserListV2AccountSource
+	return adapter.collectAccountIDs(ctx, client, accessToken, enterpriseAccountsEndpoint,
+		url.Values{"enterprise_organization_id": {strconv.FormatInt(accountID, 10)}, "account_source": {accountSource(channel)}},
+		[]string{"account_list", "list"}, []string{"account_id", "advertiser_id"})
+}
+
+func accountSource(channel string) string {
 	if channel == "qianchuan" {
-		accountSource = models.QIANCHUAN_EbpAdvertiserListV2AccountSource
+		return "QIANCHUAN"
 	}
-	return pagination.CollectPages(ctx, pagination.PageOptions[string]{
+	return "AD"
+}
+
+func (adapter AdvertiserDiscoveryAdapter) collectAccountIDs(ctx context.Context, client *Client, token, endpoint string, query url.Values, listKeys, idKeys []string) ([]string, error) {
+	rows, err := pagination.CollectPages(ctx, pagination.PageOptions[string]{
 		Retry: adapter.readRetry(), Classify: ClassifyReadError, Key: identityString,
 		Fetch: func(ctx context.Context, page int) (pagination.Page[string], error) {
-			response, httpResponse, sdkErr := client.sdk.EbpAdvertiserListV2Api().Get(ctx).
-				AccessToken(accessToken).EnterpriseOrganizationId(accountID).AccountSource(accountSource).
-				Page(int64(page)).PageSize(advertiserPageSize).Execute()
-			if response == nil {
-				return pagination.Page[string]{}, GuardEnvelope(httpResponse, sdkErr, nil, nil, nil, true, false)
-			}
-			if err := GuardEnvelope(httpResponse, sdkErr, response.Code, response.Message, response.RequestId, true, response.Data != nil); err != nil {
+			query.Set("page", strconv.Itoa(page))
+			query.Set("page_size", strconv.Itoa(advertiserPageSize))
+			response, err := client.accountData(ctx, endpoint, token, query)
+			if err != nil {
 				return pagination.Page[string]{}, err
 			}
-			rows := make([]string, 0, len(response.Data.AccountList))
-			for _, row := range response.Data.AccountList {
-				if row == nil || row.AccountId == nil || *row.AccountId <= 0 {
-					return pagination.Page[string]{}, errors.New("EBP response contains an invalid advertiser ID")
+			data, ok := response.(map[string]any)
+			if !ok {
+				return pagination.Page[string]{}, discoveryFailure(endpoint, "INVALID_ACCOUNT_LIST", errors.New("account page data is not an object"))
+			}
+			items, err := discoveryRows(data, listKeys...)
+			if err != nil {
+				return pagination.Page[string]{}, discoveryFailure(endpoint, "INVALID_ACCOUNT_LIST", err)
+			}
+			ids := make([]string, 0, len(items))
+			for _, item := range items {
+				row, ok := item.(map[string]any)
+				if !ok {
+					return pagination.Page[string]{}, discoveryFailure(endpoint, "INVALID_ACCOUNT_LIST", errors.New("invalid account page row"))
 				}
-				rows = append(rows, strconv.FormatInt(*row.AccountId, 10))
+				id := discoveryID(row, idKeys...)
+				if id == "" {
+					return pagination.Page[string]{}, discoveryFailure(endpoint, "INVALID_ADVERTISER_ID", errors.New("missing advertiser identity"))
+				}
+				ids = append(ids, id)
 			}
-			if response.Data.PageInfo == nil {
-				return pagination.Page[string]{}, errors.New("EBP response is missing page_info")
+			result, err := discoveryPage(data, page, ids)
+			if err != nil {
+				return pagination.Page[string]{}, discoveryFailure(endpoint, "INVALID_PAGINATION", err)
 			}
-			return pageFromPointers(page, response.Data.PageInfo.Page, response.Data.PageInfo.TotalPage, response.Data.PageInfo.TotalNumber, rows)
+			return result, nil
 		},
 	})
+	if err != nil {
+		return nil, discoveryFailure(endpoint, "INVALID_PAGINATION", err)
+	}
+	return rows, nil
 }
 
 func (adapter AdvertiserDiscoveryAdapter) listAgent(
