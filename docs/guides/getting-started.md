@@ -71,7 +71,7 @@ Windows 使用 `skills\ads-plan-monitor\run.cmd`。`setup doctor` 分别检查 P
 
 星图通过独立的 `xt-plan-monitor` Skill 接入，授权管理显式使用 `channel=star_map`。本地状态查询用 `get_star_map_authorization`，负责账号查询用 `list_managed_accounts` 的 `star_map` 过滤。星图账号使用 `subject_kind=star_account`；星图计划、素材和报表尚未接入，不复用营销或千川能力。
 
-在宿主对话中，Skill 使用 `start_authorization` 返回的官方 OAuth URL，并通过 `get_authorization_session` 等待结果。已保存授权但账户待同步时使用 `start_account_sync` 的本机确认页。不要在聊天中粘贴 Secret、Token 或授权码。MCP 尚未配置对应渠道 App 时，应先按[配置与授权](configuration.md)完成安全配置；恢复工具不通过模型或浏览器表单收集 App Secret。
+在宿主对话中，Skill 使用 `start_authorization` 返回的本机 App 配置页或官方 OAuth URL，并通过 `get_authorization_session` 等待结果。尚未配置对应渠道 App 时，会话进入 `awaiting_configuration`；用户只在受保护的本机表单填写 App ID/Secret，安全保存后在同一会话继续官方 OAuth。已保存授权但账户待同步时使用 `start_account_sync` 的本机确认页。不要在聊天或工具参数中粘贴 Secret、Token 或授权码；详见[配置与授权](configuration.md)。
 
 CLI 授权示例：
 

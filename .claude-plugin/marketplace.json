@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "ocean-watch",
-      "version": "3.0.0-alpha.1+codex.release-20261108-alpha1",
+      "version": "3.0.0-alpha.2+codex.release-20261126-alpha2",
       "source": "./",
       "description": "Ocean Engine OAuth, responsible-account reporting, Marketing and Qianchuan plan operations, performance reporting, and monitoring analysis over one shared Go runtime.",
       "homepage": "https://github.com/westng/ocean-watch",

@@ -1,6 +1,6 @@
 {
   "name": "ocean-watch",
-  "version": "3.0.0-alpha.1+codex.release-20261108-alpha1",
+  "version": "3.0.0-alpha.2+codex.release-20261126-alpha2",
   "description": "Claude Code plugin for Ocean Engine OAuth, responsible-account reporting, plan operations, performance reporting, and monitoring analysis. Includes a dedicated Star Map authorization and account-management Skill.",
   "author": {
     "name": "westng",
