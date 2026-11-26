@@ -25,11 +25,13 @@ import (
 )
 
 type proxySession struct {
-	candidate runtimeupdate.Candidate
-	session   *mcp.ClientSession
-	lease     *filesystem.FileLock
-	active    int
-	retired   bool
+	candidate           runtimeupdate.Candidate
+	session             *mcp.ClientSession
+	lease               *filesystem.FileLock
+	active              int
+	retired             bool
+	interactions        map[string]time.Time
+	openingInteractions int
 }
 
 var errHostContractChanged = errors.New("installed Ocean Watch runtime changed the stable MCP tool contract")
@@ -41,9 +43,10 @@ type Proxy struct {
 	LogWriter io.Writer
 	Now       func() time.Time
 
-	mu       sync.Mutex
-	current  *proxySession
-	expected []byte
+	mu              sync.Mutex
+	current         *proxySession
+	expected        []byte
+	upgradeDeferred bool
 }
 
 func RunProxy(ctx context.Context, version, pluginRoot string) error {
@@ -93,6 +96,9 @@ func (proxy *Proxy) Forward(ctx context.Context, request *mcp.CallToolRequest) (
 	}
 	if current != nil {
 		current.active++
+		if startsInteraction(request.Params.Name) {
+			current.openingInteractions++
+		}
 	}
 	proxy.mu.Unlock()
 	if current == nil {
@@ -118,18 +124,40 @@ func (proxy *Proxy) Forward(ctx context.Context, request *mcp.CallToolRequest) (
 			"runtime_version":   current.candidate.Version,
 		}
 	}
+	proxy.trackInteraction(current, params.Name, result)
+	if startsInteraction(params.Name) {
+		proxy.mu.Lock()
+		current.openingInteractions--
+		proxy.mu.Unlock()
+	}
 	proxy.releaseSession(current)
 	return result, err
 }
 
 func (proxy *Proxy) ensureSession(ctx context.Context) (*mcp.ClientSession, error) {
 	started := proxy.now()
+	proxy.mu.Lock()
+	if proxy.mustRetainCurrentLocked() {
+		proxy.upgradeDeferred = true
+		session := proxy.current.session
+		proxy.mu.Unlock()
+		return session, nil
+	}
+	proxy.mu.Unlock()
 	candidate, lease, err := proxy.Manager.ResolveLeased(ctx)
 	if err != nil {
 		return nil, err
 	}
 	proxy.mu.Lock()
 	defer proxy.mu.Unlock()
+	// A call may have started while the candidate was being resolved. In
+	// particular, start_authorization may still be returning a session handle.
+	if proxy.mustRetainCurrentLocked() {
+		_ = lease.Release()
+		proxy.upgradeDeferred = true
+		return proxy.current.session, nil
+	}
+	proxy.upgradeDeferred = false
 	previousVersion := ""
 	if proxy.current != nil {
 		previousVersion = proxy.current.candidate.Version
@@ -240,7 +268,10 @@ func (proxy *Proxy) monitor(ctx context.Context) {
 			return
 		case <-ticker.C:
 			fingerprint := installedVersionFingerprint(cacheRoot)
-			if fingerprint == "" || fingerprint == lastFingerprint {
+			proxy.mu.Lock()
+			deferred := proxy.upgradeDeferred
+			proxy.mu.Unlock()
+			if fingerprint == "" || fingerprint == lastFingerprint && !deferred {
 				continue
 			}
 			lastFingerprint = fingerprint
@@ -249,6 +280,69 @@ func (proxy *Proxy) monitor(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// An OAuth/configuration session spans multiple tool calls. A quiet RPC
+// connection is not an idle business session. Keep its runtime until the
+// caller observes a terminal result, or its bounded lifetime has elapsed.
+func (proxy *Proxy) mustRetainCurrentLocked() bool {
+	if proxy.current == nil {
+		return false
+	}
+	for id, expiry := range proxy.current.interactions {
+		if !proxy.now().Before(expiry) {
+			delete(proxy.current.interactions, id)
+		}
+	}
+	return proxy.current.openingInteractions > 0 || len(proxy.current.interactions) > 0
+}
+
+func startsInteraction(tool string) bool {
+	return tool == "start_authorization" || tool == "start_account_sync" || tool == "start_f2_configuration"
+}
+
+func (proxy *Proxy) trackInteraction(current *proxySession, tool string, result *mcp.CallToolResult) {
+	if result == nil || result.IsError {
+		return
+	}
+	family := ""
+	switch tool {
+	case "start_authorization", "start_account_sync", "get_authorization_session", "cancel_authorization_session":
+		family = "authorization"
+	case "start_f2_configuration", "get_f2_configuration_session", "cancel_f2_configuration_session":
+		family = "f2"
+	default:
+		return
+	}
+	var payload struct {
+		Session struct {
+			ID      string `json:"session_id"`
+			Channel string `json:"channel"`
+			Status  string `json:"status"`
+			Expires string `json:"expires_at"`
+		} `json:"session"`
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil || json.Unmarshal(encoded, &payload) != nil || payload.Session.ID == "" {
+		return
+	}
+	key := family + ":" + payload.Session.Channel + ":" + payload.Session.ID
+	proxy.mu.Lock()
+	defer proxy.mu.Unlock()
+	switch payload.Session.Status {
+	case "completed", "failed", "cancelled", "expired":
+		delete(current.interactions, key)
+		return
+	}
+	expiry, err := time.Parse(time.RFC3339, payload.Session.Expires)
+	if err != nil {
+		return
+	}
+	if current.interactions == nil {
+		current.interactions = map[string]time.Time{}
+	}
+	// Allow bounded worker/listener cleanup at the session deadline.
+	current.interactions[key] = expiry.Add(time.Minute)
 }
 
 func (proxy *Proxy) now() time.Time {

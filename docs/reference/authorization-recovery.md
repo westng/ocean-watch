@@ -4,16 +4,16 @@
 
 | MCP 工具 | 必填参数 | 可选参数 | 行为 |
 | --- | --- | --- | --- |
-| `start_authorization` | `channel` | `advertiser_id`, `authorization_id`, `rebind_existing` | 已配置 OAuth App 时直接返回官方 OAuth URL；指定 ID 时核验身份并更新该 grant，未指定时按官方用户与 App 匹配唯一既有 grant，或创建新 grant；保存后同步账户 |
+| `start_authorization` | `channel` | `advertiser_id`, `authorization_id`, `rebind_existing` | 未配置 App 时返回本机配置页，用户填写后在同一会话继续 OAuth；已配置时直接返回官方 OAuth URL；指定 ID 时核验身份并更新该 grant，未指定时按官方用户与 App 匹配唯一既有 grant，或创建新 grant；保存后同步账户 |
 | `start_account_sync` | `channel`, `authorization_id` | `advertiser_id`, `rebind_existing` | 返回本机确认页；确认后同步指定授权，必要的 Token 刷新沿用共享锁 |
 | `get_authorization_session` | `channel`, `session_id` | 无 | 查询本实例会话的安全状态，不读取 Token 值、不发官方请求 |
 | `cancel_authorization_session` | `channel`, `session_id` | 无 | 取消未完成会话；已经保存的授权不会被删除，已派发的请求不能承诺撤销 |
 
 `channel` 必须显式为 `marketing`、`qianchuan` 或 `star_map`，不使用默认渠道。所有输入拒绝未声明字段；不接受 Secret、Token、授权码、回调地址、可执行命令或模型确认标记。`authorization_id` 用于明确指定既有 grant；仅指定 `advertiser_id` 不会自动选择或替换旧授权。`rebind_existing` 默认 false，只有用户明确要求改变账户归属时才传 true。
 
-状态为 `awaiting_user`、`awaiting_callback`、`authorizing`、`syncing`、`completed`、`failed`、`cancelled`、`expired`。新授权/重新授权在启动时进入 `awaiting_callback` 并返回官方 OAuth URL；账户同步仍进入 `awaiting_user` 并返回本机确认页。MCP 启动请求立即返回，浏览器流程不占住 MCP 请求；该请求结束或浏览器断开不会取消已经接收的授权任务。Runtime 正常关闭会请求取消活动会话，并等待后台任务退出后释放本机服务。CLI 则等待完整业务结果和 HTTP 收尾后才返回。会话只保存在启动它的 Runtime 中，过期或重启后应重新发起。一个 Runtime 同时只接受一个活动会话，相同请求复用该会话；其他进程占用回调端口时返回忙碌，不接管监听。
+状态为 `awaiting_configuration`、`awaiting_user`、`awaiting_callback`、`authorizing`、`syncing`、`completed`、`failed`、`cancelled`、`expired`。新授权/重新授权在缺少 App 配置时进入 `awaiting_configuration` 并返回 `/oauth/setup?session=...` 本机页面，安全保存并回读配置后转入 `awaiting_callback`；已有 App 时直接返回官方 OAuth URL；账户同步仍进入 `awaiting_user` 并返回本机确认页。MCP 启动请求立即返回，浏览器流程不占住 MCP 请求；该请求结束或浏览器断开不会取消已经接收的授权任务。Runtime 正常关闭会请求取消活动会话，并等待后台任务退出后释放本机服务。CLI 则等待完整业务结果和 HTTP 收尾后才返回。会话只保存在启动它的 Runtime 中，过期或重启后应重新发起。一个 Runtime 同时只接受一个活动会话，相同请求复用该会话；其他进程占用回调端口时返回忙碌，不接管监听。
 
-MCP 本机回调服务仅监听 `127.0.0.1:8787`，沿用 CLI 的 `/oauth/callback`，会话有效期十分钟。CLI 默认等待五分钟，可用受控命令参数指定 loopback 回调地址和超时。新授权/重新授权直接进入官方 OAuth；账户同步才使用本机确认页。缺失的 App 配置必须先通过受控 CLI 写入 OS 凭据库，MCP/浏览器不收集 Secret。带 `authorization_id` 时授权范围明确显示这是替换既有 grant 的凭据。账户冲突默认失败，只有显式 `rebind_existing=true` 才允许改变归属；模型调用本身不批准覆盖映射。回调使用随机 state，校验渠道和一次性 state；回调地址、官方站点由 Runtime 固定，授权码只在进程内交给 Core。凭据不进入 MCP、日志或会话状态。
+MCP 本机回调服务仅监听 `127.0.0.1:8787`，沿用 CLI 的 `/oauth/callback`，会话有效期十分钟。CLI 默认等待五分钟，可用受控命令参数指定 loopback 回调地址和超时。首次缺少 App 时使用本机配置表单，App ID/Secret 仅通过受保护的本机 POST 交给 Core，保存至系统凭据库并回读后以 303 跳转至固定官方 OAuth 地址。工具输入和输出不接收凭据。表单验证 Host、来源、独立 CSRF、会话状态及请求大小；跨进程配置锁和已配置检查禁止用首次配置覆盖既有 App。账户同步仍使用本机确认页。带 `authorization_id` 时授权范围明确显示这是替换既有 grant 的凭据。账户冲突默认失败，只有显式 `rebind_existing=true` 才允许改变归属；模型调用本身不批准覆盖映射。回调使用随机 state，校验渠道和一次性 state；回调地址、官方站点由 Runtime 固定，授权码只在进程内交给 Core。凭据不进入 MCP、日志或会话状态。
 
 ## 服务生命周期
 
@@ -23,6 +23,8 @@ MCP 本机回调服务仅监听 `127.0.0.1:8787`，沿用 CLI 的 `/oauth/callba
 4. 正常完成或失败时，MCP 服务在最终结果页成功写出后开始关闭；浏览器未取结果时，最多保留五秒结果页交付窗口。新会话、显式取消或 Runtime 关闭可以结束这段窗口。该窗口从业务任务结束后起算，不会截断换码或账户同步。
 5. 取消、过期或服务异常先取消任务 context，再等待换码、用户核验、存储或同步中的 worker 收尾；worker 尚未退出时不发布取消/过期终态，也不主动关闭监听器。取消调用自身截止时间到达可以先返回，但后台收尾仍继续。已成功提交的结果优先保留为成功，不会被并发取消改成“未保存”。
 6. 统一关闭路径在业务 worker 退出后执行 HTTP graceful shutdown，最多等待五秒 HTTP 收尾，必要时关闭残留连接，并等待 Serve 返回。关闭后端口释放，MCP 仍可查询本 Runtime 保留的安全终态。
+
+稳定代理在 OAuth、账户同步和 F2 配置会话未结束时保留原 Runtime；收到终态或达到会话有效期及一分钟收尾窗口后才允许兼容热切换，工具请求暂时空闲不会使会话丢失。启动会话的在途调用也受保护。
 
 本实现不是独立常驻服务，也不提供跨重启的授权会话恢复；进程被强制终止时无法保证继续处理。重新启动后应查询已保存的 grant 和账户状态，再发起所需的授权或同步；不能把尚未完成的内存会话当作成功。
 
@@ -63,7 +65,7 @@ OAuth、用户核验、授权账户展开和账户信息批量校验只依赖渠
 
 取消和过期分别返回 `AUTHORIZATION_CANCELLED`、`AUTHORIZATION_EXPIRED`；本机服务异常为 `AUTHORIZATION_SERVICE_FAILED`，只有后台收尾完成后才发布这些终态。官方刷新或账户发现阶段的 `40103`、`40107` 统一为不可重试的 `REAUTHORIZATION_REQUIRED`，需使用原渠道及已知授权 ID 重新授权。账户快照待同步单独返回 `ACCOUNT_SYNC_REQUIRED`，不能把它当作必须重新 OAuth。
 
-Skill 保留原请求中的模板、链接和账户参数；授权/重新授权时让用户打开返回的官方 OAuth URL，账户同步时打开返回的本机确认页，查询会话直到终态，完成后重发同一个只读查询/预检。恢复不重复要求用户提供已有链接，不提交投放，也不使用 Shell/CLI 代替 WorkBuddy 的 MCP 业务路由。取消、超时、范围不符或失败都应停止自动恢复。
+Skill 保留原请求中的模板、链接和账户参数；授权/重新授权时让用户打开返回的 `authorization_url`（本机配置页或官方 OAuth 页），账户同步时打开返回的本机确认页，查询会话直到终态，完成后重发同一个只读查询/预检。恢复不重复要求用户提供已有链接，不提交投放，也不使用 Shell/CLI 代替 WorkBuddy 的 MCP 业务路由。取消、超时、范围不符或失败都应停止自动恢复。
 
 ## 失败诊断
 

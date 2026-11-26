@@ -1,5 +1,6 @@
 # Marketing Workflow Reference
 
+Current alpha contract: task MCP routes in `SKILL.md` take precedence over diagnostic CLI examples here. Legacy online writes are unavailable. Only Qianchuan work creation/append uses the protected Operation flow; local template/account changes keep their explicit local-write contracts. Agent template creation uses [template-create.md](template-create.md); terminal wizards are for direct human CLI use.
 > 按需详细合同。`../SKILL.md` 的快速路由矩阵具有入口优先级；仅在已确定为复杂 CLI 分支后读取本文件。
 
 # Ads Plan Monitor
@@ -23,7 +24,7 @@ This is one Skill with internal branches, not separate create/query/strategy ski
 
 This Skill owns only `marketing` (巨量营销): OAuth, account discovery, templates, materials, plans, reports, and strategy. Route every Qianchuan request to `$qc-plan-monitor`; never reuse Marketing credentials, endpoints, templates, or creation transactions for Qianchuan.
 
-For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, do not assume Marketing from the active account, existing authorization, or default channel. Run the shared `templates create` entry without `--channel` and ask the user to choose `巨量营销` or `巨量千川` before showing source templates. An unconfigured or unauthorized channel remains selectable for template creation; clearly state that authorization is required before real delivery. After Marketing is selected, ask `混剪素材（账户上传）` or `原生素材（达人授权）` before showing source templates, and show only business templates bound to that material mode.
+For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, do not assume Marketing from the active account, existing authorization, or default channel. Use `templates create --input-json '{}'` and its `missing_fields`/`choices` to ask the user to choose `巨量营销` or `巨量千川` before showing source templates. An unconfigured or unauthorized channel remains selectable for template creation; clearly state that authorization is required before real delivery. After Marketing is selected, ask `混剪素材（账户上传）` or `原生素材（达人授权）` before showing source templates, and show only business templates bound to that material mode.
 
 After Qianchuan is selected, ask `商品全域` or `直播全域` before showing source templates. Never silently default one Qianchuan template kind.
 
@@ -54,7 +55,7 @@ Core routes:
 | Advertiser authorization mapping | `auth mappings --channel marketing` |
 | List local Marketing/Qianchuan templates | MCP `list_templates` |
 | Show one exact local template | MCP `get_template` |
-| Create Marketing template | `templates create --channel marketing` |
+| Create Marketing template | `templates create --input-json JSON` (see `template-create.md`) |
 | Validate/delete template | `templates validate` / `templates delete` |
 | Uploaded videos | MCP `search_marketing_videos` |
 | Creator videos | MCP `search_marketing_creator_materials` |
@@ -199,7 +200,7 @@ If either MCP tool is unavailable, its dependency is not loaded, the local state
 Use `templates validate` before uncertain template operations. `templates delete` is a local write but still defaults to dry-run and requires `--submit`; do not use `--force` until referenced-template diagnostics have been shown and explicitly accepted. Default skeletons are never deletion targets.
 
 - The default template is a creation base only and must never submit a plan.
-- New business templates must use the interactive `templates create` wizard.
+- Agents create business templates through the structured `templates create --input-json` contract in `template-create.md`. The interactive wizard remains available for direct human CLI use.
 - Every business template binds `channel`, `advertiser_id`, `platform`, `traffic_source`, `product_id`, and `product_name`.
 - Every template binds `material_strategy.source_type` to `ACCOUNT_UPLOAD` or `CREATOR_AUTHORIZED`.
 - The Marketing creation base uses `product_info.product_image_type=DPA` with the upgraded-product image field `images_url`; the standard wizard does not ask users for image IDs.
@@ -240,7 +241,7 @@ Creation is always a two-step official transaction:
 1. `/v3.0/project/create/`
 2. `/v3.0/promotion/create/` with returned `project_id`
 
-Default to dry-run. Submit only after explicit online-write permission, using `--submit`. Before submission:
+In this alpha, use dry-run only; Marketing submission is unavailable. For a useful preview:
 
 - Apply the business template explicitly named by the user or confirmed in the current conversation. Never fall back to an active/default business template.
 - Apply explicit user overrides.
@@ -319,7 +320,7 @@ Strategy is read-only by default:
 4. Recommend concrete stop, observe, test, or scale actions with reasons.
 5. Do not change delivery state, budgets, bids, templates, or plans unless the user explicitly requests the write after seeing the evidence.
 
-When a write is explicitly requested, use `plans update-project-status`, `update-promotion-status`, `update-budget`, `update-bid`, or `update-roi`. First run without `--submit`, show IDs, endpoint and payload, then submit only the confirmed scope. Never construct a naked ad-hoc payload outside these commands.
+When a write is explicitly requested, use `plans update-project-status`, `update-promotion-status`, `update-budget`, `update-bid`, or `update-roi`. Run without `--submit` and show IDs, endpoint and payload; explain that current alpha cannot submit these changes. Never construct a naked ad-hoc payload outside these commands.
 
 ## Output And Safety
 
@@ -328,4 +329,4 @@ When a write is explicitly requested, use `plans update-project-status`, `update
 - Do not print credentials, authorization codes, or sensitive request headers.
 - Report partial batch failures per account/job; do not hide successful rows.
 - Prefer concise structured summaries; show full payloads only when requested.
-- Plan-setting and template-deletion writes are dry-run by default and require `--submit`.
+- Plan settings are preview-only in the current alpha. Local template deletion defaults to dry-run and requires its documented `--submit` confirmation.

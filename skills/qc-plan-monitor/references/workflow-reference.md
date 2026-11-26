@@ -1,5 +1,6 @@
 # Qianchuan Workflow Reference
 
+Current alpha contract: task MCP routes in `SKILL.md` take precedence over diagnostic CLI examples here. Legacy online writes are unavailable. Only Qianchuan work creation/append uses the protected Operation flow; local template/account changes keep their explicit local-write contracts. Agent template creation uses [template-create.md](template-create.md); terminal wizards are for direct human CLI use.
 > 按需详细合同。`../SKILL.md` 的快速路由矩阵具有入口优先级；仅在已确定为复杂 CLI 分支后读取本文件。
 
 # QC Plan Monitor
@@ -29,7 +30,7 @@ This Skill owns the Qianchuan (`qianchuan`) branch:
 
 Qianchuan live templates and live all-domain creation are implemented; model strategy remains read-only by default. Do not route Qianchuan requests through `ads-plan-monitor`, Marketing templates, Marketing credentials, or the Marketing project/promotion transaction.
 
-For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, ask for the channel before entering either template-source wizard. Use the shared `templates create` entry without `--channel`; authorization state is displayed but must not silently select a channel or prevent an unauthorized channel from creating a draft template.
+For a generic request to create a `投放模板` that does not name Marketing or Qianchuan, ask for the channel before entering either template-source wizard. Use `templates create --input-json '{}'` and its structured missing-field response; authorization state is displayed but must not silently select a channel or prevent an unauthorized channel from creating a draft template.
 
 After Qianchuan is selected, ask whether the template is `商品全域` or `直播全域` before listing source templates. For automation, pass `--template-type product|live` explicitly.
 
@@ -64,15 +65,15 @@ The launcher selects and executes the bundled Go binary for the current platform
 | Query all-domain plan spend | MCP `report_qianchuan_plans` |
 | Preflight product plans from work links | MCP `preflight_qianchuan_works` |
 | Inspect one exact preflight snapshot | MCP `get_qianchuan_preflight` |
-| Create product template | `qc-templates create` |
-| Create live template | `qc-templates create-live` |
+| Create product template | `templates create --input-json JSON` with `template_kind=product` |
+| Create live template | `templates create --input-json JSON` with `template_kind=live` |
 | Update product template parameters | `qc-templates update` |
 | Validate/delete templates | `templates validate` / `templates delete` |
 | Inspect public work link | `qc-materials inspect-work` |
 | List authorized creators | `qc-materials authorized-creators` |
 | Query product-matched creator videos | `qc-materials creator-videos` |
 | Create all-domain plan | `plans create-qianchuan` |
-| Submit a confirmed work-link preflight | `plans batch-qianchuan-works --submit --preflight-id ID` |
+| Execute a reviewed work-link preflight | MCP `prepare_qianchuan_operation` → `request_operation_confirmation` → `execute_operation`; see `operations.md` |
 | Remove plan materials by work link | `plans remove-qianchuan-work` |
 | Query legacy material report | `qc-reports materials` |
 | Query all-domain post material dimensions | `qc-reports custom --data-topic SITE_PROMOTION_PRODUCT_POST_DATA_VIDEO|SITE_PROMOTION_PRODUCT_POST_DATA_IMAGE|SITE_PROMOTION_PRODUCT_POST_DATA_TITLE|SITE_PROMOTION_PRODUCT_POST_DATA_OTHER` |
@@ -181,7 +182,7 @@ Use MCP `get_template` for exact template details with `channel=qianchuan` and t
 If either MCP tool is unavailable, its dependency is not loaded, the local state changes during pagination, or the call returns an error, explain the stable failure and stop that template read. Never search the repository, run `templates list`/`templates show` or the legacy `qc-templates list` as a silent fallback, and never parse CLI JSON to imitate a tool result. `STATE_CHANGED` permits restarting `list_templates` once from the first page; it does not permit mixing state versions.
 
 - `default_qianchuan_product_template` is a creation skeleton and can never create a real plan.
-- New business templates use the `qc-templates create` wizard and choose the default skeleton or an existing Qianchuan product template as the source.
+- Agents use `templates create --input-json` and select the default skeleton or an exact existing template as described in `template-create.md`. Direct human CLI use may retain the interactive wizard.
 - Qianchuan business templates have no active/default pointer. Every material query or plan-creation workflow must provide an explicit template ID or confirmed display name.
 - Every business template binds one Qianchuan advertiser, a full product name, a product short name for plan naming, and 1–30 product IDs.
 - Product-template display names are user-defined labels. The wizard requires a non-empty name, while advertiser and product ownership remain exclusively in `bindings`.
@@ -298,11 +299,11 @@ Retry transient `40100` rate limits, `51010` service timeouts, retryable transpo
 - Multiple compatible unbound plans return `plan_selection_required`; an existing binding that drifted returns `binding_drift`; another group's claim or competing template groups return `plan_group_conflict`. These groups are not submit-eligible. Old v2 snapshots retain `legacy_binding_required` for unbound historical candidates.
 - More than 100 works: create once, then append remaining chunks through the dedicated add-material endpoint.
 
-Default to dry-run. Add `--submit` only after explicit online-write permission. F2 and routing finish before account queries; account scopes and creator verification then run concurrently with shared bounded reads. Submit takes the advertiser-scoped lock and writes remain serial. Return one final summary with all child results. Do not emit per-link progress or create a file unless `--out` is explicit.
+Use read-only preflight here. For execution, follow `operations.md`; legacy `--submit` is rejected by the current alpha. F2 and routing finish before account queries; account scopes and creator verification then run concurrently with shared bounded reads. Submit takes the advertiser-scoped lock and writes remain serial. Return one final summary with all child results. Do not emit per-link progress or create a file unless `--out` is explicit.
 
 When a dry-run has result groups, it stores a minimal short-lived snapshot in the managed operation journal and returns `preflight_id` plus `expires_at`. A snapshot may contain blocked or failed groups; only `SubmitEligible` groups can execute, and an ID alone does not prove readiness. The snapshot expires after 30 minutes or at the end of the current `Asia/Shanghai` business day, whichever comes first. It contains the template/input digests, selection policy, verified creator/work/product facts and expected action/target/diff; it must not contain Tokens, Cookies, source URLs, raw F2 responses, or raw official responses. New v3 snapshots explicitly record the policy; old v2 stays `bound_only`, v1 is read-only, and old executors reject v3.
 
-After explicit online-write permission, submit each confirmed child snapshot with `plans batch-qianchuan-works --submit --preflight-id ID`. There is no cross-account submit ID and no `submit_qianchuan_preflight` MCP tool yet. Confirm the advertiser/template and preview for every submitted ID; retry only failed or pending children, preserving successful snapshots. `--preflight-id` requires `--submit` and cannot be combined with `--plan-template`, `--work-url`, `--work-item`, `--plan-type`, or `--business`. The submit path validates the journal, expiry, fingerprint, and current template digest, resolves the advertiser-bound credential again, holds the existing advertiser lock, rescans current plans once, and queries only the material membership needed for the current diff. It must not repeat link redirects, F2, targeted creator authorization, ownership checks, or product checks. A changed action, target, binding, or expected present/write material partition marks only that group `preflight_changed`; continue other unchanged groups serially and obtain a new preview for the changed group. Materials already present in the confirmed partition are not written again. Preserve the existing Guard, `OnceDispatcher`, operation keys, and unknown-write readback reconciliation.
+After the user asks to execute, prepare an immutable Operation for each successful child `preflight_id`, show its summary, request protected confirmation and execute the exact returned references. Follow [operations.md](operations.md). Query and reconcile unknown results before any new preflight; never replay a write or reuse an approval. There is no cross-account execution ID. Legacy `plans batch-qianchuan-works --submit` is unavailable in this alpha.
 
 ### Mandatory Batch Completion Response
 
@@ -331,7 +332,7 @@ ocean-watch plans remove-qianchuan-work \
 
 Resolve and deduplicate the work links, then list all plan video materials with `material_status=ALL`. Match each `aweme_item_id` to the nested `material_info.video_material.material_id`; never send an `aweme_item_id` to the delete endpoint. A work must resolve to exactly one unique material ID and every matching row must use `material_select_type=CUSTOM`. Skip smart-selected materials because the official delete endpoint supports custom materials only.
 
-Default to dry-run. Hold the same advertiser-scoped lock used by create and append operations during dry-run detail/material reconciliation and submitted deletion. With explicit `--submit`, delete at most 100 material IDs per official request. Re-query the plan after submission and report success only when every submitted material is `DELETED`. Already-deleted materials are idempotent. Warn that the official API may remove the same material across related creators or products in multi-binding scenarios. Do not modify plan settings or create an output file unless `--out` is explicit.
+Default to dry-run. Hold the same advertiser-scoped lock used by create and append operations during dry-run detail/material reconciliation and submitted deletion. Material deletion is unavailable in the current alpha; do not submit this preview. Already-deleted materials are idempotent. Warn that the official API may remove the same material across related creators or products in multi-binding scenarios. Do not modify plan settings or create an output file unless `--out` is explicit.
 
 ## All-Domain Plan Creation
 
@@ -349,7 +350,7 @@ ocean-watch plans create-qianchuan \
   --name PLAN_NAME
 ```
 
-Use `--payload-file`, `--payload-json`, or `--payload-file -` for raw official payloads when needed. Default to dry-run. Add `--submit` only after explicit online-write permission and a clean preflight.
+Use `--payload-file`, `--payload-json`, or `--payload-file -` for raw official payloads when needed. Use dry-run only. These legacy online write routes are unavailable in the current alpha.
 
 Supported goals:
 
@@ -376,7 +377,7 @@ Use `qc-reports custom` for all-domain and overall data-topic reports through `/
 
 Use `qc-reports materials` only for the legacy `/v1.0/qianchuan/report/material/get/` report. Paginate every declared page; `--top` limits display only, while summaries use all fetched rows. Use official material filters and do not substitute plan-list stats. A custom field set that omits GMV or order metrics must return those summaries as `null`, not zero. Do not use this legacy command for ordinary 全域素材维度 or video-material post reports.
 
-Plan setting commands are fixed: `qc-plans update-status`, `update-budget`, and `update-roi`. Run them without `--submit` first and show the exact IDs, endpoint, and payload. Submit only the confirmed scope while holding the advertiser lock. Treat any failed result row as command failure. Qianchuan `DELETE` requires both `--submit` and `--confirm-delete`.
+Plan setting commands are fixed: `qc-plans update-status`, `update-budget`, and `update-roi`. Run them without `--submit` first and show the exact IDs, endpoint, and payload. These settings and deletion routes are preview-only in the current alpha. Do not submit them or substitute an unrelated Operation kind. Treat any failed result row as command failure.
 
 Use `runs list/show` only for Plugin-managed journals under the local state root. Never accept arbitrary paths or infer online state from a journal.
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 )
@@ -21,6 +22,7 @@ func RunTemplatesInteractive(
 	resolvedPath string,
 	stdin io.Reader,
 	stdout io.Writer,
+	instances ...*policy.Instance,
 ) int {
 	if action != "create" {
 		return RunTemplates(ctx, action, args, store, resolvedPath, stdout)
@@ -29,6 +31,13 @@ func RunTemplatesInteractive(
 	if err != nil {
 		WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
 		return 2
+	}
+	if options.inputJSON != "" || options.inputFile != "" {
+		var instance *policy.Instance
+		if len(instances) > 0 {
+			instance = instances[0]
+		}
+		return runStructuredTemplateCreate(ctx, options, store, authorizations, instance, stdin, stdout)
 	}
 	reader := newPromptReader(stdin, stdout)
 	states := map[string]domain.AuthorizationState{}

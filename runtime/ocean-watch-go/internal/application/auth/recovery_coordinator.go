@@ -10,18 +10,19 @@ import (
 )
 
 type RecoveryCoordinator struct {
-	mu       sync.Mutex
-	view     RecoverySession
-	input    RecoveryRequest
-	state    string
-	flow     Service
-	ctx      context.Context
-	cancel   context.CancelFunc
-	started  bool
-	stopping string
-	stopCode string
-	result   AuthorizationResult
-	done     chan struct{}
+	mu          sync.Mutex
+	view        RecoverySession
+	input       RecoveryRequest
+	state       string
+	flow        Service
+	ctx         context.Context
+	cancel      context.CancelFunc
+	started     bool
+	configuring bool
+	stopping    string
+	stopCode    string
+	result      AuthorizationResult
+	done        chan struct{}
 }
 
 func NewRecoveryCoordinator(parent context.Context, input RecoveryRequest, view RecoverySession, state string, lifetime time.Duration, flow Service) *RecoveryCoordinator {
@@ -53,6 +54,31 @@ func (coordinator *RecoveryCoordinator) Result() AuthorizationResult {
 }
 
 func (coordinator *RecoveryCoordinator) Done() <-chan struct{} { return coordinator.done }
+
+// ConfigureApp advances the existing session without exposing credentials to
+// the tool caller. Cancellation/deadlines remain owned by this coordinator.
+func (coordinator *RecoveryCoordinator) ConfigureApp(app domain.OAuthApp, authorizationURL string) error {
+	coordinator.mu.Lock()
+	if coordinator.started || coordinator.configuring || coordinator.stopping != "" || coordinator.ctx.Err() != nil || coordinator.view.Status != "awaiting_configuration" {
+		coordinator.mu.Unlock()
+		return domain.NewError("authorization_callback_used", "configuration session is already used or expired", 1, nil)
+	}
+	coordinator.configuring = true
+	coordinator.mu.Unlock()
+	err := coordinator.flow.ConfigureMissingApp(coordinator.ctx, coordinator.input, app)
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	coordinator.configuring = false
+	if err := coordinator.ctx.Err(); err != nil {
+		coordinator.finishLocked(AuthorizationResult{}, err)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	coordinator.view.Status, coordinator.view.AuthorizationURL = "awaiting_callback", authorizationURL
+	return nil
+}
 
 func (coordinator *RecoveryCoordinator) AcceptCallback(state, code, providerError string) error {
 	if err := domain.ValidateOAuthCallbackState(state, coordinator.state, coordinator.input.Channel); err != nil {
@@ -114,7 +140,7 @@ func (coordinator *RecoveryCoordinator) stop(code string) {
 	}
 	coordinator.view.AuthorizationURL = ""
 	coordinator.cancel()
-	if !coordinator.started {
+	if !coordinator.started && !coordinator.configuring {
 		coordinator.finishLocked(AuthorizationResult{}, coordinator.ctx.Err())
 	}
 }

@@ -9,7 +9,7 @@ description: Dedicated 巨量星图 skill for local OAuth, authorization recover
 
 This Skill owns `star_map`. `xt-plan-monitor` is the Skill name; never replace the Runtime channel key with that name. Classify the outcome once. Do not search the repository, inspect plugin caches, read memory, or run setup probes before a normal business request. Do not call an equivalent CLI route when this table names an MCP tool.
 
-Every `./run` below is this skill's launcher. On Codex invoke it as written. On Claude Code use `${CLAUDE_PLUGIN_ROOT}/skills/xt-plan-monitor/run` with the same arguments. On DeepSeek Harness, resolve `<skill-directory>/run` or `<skill-directory>\run.cmd` from the absolute directory of the loaded `SKILL.md`, rather than the conversation's working directory. WorkBuddy uses the MCP routes only.
+Every `./run` below is documentation shorthand for this skill's launcher. Resolve the absolute directory of the loaded `SKILL.md` and invoke `<skill-directory>/run` (macOS/Linux) or `<skill-directory>\run.cmd` (Windows), quoting the path. This applies to Codex, Claude Code and DeepSeek Harness; the conversation's working directory is not the skill directory. Claude Code may also use `${CLAUDE_PLUGIN_ROOT}/skills/xt-plan-monitor/run`. Do not search unrelated directories. WorkBuddy uses MCP only.
 
 <!-- capability-routes:start -->
 | User outcome | Exact route |
@@ -27,11 +27,11 @@ Pass `channel=star_map` to account-list and authorization-management tools. `get
 | Query or cancel the current authorization session | MCP `get_authorization_session` or `cancel_authorization_session` with the same channel and session ID |
 | Confirmed Star Map setup or local-account operation not matched above | MCP `get_capabilities` once with `channel=star_map`; read [references/workflow-reference.md](references/workflow-reference.md) for the supported CLI scope |
 
-When a row matches, call that exact MCP tool immediately; never enumerate `ALL_TOOLS` or inspect caches to locate deferred declarations. If the direct call reports an unavailable tool, report it and stop without a CLI fallback. Do not call `get_capabilities` when a preceding row matches. Shared catalog entries for templates, reports, or runs do not establish Star Map support.
+When a row matches, use that exact logical MCP tool. If its declaration is deferred, use the host's supported tool search/discovery mechanism, targeted at `ocean-watch` and the exact tool name (including a filtered `ALL_TOOLS` lookup when that is the host API). Read the returned input Schema and invoke the discovered callable name; do not guess a namespace or arguments. Discovery is not a business query and does not require `get_capabilities`. If discovery or invocation reports the tool unavailable, report that error and stop without a CLI fallback. Do not call `get_capabilities` when a preceding row matches. Shared catalog entries for templates, reports, or runs do not establish Star Map support.
 
 ## Authorization Recovery
 
-For new authorization, open the official OAuth URL returned by `start_authorization`. For reauthorization, include the exact existing `authorization_id`; Core verifies the official App and user before replacing that grant. Keep original account/request arguments. If a tool needs the optional account scope, its legacy `advertiser_id` field contains the exact Star Map account ID, not a Marketing or Qianchuan advertiser.
+For new authorization, open `authorization_url` returned by `start_authorization`. With `awaiting_configuration`, the user fills App ID/Secret only in that local page, then continues to official OAuth using the same session ID; `awaiting_callback` opens official OAuth directly. For reauthorization, include the exact existing `authorization_id`; Core verifies the official App and user before replacing that grant. Keep original account/request arguments. If a tool needs the optional account scope, its legacy `advertiser_id` field contains the exact Star Map account ID, not a Marketing or Qianchuan advertiser.
 
 For saved grants with pending synchronization, call `start_account_sync` and open its local confirmation page instead of repeating OAuth. Both paths use `get_authorization_session` with `channel=star_map` until a terminal state. Only `completed` with `can_resume=true` permits retrying the original local query. Stop automatic retries on failure, cancellation, expiry, or a scope mismatch. On cancellation use `cancel_authorization_session`.
 

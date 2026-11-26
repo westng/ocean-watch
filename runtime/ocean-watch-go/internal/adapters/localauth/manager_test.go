@@ -3,7 +3,6 @@ package localauth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -29,6 +28,8 @@ type fixtureCredentials struct {
 	entries map[string]map[string]any
 }
 
+func (store *fixtureCredentials) BackendName() string { return "macos-keychain" }
+
 func (store *fixtureCredentials) Read(_ context.Context, account string) (map[string]any, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -38,7 +39,7 @@ func (store *fixtureCredentials) Write(_ context.Context, account string, value 
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	store.entries[account] = configuration.CloneMap(value)
-	return "memory", nil
+	return "macos-keychain", nil
 }
 
 type localTransport struct {
@@ -288,16 +289,15 @@ func TestDirectAuthorizationDoesNotRequireBrowserConfirmation(t *testing.T) {
 	}
 }
 
-func TestMissingAppCredentialsFailBeforeBrowserRecovery(t *testing.T) {
+func TestMissingAppCredentialsStartProtectedConfiguration(t *testing.T) {
 	fixture := newFlowFixture(t, time.Minute)
 	credentials := fixture.manager.options.Credentials.(*fixtureCredentials)
 	credentials.mu.Lock()
 	delete(credentials.entries, "oceanengine-app-qianchuan")
 	credentials.mu.Unlock()
-	_, err := fixture.manager.Start(context.Background(), auth.RecoveryRequest{Channel: "qianchuan", AdvertiserID: "1001", Operation: "authorize"})
-	var domainErr *domain.Error
-	if !errors.As(err, &domainErr) || domainErr.Code != "oauth_app_missing" {
-		t.Fatalf("missing OAuth app was not rejected at start: %v", err)
+	view, err := fixture.manager.Start(context.Background(), auth.RecoveryRequest{Channel: "qianchuan", AdvertiserID: "1001", Operation: "authorize"})
+	if err != nil || view.Status != "awaiting_configuration" || !strings.Contains(view.AuthorizationURL, "/oauth/setup?session=") || view.CanResume {
+		t.Fatalf("missing OAuth app did not start local configuration: %+v %v", view, err)
 	}
 }
 

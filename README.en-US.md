@@ -115,6 +115,8 @@ The script only updates existing Skills' MCP paths and requires the repository's
 
 All hosts should use the same state root, resolved in priority order: `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`. A valid authorization for a channel can be reused across hosts; Marketing and Qianchuan still require separate authorizations. After initial installation, start a new task, describe your goal, and follow the official OAuth flow. See [Getting started](docs/guides/getting-started.md) and [Configuration](docs/guides/configuration.md).
 
+First-use authorization now opens a protected local App configuration page when needed, then continues the same OAuth session. Compatible runtime upgrades wait for pending authorization/F2 interactions. Agent template creation accepts strict JSON, reports missing fields, and binds local commits to the reviewed configuration revision and preview digest; see the [CLI contract](docs/reference/cli.md). Deferred tools are discovered by exact name, and launchers resolve from the loaded Skill directory. Reload the plugin and start a new chat after these contract changes.
+
 ## Ask It Naturally
 
 - **Star Map accounts:** “Guide me through Star Map authorization, then sync the accounts covered by this grant.”
@@ -126,7 +128,7 @@ All hosts should use the same state root, resolved in priority order: `OCEAN_WAT
 - **Process Qianchuan works:** “Preflight these Douyin works with this template. Show proposed creates, appends, skips, and failures.”
 - **Analyze performance:** “Review the last seven days of material performance, identify high-spend low-conversion materials, and recommend actions.”
 
-These are examples; available operations depend on the tools loaded by the host. CLI-capable entry points can also create plans and change delivery settings, after showing preflight results and receiving explicit confirmation.
+These are examples; available operations depend on the tools loaded by the host. In the current alpha, online writes support only Qianchuan create/append through trusted Operations; Marketing and unmigrated settings remain preview-only.
 
 ## V3 Runtime Architecture
 

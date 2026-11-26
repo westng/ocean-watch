@@ -1,7 +1,7 @@
 interface:
   display_name: "巨量千川计划助手"
   short_description: "千川授权、模板、计划、素材及全域与乘方多维效果报表"
-  default_prompt: "Use $qc-plan-monitor to understand my Qianchuan intent, use Ocean Watch MCP for templates, common Qianchuan reads, reports, and work-link preflight, route confirmed writes and advanced operations through the bundled Go CLI, and preview writes safely."
+  default_prompt: "Use $qc-plan-monitor to understand my Qianchuan intent, use Ocean Watch MCP for templates, common Qianchuan reads, reports, and work-link preflight, execute reviewed work batches only through the protected MCP Operation flow, and use the bundled Go CLI for structured local template management and supported advanced queries."
 dependencies:
   tools:
     - type: "mcp"

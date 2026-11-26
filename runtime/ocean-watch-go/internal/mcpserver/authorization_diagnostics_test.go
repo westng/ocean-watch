@@ -15,6 +15,18 @@ type diagnosticRecoveryFixture struct {
 	view auth.RecoverySession
 }
 
+func TestFirstUseConfigurationFitsTheMCPContract(t *testing.T) {
+	view := auth.RecoverySession{SessionID: strings.Repeat("a", 48), Channel: "qianchuan", Operation: "authorize", Status: "awaiting_configuration", ExpiresAt: "2026-11-26T12:00:00Z", AuthorizationURL: "http://127.0.0.1:8787/oauth/setup?session=" + strings.Repeat("a", 48)}
+	session := connectTestServer(t, Runtime{AuthorizationRecovery: diagnosticRecoveryFixture{recoveryFixture: &recoveryFixture{}, view: view}})
+	result := callTestTool(t, session, "get_authorization_session", map[string]any{"channel": "qianchuan", "session_id": view.SessionID})
+	got := decodeStructured[struct {
+		Session auth.RecoverySession `json:"session"`
+	}](t, result)
+	if got.Session.Status != "awaiting_configuration" || got.Session.CanResume || got.Session.AuthorizationURL != view.AuthorizationURL {
+		t.Fatal("configuration session did not survive MCP output validation")
+	}
+}
+
 func (fixture diagnosticRecoveryFixture) Get(context.Context, string, string) (auth.RecoverySession, error) {
 	return fixture.view, nil
 }

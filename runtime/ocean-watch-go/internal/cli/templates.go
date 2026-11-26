@@ -6,6 +6,7 @@ import (
 	"flag"
 	"io"
 
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	applicationtemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/templates"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain"
 	domaintemplates "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/domain/templates"
@@ -32,6 +33,10 @@ type templateOptions struct {
 	fromTemplate       string
 	materialSourceType string
 	templateType       string
+	inputJSON          string
+	inputFile          string
+	expectedRevision   string
+	previewDigest      string
 }
 
 func parseTemplateOptions(action string, args []string) (templateOptions, error) {
@@ -41,6 +46,11 @@ func parseTemplateOptions(action string, args []string) (templateOptions, error)
 	flags.StringVar(&options.configPath, "config", "", "")
 	switch action {
 	case "create":
+		flags.StringVar(&options.inputJSON, "input-json", "", "")
+		flags.StringVar(&options.inputFile, "input-file", "", "")
+		flags.StringVar(&options.expectedRevision, "expected-revision", "", "")
+		flags.StringVar(&options.previewDigest, "preview-digest", "", "")
+		flags.BoolVar(&options.submit, "submit", false, "")
 		flags.StringVar(&options.channel, "channel", "", "")
 		flags.StringVar(&options.materialSourceType, "material-source-type", "", "")
 		flags.StringVar(&options.templateType, "template-type", "", "")
@@ -72,6 +82,13 @@ func parseTemplateOptions(action string, args []string) (templateOptions, error)
 	}
 	switch action {
 	case "create":
+		structured := options.inputJSON != "" || options.inputFile != ""
+		if options.inputJSON != "" && options.inputFile != "" || structured && (options.channel != "" || options.materialSourceType != "" || options.templateType != "") {
+			return templateOptions{}, errors.New("use one structured input and place all business fields in its JSON object")
+		}
+		if !structured && (options.submit || options.expectedRevision != "" || options.previewDigest != "") {
+			return templateOptions{}, errors.New("submission references require --input-json or --input-file")
+		}
 		if options.channel != "" && options.channel != "marketing" && options.channel != "qianchuan" {
 			return templateOptions{}, errors.New("--channel must be marketing or qianchuan")
 		}
@@ -186,6 +203,13 @@ func templateActionError(action string, err error) *domain.Error {
 }
 
 func templateError(err error) *domain.Error {
+	var domainErr *domain.Error
+	if errors.As(err, &domainErr) {
+		return domainErr
+	}
+	if errors.Is(err, policy.ErrDenied) {
+		return domain.NewError("policy_denied", "startup policy denied this template request", 2, nil)
+	}
 	var templateErr *domaintemplates.Error
 	if errors.As(err, &templateErr) {
 		return domain.NewError("configuration_error", templateErr.Message, 2, templateErr.Details)

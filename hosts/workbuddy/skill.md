@@ -3,7 +3,7 @@ name: {{SKILL}}
 description: {{DESCRIPTION}}
 ---
 
-本 Skill 只处理 `{{CHANNEL}}`，通过 `ocean-watch` 本地 MCP 使用共享业务数据和凭据库。渠道、应用、模板、账户和官方接口不得混用。普通业务请求直接调用匹配工具；不扫描仓库、缓存或其他宿主。
+本 Skill 只处理 `{{CHANNEL}}`，通过 `ocean-watch` 本地 MCP 使用共享业务数据和凭据库。渠道、应用、模板、账户和官方接口不得混用。普通业务请求使用匹配工具；若声明延迟加载，按工具准确名称使用宿主的定向工具发现并读取 Schema 后调用；不扫描仓库、缓存或其他宿主。
 
 {{CHANNEL_GUIDANCE}}
 
@@ -16,7 +16,7 @@ description: {{DESCRIPTION}}
 | 取消授权恢复 | MCP `cancel_authorization_session`，使用返回的 session_id 和相同渠道 |
 | 其他已确认业务目标 | MCP `get_capabilities`，channel={{CHANNEL}}；只解释能力目录 |
 
-遇到 `REAUTHORIZATION_REQUIRED` 或用户要求重新授权，调用 `start_authorization`。如果已有授权状态提供 `authorization_id`，必须沿用它；只有首次授权才省略该字段。向用户提供返回的 `authorization_url`，授权/重新授权时直接打开官方 OAuth 页面，账户同步时打开本机确认页；启动会话不代表已经授权。不要要求执行命令或把 Secret、Token、授权码、Cookie 粘贴到聊天。
+遇到 `REAUTHORIZATION_REQUIRED` 或用户要求重新授权，调用 `start_authorization`。如果已有授权状态提供 `authorization_id`，必须沿用它；只有首次授权才省略该字段。向用户提供返回的 `authorization_url`，awaiting_configuration 时打开本机 App 配置页并由页面继续官方 OAuth，awaiting_callback 时打开官方授权页，账户同步时打开本机确认页；保持同一 session_id；启动会话不代表已经授权。不要要求执行命令或把 Secret、Token、授权码、Cookie 粘贴到聊天。
 
 保留用户原请求的模板、作品链接、账户和日期。查询 `get_authorization_session` 直到终态；等待用户操作时告知当前状态，避免紧密轮询。仅当 `status=completed` 且 `can_resume=true`，才用原参数重新调用原来的查询/预检，不要求用户重发已提供的链接。授权恢复不授予投放提交权限。
 

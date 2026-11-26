@@ -51,11 +51,13 @@ skills/qc-plan-monitor/run auth mappings --channel qianchuan --advertiser-id ADV
 
 `auth sync-accounts` 刷新 OAuth 授权覆盖，不修改 `managed_accounts`。`accounts list` 读取的是用户维护的负责账户簿，两者不能互相替代。
 
-使用 MCP 的宿主通过 `start_authorization` 获取官方 OAuth 页面，通过 `start_account_sync` 获取本机同步确认页，随后用 `get_authorization_session` 查询状态，或用 `cancel_authorization_session` 取消。必须显式传入 `marketing`、`qianchuan` 或 `star_map`；重新授权时沿用已有 `authorization_id`。缺失的 OAuth App 必须通过受控 CLI 配置，MCP/浏览器不收集 Secret；授权码和凭据只在本机 Core 内处理。官方刷新错误 `40103`/`40107` 需要重新授权，账户快照待同步则重试同步即可。账户重绑默认拒绝，只有明确传入 `rebind_existing=true` 才会改变已有映射。只有凭据、账户快照及目标账户范围均验证成功，才能重跑原查询/预检；各角色接口与恢复规则详见[恢复合同](../reference/authorization-recovery.md)。WorkBuddy 不要求用户在终端执行 `./run`。
+使用 MCP 的宿主通过 `start_authorization` 获取本机 App 配置页或官方 OAuth 页面，通过 `start_account_sync` 获取本机同步确认页，随后用 `get_authorization_session` 查询状态，或用 `cancel_authorization_session` 取消。必须显式传入 `marketing`、`qianchuan` 或 `star_map`；重新授权时沿用已有 `authorization_id`。缺失 OAuth App 时状态为 `awaiting_configuration`，用户只在本机表单填写 App ID/Secret，安全保存后在同一会话继续官方 OAuth；工具参数与聊天不接收 Secret；授权码和凭据只在本机 Core 内处理。官方刷新错误 `40103`/`40107` 需要重新授权，账户快照待同步则重试同步即可。账户重绑默认拒绝，只有明确传入 `rebind_existing=true` 才会改变已有映射。只有凭据、账户快照及目标账户范围均验证成功，才能重跑原查询/预检；各角色接口与恢复规则详见[恢复合同](../reference/authorization-recovery.md)。WorkBuddy 不要求用户在终端执行 `./run`。
 
 ## 模板
 
 默认模板是创建骨架，不可直接提交。业务模板必须绑定渠道和广告主；营销模板还绑定商品、素材模式和投放设置，千川商品模板绑定商品全称、商品简称和 1–30 个商品 ID，直播模板绑定直播账号数字 UID。
+
+AI 创建模板使用 `templates create --input-json` 或 `--input-file -`，返回缺失字段或可审阅的 JSON 预览；提交必须携带同一预览的配置版本和摘要，详见 [结构化模板创建](../reference/cli.md#结构化模板创建)。
 
 素材、作品、封面和运行时 ID 不应固化到模板。模板删除默认 dry-run，并要求 `--submit`；被引用的模板只有在展示诊断并明确接受后才能使用受保护的强制删除。
 
@@ -71,7 +73,7 @@ Plugin 的 `list_templates` 与 `get_template` MCP 工具只读取当前用户�
 
 结构化行可用准确 `creator_douyin_id` 和命名 `creator_name` 补充 F2 未获取的身份/昵称；只有可见抖音号时，必须经该账户官方定向查询取得唯一精确匹配的数字 UID。可选 `creator_uid` 不能脱离可见抖音号单独使用。昵称和公开商品提示都不证明投放授权，官方归属、目标商品核验始终保留。
 
-`get_qianchuan_preflight` 只接受严格的 `preflight_id`，只读本地 Operation Journal，不读取凭据、不刷新 Token、不调用官方 API。工具只返回模板、商品、有效期、可提交作品数量和稳定排序的新建/追加决策，不返回原始作品链接、模板 payload、授权选择器或快照指纹。确认提交仍使用 `plans batch-qianchuan-works --submit --preflight-id ID`，MCP 不会自动提交。
+`get_qianchuan_preflight` 只接受严格的 `preflight_id`，只读本地 Operation Journal，不读取凭据、不刷新 Token、不调用官方 API。工具只返回模板、商品、有效期、可提交作品数量和稳定排序的新建/追加决策，不返回原始作品链接、模板 payload、授权选择器或快照指纹。当前 alpha 执行使用 `prepare_qianchuan_operation → request_operation_confirmation → execute_operation`，必须经过独立确认；旧 `--submit --preflight-id` 路径不可用。
 
 常用千川查询由八个任务型 MCP 工具承载：`list_managed_accounts`、`get_qianchuan_authorization`、`search_qianchuan_products`、`list_qianchuan_plans`、`get_qianchuan_plan`、`report_qianchuan_account`、`report_qianchuan_uni_account` 和 `report_qianchuan_plans`。前两个只读本地账户/授权状态，不刷新 Token、不调用官方 API；后六个使用广告主绑定授权，必要时刷新 Token，并读取官方商品、计划或报表接口。所有输入拒绝配置路径与未知字段，所有 ID 使用字符串，输出只保留完成任务所需字段，不返回图片/素材 URL、原始官方响应、请求 URL、凭据值或内部错误。
 

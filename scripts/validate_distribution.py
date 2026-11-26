@@ -128,7 +128,7 @@ def validate_mcp():
         "command": "./bin/ocean-watch-launcher",
         "args": ["mcp", "proxy", "--stdio", "--plugin-root", "."],
         "cwd": ".",
-        "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-07.operation-r1"},
+        "env": {"OCEAN_WATCH_MCP_CONTRACT_REVISION": "2026-11-26.skill-workflows-r2"},
     }
     if server != expected:
         fail("MCP server must use the stable local runtime proxy")
@@ -227,8 +227,10 @@ def validate_skill(name):
                 fail(f"xt-plan-monitor is missing its Star Map route: {tool}")
     if "search the repository" not in content or "stop without a CLI fallback" not in content:
         fail(f"{name} does not fail closed when MCP template tools are unavailable")
-    if "call that exact MCP tool immediately" not in content or "never enumerate `ALL_TOOLS`" not in content:
-        fail(f"{name} may inspect deferred tool declarations before direct routing")
+    if "never enumerate `ALL_TOOLS`" in content or "On Codex invoke it as written" in content:
+        fail(f"{name} retains a host-incompatible discovery or launcher rule")
+    if "supported tool search/discovery" not in content or "absolute directory of the loaded `SKILL.md`" not in content:
+        fail(f"{name} lacks deferred discovery or location-based launcher routing")
     if not (root / "run.cmd").is_file():
         fail(f"{name} Windows launcher is missing")
     launcher = root / "run"

@@ -53,6 +53,8 @@ type session struct {
 	resultOnce   sync.Once
 	stopOnce     sync.Once
 	origin       string
+	setupCSRF    string
+	oauthState   string
 }
 
 func New(ctx context.Context, options Options) *Manager {
@@ -99,8 +101,13 @@ func (manager *Manager) Start(ctx context.Context, input auth.RecoveryRequest) (
 	}
 	flow := auth.Service{Credentials: manager.options.Credentials, OAuth: manager.options.OAuth, Users: manager.options.Users, Authorizer: manager.options.Authorizer, Syncer: manager.options.Syncer}
 	input, app, err := flow.Prepare(ctx, input)
+	configurationRequired := false
 	if err != nil {
-		return auth.RecoverySession{}, err
+		var domainErr *domain.Error
+		if !errors.As(err, &domainErr) || domainErr.Code != "oauth_app_missing" {
+			return auth.RecoverySession{}, err
+		}
+		configurationRequired = true
 	}
 	manager.mu.Lock()
 	current := manager.active
@@ -154,6 +161,11 @@ func (manager *Manager) Start(ctx context.Context, input auth.RecoveryRequest) (
 		_ = listener.Close()
 		return auth.RecoverySession{}, err
 	}
+	setupCSRF, err := nonce()
+	if err != nil {
+		_ = listener.Close()
+		return auth.RecoverySession{}, err
+	}
 	sessionContext, _, _, err := requestcontrol.PrepareCommandContext(manager.parent, requestcontrol.DefaultCommandRequestLimit)
 	if err != nil {
 		_ = listener.Close()
@@ -166,9 +178,13 @@ func (manager *Manager) Start(ctx context.Context, input auth.RecoveryRequest) (
 		view.Status = "awaiting_callback"
 		view.AuthorizationURL = AuthorizationURL(input.Channel, app.AppID, origin+callbackPath, state)
 	}
-	current = &session{input: input, origin: origin, serveDone: make(chan struct{}), shutdownDone: make(chan struct{}), resultServed: make(chan struct{}), stopWaiting: make(chan struct{})}
+	if configurationRequired {
+		view.Status = "awaiting_configuration"
+		view.AuthorizationURL = origin + "/oauth/setup?session=" + id
+	}
+	current = &session{input: input, origin: origin, setupCSRF: setupCSRF, oauthState: state, serveDone: make(chan struct{}), shutdownDone: make(chan struct{}), resultServed: make(chan struct{}), stopWaiting: make(chan struct{})}
 	current.coordinator = auth.NewRecoveryCoordinator(sessionContext, input, view, state, manager.options.Lifetime, flow)
-	current.server = &http.Server{Handler: manager.handler(current), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
+	current.server = &http.Server{Handler: manager.handler(current), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
 	// Bound retained, safe terminal metadata; never persist a bearer callback.
 	if len(manager.sessions) >= 32 {
 		for key, old := range manager.sessions {
@@ -264,6 +280,8 @@ func (manager *Manager) handler(current *session) http.Handler {
 			return
 		}
 		switch request.URL.Path {
+		case "/oauth/setup":
+			manager.configureApp(writer, request, current)
 		case "/oauth/confirm":
 			manager.confirm(writer, request, current)
 		case callbackPath:
@@ -352,7 +370,7 @@ func channelTitle(channel string) string {
 	return "巨量营销"
 }
 func statusText(status string) string {
-	return map[string]string{"awaiting_user": "等待你确认", "awaiting_callback": "等待完成官方授权", "authorizing": "正在确认授权", "syncing": "正在同步可访问账户", "completed": "授权和账户同步已完成", "failed": "授权恢复未完成", "cancelled": "已取消", "expired": "本次操作已过期，请回到会话重新发起"}[status]
+	return map[string]string{"awaiting_configuration": "等待配置应用", "awaiting_user": "等待你确认", "awaiting_callback": "等待完成官方授权", "authorizing": "正在确认授权", "syncing": "正在同步可访问账户", "completed": "授权和账户同步已完成", "failed": "授权恢复未完成", "cancelled": "已取消", "expired": "本次操作已过期，请回到会话重新发起"}[status]
 }
 func recoveryStatusText(view auth.RecoverySession) string {
 	if view.Status == "failed" && view.SyncRequired {
@@ -367,7 +385,7 @@ func errorMessage(code string) string {
 	return map[string]string{
 		"OAUTH_REJECTED":                  "未完成官方授权，请回到会话重新发起。",
 		"AUTHORIZATION_FAILED":            "授权未完成，请回到会话查看失败原因。",
-		"OAUTH_APP_MISSING":               "本机尚未配置此渠道的 OAuth App，请先通过受控 CLI 配置 App。",
+		"OAUTH_APP_MISSING":               "本机尚未配置此渠道的 OAuth App，请回到对话重新发起授权，在本机配置页填写应用信息。",
 		"ACCOUNT_SYNC_FAILED":             "账户同步未完成，请回到会话查看具体失败原因。",
 		"AUTHORIZATION_SERVICE_FAILED":    "本机授权服务异常结束，请重新发起授权。",
 		"REAUTHORIZATION_REQUIRED":        "原授权已失效，请回到会话重新发起授权。",

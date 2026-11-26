@@ -76,32 +76,32 @@ type MarketingCreateSource struct {
 }
 
 type MarketingCreateInput struct {
-	TemplateName          string
-	AdvertiserID          string
-	Platform              string
-	TrafficSource         string
-	ProductID             string
-	ProductName           string
-	ProductInfo           map[string]any
-	SellingPoints         any
-	DailyBudget           any
-	ROIGoal               any
-	Gender                string
-	Ages                  any
-	MaterialSourceType    string
-	SelectionMode         string
-	MaxMaterials          any
-	UnlimitedMaterials    bool
-	CreatorIDs            any
-	MinimumRemaining      any
-	Titles                any
-	PlanSource            string
-	LandingPageURL        string
-	OpenURL               string
-	TrackURL              string
-	ActionTrackURL        string
-	ProjectNameTemplate   string
-	PromotionNameTemplate string
+	TemplateName          string         `json:"template_name,omitempty"`
+	AdvertiserID          string         `json:"advertiser_id,omitempty"`
+	Platform              string         `json:"platform,omitempty"`
+	TrafficSource         string         `json:"traffic_source,omitempty"`
+	ProductID             string         `json:"product_id,omitempty"`
+	ProductName           string         `json:"product_name,omitempty"`
+	ProductInfo           map[string]any `json:"product_info,omitempty"`
+	SellingPoints         any            `json:"selling_points,omitempty"`
+	DailyBudget           any            `json:"daily_budget,omitempty"`
+	ROIGoal               any            `json:"roi_goal,omitempty"`
+	Gender                string         `json:"gender,omitempty"`
+	Ages                  any            `json:"ages,omitempty"`
+	MaterialSourceType    string         `json:"material_source_type,omitempty"`
+	SelectionMode         string         `json:"selection_mode,omitempty"`
+	MaxMaterials          any            `json:"max_materials,omitempty"`
+	UnlimitedMaterials    bool           `json:"unlimited_materials,omitempty"`
+	CreatorIDs            any            `json:"creator_ids,omitempty"`
+	MinimumRemaining      any            `json:"minimum_remaining,omitempty"`
+	Titles                any            `json:"titles,omitempty"`
+	PlanSource            string         `json:"plan_source,omitempty"`
+	LandingPageURL        string         `json:"landing_page_url,omitempty"`
+	OpenURL               string         `json:"open_url,omitempty"`
+	TrackURL              string         `json:"track_url,omitempty"`
+	ActionTrackURL        string         `json:"action_track_url,omitempty"`
+	ProjectNameTemplate   string         `json:"project_name_template,omitempty"`
+	PromotionNameTemplate string         `json:"promotion_name_template,omitempty"`
 }
 
 func MarketingCreateSources(

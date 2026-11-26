@@ -202,7 +202,7 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 		configPath := filepath.Clean(filesystem.ResolveConfigPath(explicitConfig, cwd, getenv, userHome))
 		store := filesystem.ConfigStore{Path: configPath}
 		authorizations := filesystem.AuthorizationStore{Root: filepath.Join(filesystem.CodexHome(getenv, userHome), "ads-plan-monitor", "state")}
-		return RunTemplatesInteractive(ctx, invocation.Command.Action, invocation.Arguments, store, authorizations, configPath, stdin, stdout)
+		return RunTemplatesInteractive(ctx, invocation.Command.Action, invocation.Arguments, store, authorizations, configPath, stdin, stdout, runner.Policy)
 	case "materials":
 		stateRoot := filepath.Join(codexRoot, "ads-plan-monitor", "state")
 		return runner.runMarketingMaterials(

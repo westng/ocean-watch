@@ -11,6 +11,9 @@ import (
 func WriteHelp(writer io.Writer, invocation Invocation) {
 	if invocation.Command.Domain != "" {
 		_, _ = fmt.Fprintf(writer, "Usage: ocean-watch %s %s [options]\n\n%s\n", invocation.Command.Domain, invocation.Command.Action, invocation.Command.Description)
+		if invocation.Command.Name() == "templates create" {
+			_, _ = fmt.Fprintln(writer, "\nAgent input: --input-json JSON | --input-file PATH (use - for stdin)\nMissing choices return status=needs_input; complete input returns status=preview.\nSave the reviewed preview: --submit --expected-revision REV --preview-digest DIGEST\nPut channel, source_template and marketing/product/live fields in the JSON object.\nWithout structured input, the direct-human CLI uses its interactive wizard.")
+		}
 		return
 	}
 	if invocation.Domain != "" {

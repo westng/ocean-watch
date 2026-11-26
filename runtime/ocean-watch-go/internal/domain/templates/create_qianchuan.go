@@ -8,13 +8,13 @@ type QianchuanProductCreateSource struct {
 }
 
 type QianchuanProductCreateInput struct {
-	TemplateID       string
-	TemplateName     string
-	AdvertiserID     string
-	ProductName      string
-	ProductShortName string
-	ProductIDs       any
-	PlanNameTemplate string
+	TemplateID       string `json:"-"`
+	TemplateName     string `json:"template_name,omitempty"`
+	AdvertiserID     string `json:"advertiser_id,omitempty"`
+	ProductName      string `json:"product_name,omitempty"`
+	ProductShortName string `json:"product_short_name,omitempty"`
+	ProductIDs       any    `json:"product_ids,omitempty"`
+	PlanNameTemplate string `json:"plan_name_template,omitempty"`
 }
 
 type QianchuanLiveCreateSource struct {
@@ -23,10 +23,10 @@ type QianchuanLiveCreateSource struct {
 }
 
 type QianchuanLiveCreateInput struct {
-	TemplateID   string
-	AdvertiserID string
-	CreatorName  string
-	AwemeID      string
+	TemplateID   string `json:"-"`
+	AdvertiserID string `json:"advertiser_id,omitempty"`
+	CreatorName  string `json:"creator_name,omitempty"`
+	AwemeID      string `json:"aweme_id,omitempty"`
 }
 
 func QianchuanProductCreateSources(config map[string]any) (map[string]any, []QianchuanProductCreateSource, error) {

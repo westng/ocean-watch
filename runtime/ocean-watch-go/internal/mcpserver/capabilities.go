@@ -7,6 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/productversion"
 )
 
 const capabilitiesInputSchema = `{
@@ -26,7 +27,7 @@ const capabilitiesOutputSchema = `{
 		"channel":{"type":"string","enum":["marketing","qianchuan","star_map","shared"]},
 		"effect":{"type":"string","enum":["local_read","local_write","public_read","authorization_write","official_read","online_write"]},
 		"requires_submit":{"type":"boolean"},"description":{"type":"string","minLength":1,"maxLength":256},
-		"primary_surface":{"type":"string","enum":["cli","mcp"]},"route":{"type":"string","minLength":1,"maxLength":256},"enabled":{"type":"boolean"},"minimum_mode":{"enum":["read","plan","execute"]},"required_toolsets":{"type":"array","items":{"type":"string"}}
+		"primary_surface":{"type":"string","enum":["cli","mcp"]},"route":{"type":"string","minLength":1,"maxLength":256},"enabled":{"type":"boolean"},"unavailable_reason":{"type":"string"},"minimum_mode":{"enum":["read","plan","execute"]},"required_toolsets":{"type":"array","items":{"type":"string"}}
       }
     }}
   }
@@ -41,18 +42,19 @@ type capabilityOutput struct {
 }
 
 type capabilityItem struct {
-	Enabled          bool     `json:"enabled"`
-	MinimumMode      string   `json:"minimum_mode"`
-	RequiredToolsets []string `json:"required_toolsets"`
-	ID               string   `json:"id"`
-	Domain           string   `json:"domain,omitempty"`
-	Action           string   `json:"action,omitempty"`
-	Channel          string   `json:"channel"`
-	Effect           string   `json:"effect"`
-	RequiresSubmit   bool     `json:"requires_submit"`
-	Description      string   `json:"description"`
-	PrimarySurface   string   `json:"primary_surface"`
-	Route            string   `json:"route"`
+	Enabled           bool     `json:"enabled"`
+	UnavailableReason string   `json:"unavailable_reason,omitempty"`
+	MinimumMode       string   `json:"minimum_mode"`
+	RequiredToolsets  []string `json:"required_toolsets"`
+	ID                string   `json:"id"`
+	Domain            string   `json:"domain,omitempty"`
+	Action            string   `json:"action,omitempty"`
+	Channel           string   `json:"channel"`
+	Effect            string   `json:"effect"`
+	RequiresSubmit    bool     `json:"requires_submit"`
+	Description       string   `json:"description"`
+	PrimarySurface    string   `json:"primary_surface"`
+	Route             string   `json:"route"`
 }
 
 func capabilitiesHandler(version string, instances ...*policy.Instance) mcp.ToolHandler {
@@ -77,6 +79,10 @@ func capabilitiesHandler(version string, instances ...*policy.Instance) mcp.Tool
 		for _, spec := range contracts.DefaultCapabilityRegistry.All() {
 			item := capabilitySpecOutput(spec)
 			item.Enabled = instance.CheckCapability(spec.ID) == nil
+			if parsed, err := productversion.Parse(version); err == nil && parsed.Prerelease() && spec.Effect == contracts.EffectOnlineWrite && spec.ID != "qianchuan.operation_execute" {
+				item.Enabled = false
+				item.UnavailableReason = "legacy_write_unavailable_in_preview"
+			}
 			if spec.ID == "shared.managed_account_report" && channel == "marketing" {
 				item.PrimarySurface = "cli"
 				item.Route = "./run accounts report --channel marketing"

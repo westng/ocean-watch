@@ -1,7 +1,7 @@
 interface:
   display_name: "巨量引擎盯盘助手"
   short_description: "营销授权覆盖刷新、负责账户、模板素材、计划报表与策略"
-  default_prompt: "Use $ads-plan-monitor to understand my Marketing intent, use Ocean Watch MCP for templates and common Marketing reads, and safely route remaining operations through the bundled Go CLI."
+  default_prompt: "Use $ads-plan-monitor to understand my Marketing intent, use Ocean Watch MCP for templates and common Marketing reads, use structured CLI input for local templates and supported remaining reads, and report Marketing online writes as unavailable in the current alpha."
 dependencies:
   tools:
     - type: "mcp"

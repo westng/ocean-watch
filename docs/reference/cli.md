@@ -14,6 +14,8 @@ skills/qc-plan-monitor/run <domain> <action> [options]
 skills/xt-plan-monitor/run <domain> <action> [options]
 ```
 
+上述路径相对于仓库根。AI 在任意用户项目中调用时，必须从已加载的 `SKILL.md` 目录构造并引用启动器绝对路径，不能直接在会话目录执行 `./run`。
+
 Windows 使用对应的 `run.cmd`。三个 Skill 启动器只负责选择当前平台的内置 Go 二进制，命令和 JSON 合同相同。星图 Skill 使用 `--channel star_map`，仅接入授权与账户能力，不能把营销或千川命令当成星图计划 / 报表接口。
 
 完整参数以运行时帮助为准：
@@ -45,7 +47,7 @@ skills/qc-plan-monitor/run plans batch-qianchuan-works --help
 
 ## 输出与退出码
 
-stdout 只输出一个 UTF-8 JSON 文档。成功使用退出码 `0`；参数或配置问题通常为 `2`；业务、官方 API 或环境失败为非零。凭据不会写入 JSON、stderr 或日志。
+非交互命令的 stdout 只输出一个 UTF-8 JSON 文档；人类直接使用的旧交互向导包含提示文本，AI 应使用下述结构化模板入口。成功使用退出码 `0`；参数或配置问题通常为 `2`；业务、官方 API 或环境失败为非零。凭据不会写入 JSON、stderr 或日志。
 
 当结果包含：
 
@@ -59,7 +61,7 @@ Skill 必须原样展示 `rendered_markdown`，保留列顺序、日期范围、
 
 - 名单、模板查询、素材查询、报表和计划详情为只读。
 - 模板创建/删除、计划创建/追加/删除和预算/ROI/状态调整默认 dry-run。
-- 在线写入必须显式 `--submit`；千川计划删除还要求 `--confirm-delete`。
+- 当前 alpha 的在线写入仅支持可信千川 Operation 执行；旧计划创建、删除和设置变更的 `--submit` 被拒绝。
 - `qc-plans bind` 只写本地绑定、不调用官方写接口，但会改变后续在线计划选择，因此同样要求显式 `--submit` 和精确 `--group-id` / `--ad-id`；`qc-plans binding-audit` 为只读。
 - 先展示广告主、对象 ID、端点、载荷摘要和阻断项，再接受提交确认。
 - 写入结果不确定时先回读官方状态对账，不跨端点盲目重试。
@@ -98,8 +100,22 @@ skills/qc-plan-monitor/run qc-reports products --advertiser-id ADVERTISER_ID --r
 
 CLI 的批量入口在兼容期内继续接受旧的逐行 `--work-url` 参数并输出弃用提示；新 MCP 入口只接受结构化 `items[]`，不保留旧顶层批次类型或商务字段。CLI 和 MCP 最终都调用同一个批次 Application Service，输入顺序、分组身份、预检快照和安全边界保持一致。兼容参数的移除必须另行记录在版本变更中。
 
-混合商品或账户使用重复 `--work-item` JSON 参数（MCP 使用 `items[]`），每行可指定 `product_id/product_name`、`advertiser_id`、`plan_template`，省略全局 `--plan-template`。入口根据启用模板的商品/账户绑定唯一匹配后，按广告主和模板拆批；歧义、缺少商品或公开元数据包含多个商品的行保留待确认。每个子批次独立核验和生成预检 ID，一个账户失败不阻断其他账户。没有跨账户统一提交 ID，确认后使用 `--submit --preflight-id ID` 逐个提交。字段、示例和流程图见[千川混合商品作品建计划流程](qianchuan-work-routing.md)。
+混合商品或账户使用重复 `--work-item` JSON 参数（MCP 使用 `items[]`），每行可指定 `product_id/product_name`、`advertiser_id`、`plan_template`，省略全局 `--plan-template`。入口根据启用模板的商品/账户绑定唯一匹配后，按广告主和模板拆批；歧义、缺少商品或公开元数据包含多个商品的行保留待确认。每个子批次独立核验和生成预检 ID，一个账户失败不阻断其他账户。没有跨账户统一执行 ID，每个成功预检须独立准备 Operation、保护确认并执行。字段、示例和流程图见[千川混合商品作品建计划流程](qianchuan-work-routing.md)。
 
 F2 失败时，可在结构化行中补充准确 `creator_douyin_id` 和命名 `creator_name`，由官方定向查询取得唯一数字 UID 后继续归属、商品核验。昵称只用于命名，不能代替身份；未知解析错误不能直接归因为反爬或未授权。
 
 批量成功结果固定展示 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题`。跳过、官方查询不完整和失败原因放在表外，空结果也保留表头。
+
+## 结构化模板创建
+
+`templates create --input-json JSON` 或 `templates create --input-file -` 接收一个严格 JSON 对象，后者从标准输入读取。业务字段全部放在对象中，不与旧 `--channel`、`--template-type` 等向导参数混用。
+
+```bash
+skills/ads-plan-monitor/run templates create --input-json '{}'
+```
+
+缺少渠道、模板类型或业务参数时返回 `status=needs_input`、`missing_fields` 和适用的 `choices`，不写入配置、不读取交互输入。`channel` 为 `marketing` 或 `qianchuan`；千川必须显式选择 `template_kind=product|live`，营销必须选择 `marketing.material_source_type`。`source_template` 使用 `default` 骨架或准确来源名称/ID。分渠道参数及合成示例见 [营销模板](../../skills/ads-plan-monitor/references/template-create.md) 和 [千川模板](../../skills/qc-plan-monitor/references/template-create.md)。
+
+完整请求返回 `status=preview`、`template`、`state_version`、`preview_digest` 和本地授权覆盖状态。审阅后重复相同 JSON，并提供 `--submit --expected-revision REV --preview-digest DIGEST` 才会保存；输入、配置或来源漂移会拒绝提交。最终 Compare-and-Swap 仍校验预览配置版本，不覆盖并发修改、不自动重试。`status=created` 且 `changed=true` 仅表示本地模板已保存，不授予在线计划写入权限。
+
+JSON 拒绝未知字段、重复键、尾随值和超长输入。渠道隔离、广告主策略与本地授权范围均在 Application 中复核；没有授权的渠道可先创建模板，但必须报告 `authorization_status=unverified`。WorkBuddy 保持 MCP-only，尚未提供模板创建工具。
