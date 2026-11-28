@@ -12,36 +12,43 @@ import (
 
 var _ state.OperationRepository = (*Store)(nil)
 
-func (store *Store) MarkAwaitingApproval(ctx context.Context, operationID string, version int, snapshotDigest string, now time.Time) error {
+func (store *Store) MarkAwaitingApproval(ctx context.Context, operationID string, version int, snapshotDigest string, now time.Time) (int64, error) {
 	tx, err := store.beginOperationTx(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
 	snapshot, err := currentOperationSnapshot(ctx, tx, operationID, version, now)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if snapshot.SnapshotDigest != snapshotDigest {
-		return domain.ErrOperationNotExecutable
+		return 0, domain.ErrOperationNotExecutable
 	}
 	current, err := readOperationState(ctx, tx, operationID, version)
 	if err != nil {
-		return err
-	}
-	if current.Status == domain.StatusAwaitingApproval {
-		return store.commitOperationTx(tx)
+		return 0, err
 	}
 	if err := domain.ValidateTransition(current.Status, domain.StatusAwaitingApproval); err != nil {
-		return err
+		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE operation_states SET status='awaiting_approval', updated_at=? WHERE operation_id=? AND operation_version=? AND status='preflight_ready'`, operationTime(now), operationID, version); err != nil {
-		return err
+	if current.Status == domain.StatusApproved {
+		// Retain the audit record, but fence the old ID before opening a new dialog.
+		if _, err := tx.ExecContext(ctx, `UPDATE approvals SET status='expired' WHERE operation_id=? AND operation_version=? AND status='valid'`, operationID, version); err != nil {
+			return 0, err
+		}
 	}
-	return store.commitOperationTx(tx)
+	// Only a decision from the most recently requested dialog may be saved.
+	var round int64
+	err = tx.QueryRowContext(ctx, `UPDATE operation_states SET status='awaiting_approval', updated_at=?, confirmation_round=confirmation_round+1
+		WHERE operation_id=? AND operation_version=? AND status=? RETURNING confirmation_round`, operationTime(now), operationID, version, current.Status).Scan(&round)
+	if err != nil {
+		return 0, err
+	}
+	return round, store.commitOperationTx(tx)
 }
 
-func (store *Store) SaveApproval(ctx context.Context, verified approval.VerifiedApproval, now time.Time) error {
+func (store *Store) SaveApproval(ctx context.Context, verified approval.VerifiedApproval, round int64, now time.Time) error {
 	tx, err := store.beginOperationTx(ctx)
 	if err != nil {
 		return err
@@ -83,7 +90,7 @@ func (store *Store) SaveApproval(ctx context.Context, verified approval.Verified
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'valid')`, record.ID, record.OperationID, record.Version, record.SnapshotDigest, record.ScopeDigest, record.ProviderID, record.AdapterID, record.HostVersion, record.EvidenceHash, record.NonceHash, record.SourceReference, operationTime(record.IssuedAt), operationTime(record.ExpiresAt)); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, "UPDATE operation_states SET status='approved',updated_at=? WHERE operation_id=? AND operation_version=? AND status='awaiting_approval'", operationTime(now), record.OperationID, record.Version)
+	result, err := tx.ExecContext(ctx, "UPDATE operation_states SET status='approved',updated_at=? WHERE operation_id=? AND operation_version=? AND status='awaiting_approval' AND confirmation_round=? AND confirmation_round>0", operationTime(now), record.OperationID, record.Version, round)
 	if err != nil {
 		return err
 	}

@@ -9,8 +9,8 @@ import (
 )
 
 type OperationRepository interface {
-	MarkAwaitingApproval(context.Context, string, int, string, time.Time) error
-	SaveApproval(context.Context, approval.VerifiedApproval, time.Time) error
+	MarkAwaitingApproval(context.Context, string, int, string, time.Time) (int64, error)
+	SaveApproval(context.Context, approval.VerifiedApproval, int64, time.Time) error
 	ClaimExecution(context.Context, operations.ClaimExecutionRequest) (operations.ExecutionLease, error)
 	TakeOverExecution(context.Context, string, int, string, time.Time, time.Duration) (operations.ExecutionLease, error)
 	RenewExecutionLease(context.Context, operations.ExecutionLease, time.Time, time.Duration) (operations.ExecutionLease, error)

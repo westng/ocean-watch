@@ -98,7 +98,7 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 		if service.Links == nil {
 			return BatchCommandResult{}, errors.New("Qianchuan work-link resolver is required")
 		}
-		metadata, resolveErr := service.Links.Resolve(ctx, applicationworkmetadata.ResolveRequest{URLs: batchItemURLs(metadataItems), Concurrency: command.Concurrency})
+		metadata, resolveErr := resolveRoutingMetadata(ctx, service.Links, applicationworkmetadata.ResolveRequest{URLs: batchItemURLs(metadataItems), Concurrency: command.Concurrency})
 		if ctx.Err() != nil {
 			return BatchCommandResult{}, ctx.Err()
 		}
@@ -128,7 +128,15 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 						prepared[metadataItems[row.InputIndex].InputIndex] = shared
 						continue
 					}
-					metadataFailures[metadataItems[row.InputIndex].InputIndex] = routingMetadataReason(row.Reason)
+					item := metadataItems[row.InputIndex]
+					reason := routingMetadataReason(row.Reason)
+					if item.CreatorDouyinID != "" && validPositiveID(row.AwemeItemID) &&
+						(strings.HasPrefix(reason, "f2_") || reason == "invalid_f2_response" || reason == "product_metadata_unavailable") {
+						// Link identity survived F2. Template selection below must still be unique,
+						// and the child's verifier must prove creator, ownership and product.
+						prepared[item.InputIndex] = domain.ResolvedWorkLink{InputURL: row.InputURL, ResolvedURL: row.ResolvedURL, CanonicalURL: row.CanonicalURL, AwemeItemID: row.AwemeItemID}
+					}
+					metadataFailures[item.InputIndex] = reason
 				}
 			}
 		}
@@ -357,6 +365,32 @@ func (service CommandService) routeBatchWorks(ctx context.Context, command Batch
 		result.Performance.Requests.OfficialRequestCount, result.Performance.Requests.RetryCount = counts.Attempts, counts.Retries
 	}
 	return result, nil
+}
+
+// Preserve successful link resolution even when the whole F2 enrichment fails.
+func resolveRoutingMetadata(ctx context.Context, resolver WorkLinkResolver, request applicationworkmetadata.ResolveRequest) (applicationworkmetadata.ResolveResult, error) {
+	staged, ok := resolver.(StagedWorkLinkResolver)
+	if !ok {
+		return resolver.Resolve(ctx, request)
+	}
+	links, err := staged.ResolveLinks(ctx, request)
+	if err != nil || len(links.Resolved) == 0 {
+		return links, err
+	}
+	enriched, err := staged.ResolveMetadata(ctx, cloneResolveResult(links), request.Concurrency)
+	if err == nil || ctx.Err() != nil {
+		return enriched, err
+	}
+	reason := "product_metadata_unavailable"
+	var metadataError *domain.WorkLinkError
+	if errors.As(err, &metadataError) {
+		reason = routingMetadataReason(metadataError.Code)
+	}
+	for _, row := range links.Resolved {
+		links.Skipped = append(links.Skipped, domain.SkippedWorkLink{InputIndex: row.InputIndex, InputURL: row.InputURL, ResolvedURL: row.ResolvedURL, CanonicalURL: row.CanonicalURL, AwemeItemID: row.AwemeItemID, Reason: reason, Message: "作品信息获取未完成", Status: "skipped"})
+	}
+	links.Resolved = nil
+	return links, nil
 }
 
 type routeConfigSnapshot struct{ config map[string]any }

@@ -361,6 +361,9 @@ func (service CommandService) batchWorks(ctx context.Context, command BatchWorks
 	if resolveErr != nil {
 		return BatchCommandResult{}, preflightStageError("work_metadata", resolveErr)
 	}
+	if err := checkDuplicateWorkSettings(resolved, command.Items); err != nil {
+		return BatchCommandResult{}, preflightStageError("work_metadata", err)
+	}
 	baseRequest.Skipped = qianchuanBatchSkippedLinks(resolved.Skipped, command.Items)
 	cachePerformance, linkPerformance = cache, linkPerf
 	if len(resolved.Resolved) == 0 {

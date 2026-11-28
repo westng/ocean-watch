@@ -24,6 +24,7 @@ type PreparedGroup struct {
 	ExpectedPresentItemIDs []string                          `json:"expected_present_item_ids"`
 	ExpectedWriteItemIDs   []string                          `json:"expected_write_item_ids"`
 	BindingDigest          string                            `json:"binding_digest"`
+	PartialProductDigest   string                            `json:"partial_product_digest,omitempty"`
 	SubmitEligible         bool                              `json:"submit_eligible"`
 	ErrorCode              string                            `json:"error_code,omitempty"`
 }
@@ -123,6 +124,7 @@ func prepareBatchSnapshot(request BatchRequest, result BatchResult, now time.Tim
 			prepared.ExpectedAdID = ""
 			prepared.ExpectedWriteItemIDs = sortedUniqueStrings(inputIDs)
 		case "would_append":
+			prepared.PartialProductDigest = resultGroup.partialProductDigest
 			prepared.SubmitEligible = true
 			prepared.ExpectedPresentItemIDs = sortedUniqueStrings(resultGroup.AlreadyPresent)
 			prepared.ExpectedWriteItemIDs = sortedStringDifference(inputIDs, prepared.ExpectedPresentItemIDs)
@@ -196,6 +198,7 @@ func (snapshot preparedBatchSnapshot) batchRequest(
 	}
 	works := []VerifiedWork{}
 	preparedGroups := map[string]PreparedGroup{}
+	partialProducts := map[string]string{}
 	groupIDs := sortedPreparedGroupIDs(snapshot.Groups)
 	for _, groupID := range groupIDs {
 		group := snapshot.Groups[groupID]
@@ -203,6 +206,7 @@ func (snapshot preparedBatchSnapshot) batchRequest(
 			continue
 		}
 		preparedGroups[groupID] = clonePreparedGroup(group)
+		partialProducts[groupID] = group.PartialProductDigest
 		works = append(works, group.Works...)
 	}
 	if len(preparedGroups) == 0 {
@@ -217,8 +221,9 @@ func (snapshot preparedBatchSnapshot) batchRequest(
 		TemplatePayload:  append(json.RawMessage(nil), template.TemplatePayload...),
 		IncludePayloads:  snapshot.IncludePayloads, Works: works,
 		Skipped: append([]SkippedWork(nil), snapshot.Skipped...), ReadPool: pool,
-		PreparedGroups:  preparedGroups,
-		SelectionPolicy: snapshot.planSelectionPolicy(),
+		PreparedGroups:          preparedGroups,
+		expectedPartialProducts: partialProducts,
+		SelectionPolicy:         snapshot.planSelectionPolicy(),
 	}, nil
 }
 

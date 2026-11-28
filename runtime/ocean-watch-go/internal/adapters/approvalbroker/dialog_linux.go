@@ -2,6 +2,7 @@ package approvalbroker
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -30,8 +31,19 @@ func nativeDialog(ctx context.Context, request approval.Request) (bool, error) {
 	command.Stdin = strings.NewReader(text)
 	command.Env = dialogEnvironment()
 	command.WaitDelay = time.Second
-	if err := command.Run(); err != nil {
-		return false, approval.ErrNotApproved
+	return zenityDecision(ctx, command.Run())
+}
+
+func zenityDecision(ctx context.Context, err error) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
 	}
-	return true, nil
+	if err == nil {
+		return true, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false, nil // Cancel or window close: send a rejected decision.
+	}
+	return false, ErrUnavailable
 }

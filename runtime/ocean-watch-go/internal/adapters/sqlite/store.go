@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	SchemaVersion = 6
+	SchemaVersion = 7
 	applicationID = 0x4f574348
 )
 

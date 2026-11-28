@@ -124,11 +124,6 @@ func TestNewVersionInvalidatesAlreadySavedApprovalBeforeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Re-confirmation of an already approved version cannot open another UI
-	// and leave a rejection ambiguously coexisting with the first approval.
-	if _, err := service.Confirm(ctx, snapshot.OperationID, 1, snapshot.SnapshotDigest); err == nil {
-		t.Fatal("approved version requested a second decision")
-	}
 	next := snapshot
 	next.Version = 2
 	next.CreatedAt = time.Now().UTC()

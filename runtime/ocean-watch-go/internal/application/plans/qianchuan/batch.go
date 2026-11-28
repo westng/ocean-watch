@@ -51,7 +51,9 @@ type BatchRequest struct {
 	ReadPool         *ReadPool
 	PlanInventory    *CurrentPlanInventory
 	PreparedGroups   map[string]PreparedGroup
-	SelectionPolicy  string
+	// Retain product-level expectations when replaying a snapshot as a dry run.
+	expectedPartialProducts map[string]string
+	SelectionPolicy         string
 }
 
 type BatchTemplateSummary struct {
@@ -73,26 +75,27 @@ type BatchWrite struct {
 }
 
 type BatchGroupResult struct {
-	GroupID          string         `json:"group_id"`
-	AwemeID          string         `json:"aweme_id"`
-	DouyinID         string         `json:"douyin_id,omitempty"`
-	CreatorName      string         `json:"creator_name,omitempty"`
-	AdID             string         `json:"ad_id,omitempty"`
-	PlanName         string         `json:"plan_name,omitempty"`
-	PlanStatus       string         `json:"plan_status,omitempty"`
-	CandidatePlans   []ExistingPlan `json:"candidate_plans,omitempty"`
-	ProductIDs       []string       `json:"product_ids"`
-	PlanType         string         `json:"plan_type"`
-	Business         string         `json:"business"`
-	InputItemIDs     []string       `json:"input_item_ids"`
-	AlreadyPresent   []string       `json:"already_present_item_ids"`
-	CompletedItemIDs []string       `json:"completed_item_ids"`
-	Status           string         `json:"status"`
-	Writes           []BatchWrite   `json:"writes"`
-	Error            string         `json:"error,omitempty"`
-	ErrorCode        string         `json:"error_code,omitempty"`
-	BindingDigest    string         `json:"-"`
-	Failure          error          `json:"-"`
+	GroupID              string         `json:"group_id"`
+	AwemeID              string         `json:"aweme_id"`
+	DouyinID             string         `json:"douyin_id,omitempty"`
+	CreatorName          string         `json:"creator_name,omitempty"`
+	AdID                 string         `json:"ad_id,omitempty"`
+	PlanName             string         `json:"plan_name,omitempty"`
+	PlanStatus           string         `json:"plan_status,omitempty"`
+	CandidatePlans       []ExistingPlan `json:"candidate_plans,omitempty"`
+	ProductIDs           []string       `json:"product_ids"`
+	PlanType             string         `json:"plan_type"`
+	Business             string         `json:"business"`
+	InputItemIDs         []string       `json:"input_item_ids"`
+	AlreadyPresent       []string       `json:"already_present_item_ids"`
+	CompletedItemIDs     []string       `json:"completed_item_ids"`
+	Status               string         `json:"status"`
+	Writes               []BatchWrite   `json:"writes"`
+	Error                string         `json:"error,omitempty"`
+	ErrorCode            string         `json:"error_code,omitempty"`
+	BindingDigest        string         `json:"-"`
+	partialProductDigest string
+	Failure              error `json:"-"`
 }
 
 type BatchResult struct {
@@ -155,9 +158,25 @@ type batchGroup struct {
 	works    []VerifiedWork
 }
 
-type materialSnapshot struct {
-	rowsByItem map[string]domainqianchuan.PlanMaterial
-	activeIDs  map[string]struct{}
+// Each work may have several active material rows with different product scopes.
+// An empty product ID marks a row whose scope the platform did not return.
+type materialSnapshot map[string]map[string]struct{}
+
+func (snapshot materialSnapshot) missingProducts(itemID string, expected, planProducts []string) ([]string, error) {
+	active := snapshot[itemID]
+	missing := make([]string, 0, len(expected))
+	for _, product := range expected {
+		if _, ok := active[product]; !ok {
+			missing = append(missing, product)
+		}
+	}
+	if _, unscoped := active[""]; unscoped && len(missing) > 0 {
+		if len(planProducts) == 1 && len(missing) == 1 && missing[0] == planProducts[0] {
+			return nil, nil
+		}
+		return nil, errors.New("Qianchuan material product coverage is unknown for a multi-product plan")
+	}
+	return missing, nil
 }
 
 func (service BatchService) Execute(ctx context.Context, request BatchRequest) (BatchResult, error) {
@@ -442,13 +461,33 @@ func (service BatchService) executeExistingGroup(
 		snapshot = *prepared
 	}
 	newWorks := make([]VerifiedWork, 0, len(eligible))
+	partial := map[string][]string{}
 	for _, work := range eligible {
-		if _, exists := snapshot.activeIDs[work.AwemeItemID]; exists {
+		missing, err := snapshot.missingProducts(work.AwemeItemID, work.MatchedProductIDs, plan.ProductIDs)
+		if err != nil {
+			result.Status, result.Error = "failed", err.Error()
+			return result, err
+		}
+		if len(missing) == 0 {
 			result.AlreadyPresent = append(result.AlreadyPresent, work.AwemeItemID)
 			result.CompletedItemIDs = append(result.CompletedItemIDs, work.AwemeItemID)
 			continue
 		}
+		if len(missing) != len(work.MatchedProductIDs) {
+			partial[work.AwemeItemID] = missing
+		}
+		work.MatchedProductIDs = missing
 		newWorks = append(newWorks, work)
+	}
+	if len(partial) > 0 {
+		encoded, _ := json.Marshal(partial)
+		digest := sha256.Sum256(encoded)
+		result.partialProductDigest = hex.EncodeToString(digest[:])
+	}
+	if expected, ok := request.expectedPartialProducts[group.groupID]; ok && expected != result.partialProductDigest {
+		result.Status, result.ErrorCode = "preflight_changed", "PREFLIGHT_CHANGED"
+		result.Error = "current material product associations changed after preflight; run preflight again"
+		return result, nil
 	}
 	if request.Submit {
 		if prepared, exists := request.PreparedGroups[group.groupID]; exists &&
@@ -694,7 +733,8 @@ func (service BatchService) appendWorks(
 		}
 		applied := make([]string, 0, len(itemIDs))
 		for _, itemID := range itemIDs {
-			if _, exists := snapshot.activeIDs[itemID]; exists {
+			missing, coverageErr := snapshot.missingProducts(itemID, productIDs, productIDs)
+			if coverageErr == nil && len(missing) == 0 {
 				applied = append(applied, itemID)
 			}
 		}
@@ -765,17 +805,23 @@ func (service BatchService) fetchPlanMaterialsSnapshot(
 	if err != nil {
 		return materialSnapshot{}, err
 	}
-	snapshot := materialSnapshot{rowsByItem: map[string]domainqianchuan.PlanMaterial{}, activeIDs: map[string]struct{}{}}
+	snapshot := materialSnapshot{}
 	for _, row := range rows {
 		if row.AwemeItemID == "" || strings.EqualFold(row.MaterialStatus, "DELETED") ||
 			(row.Deleted != nil && *row.Deleted) {
 			continue
 		}
-		if existing, exists := snapshot.rowsByItem[row.AwemeItemID]; exists && existing.MaterialID != row.MaterialID {
-			return materialSnapshot{}, errors.New("Qianchuan plan contains ambiguous active materials for one work")
+		products := snapshot[row.AwemeItemID]
+		if products == nil {
+			products = map[string]struct{}{}
+			snapshot[row.AwemeItemID] = products
 		}
-		snapshot.rowsByItem[row.AwemeItemID] = row
-		snapshot.activeIDs[row.AwemeItemID] = struct{}{}
+		if len(row.ProductIDs) == 0 {
+			products[""] = struct{}{}
+		}
+		for _, id := range row.ProductIDs {
+			products[id] = struct{}{}
+		}
 	}
 	return snapshot, nil
 }

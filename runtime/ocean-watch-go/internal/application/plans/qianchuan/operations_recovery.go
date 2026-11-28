@@ -84,7 +84,8 @@ func (s OperationService) readback(ctx context.Context, snapshot ops.Snapshot, p
 		return err
 	}
 	for _, id := range w.ItemIDs {
-		if _, ok := materials.activeIDs[id]; !ok {
+		missing, coverageErr := materials.missingProducts(id, group.Identity.ProductIDs, group.Identity.ProductIDs)
+		if coverageErr != nil || len(missing) != 0 {
 			return ops.ErrDispatchUnknown
 		}
 	}
@@ -156,7 +157,7 @@ func (s OperationService) Reconcile(ctx context.Context, ref OperationReference)
 					break
 				}
 				if err = s.readback(locked, snapshot, p, byID[r.ItemID], r.ObjectID, token.AccessToken, lease); err != nil {
-					readErr = errors.Join(readErr, err)
+					readErr = errors.Join(readErr, ops.ErrDispatchUnknown, err)
 				}
 			}
 		}

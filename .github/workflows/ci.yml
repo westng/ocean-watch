@@ -43,7 +43,9 @@ jobs:
           fi
       - name: Test Go runtime
         working-directory: runtime/ocean-watch-go
-        run: go test ./...
+        run: |
+          go test ./...
+          go test -tags=isolatedhost -count=1 -run '^TestIsolatedOperationHost$' ./internal/application/plans/qianchuan
       - name: Test Go runtime with race detector
         if: runner.os == 'Linux'
         working-directory: runtime/ocean-watch-go

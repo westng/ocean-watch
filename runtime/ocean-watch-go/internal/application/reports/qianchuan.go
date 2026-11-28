@@ -55,7 +55,7 @@ var PlanPresentationColumns = []domain.PresentationColumn{
 	{Field: "cost_guarantee_status_label", Label: "成本保障"},
 	{Field: "bid_type_label", Label: "出价方式"},
 	{Field: "roi_goal", Label: "目标 ROI"},
-	{Field: "budget", Label: "日预算"},
+	{Field: "budget", Label: "预算（接口原值，单位未核实）"},
 	{Field: "stat_cost", Label: "消耗"},
 	{Field: "total_pay_order_count_for_roi2", Label: "订单"},
 	{Field: "total_pay_order_gmv_include_coupon_for_roi2", Label: "GMV"},
@@ -750,7 +750,7 @@ func planPresentationValue(field string, value any) string {
 	}
 	if decimal, ok := decimalPointerOrValue(value); ok {
 		switch field {
-		case "budget", "stat_cost", "total_pay_order_gmv_include_coupon_for_roi2", "total_order_settle_amount_for_roi2_1h":
+		case "stat_cost", "total_pay_order_gmv_include_coupon_for_roi2", "total_order_settle_amount_for_roi2_1h":
 			return "¥" + commaMoney(decimal.StringFixed(2))
 		default:
 			return domain.EscapeMarkdownValue(decimal.String())

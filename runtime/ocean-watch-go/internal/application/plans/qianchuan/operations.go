@@ -380,8 +380,8 @@ func confirmationItem(w operationWrite, g PreparedGroup) (ops.ConfirmationItem, 
 		}
 		encoded, _ := json.Marshal(value)
 		label := prefix
-		if prefix == "delivery_setting.budget" {
-			label = "预算（budget 接口原值）"
+		if w.Action == "create" && prefix == "delivery_setting.budget" {
+			label = "计划预算（元）"
 		}
 		if prefix == "delivery_setting.roi2_goal" {
 			label = "目标 ROI（倍）"
@@ -508,7 +508,7 @@ func (s OperationService) Execute(ctx context.Context, ref OperationReference, a
 					return nil, receipt.Error
 				}
 				if err = s.readback(writeContext, snapshot, p, w, written.ObjectID, e.AccessToken, lease); err != nil {
-					return nil, err
+					return nil, errors.Join(ops.ErrDispatchUnknown, err)
 				}
 				if state == ops.DispatchUnknown {
 					return nil, nil

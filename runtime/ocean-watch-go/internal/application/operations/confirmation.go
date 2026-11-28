@@ -54,7 +54,8 @@ func (s Service) Confirm(ctx context.Context, operationID string, version int, d
 	}
 	request := approval.Request{OperationID: operationID, Version: version, SnapshotDigest: digest,
 		ScopeDigest: summary.ScopeDigest, ExpiresAt: expires, Summary: summary}
-	if err := s.RequestConfirmation(ctx, operationID, version, digest); err != nil {
+	round, err := s.RequestConfirmation(ctx, operationID, version, digest)
+	if err != nil {
 		return ConfirmationResult{}, err
 	}
 	if err := s.Provider.Request(ctx, request); err != nil {
@@ -70,7 +71,7 @@ func (s Service) Confirm(ctx context.Context, operationID string, version int, d
 		evidence.SnapshotDigest != digest || evidence.ScopeDigest != request.ScopeDigest || evidence.ExpiresAt.After(expires) {
 		return ConfirmationResult{}, approval.ErrUntrustedEvidence
 	}
-	record, err := s.AcceptApproval(ctx, evidence)
+	record, err := s.AcceptApproval(ctx, evidence, round)
 	if err != nil {
 		return ConfirmationResult{}, err
 	}

@@ -16,7 +16,7 @@ func (runtime Runtime) addOperationTools(server *mcp.Server) {
 	for _, tool := range []struct{ action, name, description string }{
 		{"prepare", "prepare_qianchuan_operation", "将精确千川预检转换为不可变执行预览；返回用户应审阅的摘要，不执行投放。"},
 		{"get", "get_operation", "读取精确操作的摘要与持久派发/对账状态，不访问官方接口。"},
-		{"confirm", "request_operation_confirmation", "为精确操作打开独立本机确认界面；仅用户在该界面批准后返回审批引用，聊天或自动许可不算批准。"},
+		{"confirm", "request_operation_confirmation", "打开本机界面，请用户审批指定操作。若执行前丢失审批引用或引用已过期，可在预检有效期内再次调用。重新确认会立即作废旧引用，用户批准后返回新引用。"},
 		{"execute", "execute_operation", "消费精确版本的审批引用并执行千川新建/追加；只使用已保存载荷，失败或未知后先查询和对账。"},
 		{"reconcile", "reconcile_operation", "恢复精确操作的官方结果事实；不会重新派发，未派发项目需重新预检和确认。"},
 	} {
@@ -35,6 +35,7 @@ func (runtime Runtime) addOperationTools(server *mcp.Server) {
 		if action == "confirm" {
 			output = objectSchema(map[string]any{"operation_id": stringSchema(), "version": map[string]any{"type": "integer"}, "snapshot_digest": stringSchema(), "approval_id": stringSchema(), "expires_at": stringSchema()}, "operation_id", "version", "snapshot_digest", "approval_id", "expires_at")
 		}
+		output = json.RawMessage(objectOneOf + string(output) + "," + errorOutputSchema + "]}")
 		handler := func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			started, id := runtime.now(), runtime.requestID()
 			var input struct {

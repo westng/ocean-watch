@@ -268,6 +268,14 @@ func TestQianchuanPlanReportSDKParity(t *testing.T) {
 	}
 }
 
+func TestQianchuanReportBudgetHasNoAssumedCurrency(t *testing.T) {
+	amount := domain.MustDecimal("1234.567")
+	table := renderPlanTable([]map[string]any{{"budget": &amount, "stat_cost": amount}})
+	if !strings.Contains(table, "| 预算（接口原值，单位未核实） |") || !strings.Contains(table, "| 1234.567 | ¥1,234.57 |") {
+		t.Fatal(table)
+	}
+}
+
 func TestQianchuanUnifiedReportRoutingAndPagination(t *testing.T) {
 	reader := &qianchuanUnifiedReaderStub{
 		dataPages: map[int]domainreports.QianchuanReportPage{

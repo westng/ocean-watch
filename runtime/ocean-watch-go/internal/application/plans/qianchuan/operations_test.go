@@ -252,6 +252,52 @@ func (f *operationFixture) confirm(t *testing.T, r OperationReference) string {
 	return a.ApprovalID
 }
 
+func TestConfirmationBudgetUsesExactCreateField(t *testing.T) {
+	for _, action := range []string{"create", "append"} {
+		w := operationWrite{Action: action, Payload: json.RawMessage(`{"delivery_setting":{"budget":1234.50},"other":{"budget":987.65}}`)}
+		item, err := confirmationItem(w, PreparedGroup{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := map[string]string{}
+		for _, change := range item.Changes {
+			fields[change.Field] = change.After
+		}
+		label := "delivery_setting.budget"
+		if action == "create" {
+			label = "计划预算（元）"
+		}
+		if fields[label] != "1234.50" || fields["other.budget"] != "987.65" || (action != "create" && fields["计划预算（元）"] != "") {
+			t.Fatalf("%s: %+v", action, fields)
+		}
+	}
+}
+
+// NewHostFixture exposes the synthetic ports only to the external MCP acceptance test.
+func NewHostFixture(t *testing.T) *operationFixture       { return newOperationFixture(t, 1) }
+func (f *operationFixture) HostService() OperationService { return f.service }
+func (f *operationFixture) PreflightID() string           { return f.preflight }
+func (f *operationFixture) RejectConfirmation()           { f.approval.reject = true }
+func (f *operationFixture) LoseWriteResponse()            { f.io.lose, f.io.hide = true, true }
+func (f *operationFixture) Dispatches() int               { return f.io.calls }
+
+func (f *operationFixture) Reopen(t *testing.T) {
+	t.Helper()
+	if err := f.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(context.Background(), sqlite.Options{Path: f.path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.store = store
+	f.service.Core.Repository = store
+	f.service.Core.Snapshots = store
+	f.service.Recovery = store
+	f.now = f.now.Add(time.Second)
+	f.io.hide = false
+}
+
 func TestOperationConfirmedCreateReadbackAndReplay(t *testing.T) {
 	f := newOperationFixture(t, 1)
 	ref := f.prepare(t)
@@ -278,19 +324,15 @@ func TestOperationUnknownSurvivesRestartAndReconcilesWithoutWrite(t *testing.T) 
 	f.io.lose = true
 	f.io.hide = true
 	view, err := f.service.Execute(context.Background(), ref, id)
-	if err == nil || view.Status != ops.StatusUnknown || f.io.calls != 1 {
+	if !errors.Is(err, ops.ErrDispatchUnknown) || view.Status != ops.StatusUnknown || f.io.calls != 1 {
 		t.Fatalf("unknown: %+v %v", view, err)
 	}
-	_ = f.store.Close()
-	f.store, err = sqlite.Open(context.Background(), sqlite.Options{Path: f.path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.service.Core.Repository = f.store
-	f.service.Core.Snapshots = f.store
-	f.service.Recovery = f.store
 	f.now = f.now.Add(time.Second)
-	f.io.hide = false
+	view, err = f.service.Reconcile(context.Background(), ref)
+	if !errors.Is(err, ops.ErrDispatchUnknown) || view.Status != ops.StatusUnknown || f.io.calls != 1 {
+		t.Fatalf("unavailable readback: %+v %v", view, err)
+	}
+	f.Reopen(t)
 	view, err = f.service.Reconcile(context.Background(), ref)
 	if err != nil || view.Status != ops.StatusSucceeded || f.io.calls != 1 {
 		t.Fatalf("recovery: %+v %v", view, err)

@@ -121,7 +121,7 @@ func CanTransition(from, to Status) bool {
 	case StatusAwaitingApproval:
 		return to == StatusApproved || to == StatusBlocked || to == StatusCancelled || to == StatusExpired
 	case StatusApproved:
-		return to == StatusExecuting || to == StatusCancelled || to == StatusExpired
+		return to == StatusAwaitingApproval || to == StatusExecuting || to == StatusCancelled || to == StatusExpired
 	case StatusExecuting:
 		return to == StatusSucceeded || to == StatusFailed || to == StatusPartiallySucceeded || to == StatusUnknown
 	case StatusUnknown, StatusPartiallySucceeded:

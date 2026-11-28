@@ -34,14 +34,14 @@ type ExecutionResult struct {
 	Lease domain.ExecutionLease
 }
 
-func (s Service) RequestConfirmation(ctx context.Context, operationID string, version int, snapshotDigest string) error {
+func (s Service) RequestConfirmation(ctx context.Context, operationID string, version int, snapshotDigest string) (int64, error) {
 	if s.Repository == nil {
-		return errors.New("operation repository is required")
+		return 0, errors.New("operation repository is required")
 	}
 	return s.Repository.MarkAwaitingApproval(ctx, operationID, version, snapshotDigest, s.now())
 }
 
-func (s Service) AcceptApproval(ctx context.Context, evidence approval.Evidence) (domain.ApprovalRecord, error) {
+func (s Service) AcceptApproval(ctx context.Context, evidence approval.Evidence, round int64) (domain.ApprovalRecord, error) {
 	if s.Repository == nil || s.Verifier == nil {
 		return domain.ApprovalRecord{}, errors.New("approval repository and verifier are required")
 	}
@@ -57,7 +57,7 @@ func (s Service) AcceptApproval(ctx context.Context, evidence approval.Evidence)
 	if !record.ValidAt(now) {
 		return domain.ApprovalRecord{}, domain.ErrApprovalExpired
 	}
-	if err := s.Repository.SaveApproval(ctx, verified, now); err != nil {
+	if err := s.Repository.SaveApproval(ctx, verified, round, now); err != nil {
 		return domain.ApprovalRecord{}, err
 	}
 	return record, nil

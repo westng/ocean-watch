@@ -184,7 +184,7 @@ func runQianchuanLiveTemplateWizard(
 		return err
 	}
 	delivery := copyMap(source.Template["delivery_setting"])
-	budget, err := reader.value("日预算", defaultOr(delivery["budget"], 5000), true)
+	budget, err := reader.value("计划预算（元）", defaultOr(delivery["budget"], 5000), true)
 	if err != nil {
 		return err
 	}

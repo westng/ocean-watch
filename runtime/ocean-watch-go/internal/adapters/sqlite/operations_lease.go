@@ -188,10 +188,12 @@ func (store *Store) TakeOverExecution(ctx context.Context, operationID string, v
 			return domain.ExecutionLease{}, err
 		}
 	}
+	// The IMMEDIATE transaction protects the expiry checked above. Persisted
+	// RFC3339Nano timestamps cannot be ordered lexicographically.
 	result, err := tx.ExecContext(ctx, `UPDATE execution_leases SET owner_id=?, fencing_epoch=?, expires_at=?, renewed_at=?
-		WHERE operation_id=? AND operation_version=? AND fencing_epoch=? AND expires_at<=?`,
+		WHERE operation_id=? AND operation_version=? AND fencing_epoch=?`,
 		lease.OwnerID, lease.FencingEpoch, operationTime(lease.ExpiresAt), operationTime(lease.RenewedAt), operationID, version,
-		current.FencingEpoch, operationTime(now))
+		current.FencingEpoch)
 	if err != nil {
 		return domain.ExecutionLease{}, err
 	}
@@ -240,9 +242,9 @@ func (store *Store) RenewExecutionLease(ctx context.Context, lease domain.Execut
 	updated.RenewedAt = now
 	updated.ExpiresAt = now.Add(ttl)
 	result, err := tx.ExecContext(ctx, `UPDATE execution_leases SET expires_at=?, renewed_at=?
-		WHERE operation_id=? AND operation_version=? AND owner_id=? AND fencing_epoch=? AND expires_at>?`,
+		WHERE operation_id=? AND operation_version=? AND owner_id=? AND fencing_epoch=?`,
 		operationTime(updated.ExpiresAt), operationTime(updated.RenewedAt), updated.OperationID, updated.Version,
-		updated.OwnerID, updated.FencingEpoch, operationTime(now))
+		updated.OwnerID, updated.FencingEpoch)
 	if err != nil {
 		return domain.ExecutionLease{}, err
 	}

@@ -79,13 +79,17 @@ func (resolver *routedLinkResolver) ResolveLinks(ctx context.Context, request ap
 		resolver.applyHint(&result.Resolved[index])
 	}
 	sort.Slice(result.Resolved, func(i, j int) bool { return result.Resolved[i].InputIndex < result.Resolved[j].InputIndex })
+	return result, checkDuplicateWorkSettings(result, resolver.items)
+}
+
+func checkDuplicateWorkSettings(result applicationworkmetadata.ResolveResult, items []domainqianchuan.BatchItem) error {
 	seen := map[string]int{}
 	check := func(id string, index int) error {
-		if id == "" || index < 0 || index >= len(resolver.items) {
+		if id == "" || index < 0 || index >= len(items) {
 			return nil
 		}
 		if previous, exists := seen[id]; exists {
-			left, right := resolver.items[previous], resolver.items[index]
+			left, right := items[previous], items[index]
 			if left.PlanType != right.PlanType || left.Business != right.Business || left.ProductID != right.ProductID || left.CreatorDouyinID != right.CreatorDouyinID || left.CreatorUID != right.CreatorUID || left.CreatorName != right.CreatorName {
 				return domainqianchuan.ErrDuplicateItemConflict
 			}
@@ -96,17 +100,15 @@ func (resolver *routedLinkResolver) ResolveLinks(ctx context.Context, request ap
 	}
 	for _, row := range result.Resolved {
 		if err := check(row.AwemeItemID, row.InputIndex); err != nil {
-			return result, err
+			return err
 		}
 	}
 	for _, row := range result.Skipped {
-		if row.Reason == "duplicate_input" {
-			if err := check(row.AwemeItemID, row.InputIndex); err != nil {
-				return result, err
-			}
+		if err := check(row.AwemeItemID, row.InputIndex); err != nil {
+			return err
 		}
 	}
-	return result, nil
+	return nil
 }
 
 func (resolver *routedLinkResolver) applyHint(row *domain.ResolvedWorkLink) {
