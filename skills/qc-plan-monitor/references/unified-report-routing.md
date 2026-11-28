@@ -6,6 +6,8 @@ Use this reference after the Skill has identified a Qianchuan 全域 or 乘方 r
 
 Use `report_qianchuan_account` for one account's overall/uni fixed report, `report_qianchuan_uni_account` for the fixed all-domain report, and `report_qianchuan_managed_accounts` for the locally enabled responsible-account set. For one advertiser's custom topic, use `get_qianchuan_report_schema` when topics, dimensions or metrics need discovery, then `report_qianchuan_custom` with the exact `data_topic`, `dimensions`, `metrics`, `start_date` and `end_date`. These MCP routes reuse the existing SDK reporting services and retain their source, decimal amounts and partial failures.
 
+Omit `topics` to discover `available_topics` from the local contract, then select the relevant topic and query its dimensions and metrics for each advertiser. Only use fields returned by that account's Schema. A failed Schema query blocks construction of the custom report. Preserve the error code and retry only a retryable transient failure within bounds. Never invent `AUTHOR`, `author_id` or `author_name` to bypass failed discovery. For a combined creator ranking, collect the complete relevant account rows with the same date and metric definition, group additive metrics by a verified cross-account creator identifier, and rank after aggregation. Keep incomplete coverage explicit.
+
 The CLI contracts below remain available for an explicitly requested advanced command or multi-account custom query. They are not a fallback for a missing task MCP. If a desired room/author report has no matching custom topic, use the approved exact official query contract for that dimension endpoint rather than inventing a topic.
 
 ## Semantic Selection

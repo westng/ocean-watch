@@ -72,6 +72,10 @@
 
 ## 结果与失败
 
+`get_qianchuan_report_schema` 省略 `topics` 时返回 `source=local_contract` 和 `result.available_topics`。选择符合业务场景的主题后，携带 `topics` 查询指定账户的官方维度和指标，成功来源为 `official_sdk`。主题列表不证明该账户支持每个主题或字段。
+
+`report_qianchuan_custom` 会在请求报表数据前读取同一账户、主题和数据周期的 Schema，校验维度、指标、排序和过滤字段。Schema 失败时停止数据查询。主题或字段不可用时返回 `REPORT_TOPIC_REQUIRED` 或 `REPORT_FIELDS_UNSUPPORTED`；官方错误保留错误码。MCP 输出合同同时声明成功与失败结构，严格宿主可读取 `error.code`，无需通过猜测字段绕过失败。默认最多读取 20 页，`top` 只限制展示。
+
 通用查询返回查询身份、来源、查询时间、渠道与主体、日期/统计口径、白名单 `columns/items`、失败和 `completeness/has_more/cursor`。ID 与数值保留十进制字符串，空值为 null；不经过浮点数、不把缺失值补零，也不输出原始业务 JSON 或媒体 URL。
 
 余额和计划消耗的文档单位为“千分之一分”，DTO 标记 `CNY/100000` 并保留原值；展示人民币元时须按十进制定点换算。元、分和秒分别标记已核实单位；文档未明确的单位保持未知，例如配额中的 `month_cost`，不得猜测。

@@ -9,7 +9,8 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/policy"
 )
 
-const developerOutputSchema = `{"type":"object","required":["source","kind","snippets","truncated"],"properties":{"source":{"const":"official_developer_mcp"},"kind":{"enum":["search","schema","example"]},"language":{"type":"string"},"snippets":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"}},"additionalProperties":false}`
+const developerSuccessSchema = `{"type":"object","required":["source","kind","snippets","truncated"],"properties":{"source":{"const":"official_developer_mcp"},"kind":{"enum":["search","schema","example"]},"language":{"type":"string"},"snippets":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"}},"additionalProperties":false}`
+const developerOutputSchema = objectOneOf + developerSuccessSchema + `,` + errorOutputSchema + `]}`
 
 func (runtime Runtime) addDeveloperTools(server *mcp.Server) {
 	if runtime.Policy == nil || runtime.Policy.Check([]string{"developer_docs"}, "read") != nil {

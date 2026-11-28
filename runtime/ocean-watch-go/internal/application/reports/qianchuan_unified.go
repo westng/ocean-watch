@@ -166,17 +166,17 @@ type QianchuanDimensionResult struct {
 }
 
 func (service Service) QianchuanSchema(ctx context.Context, query QianchuanSchemaQuery) (QianchuanSchemaResult, error) {
-	reader, lease, ctx, err := service.unifiedContext(ctx, query.CredentialScope)
-	if err != nil {
-		return QianchuanSchemaResult{}, err
-	}
 	topics := uniqueNonEmpty(query.Topics)
-	if len(topics) == 0 {
-		return QianchuanSchemaResult{}, errors.New("at least one data topic is required")
+	if err := validateQianchuanReportTopics(topics); err != nil {
+		return QianchuanSchemaResult{}, err
 	}
 	query.DataPeriod = strings.TrimSpace(query.DataPeriod)
 	if !validQianchuanDataPeriod(query.DataPeriod) {
 		return QianchuanSchemaResult{}, errors.New("data_period is not supported")
+	}
+	reader, lease, ctx, err := service.unifiedContext(ctx, query.CredentialScope)
+	if err != nil {
+		return QianchuanSchemaResult{}, err
 	}
 	schemas, err := reader.FetchSchemas(ctx, portreports.SchemaRequest{
 		AdvertiserID: query.AdvertiserID, AccessToken: lease.AccessToken,
@@ -252,6 +252,16 @@ func (service Service) QianchuanCustom(ctx context.Context, query QianchuanCusto
 	}
 	reader, lease, ctx, err := service.unifiedContext(ctx, query.CredentialScope)
 	if err != nil {
+		return QianchuanCustomResult{}, err
+	}
+	schemas, err := reader.FetchSchemas(ctx, portreports.SchemaRequest{
+		AdvertiserID: query.AdvertiserID, AccessToken: lease.AccessToken,
+		Topics: []string{query.DataTopic}, DataPeriod: query.DataPeriod,
+	})
+	if err != nil {
+		return QianchuanCustomResult{}, err
+	}
+	if err := validateQianchuanReportFields(query, schemas); err != nil {
 		return QianchuanCustomResult{}, err
 	}
 	filters := make([]portreports.ReportFilter, len(query.Filters))
@@ -441,6 +451,9 @@ func (service Service) normalizeCustomQianchuanQuery(query QianchuanCustomQuery)
 	query.Dimensions, query.Metrics = uniqueNonEmpty(query.Dimensions), uniqueNonEmpty(query.Metrics)
 	if query.DataTopic == "" || len(query.Dimensions) == 0 || len(query.Metrics) == 0 {
 		return query, errors.New("data_topic, dimensions, and metrics are required")
+	}
+	if err := validateQianchuanReportTopics([]string{query.DataTopic}); err != nil {
+		return query, err
 	}
 	query.OrderField = defaultString(strings.TrimSpace(query.OrderField), "stat_cost")
 	query.OrderType = defaultString(strings.ToUpper(strings.TrimSpace(query.OrderType)), "DESC")

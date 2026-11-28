@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/adapters/oceanengine"
 	accounts "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/accounts"
 	official "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/official"
 	reports "github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/application/reports"
@@ -30,7 +32,8 @@ type officialToolOutput struct {
 	Result    any    `json:"result"`
 }
 
-const officialOutputSchema = `{"type":"object","properties":{"ok":{"type":"boolean"},"request_id":{"type":"string"},"source":{"type":"string","enum":["local_contract","official_mcp","official_sdk"]},"result":{"type":"object"}},"required":["ok","request_id","source","result"],"additionalProperties":false}`
+const officialSuccessSchema = `{"type":"object","properties":{"ok":{"const":true},"request_id":{"type":"string"},"source":{"type":"string","enum":["local_contract","official_mcp","official_sdk"]},"result":{"type":"object"}},"required":["ok","request_id","source","result"],"additionalProperties":false}`
+const officialOutputSchema = objectOneOf + officialSuccessSchema + `,` + errorOutputSchema + `]}`
 
 func objectSchema(properties map[string]any, required ...string) json.RawMessage {
 	result := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
@@ -70,8 +73,8 @@ func (runtime Runtime) addOfficialTools(server *mcp.Server) {
 		{"qianchuan.plan_diagnose", "diagnose_qianchuan_plan", "诊断一个精确计划。先核实当前计划场景，再查询对应审核、学习期和赔付事实；不适用项目明确跳过。legacy 必须明确指定。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "plan_id": idSchema(), "scene": enumSchema("uni", "overall", "legacy")}, "advertiser_id", "plan_id"), runtime.officialDiagnose, false},
 		{"qianchuan.material_quality", "inspect_qianchuan_material_quality", "核对精确千川素材的原创和低效标签。提供 material_ids 或 works；作品须经当前 F2 和官方达人、商品、作品关系确认素材 ID。不会创建计划预检。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "material_ids": map[string]any{"type": "array", "items": idSchema(), "maxItems": 100, "minItems": 1, "uniqueItems": true}, "works": works}, "advertiser_id"), runtime.officialQuality, false},
 		{"qianchuan.delivery_suggestions", "get_qianchuan_delivery_suggestions", "查询指定场景的官方预算、ROI、出价或审核建议。有 plan_id 时先核对当前场景；缺少参数会返回补充要求。返回建议及单位，不自动调整计划。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "kind": enumSchema("budget", "roi", "bid", "audit"), "scene": enumSchema("uni", "overall", "legacy"), "plan_id": idSchema(), "parameters": parameterSchema()}, "advertiser_id", "kind", "scene"), runtime.officialSuggestions, false},
-		{"qianchuan.report_schema", "get_qianchuan_report_schema", "查询当前千川账户支持的统一报表主题、维度、指标与口径。复用官方 SDK，先查此工具再构造自定义报表。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "topics": stringsSchema(10), "data_period": stringSchema()}, "advertiser_id"), runtime.officialReportSchema, false},
-		{"qianchuan.custom_report", "report_qianchuan_custom", "按已确认的报表主题、维度和指标查询自定义千川报表。复用 SDK，日期和翻页有界；保留指标单位、口径和截断状态。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "start_date": stringSchema(), "end_date": stringSchema(), "data_topic": stringSchema(), "dimensions": stringsSchema(20), "metrics": stringsSchema(50), "filters": map[string]any{"type": "array", "maxItems": 20, "items": objectSchema(map[string]any{"field": stringSchema(), "operator": numberSchema(0, 100), "values": stringsSchema(100)}, "field", "operator", "values")}, "data_period": stringSchema(), "order_field": stringSchema(), "order_type": enumSchema("ASC", "DESC"), "page_size": numberSchema(1, 100), "max_pages": numberSchema(1, 20), "top": numberSchema(1, 1000)}, "advertiser_id", "start_date", "end_date", "data_topic", "dimensions", "metrics"), runtime.officialCustomReport, false},
+		{"qianchuan.report_schema", "get_qianchuan_report_schema", "省略 topics 返回本地合同的 available_topics；选择主题后带 topics 查询当前账户可用维度和指标。字段确认成功后才能构造自定义报表。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "topics": stringsSchema(10), "data_period": stringSchema()}, "advertiser_id"), runtime.officialReportSchema, false},
+		{"qianchuan.custom_report", "report_qianchuan_custom", "按已确认的主题和字段查询千川报表，派发前再次核验账户 Schema。max_pages 缺省 20，top 只限制展示。Schema 失败时停止查询。", objectSchema(map[string]any{"advertiser_id": idSchema(), "auth_account_id": idSchema(), "start_date": stringSchema(), "end_date": stringSchema(), "data_topic": stringSchema(), "dimensions": stringsSchema(20), "metrics": stringsSchema(50), "filters": map[string]any{"type": "array", "maxItems": 20, "items": objectSchema(map[string]any{"field": stringSchema(), "operator": numberSchema(0, 100), "values": stringsSchema(100)}, "field", "operator", "values")}, "data_period": stringSchema(), "order_field": stringSchema(), "order_type": enumSchema("ASC", "DESC"), "page_size": numberSchema(1, 100), "max_pages": numberSchema(1, 20), "top": numberSchema(1, 1000)}, "advertiser_id", "start_date", "end_date", "data_topic", "dimensions", "metrics"), runtime.officialCustomReport, false},
 		{"shared.managed_account_report", "report_qianchuan_managed_accounts", "查询本地已启用的负责千川账户消耗和表现。复用 SDK 的负责账户报表服务，保留失败账户及缺失指标；不会扫描整份授权列表。", objectSchema(map[string]any{"start_date": stringSchema(), "end_date": stringSchema(), "concurrency": numberSchema(1, 8)}, "start_date", "end_date"), runtime.officialManagedReport, false},
 	}
 	for _, task := range tasks {
@@ -96,6 +99,29 @@ func (runtime Runtime) officialRun(ctx context.Context, request *mcp.CallToolReq
 }
 func mapOfficialError(err error) toolFailure {
 	result := toolFailure{Code: "QUERY_FAILED", Message: "查询未完成。", Details: map[string]any{}}
+	var reportError *domain.Error
+	if errors.As(err, &reportError) {
+		switch reportError.Code {
+		case "report_topics_required", "report_topic_unsupported":
+			topics, _ := reports.QianchuanReportTopics()
+			return toolFailure{Code: "REPORT_TOPIC_REQUIRED", Message: "请从当前合同的数据主题中选择，再查询该账户的报表字段。", Details: map[string]any{"allowed_topics": topics, "schema_tool": "get_qianchuan_report_schema"}}
+		case "report_fields_unsupported":
+			return toolFailure{Code: "REPORT_FIELDS_UNSUPPORTED", Message: "当前账户的报表 Schema 不支持所选字段，请重新选择。", Details: map[string]any{"unsupported_fields": reportError.Details["unsupported_fields"], "schema_tool": "get_qianchuan_report_schema"}}
+		case "report_schema_incomplete":
+			return toolFailure{Code: "REPORT_SCHEMA_INCOMPLETE", Message: "官方 Schema 未完整返回请求的主题。", Details: map[string]any{}}
+		}
+	}
+	mapped := mapOfficialQueryError(err)
+	if mapped.Code != "UPSTREAM_QUERY_FAILED" {
+		return mapped
+	}
+	var envelope *oceanengine.EnvelopeError
+	if errors.As(err, &envelope) {
+		result.Code, result.Message = "OFFICIAL_API_ERROR", "官方接口未完成查询，请核对错误码和请求范围。"
+		result.Retryable, _ = oceanengine.ClassifyReadError(err)
+		result.Details["api_code"] = strconv.FormatInt(envelope.Code, 10)
+		result.Details["http_status"] = envelope.HTTPStatus
+	}
 	var controlled *port.Failure
 	if errors.As(err, &controlled) {
 		result.Code = controlled.Code
@@ -210,16 +236,25 @@ type schemaTaskInput struct {
 }
 
 func (runtime Runtime) officialReportSchema(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return runtime.officialRun(ctx, r, "official_sdk", func() (any, error) {
-		var i schemaTaskInput
-		if decodeStrict(r.Params.Arguments, &i) != nil {
+	var i schemaTaskInput
+	inputErr := decodeStrict(r.Params.Arguments, &i)
+	source := "official_sdk"
+	if len(i.Topics) == 0 {
+		source = "local_contract"
+	}
+	return runtime.officialRun(ctx, r, source, func() (any, error) {
+		if inputErr != nil {
 			return nil, invalidOfficialInput()
-		}
-		if runtime.UnifiedReports == nil {
-			return nil, officialUnavailable()
 		}
 		if runtime.checkReportSubject(i.AdvertiserID) != nil {
 			return nil, &port.Failure{Code: "SCOPE_DENIED", Stage: "scope"}
+		}
+		if len(i.Topics) == 0 {
+			topics, err := reports.QianchuanReportTopics()
+			return map[string]any{"available_topics": topics, "schema_tool": "get_qianchuan_report_schema", "next_action": "select_topics_for_account_schema"}, err
+		}
+		if runtime.UnifiedReports == nil {
+			return nil, officialUnavailable()
 		}
 		return runtime.UnifiedReports.QianchuanSchema(ctx, reports.QianchuanSchemaQuery{CredentialScope: reports.CredentialScope{AdvertiserID: i.AdvertiserID, AuthAccountID: i.AuthAccountID}, Topics: i.Topics, DataPeriod: i.DataPeriod})
 	})
@@ -248,7 +283,7 @@ type customTaskInput struct {
 
 func (runtime Runtime) officialCustomReport(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return runtime.officialRun(ctx, r, "official_sdk", func() (any, error) {
-		var i customTaskInput
+		i := customTaskInput{MaxPages: 20}
 		if decodeStrict(r.Params.Arguments, &i) != nil {
 			return nil, invalidOfficialInput()
 		}

@@ -15,7 +15,7 @@ const capabilitiesInputSchema = `{
 	"properties":{"channel":{"type":"string","enum":["all","marketing","qianchuan","star_map","shared"]}}
 }`
 
-const capabilitiesOutputSchema = `{
+const capabilitiesSuccessSchema = `{
   "type":"object","additionalProperties":false,"required":["ok","runtime_version","commands"],
   "properties":{
 	"mode":{"enum":["read","plan","execute"]},"toolsets":{"type":"array","items":{"type":"string"}},
@@ -32,6 +32,8 @@ const capabilitiesOutputSchema = `{
     }}
   }
 }`
+
+const capabilitiesOutputSchema = objectOneOf + capabilitiesSuccessSchema + `,` + errorOutputSchema + `]}`
 
 type capabilityOutput struct {
 	Mode           string           `json:"mode"`
