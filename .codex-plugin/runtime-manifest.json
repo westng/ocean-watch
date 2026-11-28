@@ -9,7 +9,7 @@
   "resources": {
     ".claude-plugin/plugin.json": "8f4ae99cfad3e3fd5a6b275469784b6d41fcdac68f6d88e1670fe582371a0461",
     ".mcp.json": "716ba6873b268844ef3494f0f4816618f06e698061f566c42981c5eced389867",
-    "bin/ocean-watch-launcher": "02dc307e25750bb94ac39d45b1a328d9592aee160cf546d71404e4eaaa4c5a15",
+    "bin/ocean-watch-launcher": "64a90b0ac4b47bda1f3c4a2ab8142fe4eebd4ef20d5a9f0c3c9aea7e94c5e738",
     "f2/resolve.py": "24a94e10117779fe6b7f5529dab510b88d89b8b1c2d22dd60d0967a6925fa938",
     "harness/config.mjs": "3bdddd27040a73d696eca79c4ef15ccc43581faf476d451fb258b8b7ba816278",
     "harness/cordis.patch.yml": "07ca9c5f25523fe98c1822b6550fadd1c284ecc726e3b0c7193b311a3227ee90",
@@ -23,7 +23,7 @@
     "skills/ads-plan-monitor/references/current-template-notes.md": "17ae98efc1d6b7f64226be46bcbbeb1efb189b3fd2476e94079b934ee9f8df74",
     "skills/ads-plan-monitor/references/official-api-notes.md": "8ee0ba04cc485d84b584e08592aff7577481e47ee7d0c8beeefcc2bb9c1dbd0c",
     "skills/ads-plan-monitor/references/template-create.md": "5f3c38b214d55347181313fee8766f5fae865507efc12c6742f257f39ea7fc89",
-    "skills/ads-plan-monitor/references/workflow-reference.md": "8d422e5d502bce0a78e8229fc0ccbc9a15986572f3a600594e3feeb8202da185",
+    "skills/ads-plan-monitor/references/workflow-reference.md": "668fa4508f6b34be0dfd12f9855ad9dc882b475284868efed7e73ad3f0d785be",
     "skills/ads-plan-monitor/run": "4c3f9c23d8ffd65eaf6ebfe8caf0d8523a2841d2346831c670acbe6bf8762d56",
     "skills/ads-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c",
     "skills/qc-plan-monitor/SKILL.md": "6e6268b4675e6ff6fee983ec233bc1f8e2730e51ed3c5fe320ed549febcb2e3c",
@@ -35,7 +35,7 @@
     "skills/qc-plan-monitor/references/official-queries.md": "6e7ef7a33a93c660369f47fccaa52c33e8c901b628ac6cb693bc887fcba701fb",
     "skills/qc-plan-monitor/references/operations.md": "7975146ca0131758576a0ed72be12aba0a243e50859b7b2bf87058bc6d7de819",
     "skills/qc-plan-monitor/references/template-create.md": "bebc64d8d189da066aa7a0c78cbcd221c8bd3c93f9b96577abba48fc52a61b39",
-    "skills/qc-plan-monitor/references/unified-report-routing.md": "7466878783108fede4f98398c45683daef3b0c738bdda12df5cf2434e906b7f1",
+    "skills/qc-plan-monitor/references/unified-report-routing.md": "b98030461ef8901c4fe406119c3535535a43b7fb87793eef30e193f819fdb6f8",
     "skills/qc-plan-monitor/references/workflow-reference.md": "c7b7578dd145083c36106e126ae0786e396254171e0c1b9c83b7c37204798738",
     "skills/qc-plan-monitor/run": "4c3f9c23d8ffd65eaf6ebfe8caf0d8523a2841d2346831c670acbe6bf8762d56",
     "skills/qc-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c",
@@ -46,10 +46,10 @@
     "skills/xt-plan-monitor/run.cmd": "39e7e297b6afd4f81a43fdedcdff4b8124d7afdc3a3f44ef264bde789f52608c"
   },
   "sha256": {
-    "ocean-watch_darwin_amd64": "9405b5688e8111bd132867f3c1781167395412dae0e9e381d693cc237914ce0c",
-    "ocean-watch_darwin_arm64": "50d6b1b960c37424a094b4dcc58748ebd06e59cc2e3e7d797423b99f7a9d3558",
-    "ocean-watch_linux_amd64": "6b64d3f032959ad1049f085b885f06dac5ca149c7ef967fee3e336ba4c43811a",
-    "ocean-watch_linux_arm64": "67db5ce762d7aaa94f466da695028e483b620955297bc93bac480bd8b36a1dfd",
-    "ocean-watch_windows_amd64.exe": "d0b3adda28fe3d82aa61f46413894052ac4668237ceaa797c3fb857ef060a2a4"
+    "ocean-watch_darwin_amd64": "27f433b8fda336f269f8d6c8bb9ee1895b29855d64f0f9ce44a58b2086c6f7a8",
+    "ocean-watch_darwin_arm64": "eda7472cc6f6a7ffc9128e7b8a7f979f8492d1b76c2c54c88d58450800f36dc5",
+    "ocean-watch_linux_amd64": "6af9c14c1a5ecf47c2b58fb1a25b7fc198e56e4c4cfd1733beb3aa305a84e8e8",
+    "ocean-watch_linux_arm64": "23b48a9b01c8d7bc7cd925b00209b3b0f3dacdc6e5148dd1b82f690da59ba8ef",
+    "ocean-watch_windows_amd64.exe": "691f08f859f9c0b551b3d8aa0d9fcda731b57165cd2020f8ac3f2fc4d0fe26e7"
   }
 }
