@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -117,28 +118,123 @@ func Restore(ctx context.Context, backupPath string, options Options) (*Store, e
 	if err := checkIntegrity(ctx, source); err != nil {
 		return nil, err
 	}
-	destination, err := newPrivateFile(options.Path)
+	destination := filepath.Clean(options.Path)
+	if _, err := os.Lstat(destination); err == nil {
+		return nil, os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	// Finish copying, migrating, and checking integrity before the requested
+	// name becomes visible. A crash before publication cannot occupy it.
+	stage, err := newPrivateFile(filepath.Join(filepath.Dir(destination), ".restore-"+rand.Text()+".db"))
 	if err != nil {
 		return nil, err
 	}
-	if err := copyDatabase(ctx, source, destination); err != nil {
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal", ".maintenance.lock"} {
+		defer os.Remove(stage + suffix)
+	}
+	if err := copyDatabase(ctx, source, stage); err != nil {
 		return nil, err
 	}
-	if err := enableWAL(ctx, destination); err != nil {
+	if err := enableWAL(ctx, stage); err != nil {
 		return nil, err
 	}
+	stageOptions := options
+	stageOptions.Path = stage
 	var store *Store
 	if record.SchemaVersion < SchemaVersion {
-		store, err = Upgrade(ctx, options)
+		store, err = Upgrade(ctx, stageOptions)
 	} else {
-		store, err = Open(ctx, options)
+		store, err = Open(ctx, stageOptions)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := checkIntegrity(ctx, store.db); err != nil {
-		_ = store.Close()
+	if err := errors.Join(checkIntegrity(ctx, store.db), store.Close()); err != nil {
 		return nil, err
+	}
+	return publishRestoredDatabase(ctx, stage, filepath.Join(filepath.Dir(stage), filepath.Base(destination)), options)
+}
+
+func publishRestoredDatabase(ctx context.Context, stage, destination string, options Options) (*Store, error) {
+	identity, err := captureIdentity(stage)
+	if err != nil {
+		return nil, err
+	}
+	release, downgrade, err := acquireMaintenance(ctx, destination, true, options.BusyTimeout)
+	if err != nil {
+		return nil, err
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = release()
+		}
+	}()
+	if _, err := os.Lstat(destination); err == nil {
+		return nil, os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	// Closing the staged store must have checkpointed its WAL. Never pair a
+	// newly published main file with an unrelated destination recovery file.
+	for _, path := range []string{stage, destination} {
+		for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+			if _, err := os.Lstat(path + suffix); err == nil {
+				return nil, ErrIncompatible
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Link is an atomic, no-replace publication, including against concurrent
+	// Initialize calls that create the main file before acquiring maintenance.
+	if err := os.Link(stage, destination); err != nil {
+		return nil, err
+	}
+	store, err := openRestoredDatabase(ctx, destination, options, identity)
+	if err == nil {
+		err = downgrade()
+		if err == nil {
+			store.release = release
+			transferred = true
+			return store, nil
+		}
+		err = errors.Join(err, store.Close())
+	}
+	// No consumer can open our new file until the exclusive lock is released.
+	// Check its identity before removing our own publication on a failed open.
+	info, statErr := os.Lstat(destination)
+	if statErr == nil && os.SameFile(info, identity.file) {
+		return nil, errors.Join(err, os.Remove(destination))
+	}
+	return nil, errors.Join(err, statErr, ErrUnsafePath)
+}
+
+// Open the published name while Restore still owns its exclusive maintenance
+// lock. All connections need the same write and durability settings as Open.
+func openRestoredDatabase(ctx context.Context, path string, options Options, identity *pathIdentity) (*Store, error) {
+	query := url.Values{"mode": {"rw"}, "_txlock": {"immediate"}, "_pragma": {
+		fmt.Sprintf("busy_timeout(%d)", options.BusyTimeout.Milliseconds()), "foreign_keys(1)", "synchronous(FULL)", "trusted_schema(0)",
+	}}
+	db, err := sql.Open("sqlite", databaseURI(filepath.ToSlash(path), query))
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(options.MaxConnections)
+	db.SetMaxIdleConns(options.MaxConnections)
+	store := &Store{db: db, path: path, runtimeVersion: options.RuntimeVersion, identity: identity}
+	if err := store.ensureIdentity(); err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	if err := store.validate(ctx); err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	if err := store.ensureIdentity(); err != nil {
+		return nil, errors.Join(err, store.Close())
 	}
 	return store, nil
 }
@@ -279,32 +375,40 @@ func writePrivateJSON(path string, value any) error {
 		return err
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		return err
+	if err == nil {
+		_, writeErr := file.Write(payload)
+		err = errors.Join(writeErr, file.Sync(), file.Close())
 	}
-	_, writeErr := file.Write(payload)
-	return errors.Join(writeErr, file.Sync(), file.Close())
+	if err != nil {
+		return errors.Join(err, os.Remove(path))
+	}
+	return nil
 }
 
 func readBackupRecord(path string) (BackupRecord, error) {
+	var record BackupRecord
+	err := readPrivateJSON(path, &record)
+	return record, err
+}
+
+func readPrivateJSON(path string, value any) error {
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || !private(path, info) || info.Size() > 4096 {
-		return BackupRecord{}, ErrIncompatible
+		return ErrIncompatible
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return BackupRecord{}, err
+		return err
 	}
 	defer file.Close()
 	decoder := json.NewDecoder(io.LimitReader(file, 4097))
 	decoder.DisallowUnknownFields()
-	var record BackupRecord
-	if err := decoder.Decode(&record); err != nil {
-		return BackupRecord{}, ErrIncompatible
+	if err := decoder.Decode(value); err != nil {
+		return ErrIncompatible
 	}
 	var trailing any
 	if decoder.Decode(&trailing) != io.EOF {
-		return BackupRecord{}, ErrIncompatible
+		return ErrIncompatible
 	}
-	return record, nil
+	return nil
 }

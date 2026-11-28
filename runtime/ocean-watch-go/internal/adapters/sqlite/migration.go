@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -27,6 +28,10 @@ type migrationStep struct {
 	version int
 	payload []byte
 }
+
+// ErrMigrationCommitted means the database has already advanced. Retry Upgrade
+// to finish publishing its external record without applying SQL again.
+var ErrMigrationCommitted = errors.New("state migration committed; retry upgrade to finish the external migration record")
 
 type MigrationRecord struct {
 	ID             string    `json:"id"`
@@ -153,7 +158,7 @@ func (store *Store) upgrade(ctx context.Context) error {
 		return err
 	}
 	if from == SchemaVersion {
-		return nil
+		return store.finishMigrationRecord(ctx, false)
 	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -169,14 +174,71 @@ func (store *Store) upgrade(ctx context.Context) error {
 		return err
 	}
 	err = store.applyMigrations(ctx, steps, id, filepath.Base(backup))
-	result := "succeeded"
 	if err != nil {
-		result = "failed_rolled_back"
+		record := MigrationRecord{ID: id, FromVersion: from, ToVersion: SchemaVersion, RuntimeVersion: store.runtimeVersion,
+			Backup: filepath.Base(backup), Result: "failed_rolled_back", CompletedAt: time.Now().UTC()}
+		return errors.Join(err, writePrivateJSON(backup+".migration.json", record))
 	}
-	record := MigrationRecord{ID: id, FromVersion: from, ToVersion: SchemaVersion, RuntimeVersion: store.runtimeVersion,
-		Backup: filepath.Base(backup), Result: result, CompletedAt: time.Now().UTC()}
-	recordErr := writePrivateJSON(backup+".migration.json", record)
-	return errors.Join(err, recordErr)
+	return store.finishMigrationRecord(ctx, true)
+}
+
+func (store *Store) finishMigrationRecord(ctx context.Context, justCommitted bool) error {
+	err := store.publishMigrationRecord(ctx, justCommitted)
+	if err != nil {
+		return errors.Join(ErrMigrationCommitted, err)
+	}
+	return nil
+}
+
+func (store *Store) publishMigrationRecord(ctx context.Context, justCommitted bool) error {
+	var record MigrationRecord
+	var completedAt string
+	err := store.db.QueryRowContext(ctx, `SELECT id,from_version,to_version,source_runtime,backup_reference,result,completed_at
+		FROM migration_attempts WHERE to_version=? AND from_version>0`, SchemaVersion).Scan(&record.ID, &record.FromVersion,
+		&record.ToVersion, &record.RuntimeVersion, &record.Backup, &record.Result, &completedAt)
+	if errors.Is(err, sql.ErrNoRows) && !justCommitted { // Initially created at the current version.
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	nonce, err := hex.DecodeString(strings.TrimPrefix(record.ID, "migration_"))
+	if err != nil || len(nonce) != 16 || record.ID != "migration_"+hex.EncodeToString(nonce) || record.Backup != record.ID+".db" {
+		return ErrIncompatible
+	}
+	record.CompletedAt, err = time.Parse(time.RFC3339Nano, completedAt)
+	if err != nil {
+		return err
+	}
+	backup, err := preparePath(filepath.Join(filepath.Dir(store.path), "backups", record.Backup), false)
+	if errors.Is(err, ErrNotInitialized) && !justCommitted {
+		// Restored or relocated databases can legitimately lack the source's backups.
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	path := backup + ".migration.json"
+	if _, err := preparePath(path, false); err == nil {
+		// Older writers recorded a separate completion timestamp after commit.
+		var existing MigrationRecord
+		if readPrivateJSON(path, &existing) == nil && !existing.CompletedAt.IsZero() {
+			existing.CompletedAt = record.CompletedAt
+			if existing == record {
+				return nil
+			}
+		}
+	} else if !errors.Is(err, ErrNotInitialized) {
+		return err
+	}
+	// Stage and sync a private file before replacing a missing or interrupted
+	// record. The exclusive maintenance lock serializes competing retries.
+	temporary := path + "." + rand.Text() + ".tmp"
+	if err := writePrivateJSON(temporary, record); err != nil {
+		return err
+	}
+	defer os.Remove(temporary)
+	return os.Rename(temporary, path)
 }
 
 func (store *Store) migrate(ctx context.Context, payload []byte) error {
