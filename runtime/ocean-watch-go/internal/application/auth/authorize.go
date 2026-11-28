@@ -61,12 +61,14 @@ func (authorizer Authorizer) save(ctx context.Context, request AuthorizationRequ
 	}
 	raw, existed := configuration.Object(state["authorizations"])[request.AuthorizationID]
 	currentRevision := 0
+	var pendingAttempt string
 	if existed {
 		current := configuration.Object(raw)
 		currentRevision, err = positiveInteger(current["token_revision"], 1)
 		if err != nil {
 			return AuthorizationResult{}, TokenLease{}, atAuthorizationStep(failureAuthorizationStorage, err)
 		}
+		pendingAttempt = pendingRefresh(current, currentRevision)
 		if app := credentialString(current, "app_id"); app != "" && app != request.AppID {
 			return AuthorizationResult{}, TokenLease{}, atAuthorizationStep(failureAuthorizedUser, identityMismatch())
 		}
@@ -87,6 +89,10 @@ func (authorizer Authorizer) save(ctx context.Context, request AuthorizationRequ
 	}
 	credential["app_id"], credential["authorized_user_id"] = request.AppID, request.UserID
 	revision := currentRevision + 1
+	if pendingAttempt != "" {
+		// Leave a recoverable refresh candidate intact if this grant save fails.
+		revision++
+	}
 	credentialAccount, err := domain.AuthorizationCredentialAccount(request.Channel, request.AuthorizationID, revision)
 	if err != nil {
 		return AuthorizationResult{}, TokenLease{}, atAuthorizationStep(failureAuthorizationStorage, err)
@@ -104,7 +110,7 @@ func (authorizer Authorizer) save(ctx context.Context, request AuthorizationRequ
 		current := configuration.Object(row)
 		if exists {
 			observed, err := positiveInteger(current["token_revision"], 1)
-			if err != nil || observed != currentRevision {
+			if err != nil || observed != currentRevision || pendingRefresh(current, observed) != pendingAttempt {
 				return errors.New("authorization credential changed during persistence")
 			}
 		} else {
@@ -112,6 +118,7 @@ func (authorizer Authorizer) save(ctx context.Context, request AuthorizationRequ
 			rows[request.AuthorizationID] = current
 		}
 		current["app_id"], current["authorized_user_id"] = request.AppID, request.UserID
+		delete(current, "pending_refresh_attempt")
 		current["token_revision"], current["pending_account_sync"] = revision, true
 		current["last_authorized_at"] = now.Format(time.RFC3339Nano)
 		candidate["generation"] = nextGeneration(candidate["generation"])

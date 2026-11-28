@@ -91,6 +91,17 @@ func (syncer AdvertiserSnapshotSync) syncLease(ctx context.Context, lease TokenL
 	if err != nil {
 		return AdvertiserSyncResult{}, err
 	}
+	// Capture the grant's snapshot revision before the first remote read. Other
+	// grants can commit independently while discovery is in flight.
+	state, err := syncer.Authorizations.LoadChannel(ctx, lease.Channel)
+	if err != nil {
+		return AdvertiserSyncResult{}, accountSyncFailure("ACCOUNT_ACTIVATION_FAILED", err)
+	}
+	row := configuration.Object(configuration.Object(state["authorizations"])[lease.AuthorizationID])
+	observed, err := positiveInteger(row["account_snapshot_revision"], 0)
+	if err != nil {
+		return AdvertiserSyncResult{}, accountSyncFailure("ACCOUNT_ACTIVATION_FAILED", err)
+	}
 	snapshot, err := syncer.Discovery.Discover(requestContext, lease.Channel, lease.AccessToken)
 	if err != nil {
 		return AdvertiserSyncResult{}, fmt.Errorf("discover complete advertiser snapshot: %w", accountSyncFailure("ACCOUNT_DISCOVERY_FAILED", err))
@@ -108,6 +119,10 @@ func (syncer AdvertiserSnapshotSync) syncLease(ctx context.Context, lease TokenL
 		revision, err := positiveInteger(metadata["token_revision"], 1)
 		if err != nil || revision != lease.TokenRevision {
 			return errors.New("authorization credential changed during account discovery")
+		}
+		current, err := positiveInteger(metadata["account_snapshot_revision"], 0)
+		if err != nil || current != observed {
+			return errors.New("account mappings changed during discovery; retry account synchronization")
 		}
 		return activateAdvertiserSnapshot(
 			candidate, lease.AuthorizationID, snapshot, rebindExisting, syncedAt,
@@ -153,8 +168,10 @@ func activateAdvertiserSnapshot(
 		for accountID, owner := range conflicts {
 			old := configuration.Object(authorizations[owner])
 			old["authorized_accounts"] = removeAuthorizedAccount(old["authorized_accounts"], accountID)
+			old["account_snapshot_revision"] = nextGeneration(old["account_snapshot_revision"])
 		}
 	}
+	target["account_snapshot_revision"] = nextGeneration(target["account_snapshot_revision"])
 	target["authorized_accounts"] = authorizedAccountMaps(snapshot.Accounts)
 	target["pending_account_sync"] = false
 	target["last_authorized_account_sync_at"] = syncedAt

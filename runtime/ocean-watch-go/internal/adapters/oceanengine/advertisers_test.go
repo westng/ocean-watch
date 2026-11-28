@@ -323,6 +323,44 @@ func TestAdvertiserDiscoveryUsesAgentAndShopProfiles(t *testing.T) {
 	}
 }
 
+func TestAgentPermissionDenialOnlySoftensOnFirstPage(t *testing.T) {
+	for _, deniedPage := range []string{"1", "2"} {
+		t.Run("page_"+deniedPage, func(t *testing.T) {
+			transport := &discoveryTransport{perRoute: map[string]int{}}
+			transport.respond = func(req *http.Request, _ int) (int, string) {
+				switch req.URL.Path {
+				case "/open_api/oauth2/advertiser/get/":
+					return 200, `{"code":0,"data":{"list":[{"account_id":9100,"account_type":"ADVERTISER"},{"account_id":9101,"account_type":"PLATFORM_ROLE_QIANCHUAN_AGENT"}]}}`
+				case "/open_api/2/agent/advertiser/select/":
+					if req.URL.Query().Get("page") == deniedPage {
+						return 200, `{"code":40002,"message":"permission denied"}`
+					}
+					return 200, `{"code":0,"data":{"list":[2001],"page_info":{"page":1,"total_number":2,"total_page":2}}}`
+				case "/open_api/2/advertiser/info/":
+					return 200, `{"code":0,"data":[{"id":9100}]}`
+				default:
+					return 404, `{}`
+				}
+			}
+			factory, err := NewClientFactory(FactoryOptions{TransportFactory: func(HostProfile) http.RoundTripper { return transport }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := (AdvertiserDiscoveryAdapter{Factory: factory}).Discover(testRequestContext(t, "qianchuan"), "qianchuan", "fixture-access")
+			if deniedPage == "1" {
+				if err != nil || len(snapshot.DiscoveryIssues) != 1 || snapshot.DiscoveryIssues[0].Reason != "app_permission_missing" || !reflect.DeepEqual(snapshot.AdvertiserIDs, []string{"9100"}) {
+					t.Fatalf("expected a permission issue and the other account's mapping, got %+v, %v", snapshot, err)
+				}
+				return
+			}
+			var envelope *EnvelopeError
+			if !errors.As(err, &envelope) || envelope.Code != 40002 || len(snapshot.Accounts) != 0 || len(snapshot.AdvertiserIDs) != 0 {
+				t.Fatalf("accepted partial discovery or lost the official error: %+v, %v", snapshot, err)
+			}
+		})
+	}
+}
+
 func TestAdvertiserDiscoveryAcceptsOfficialEmptyZeroPageMetadata(t *testing.T) {
 	transport := &discoveryTransport{perRoute: map[string]int{}}
 	transport.respond = func(request *http.Request, _ int) (int, string) {

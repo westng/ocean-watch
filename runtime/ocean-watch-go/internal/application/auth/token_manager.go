@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strconv"
@@ -73,7 +74,14 @@ func (manager TokenManager) Ensure(ctx context.Context, query TokenQuery) (Token
 	if domainErr != nil {
 		return TokenLease{}, domainErr
 	}
-	credential, err := manager.Credentials.Read(ctx, binding.CredentialAccount)
+	var credential map[string]any
+	row := configuration.Object(configuration.Object(state["authorizations"])[binding.AuthorizationID])
+	attempt := pendingRefresh(row, binding.TokenRevision)
+	if attempt != "" {
+		credential, err = manager.recoverRefresh(ctx, &binding, attempt)
+	} else {
+		credential, err = manager.Credentials.Read(ctx, binding.CredentialAccount)
+	}
 	if err != nil {
 		return TokenLease{}, err
 	}
@@ -87,7 +95,7 @@ func (manager TokenManager) Ensure(ctx context.Context, query TokenQuery) (Token
 	}
 	forceRefresh := query.ForceRefresh && binding.TokenRevision == initial.TokenRevision
 	if !forceRefresh && accessTokenReady(credential, now, margin) {
-		return tokenLease(binding, credential, false), nil
+		return tokenLease(binding, credential, attempt != ""), nil
 	}
 	refreshToken := credentialString(credential, "refresh_token")
 	if refreshToken == "" || tokenExpired(credential["refresh_token_expires_at"], now) {
@@ -119,8 +127,25 @@ func (manager TokenManager) Ensure(ctx context.Context, query TokenQuery) (Token
 	if err != nil {
 		return TokenLease{}, err
 	}
-	refreshed, err := manager.OAuth.RefreshToken(refreshContext, query.Channel, app, refreshToken)
+	nextAccount, err := domain.AuthorizationCredentialAccount(binding.Channel, binding.AuthorizationID, binding.TokenRevision+1)
 	if err != nil {
+		return TokenLease{}, err
+	}
+	attempt = strconv.Itoa(binding.TokenRevision) + ":" + rand.Text()
+	if err := manager.setRefreshState(ctx, binding, "", attempt, false); err != nil {
+		return TokenLease{}, fmt.Errorf("record credential refresh: %w", err)
+	}
+	refreshed, err := manager.OAuth.RefreshToken(refreshContext, query.Channel, app, refreshToken)
+	// Once a rotating token has been returned, finish the local transaction
+	// even if the original caller stops waiting.
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
+	if err != nil {
+		if refreshWasRejected(err) {
+			if cleanupErr := manager.setRefreshState(persistCtx, binding, attempt, "", false); cleanupErr != nil {
+				err = errors.Join(err, cleanupErr)
+			}
+		}
 		var invalid InvalidRefreshError
 		if errors.As(err, &invalid) && invalid.RequiresReauthorization() {
 			return TokenLease{}, fmt.Errorf("%w: %w", domain.NewError("reauthorization_required", "OAuth refresh token is no longer valid; authorize again", 1, nil), err)
@@ -131,32 +156,20 @@ func (manager TokenManager) Ensure(ctx context.Context, query TokenQuery) (Token
 	if err != nil {
 		return TokenLease{}, err
 	}
-	nextRevision := binding.TokenRevision + 1
-	nextAccount, err := domain.AuthorizationCredentialAccount(query.Channel, binding.AuthorizationID, nextRevision)
-	if err != nil {
-		return TokenLease{}, err
+	updated["refresh_attempt_id"] = attempt
+	if binding.AppID != "" {
+		updated["app_id"] = binding.AppID
 	}
-	if _, err := manager.Credentials.Write(ctx, nextAccount, updated); err != nil {
+	if binding.AuthorizedUserID != "" {
+		updated["authorized_user_id"] = binding.AuthorizedUserID
+	}
+	if _, err := manager.Credentials.Write(persistCtx, nextAccount, updated); err != nil {
 		return TokenLease{}, fmt.Errorf("persist refreshed credential: %w", err)
 	}
-	err = manager.Authorizations.UpdateChannel(ctx, query.Channel, func(candidate map[string]any) error {
-		authorizations := configuration.Object(candidate["authorizations"])
-		metadata := configuration.Object(authorizations[binding.AuthorizationID])
-		currentRevision, parseErr := positiveInteger(metadata["token_revision"], 1)
-		if parseErr != nil {
-			return parseErr
-		}
-		if currentRevision != binding.TokenRevision {
-			return errors.New("authorization token revision changed during refresh")
-		}
-		metadata["token_revision"] = nextRevision
-		candidate["generation"] = nextGeneration(candidate["generation"])
-		return nil
-	})
-	if err != nil {
+	if err := manager.setRefreshState(persistCtx, binding, attempt, "", true); err != nil {
 		return TokenLease{}, fmt.Errorf("activate refreshed credential: %w", err)
 	}
-	binding.TokenRevision = nextRevision
+	binding.TokenRevision++
 	binding.CredentialAccount = nextAccount
 	return tokenLease(binding, updated, true), nil
 }

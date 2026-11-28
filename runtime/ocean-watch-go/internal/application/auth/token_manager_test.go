@@ -191,7 +191,7 @@ func TestTokenRefreshFailureKeepsOldRevisionActive(t *testing.T) {
 		failUpdate bool
 	}{
 		{name: "credential-write", failWrite: true},
-		{name: "state-activation", failUpdate: true},
+		{name: "state-intent", failUpdate: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			credentials := tokenFixtureCredentials(now, "marketing", "stable")
@@ -214,7 +214,7 @@ func TestTokenRefreshFailureKeepsOldRevisionActive(t *testing.T) {
 			}
 			state, _ := authorizations.LoadChannel(context.Background(), "marketing")
 			metadata := configuration.Object(configuration.Object(state["authorizations"])["stable"])
-			if fmt.Sprint(metadata["token_revision"]) != "1" || fmt.Sprint(state["generation"]) != "1" {
+			if fmt.Sprint(metadata["token_revision"]) != "1" || (pendingRefresh(metadata, 1) != "") != test.failWrite {
 				t.Fatalf("failed refresh activated a new revision: %#v", state)
 			}
 			old, _ := credentials.Read(context.Background(), "oceanengine-auth-marketing-stable-r1")

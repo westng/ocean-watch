@@ -137,6 +137,34 @@ func snapshotStateFixture() map[string]any {
 	}
 }
 
+func TestConcurrentDiscoveryCannotOverwriteNewerMappings(t *testing.T) {
+	ctx := context.Background()
+	store := &memoryAuthorizationStore{channels: map[string]map[string]any{"qianchuan": snapshotStateFixture()}}
+	query := AdvertiserSyncQuery{Channel: "qianchuan", AuthorizationID: "target"}
+	snapshot := func(id string) domain.AdvertiserSnapshot {
+		return domain.AdvertiserSnapshot{Accounts: []domain.AuthorizedAccount{{AccountID: id, AdvertiserIDs: []string{id}}}, AdvertiserIDs: []string{id}}
+	}
+	newer := AdvertiserSnapshotSync{
+		Authorizations: store, Tokens: staticTokenProvider{lease: TokenLease{Channel: "qianchuan", AuthorizationID: "target", TokenRevision: 1, AccessToken: "fixture"}},
+		Discovery: staticDiscovery{snapshot: snapshot("22")},
+		Now:       func() time.Time { return time.Unix(0, 0) },
+	}
+	older := newer
+	older.Discovery = recoveryDiscoveryFunc(func(ctx context.Context) (domain.AdvertiserSnapshot, error) {
+		if _, err := newer.Sync(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+		return snapshot("11"), nil
+	})
+	if _, err := older.Sync(ctx, query); err == nil {
+		t.Fatal("late discovery replaced the committed snapshot")
+	}
+	state, err := store.LoadChannel(ctx, query.Channel)
+	if err != nil || !reflect.DeepEqual(state["account_index"], map[string]any{"22": "target"}) || !reflect.DeepEqual(state["advertiser_index"], map[string]any{"22": []any{"target"}}) {
+		t.Fatalf("expected the newer snapshot and indexes, got %v, %v", state, err)
+	}
+}
+
 func TestAdvertiserSnapshotRejectsDiscoveryFromObsoleteCredential(t *testing.T) {
 	store := &memoryAuthorizationStore{channels: map[string]map[string]any{"qianchuan": snapshotStateFixture()}}
 	var selected map[string]any

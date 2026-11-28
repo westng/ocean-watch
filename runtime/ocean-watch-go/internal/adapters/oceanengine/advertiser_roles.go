@@ -46,9 +46,8 @@ func (adapter AdvertiserDiscoveryAdapter) expandAccount(
 		rows, err := adapter.listEBP(ctx, channel, accessToken, sourceID)
 		return rows, nil, err
 	case "PLATFORM_ROLE_QIANCHUAN_AGENT":
-		rows, err := adapter.listAgent(ctx, channel, accessToken, sourceID)
-		var envelope *EnvelopeError
-		if errors.As(err, &envelope) && envelope.Code == 40002 {
+		rows, permissionMissing, err := adapter.listAgent(ctx, channel, accessToken, sourceID)
+		if permissionMissing {
 			return []string{}, &domain.AccountDiscoveryIssue{
 				AccountID: account.AccountID, Role: role, Code: "40002", Reason: "app_permission_missing",
 			}, nil
@@ -146,14 +145,16 @@ func (adapter AdvertiserDiscoveryAdapter) listAgent(
 	ctx context.Context,
 	channel, accessToken string,
 	accountID int64,
-) ([]string, error) {
+) (rows []string, permissionMissing bool, err error) {
 	client, err := adapter.Factory.Client(channel, ProfileAgent, TimeoutStandard)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return pagination.CollectPages(ctx, pagination.PageOptions[string]{
+	var requestedPage int
+	rows, err = pagination.CollectPages(ctx, pagination.PageOptions[string]{
 		Retry: adapter.readRetry(), Classify: ClassifyReadError, Key: identityString,
 		Fetch: func(ctx context.Context, page int) (pagination.Page[string], error) {
+			requestedPage = page
 			response, httpResponse, sdkErr := client.sdk.AgentAdvertiserSelectV2Api().Get(ctx).
 				AccessToken(accessToken).AdvertiserId(accountID).Page(int64(page)).PageSize(advertiserPageSize).Execute()
 			if response == nil {
@@ -176,6 +177,13 @@ func (adapter AdvertiserDiscoveryAdapter) listAgent(
 			return pageFromPointers(page, response.Data.PageInfo.Page, response.Data.PageInfo.TotalPage, response.Data.PageInfo.TotalNumber, rows)
 		},
 	})
+	// A denial after page one contradicts the successful first page. The
+	// incomplete list must never be activated as an empty account mapping.
+	var envelope *EnvelopeError
+	if requestedPage == 1 && errors.As(err, &envelope) && envelope.Code == 40002 {
+		return nil, true, nil
+	}
+	return rows, false, err
 }
 
 func (adapter AdvertiserDiscoveryAdapter) listShop(
