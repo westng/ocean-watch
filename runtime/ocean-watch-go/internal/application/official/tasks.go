@@ -189,7 +189,14 @@ func (tasks Tasks) Health(ctx context.Context, request HealthRequest) (TaskResul
 	if err != nil {
 		return result, err
 	}
-	offset, err := decodeTaskCursor(binding, request.Cursor, len(accounts))
+	var key [32]byte
+	if request.Cursor != "" || len(accounts) > request.Limit {
+		key, err = tasks.Queries.cursorKey(ctx)
+		if err != nil {
+			return result, failure("CURSOR_KEY_UNAVAILABLE", "paging", false)
+		}
+	}
+	offset, err := decodeTaskCursor(key, binding, request.Cursor, len(accounts))
 	if err != nil || offset > len(accounts) {
 		return result, failure("INVALID_CURSOR", "scope", false)
 	}
@@ -198,7 +205,7 @@ func (tasks Tasks) Health(ctx context.Context, request HealthRequest) (TaskResul
 	result.ProcessedAccounts = end - offset
 	result.HasMore = end < len(accounts)
 	if result.HasMore {
-		result.Cursor = encodeTaskCursor(binding, end)
+		result.Cursor = encodeTaskCursor(key, binding, end)
 		result.Status = "partial"
 	}
 	for _, account := range accounts[offset:end] {

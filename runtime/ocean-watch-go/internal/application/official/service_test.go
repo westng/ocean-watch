@@ -186,6 +186,7 @@ func TestQueryBindsPagedContinuationAndPreservesIncompleteState(t *testing.T) {
 	}
 	r := fixtureRequest("qianchuan_uni_promotion_list_v1")
 	r.Parameters = map[string]json.RawMessage{"fields": raw([]string{"stat_cost"}), "marketing_goal": raw("VIDEO_PROM_GOODS"), "start_time": raw("2026-10-31 00:00:00"), "end_time": raw("2026-10-31 23:59:59")}
+	r.Limit = 0 // DecodeOfficialQueryRequest applies the default before signing.
 	first, err := s.Query(fixtureContext(t), r)
 	if err != nil {
 		t.Fatal(err)
@@ -194,6 +195,11 @@ func TestQueryBindsPagedContinuationAndPreservesIncompleteState(t *testing.T) {
 		t.Fatal("first page incorrectly complete")
 	}
 	r.Cursor = first.Cursor
+	r.Limit = 1
+	if _, err := s.Query(fixtureContext(t), r); errorCode(err) != "INVALID_CURSOR" || backend.calls != 1 {
+		t.Fatalf("changed limit dispatched or accepted: %v, calls=%d", err, backend.calls)
+	}
+	r.Limit = 200
 	second, err := s.Query(fixtureContext(t), r)
 	if err != nil {
 		t.Fatal(err)

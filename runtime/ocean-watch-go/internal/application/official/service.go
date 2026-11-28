@@ -23,6 +23,7 @@ type Service struct {
 	Tokens         auth.TokenProvider
 	Backend        port.Backend
 	AppTokens      port.AppTokenProvider
+	CursorKey      func(context.Context) ([32]byte, error)
 	Now            func() time.Time
 }
 
@@ -217,9 +218,17 @@ func (service Service) query(ctx context.Context, request contracts.OfficialQuer
 	if len(query.ServerFields) > 0 && (service.AppTokens == nil || binding.AppID == "") {
 		return result, failure("APP_TOKEN_CONFIGURATION_REQUIRED", "app_authorization", false)
 	}
-	cursorState, err := decodeQueryCursorState(query, request, binding.AuthorizationID)
-	if err != nil {
-		return result, failure("INVALID_CURSOR", "paging", false)
+	cursorState := pageCursor{Page: 1}
+	var key [32]byte
+	if request.Cursor != "" {
+		key, err = service.cursorKey(ctx)
+		if err != nil {
+			return result, failure("CURSOR_KEY_UNAVAILABLE", "paging", false)
+		}
+		cursorState, err = decodeQueryCursorState(key, query, request, binding.AuthorizationID)
+		if err != nil {
+			return result, failure("INVALID_CURSOR", "paging", false)
+		}
 	}
 	page, offset := cursorState.Page, cursorState.Offset
 	if query.PageField != "" {
@@ -341,7 +350,13 @@ func (service Service) query(ctx context.Context, request contracts.OfficialQuer
 		if projection.nextOffset > 0 {
 			nextUpstream = cursorState.Upstream
 		}
-		result.Cursor = encodeQueryCursor(query, request, binding.AuthorizationID, projection.nextPage, projection.nextOffset, nextUpstream)
+		if request.Cursor == "" {
+			key, err = service.cursorKey(ctx)
+			if err != nil {
+				return result, failure("CURSOR_KEY_UNAVAILABLE", "paging", true)
+			}
+		}
+		result.Cursor = encodeQueryCursor(key, query, request, binding.AuthorizationID, projection.nextPage, projection.nextOffset, nextUpstream)
 	}
 	return result, nil
 }

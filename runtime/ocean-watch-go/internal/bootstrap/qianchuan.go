@@ -163,6 +163,9 @@ func NewQianchuanRuntime(options QianchuanOptions) (QianchuanRuntime, error) {
 		backend, closeClient = client, client.Close
 	}
 	official := applicationofficial.Service{Policy: instance, Authorizations: authorizations, Tokens: tokens, Backend: backend, AppTokens: &oceanengine.OfficialAppTokens{Credentials: options.CredentialStore, Factory: factory}, Now: options.Now}
+	if options.StateRoot != "" {
+		official.CursorKey = officialCursorKey(options.StateRoot)
+	}
 	links := applicationworkmetadata.Resolver{Links: adapterworkmetadata.DouyinRedirectResolver{Client: options.HTTPClient}, Metadata: adapterworkmetadata.F2Resolver{Python: options.PythonResolver, Directory: options.PluginRoot, Cookie: (f2config.Settings{Store: credentialadapter.SystemStore{}}).Cookie}}
 	accounts := options.ManagedAccounts
 	if accounts == nil {

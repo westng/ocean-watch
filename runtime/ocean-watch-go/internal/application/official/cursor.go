@@ -1,6 +1,7 @@
 package official
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -14,13 +15,21 @@ import (
 	"github.com/westng/ocean-watch/runtime/ocean-watch-go/internal/contracts"
 )
 
-var queryCursorKey = func() []byte {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
+// Services constructed directly without a state root retain process-local cursors.
+var processCursorKey = func() [32]byte {
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
 		panic("cannot initialize query cursor signing")
 	}
 	return key
 }()
+
+func (service Service) cursorKey(ctx context.Context) ([32]byte, error) {
+	if service.CursorKey == nil {
+		return processCursorKey, nil
+	}
+	return service.CursorKey(ctx)
+}
 
 type pageCursor struct {
 	Version  int    `json:"v"`
@@ -36,30 +45,20 @@ func queryBinding(query contracts.ApprovedOfficialQuery, request contracts.Offic
 		Contract, Query, Authorization, AuthAccount string
 		Scope                                       contracts.OfficialQueryScope
 		Parameters                                  map[string]json.RawMessage
-	}{query.Policy.ContractFingerprint, request.QueryID, authorization, request.AuthAccountID, request.Scope, request.Parameters})
+		Limit                                       int
+	}{query.Policy.ContractFingerprint, request.QueryID, authorization, request.AuthAccountID, request.Scope, request.Parameters, request.Limit})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
-func encodeQueryCursor(query contracts.ApprovedOfficialQuery, request contracts.OfficialQueryRequest, authorization string, page, offset int, upstream ...string) string {
-	next := ""
-	if len(upstream) > 0 {
-		next = upstream[0]
-	}
-	data, _ := json.Marshal(pageCursor{Version: 1, Binding: queryBinding(query, request, authorization), Page: page, Offset: offset, Expires: time.Now().Add(time.Hour).Unix(), Upstream: next})
-	mac := hmac.New(sha256.New, queryCursorKey)
+func encodeQueryCursor(key [32]byte, query contracts.ApprovedOfficialQuery, request contracts.OfficialQueryRequest, authorization string, page, offset int, upstream string) string {
+	data, _ := json.Marshal(pageCursor{Version: 1, Binding: queryBinding(query, request, authorization), Page: page, Offset: offset, Expires: time.Now().Add(time.Hour).Unix(), Upstream: upstream})
+	mac := hmac.New(sha256.New, key[:])
 	_, _ = mac.Write(data)
 	return base64.RawURLEncoding.EncodeToString(data) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func decodeQueryCursor(query contracts.ApprovedOfficialQuery, request contracts.OfficialQueryRequest, authorization string) (int, int, error) {
-	cursor, err := decodeQueryCursorState(query, request, authorization)
-	return cursor.Page, cursor.Offset, err
-}
-func decodeQueryCursorState(query contracts.ApprovedOfficialQuery, request contracts.OfficialQueryRequest, authorization string) (pageCursor, error) {
-	if request.Cursor == "" {
-		return pageCursor{Page: 1, Offset: 0}, nil
-	}
+func decodeQueryCursorState(key [32]byte, query contracts.ApprovedOfficialQuery, request contracts.OfficialQueryRequest, authorization string) (pageCursor, error) {
 	parts := strings.Split(request.Cursor, ".")
 	if len(parts) != 2 {
 		return pageCursor{}, errors.New("invalid query cursor")
@@ -72,7 +71,7 @@ func decodeQueryCursorState(query contracts.ApprovedOfficialQuery, request contr
 	if err != nil {
 		return pageCursor{}, err
 	}
-	mac := hmac.New(sha256.New, queryCursorKey)
+	mac := hmac.New(sha256.New, key[:])
 	_, _ = mac.Write(data)
 	if !hmac.Equal(signature, mac.Sum(nil)) {
 		return pageCursor{}, errors.New("invalid query cursor")
@@ -126,14 +125,14 @@ type taskCursor struct {
 	Expires int64  `json:"expires"`
 }
 
-func encodeTaskCursor(binding string, offset int) string {
+func encodeTaskCursor(key [32]byte, binding string, offset int) string {
 	data, _ := json.Marshal(taskCursor{Version: 1, Binding: binding, Offset: offset, Expires: time.Now().Add(time.Hour).Unix()})
-	mac := hmac.New(sha256.New, queryCursorKey)
+	mac := hmac.New(sha256.New, key[:])
 	_, _ = mac.Write(data)
 	return base64.RawURLEncoding.EncodeToString(data) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func decodeTaskCursor(binding, encoded string, total int) (int, error) {
+func decodeTaskCursor(key [32]byte, binding, encoded string, total int) (int, error) {
 	if encoded == "" {
 		return 0, nil
 	}
@@ -149,7 +148,7 @@ func decodeTaskCursor(binding, encoded string, total int) (int, error) {
 	if err != nil {
 		return 0, errors.New("invalid task cursor")
 	}
-	mac := hmac.New(sha256.New, queryCursorKey)
+	mac := hmac.New(sha256.New, key[:])
 	_, _ = mac.Write(data)
 	var cursor taskCursor
 	if !hmac.Equal(signature, mac.Sum(nil)) || json.Unmarshal(data, &cursor) != nil || cursor.Version != 1 || cursor.Binding != binding || cursor.Offset < 0 || cursor.Offset >= total || cursor.Expires <= time.Now().Unix() {
