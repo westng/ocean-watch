@@ -206,6 +206,89 @@ func TestMarketingPlanReportNegotiatesFieldsAndAggregatesAllPages(t *testing.T) 
 	}
 }
 
+func TestMarketingSharedMaterialMetricsStayWithTheirPromotion(t *testing.T) {
+	const materialID, first, second = "9007199254740995", "9007199254740993", "9007199254740997"
+	materials := []domainreports.MarketingVideoMaterial{{MaterialID: materialID}}
+	promotions := []domainreports.MarketingPromotion{{PromotionID: first, Materials: materials}, {PromotionID: second, Materials: materials}}
+	for _, tt := range []struct {
+		name  string
+		rows  []domainreports.MarketingReportRow
+		costs []string
+	}{
+		{"per-promotion costs", []domainreports.MarketingReportRow{
+			{Dimensions: map[string]string{"material_id": materialID, "cdp_promotion_id": second}, Metrics: map[string]string{"stat_cost": "20"}},
+			{Dimensions: map[string]string{"material_id": materialID, "cdp_promotion_id": first}, Metrics: map[string]string{"stat_cost": "10"}},
+		}, []string{"10", "20"}},
+		{"unattributable aggregate", []domainreports.MarketingReportRow{
+			{Dimensions: map[string]string{"material_id": materialID}, Metrics: map[string]string{"stat_cost": "30"}},
+		}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := &marketingReportReaderStub{
+				promotionPages: map[int]domainreports.MarketingPromotionPage{1: {Page: 1, TotalPages: 1, TotalNumber: len(promotions), Rows: promotions}},
+				reportPages:    map[int]domainreports.MarketingReportPage{1: {Page: 1, TotalPages: 1, TotalNumber: len(tt.rows), Rows: tt.rows, TotalMetrics: map[string]string{"stat_cost": "30"}}},
+			}
+			result, err := (MarketingService{Tokens: &marketingReportTokenStub{}, Reader: reader}).Materials(context.Background(), MarketingMaterialQuery{
+				CredentialScope: CredentialScope{AdvertiserID: "1000000000000001"},
+				StartDate:       "2026-07-15", EndDate: "2026-07-15", Dimensions: []string{"material_id"}, Metrics: []string{"stat_cost"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(reader.reportRequests) != 1 || !reflect.DeepEqual(reader.reportRequests[0].Dimensions, []string{"material_id", "cdp_promotion_id"}) {
+				t.Fatal("report request lost per-promotion grouping")
+			}
+			if len(result.Rows) != 2 || result.Summary.RowsWithReportData != len(tt.costs) || result.ReportTotalMetrics.(map[string]string)["stat_cost"] != "30" {
+				t.Fatalf("incorrect aggregate or detail counts: %#v", result)
+			}
+			for i, row := range result.Rows {
+				cost, present := row["stat_cost"]
+				if present != (tt.costs != nil) || row["has_report_data"] != present || (present && cost != tt.costs[i]) {
+					t.Fatalf("incorrect detail for promotion %v: %#v", row["promotion_id"], row)
+				}
+			}
+		})
+	}
+}
+
+func TestMarketingMaterialAttributionUsesReportScopeAndBreakdown(t *testing.T) {
+	a := map[string]any{"promotion_id": "1", "material_id": "10"}
+	b := map[string]any{"promotion_id": "2", "material_id": "20"}
+	report := func(promotion, day, cost string) domainreports.MarketingReportRow {
+		return domainreports.MarketingReportRow{
+			Dimensions: map[string]string{"material_id": "10", "promotion_id": promotion, "stat_time_day": day},
+			Metrics:    map[string]string{"stat_cost": cost},
+		}
+	}
+	total := report("", "", "30")
+	for _, tc := range []struct {
+		name      string
+		inventory []map[string]any
+		reports   []domainreports.MarketingReportRow
+		wantCosts []string
+	}{
+		{"one promotion in filter", []map[string]any{a}, []domainreports.MarketingReportRow{total}, []string{"30"}},
+		{"multiple promotions in filter", []map[string]any{a, b}, []domainreports.MarketingReportRow{total}, []string{"", ""}},
+		{"duplicate inventory entry", []map[string]any{a, a}, []domainreports.MarketingReportRow{report("1", "", "30")}, []string{"", ""}},
+		{"both days, without repeating total", []map[string]any{a}, []domainreports.MarketingReportRow{
+			total, report("1", "2026-07-15", "10"), report("1", "2026-07-16", "20"),
+		}, []string{"10", "20"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := joinMarketingMaterialRows(tc.inventory, tc.reports)
+			if len(rows) != len(tc.wantCosts) {
+				t.Fatalf("unexpected rows: %#v", rows)
+			}
+			for i, want := range tc.wantCosts {
+				cost, present := rows[i]["stat_cost"].(string)
+				if cost != want || present != (want != "") || rows[i]["has_report_data"] != present {
+					t.Fatalf("row %d: %#v", i, rows[i])
+				}
+			}
+		})
+	}
+}
+
 func TestMarketingMaterialReportPaginatesFiltersAndJoins(t *testing.T) {
 	reader := &marketingReportReaderStub{
 		promotionPages: map[int]domainreports.MarketingPromotionPage{

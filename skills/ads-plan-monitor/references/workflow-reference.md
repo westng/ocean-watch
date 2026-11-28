@@ -296,7 +296,7 @@ For current material monitoring, use `reports materials`:
 1. Query promotion/unit list and retain status fields.
 2. Extract current `promotion_materials.video_material_list` IDs.
 3. Query `MATERIAL_DATA` for those material and promotion IDs.
-4. Join unit, material, and metric rows.
+4. Match report rows by promotion ID and material ID. An unscoped material row can supply metrics when the report filter contains exactly one promotion. Keep each requested time or dimension breakdown. Where attribution is ambiguous, show the detail metrics as unavailable (`has_report_data=false`) and retain the official total for its stated scope.
 
 Do not use a broad promotion-only total as the current material-list total. Status values are displayed and remembered but not filtered unless the user asks for active-only data.
 

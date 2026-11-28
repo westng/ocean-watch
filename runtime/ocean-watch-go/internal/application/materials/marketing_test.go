@@ -172,7 +172,7 @@ func TestMarketingVideoPaginationAndDiagnostics(t *testing.T) {
 	}}
 	result, err := (Service{Tokens: tokens, Reader: reader}).QueryVideos(context.Background(), VideoQuery{
 		CredentialScope: CredentialScope{AdvertiserID: fixtureAdvertiserID, AuthAccountID: "9000000000000001"},
-		Date:            "2026-07-25", PageSize: 1, FetchAll: true, Filename: "fixture",
+		Date:            "2026-07-25", PageSize: 1, FetchAll: true, Filename: "fixture 2",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -180,8 +180,8 @@ func TestMarketingVideoPaginationAndDiagnostics(t *testing.T) {
 	if len(reader.videoRequests) != 2 || reader.videoRequests[0].Page != 1 || reader.videoRequests[1].Page != 2 {
 		t.Fatalf("video page sequence = %#v", reader.videoRequests)
 	}
-	if result.Endpoint != LibraryVideoEndpoint || result.MatchedCount != 2 || len(result.SelectedVideos) != 2 ||
-		result.SelectedVideos[1].MaterialID != "9007199254740992" ||
+	if result.Endpoint != LibraryVideoEndpoint || result.MatchedCount != 1 || len(result.SelectedVideos) != 1 ||
+		result.SelectedVideos[0].MaterialID != "9007199254740992" ||
 		!reflect.DeepEqual(result.RequestIDs, []string{"request-1", "request-2"}) {
 		t.Fatalf("video result changed: %#v", result)
 	}
@@ -192,6 +192,21 @@ func TestMarketingVideoPaginationAndDiagnostics(t *testing.T) {
 	}
 	if filtering, ok := result.Params["filtering"].(map[string]any); !ok || filtering["start_time"] != "2026-07-25" || filtering["end_time"] != "2026-07-25" {
 		t.Fatalf("video date filtering changed: %#v", result.Params)
+	}
+}
+
+func TestMarketingVideoFilenameScanRejectsOversizeLibrary(t *testing.T) {
+	reader := &marketingReaderStub{videos: func(request portmarketing.LibraryVideoRequest) (domainmarketing.VideoPage, error) {
+		return domainmarketing.VideoPage{
+			Rows:     []domainmarketing.VideoAsset{{ID: "a", Filename: "match"}},
+			PageInfo: domainmarketing.PageInfo{Page: request.Page, PageSize: 1, TotalPages: DefaultMaxPages + 1, TotalNumber: DefaultMaxPages + 1},
+		}, nil
+	}}
+	result, err := (Service{Tokens: &marketingTokenSpy{}, Reader: reader}).QueryVideos(context.Background(), VideoQuery{
+		CredentialScope: CredentialScope{AdvertiserID: fixtureAdvertiserID}, FetchAll: true, PageSize: 1, Filename: "match",
+	})
+	if err == nil || len(reader.videoRequests) != 1 || len(result.SelectedVideos) != 0 {
+		t.Fatalf("oversized scan: requests=%d result=%#v err=%v", len(reader.videoRequests), result, err)
 	}
 }
 
@@ -369,6 +384,34 @@ func TestMarketingHomepageDoesNotClaimAuthorization(t *testing.T) {
 	if candidate.AuthorizationStatus != "" || candidate.RawAuthorizationStatus != "" || candidate.AuthorizationType != "" ||
 		candidate.SourceKey != nil || candidate.CreatorID != "creator-homepage" || !candidate.Usable {
 		t.Fatalf("homepage candidate claimed authorization semantics: %#v", candidate)
+	}
+}
+
+func TestMarketingHomepageItemFilterPreservesSourcePagination(t *testing.T) {
+	reader := &marketingReaderStub{homepage: func(request portmarketing.CreatorHomepageRequest) (domainmarketing.CreatorHomepagePage, error) {
+		rows := []domainmarketing.CreatorVideo{{ItemID: "11", VideoID: "v1", VideoCoverID: "c1"}}
+		if request.Page == 2 {
+			rows = []domainmarketing.CreatorVideo{{ItemID: "22", VideoID: "v2", VideoCoverID: "c2"}}
+		}
+		return domainmarketing.CreatorHomepagePage{Rows: rows, PageInfo: domainmarketing.PageInfo{
+			Page: request.Page, PageSize: 1, TotalPages: 2, TotalNumber: 2,
+		}}, nil
+	}}
+	service := Service{Tokens: &marketingTokenSpy{}, Reader: reader}
+	for page := 1; page <= 2; page++ {
+		result, err := service.QueryCreator(context.Background(), CreatorQuery{
+			CredentialScope: CredentialScope{AdvertiserID: fixtureAdvertiserID}, Source: "homepage", AwemeIDs: []string{"123"},
+			ItemIDs: []string{"22"}, Page: page, PageSize: 1, SinglePage: true, IncludeUnusable: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.PageInfo == nil || result.PageInfo.Page != page || result.PageInfo.TotalNumber != 2 || result.PageInfo.TotalPages != 2 || result.PageCount != 1 {
+			t.Fatalf("page %d lost source pagination: %#v", page, result)
+		}
+		if page == 1 && result.CandidateCount != 0 || page == 2 && (result.CandidateCount != 1 || result.Candidates[0].ItemID != "22") {
+			t.Fatalf("page %d returned unexpected candidates: %#v", page, result.Candidates)
+		}
 	}
 }
 

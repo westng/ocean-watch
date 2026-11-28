@@ -162,7 +162,7 @@ func TestMarketingMaterialSearchesUseApplicationServiceAndDropURLs(t *testing.T)
 			Candidates: []domainmarketing.CreatorCandidate{{
 				MaterialID: "2000000000000001", VideoID: "video-2", ItemID: "3000000000000001",
 				VideoCoverURL: secretURL, Title: "fixture title", CreatorID: "4000000000000001",
-				AuthorizationStatus: "VALID", Usable: true, WarningTypes: []string{}, UnusableReasons: []string{},
+				AuthorizationStatus: "VALID", Usable: true, UnusableReasons: []string{},
 			}},
 		},
 	}
@@ -171,7 +171,7 @@ func TestMarketingMaterialSearchesUseApplicationServiceAndDropURLs(t *testing.T)
 
 	videos, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "search_marketing_videos", Arguments: map[string]any{
-			"advertiser_id": "1000000000000001", "page": 2, "limit": 25, "filename": "fixture",
+			"advertiser_id": "1000000000000001", "page": 2, "limit": 25,
 		},
 	})
 	if err != nil || videos.IsError {
@@ -186,7 +186,8 @@ func TestMarketingMaterialSearchesUseApplicationServiceAndDropURLs(t *testing.T)
 	creators, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "search_marketing_creator_materials", Arguments: map[string]any{
 			"advertiser_id": "1000000000000001", "source": "homepage",
-			"aweme_ids": []any{"4000000000000001"}, "include_unusable": true, "page": 2, "limit": 25,
+			"aweme_ids": []any{"4000000000000001"}, "item_ids": []any{"3000000000000001"},
+			"include_unusable": true, "page": 2, "limit": 25,
 		},
 	})
 	if err != nil || creators.IsError {
@@ -195,14 +196,51 @@ func TestMarketingMaterialSearchesUseApplicationServiceAndDropURLs(t *testing.T)
 	creatorOutput := decodeStructured[marketingCreatorOutput](t, creators)
 	if stub.creatorCalls != 1 || stub.creatorQuery.Source != "homepage" || !stub.creatorQuery.IncludeUnusable ||
 		!stub.creatorQuery.SinglePage || stub.creatorQuery.Page != 2 || stub.creatorQuery.PageSize != 25 ||
+		len(stub.creatorQuery.ItemIDs) != 1 || stub.creatorQuery.ItemIDs[0] != "3000000000000001" ||
 		creatorOutput.Page != 2 || creatorOutput.SourceTotal != 60 || !creatorOutput.HasMore ||
 		creatorOutput.DisplayedCount != 1 || creatorOutput.Items[0].CreatorID != "4000000000000001" {
 		t.Fatalf("creator service boundary changed: stub=%#v output=%#v", stub, creatorOutput)
 	}
 	videoJSON, _ := json.Marshal(videoOutput)
 	creatorJSON, _ := json.Marshal(creatorOutput)
+	if !bytes.Contains(creatorJSON, []byte(`"warning_types":[]`)) || !bytes.Contains(creatorJSON, []byte(`"unusable_reasons":[]`)) {
+		t.Fatalf("empty creator arrays do not match the output schema: %s", creatorJSON)
+	}
 	if bytes.Contains(videoJSON, []byte("private.example")) || bytes.Contains(creatorJSON, []byte("private.example")) {
 		t.Fatalf("material output leaked URLs: videos=%s creators=%s", videoJSON, creatorJSON)
+	}
+}
+
+func TestMarketingVideoFilenameSearchPaginatesMatches(t *testing.T) {
+	stub := &marketingMaterialStub{videoResult: applicationmaterials.VideoResult{
+		MatchedCount: 3, PageInfo: &domainmarketing.PageInfo{Page: 2, TotalPages: 2, TotalNumber: 110},
+		SelectedVideos: []domainmarketing.SelectedVideo{{VideoID: "a"}, {VideoID: "b"}, {VideoID: "c"}},
+	}}
+	session := connectTestServer(t, Runtime{MarketingMaterials: stub})
+	defer session.Close()
+	for _, tc := range []struct {
+		page    int
+		ids     []string
+		hasMore bool
+	}{{1, []string{"a", "b"}, true}, {2, []string{"c"}, false}, {3, []string{}, false}} {
+		result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "search_marketing_videos", Arguments: map[string]any{
+			"advertiser_id": "1000000000000001", "filename": "fixture", "page": tc.page, "limit": 2,
+		}})
+		if err != nil || result.IsError {
+			t.Fatalf("page %d: result=%#v err=%v", tc.page, result, err)
+		}
+		output := decodeStructured[marketingVideosOutput](t, result)
+		if !stub.videoQuery.FetchAll || stub.videoQuery.Page != 1 || stub.videoQuery.PageSize != applicationmaterials.MaxPageSize || stub.videoQuery.Filename != "fixture" {
+			t.Fatalf("incomplete filename search: %#v", stub.videoQuery)
+		}
+		if output.Page != tc.page || output.TotalCount != 3 || output.HasMore != tc.hasMore || output.DisplayedCount != len(tc.ids) || len(output.Items) != len(tc.ids) {
+			t.Fatalf("page %d: %#v", tc.page, output)
+		}
+		for i, id := range tc.ids {
+			if output.Items[i].VideoID != id {
+				t.Fatalf("page %d item %d: got %s, want %s", tc.page, i, output.Items[i].VideoID, id)
+			}
+		}
 	}
 }
 

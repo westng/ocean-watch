@@ -237,26 +237,38 @@ func (runtime Runtime) searchMarketingVideos(ctx context.Context, request *mcp.C
 	if runtime.MarketingMaterials == nil {
 		return runtime.failureResult(started, requestID, "search_marketing_videos", internalFailure()), nil
 	}
-	result, err := runtime.MarketingMaterials.QueryVideos(ctx, applicationmaterials.VideoQuery{
+	query := applicationmaterials.VideoQuery{
 		CredentialScope: applicationmaterials.CredentialScope{
 			AdvertiserID: input.AdvertiserID, AuthAccountID: input.AuthAccountID,
 		},
 		Mode: "library-get", VideoIDs: input.VideoIDs, MaterialIDs: input.MaterialIDs,
-		Signatures: input.Signatures, Filename: input.Filename,
+		Signatures: input.Signatures, Filename: strings.TrimSpace(input.Filename),
 		StartTime: input.StartDate, EndTime: input.EndDate, Page: input.Page, PageSize: input.Limit,
-	})
+	}
+	if query.Filename != "" {
+		// The platform cannot filter filenames; paginate the matches after a bounded library scan.
+		query.Page, query.PageSize, query.FetchAll = 1, applicationmaterials.MaxPageSize, true
+	}
+	result, err := runtime.MarketingMaterials.QueryVideos(ctx, query)
 	if err != nil {
 		return runtime.failureResult(started, requestID, "search_marketing_videos", mapMarketingOfficialError(err)), nil
 	}
-	items, err := presentMarketingVideos(result.SelectedVideos)
-	if err != nil {
-		return runtime.failureResult(started, requestID, "search_marketing_videos", invalidUpstreamFailure()), nil
-	}
+	rows := result.SelectedVideos
 	total := result.MatchedCount
 	hasMore := false
-	if result.PageInfo != nil {
+	if query.FetchAll {
+		total = len(rows)
+		start := min((input.Page-1)*input.Limit, total)
+		end := min(start+input.Limit, total)
+		rows = rows[start:end]
+		hasMore = end < total
+	} else if result.PageInfo != nil {
 		total = result.PageInfo.TotalNumber
 		hasMore = result.PageInfo.Page < result.PageInfo.TotalPages
+	}
+	items, err := presentMarketingVideos(rows)
+	if err != nil {
+		return runtime.failureResult(started, requestID, "search_marketing_videos", invalidUpstreamFailure()), nil
 	}
 	return runtime.successResult(started, requestID, "search_marketing_videos", marketingVideosOutput{
 		OK: true, RequestID: requestID, Source: "official_api", AdvertiserID: input.AdvertiserID,
@@ -461,8 +473,8 @@ func presentMarketingCreatorItems(rows []domainmarketing.CreatorCandidate) ([]ma
 			AuthorizationSubjectID: row.AuthorizationSubjectID, AuthorizationType: row.AuthorizationType,
 			AuthorizationStatus: row.AuthorizationStatus, AuthorizationStartAt: row.AuthorizationStartAt,
 			AuthorizationExpiresAt: row.AuthorizationExpiresAt,
-			WarningTypes:           append([]string(nil), row.WarningTypes...), Usable: row.Usable,
-			UnusableReasons: append([]string(nil), row.UnusableReasons...),
+			WarningTypes:           append([]string{}, row.WarningTypes...), Usable: row.Usable,
+			UnusableReasons: append([]string{}, row.UnusableReasons...),
 		}
 	}
 	return items, nil

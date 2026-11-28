@@ -385,10 +385,10 @@ func (service Service) collectVideos(
 	}
 	seen := keySet(videoKeys(rows))
 	expected := first.PageInfo
+	if expected.TotalPages-query.Page+1 > DefaultMaxPages {
+		return nil, nil, domainmarketing.VideoPage{}, errors.New("video pagination exceeds safety cap")
+	}
 	for pageNumber := query.Page + 1; pageNumber <= expected.TotalPages; pageNumber++ {
-		if pageNumber-query.Page+1 > DefaultMaxPages {
-			return nil, nil, domainmarketing.VideoPage{}, errors.New("video pagination exceeds safety cap")
-		}
 		page, fetchErr := fetch(ctx, pageNumber)
 		if fetchErr != nil {
 			return nil, nil, domainmarketing.VideoPage{}, fetchErr
@@ -520,8 +520,12 @@ func (service Service) queryCreatorHomepage(
 	if err != nil {
 		return CreatorResult{}, fmt.Errorf("query creator homepage videos: %w", err)
 	}
+	itemFilter := stringSet(query.ItemIDs)
 	candidates := make([]domainmarketing.CreatorCandidate, 0, len(rows))
 	for _, row := range rows {
+		if _, matches := itemFilter[row.ItemID]; len(itemFilter) > 0 && !matches {
+			continue
+		}
 		candidate := normalizeHomepageCandidate(row, query.AdvertiserID, awemeID)
 		if query.IncludeUnusable || candidate.Usable {
 			candidates = append(candidates, candidate)

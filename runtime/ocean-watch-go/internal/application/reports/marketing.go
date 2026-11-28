@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -798,31 +799,43 @@ func joinMarketingMaterialRows(
 	materials []map[string]any,
 	reports []domainreports.MarketingReportRow,
 ) []map[string]any {
-	byKey := map[string]domainreports.MarketingReportRow{}
+	type pair struct{ material, promotion string }
+	inventoryCount := make(map[pair]int, len(materials))
+	promotions := map[string]struct{}{}
+	for _, material := range materials {
+		key := pair{fmt.Sprint(material["material_id"]), fmt.Sprint(material["promotion_id"])}
+		inventoryCount[key]++
+		promotions[key.promotion] = struct{}{}
+	}
+	// The report is filtered by these exact promotion IDs. Only a single-ID
+	// filter identifies the promotion when a historical row omits it.
+	byKey := map[pair][]domainreports.MarketingReportRow{}
 	for _, row := range reports {
 		materialID := row.Dimensions["material_id"]
 		promotionID := row.Dimensions["cdp_promotion_id"]
 		if promotionID == "" {
 			promotionID = row.Dimensions["promotion_id"]
 		}
-		key := materialID + "\x1f" + promotionID
-		byKey[key] = row
-		if promotionID == "" {
-			if _, exists := byKey[materialID+"\x1f"]; !exists {
-				byKey[materialID+"\x1f"] = row
-			}
-		}
+		key := pair{materialID, promotionID}
+		byKey[key] = append(byKey[key], row)
 	}
 	joined := make([]map[string]any, 0, len(materials))
 	for _, material := range materials {
-		row := cloneAnyMap(material)
-		materialID := fmt.Sprint(material["material_id"])
-		promotionID := fmt.Sprint(material["promotion_id"])
-		report, ok := byKey[materialID+"\x1f"+promotionID]
-		if !ok {
-			report, ok = byKey[materialID+"\x1f"]
+		key := pair{fmt.Sprint(material["material_id"]), fmt.Sprint(material["promotion_id"])}
+		var matches []domainreports.MarketingReportRow
+		if inventoryCount[key] == 1 {
+			matches = byKey[key]
+			if len(matches) == 0 && len(promotions) == 1 {
+				matches = byKey[pair{material: key.material}]
+			}
 		}
-		if ok {
+		if len(matches) == 0 {
+			row := cloneAnyMap(material)
+			row["has_report_data"] = false
+			joined = append(joined, row)
+		}
+		for _, report := range matches {
+			row := cloneAnyMap(material)
 			for key, value := range report.Dimensions {
 				if _, exists := row[key]; !exists {
 					row[key] = value
@@ -833,9 +846,9 @@ func joinMarketingMaterialRows(
 					row[key] = value
 				}
 			}
+			row["has_report_data"] = true
+			joined = append(joined, row)
 		}
-		row["has_report_data"] = ok
-		joined = append(joined, row)
 	}
 	return joined
 }
@@ -941,6 +954,13 @@ func (service MarketingService) normalizeMaterialQuery(
 	query.Dimensions = uniqueReportValues(query.Dimensions)
 	if len(query.Dimensions) == 0 {
 		query.Dimensions = append([]string(nil), DefaultMarketingDimensions...)
+	}
+	// Keep both attribution keys when the caller also requests a breakdown.
+	if !slices.Contains(query.Dimensions, "material_id") {
+		query.Dimensions = append(query.Dimensions, "material_id")
+	}
+	if !slices.Contains(query.Dimensions, "cdp_promotion_id") && !slices.Contains(query.Dimensions, "promotion_id") {
+		query.Dimensions = append(query.Dimensions, "cdp_promotion_id")
 	}
 	query.Metrics = uniqueReportValues(query.Metrics)
 	if len(query.Metrics) == 0 {
