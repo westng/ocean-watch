@@ -1,6 +1,8 @@
 """Synthetic-only installer regression checks; never touches an actual profile."""
 import importlib.util
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,13 +67,58 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("MCP `list_templates`", skill)
         self.assertIn("channel=qianchuan", skill)
         self.assertNotIn("./run unsupported", skill)
+        for tool in ("prepare_qianchuan_operation", "request_operation_confirmation",
+                     "execute_operation", "get_operation", "reconcile_operation"):
+            self.assertIn(tool, skill)
+        self.assertIn("STATE_INCOMPATIBLE", skill)
+        self.assertIn("available_topics", skill)
+        self.assertIn("不猜 AUTHOR", skill)
+        self.assertIn("official_sdk", skill)
+        self.assertIn("旧引用立即作废", skill)
+        self.assertNotIn("references/operations.md", skill)
+        self.assertNotIn("创建计划、提交预检、预算/ROI/状态及删除不在", skill)
+        marketing = (self.host / "skills/ads-plan-monitor/SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("execute_operation", marketing)
         star = (self.host / "skills/xt-plan-monitor/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("channel=star_map", star)
         self.assertIn("MCP `get_star_map_authorization`", star)
         self.assertNotIn("channel=marketing", star)
         self.assertNotIn("{{", star)
         self.assertNotIn("./run unsupported", star)
+        self.assertNotIn("execute_operation", star)
         self.assertEqual(self.install()["install"], result["install"])
+
+    def test_cli_upgrade_preserves_service_customizations_and_previously_selected_state(self):
+        path = self.host / "mcp.json"
+        self.install()
+        config = json.loads(path.read_text(encoding="utf-8"))
+        service = config["mcpServers"]["ocean-watch"]
+        service.update(disabled=True, timeout=123, command="old-binary")
+        custom_env = {"PATH": "/fixture/bin", "HOME": "/fixture/home", "OCEAN_WATCH_PYTHON": "/fixture/venv/python"}
+        service["env"].update(custom_env)
+        self.write(path, json.dumps(config))
+
+        def run_cli(*args):
+            with patch.object(installer, "__file__", str(self.root / "scripts/install-workbuddy.py")), \
+                 patch.object(sys, "argv", ["install-workbuddy.py", "--workbuddy-home", str(self.host), *args]), \
+                 patch.object(installer.platform, "system", return_value="Darwin"), \
+                 patch.object(installer.platform, "machine", return_value="arm64"), \
+                 patch.dict(os.environ, {"OCEAN_WATCH_HOME": str(self.host / "unrelated")}), patch("builtins.print"):
+                installer.main()
+            actual = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(actual["mcpServers"]["other"], {"command": "keep"})
+            self.assertEqual(actual["extra"], "keep")
+            current = actual["mcpServers"]["ocean-watch"]
+            self.assertTrue(Path(current["command"]).is_file())
+            self.assertEqual((current["disabled"], current["timeout"]), (True, 123))
+            self.assertEqual({key: current["env"][key] for key in custom_env}, custom_env)
+            self.assertEqual(current["env"]["OCEAN_WATCH_HOME"], current["env"]["CODEX_HOME"])
+            return current["env"]["OCEAN_WATCH_HOME"]
+
+        self.assertEqual(run_cli(), str(self.state))
+        new_state = self.host / "another state"
+        self.assertEqual(run_cli("--state-home", str(new_state)), str(new_state))
+        self.assertEqual(run_cli(), str(new_state))
 
     def test_tampered_runtime_is_rejected_before_profile_mutation(self):
         before = (self.host / "mcp.json").read_bytes()

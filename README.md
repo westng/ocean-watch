@@ -111,7 +111,7 @@ WorkBuddy（已实测 macOS Apple Silicon）：在仓库根目录使用原生 ar
 bash scripts/install-doubao.sh
 ```
 
-脚本只更新已有 Skill 的 MCP 路径，依赖仓库内的 arm64 Runtime；运行后完全退出并重启豆包工作。
+脚本更新已导入 Skill 的 Ocean Watch MCP 路径，并在豆包工作区生成指向仓库的 CLI 启动器。移动仓库或重新导入 Skill 后需重跑脚本，再完全退出并重启豆包工作。
 
 所有宿主应使用同一状态根：`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`，按优先级解析。同一渠道的有效授权可跨宿主复用；营销与千川仍需分别授权。首次接入后新建任务，描述目标并按引导完成官方 OAuth。详见[快速开始](docs/guides/getting-started.md)和[配置与授权](docs/guides/configuration.md)。
 

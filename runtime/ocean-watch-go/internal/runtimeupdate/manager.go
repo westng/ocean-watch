@@ -356,17 +356,24 @@ func (manager Manager) Reject(ctx context.Context, rejected Candidate) (Candidat
 		}
 		return current, nil
 	}
-	if state.Previous == nil {
+	var previous Candidate
+	var previousErr error
+	if state.Previous != nil {
+		previous, previousErr = manager.validateRecordedCandidate(ctx, *state.Previous)
+		if err := ctx.Err(); err != nil {
+			return Candidate{}, err
+		}
+	}
+	if state.Previous == nil || previousErr != nil {
+		// Older cleanup may already have removed the rollback slot. Preserve
+		// the rejection even when an immediate rollback is unavailable.
+		state.Previous = nil
 		state.RejectedSHA256 = rejected.SHA256
 		state.UpdatedAt = manager.now().UTC().Format(time.RFC3339)
 		if err := manager.writeState(state); err != nil {
 			return Candidate{}, err
 		}
-		return state.Current, ErrNoPreviousRuntime
-	}
-	previous, err := manager.validateRecordedCandidate(ctx, *state.Previous)
-	if err != nil {
-		return Candidate{}, fmt.Errorf("previous Ocean Watch runtime is invalid: %w", err)
+		return state.Current, errors.Join(ErrNoPreviousRuntime, previousErr)
 	}
 	state.Current = previous
 	state.Previous = nil
@@ -402,14 +409,25 @@ func (manager Manager) PruneObsoleteRuntimes(ctx context.Context, keep Candidate
 	if stateErr != nil && !os.IsNotExist(stateErr) {
 		return stateErr
 	}
-	if stateErr == nil && manager.isRuntimeSlot(state.Current) {
-		keep = state.Current
-	}
 	protected, err := manager.otherHostRuntimeReferences()
 	if err != nil {
 		return err
 	}
 	protected[keep.SHA256] = true
+	if stateErr == nil {
+		// Only the host that validated the current candidate can retire its
+		// rollback reference. A delayed cleanup may still name an older slot.
+		if state.Previous != nil && sameCandidateIdentity(state.Current, keep) {
+			state.Previous = nil
+			state.UpdatedAt = manager.now().UTC().Format(time.RFC3339)
+			if err := manager.writeState(state); err != nil {
+				return err
+			}
+		}
+		if err := manager.protectRuntimeReferences(protected, state); err != nil {
+			return err
+		}
+	}
 	versionsRoot := filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "versions")
 	entries, err := os.ReadDir(versionsRoot)
 	if err != nil {
@@ -433,13 +451,6 @@ func (manager Manager) PruneObsoleteRuntimes(ctx context.Context, keep Candidate
 		releaseErr := lease.Release()
 		if removeErr != nil || releaseErr != nil {
 			return errors.Join(removeErr, releaseErr)
-		}
-	}
-	if stateErr == nil && sameCandidateIdentity(state.Current, keep) && state.Previous != nil {
-		state.Previous = nil
-		state.UpdatedAt = manager.now().UTC().Format(time.RFC3339)
-		if err := manager.writeState(state); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -489,13 +500,25 @@ func (manager Manager) otherHostRuntimeReferences() (map[string]bool, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read Ocean Watch host contract state: %w", err)
 		}
-		candidate := state.Current
-		if !validSHA256(candidate.SHA256) || filepath.Clean(candidate.PluginRoot) != filepath.Join(runtimeRoot, "versions", candidate.SHA256) {
-			return nil, errors.New("Ocean Watch host contract runtime reference is invalid")
+		if err := manager.protectRuntimeReferences(protected, state); err != nil {
+			return nil, err
+		}
+	}
+	return protected, nil
+}
+
+func (manager Manager) protectRuntimeReferences(protected map[string]bool, state State) error {
+	for _, candidate := range []*Candidate{&state.Current, state.Previous} {
+		if candidate == nil {
+			continue
+		}
+		slot := filepath.Join(manager.CodexRoot, "ocean-watch", "runtime", "versions", candidate.SHA256)
+		if !validSHA256(candidate.SHA256) || filepath.Clean(candidate.PluginRoot) != slot {
+			return errors.New("Ocean Watch host contract runtime reference is invalid")
 		}
 		protected[candidate.SHA256] = true
 	}
-	return protected, nil
+	return nil
 }
 
 func (manager Manager) InstalledCacheRoot() string {

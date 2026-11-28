@@ -44,12 +44,30 @@ def render_skill(root, name):
     routes = content.split("<!-- capability-routes:start -->", 1)[1].split("<!-- capability-routes:end -->", 1)[0]
     rows = [line for line in routes.splitlines() if line.startswith("|") and "MCP `" in line]
     channel = SKILL_CHANNELS[name]
+    operation_guidance = ""
     channel_guidance = (
         "星图账号使用 subject_id 和 subject_kind=star_account；授权管理工具的旧 advertiser_id 参数填写同一星图账号 ID。"
         "星图模板、计划、素材和报表尚未接入；能力目录中的 shared 条目不能作为星图支持证明。"
         if channel == "star_map" else ""
     )
     if channel == "qianchuan":
+        rows.extend([
+            "| 执行已通过预检的千川作品新建或续投 | MCP `prepare_qianchuan_operation` → `request_operation_confirmation` → `execute_operation`，按下述人工确认流程执行 |",
+            "| 查看或恢复千川操作结果 | MCP `get_operation`；未知结果用 MCP `reconcile_operation` 只读对账 |",
+        ])
+        operation_guidance = (
+            "用户明确要求执行已通过的千川作品预检时，对每个账户/模板子批次独立处理。"
+            "调用 prepare_qianchuan_operation，传入该子批次的 preflight_id，并完整展示返回的 summary。"
+            "保留 operation_id、version、snapshot_digest，调用 request_operation_confirmation，"
+            "请用户在本机 Broker 窗口核对并批准。拒绝、取消、超时或窗口不可用时停止执行。"
+            "仅将本次批准返回的 approval_id 与同一操作三元组传给 execute_operation。"
+            "实例必须已经处于 execute 模式，工具不得自行提升模式。\n\n"
+            "响应丢失或报错后先用 get_operation 查看持久状态。批准引用丢失或过期且操作尚未领取执行、"
+            "预检仍有效时，可用原三元组再次请求人工确认；旧引用立即作废。"
+            "已派发、unknown 或执行中断时调用 reconcile_operation 只读对账，等待活动租约到期后再对账，"
+            "不要重新派发。部分成功中的未派发项需要新的预检和人工批准。"
+            "遇到 STATE_INCOMPATIBLE 时报告需要显式备份迁移状态库，由用户安排维护操作。"
+        )
         channel_guidance += (
             "用户说配置 F2、初始化 F2、设置或更新抖音 Cookie，或返回 F2_CONFIGURATION_REQUIRED 时，"
             "调用 start_f2_configuration，参数为空对象。打开返回的 configuration_url，Cookie 仅在本机页面填写并保存至系统凭据库。"
@@ -58,14 +76,21 @@ def render_skill(root, name):
             "HTTP 403 或 f2_http_error 同样不能证明保存失败，应按具体请求错误继续诊断。"
             "预检 ok=true 或存在 preflight_id 不代表业务通过；须检查每组 status、counts、failed_results、skipped 和 query_failures，仅 would_create、would_append、already_present 为已完成预检。"
             "保存成功不证明 Cookie 未过期或作品可访问。用户取消时调用 cancel_f2_configuration_session，失败、取消或过期则停止自动重试。"
+            "\n\n自定义报表先调用 get_qianchuan_report_schema。省略 topics 时返回本地合同的 available_topics，"
+            "选择符合业务场景的主题后带 topics 查询当前账户实际支持的维度和指标。"
+            "主题、字段或排序指标未确认时停止该报表，不猜 AUTHOR、author_id 或 author_name。"
+            "Schema 失败时保留真实错误码；仅 retryable=true 的暂时错误可有界重试，"
+            "相同结构校验错误需修复连接器并重新加载后再查询。"
+            "跨账户达人排名需逐账户核对主题、日期及消耗口径，按官方返回且可跨账户核对的达人标识汇总可加指标后排序，"
+            "完整取数受阻时标明覆盖范围，不能以单个高消耗账户或各账户局部 Top3 代替合并排名。"
         )
     template = (root / "hosts/workbuddy/skill.md").read_text(encoding="utf-8")
-    for key, value in {"SKILL": name, "DESCRIPTION": description, "CHANNEL": channel, "CHANNEL_GUIDANCE": channel_guidance, "ROUTES": "\n".join(rows)}.items():
+    for key, value in {"SKILL": name, "DESCRIPTION": description, "CHANNEL": channel, "CHANNEL_GUIDANCE": channel_guidance, "OPERATION_GUIDANCE": operation_guidance, "ROUTES": "\n".join(rows)}.items():
         template = template.replace("{{" + key + "}}", value)
     return template
 
 
-def install(root, host, state_home):
+def install(root, host, state_home=None):
     system = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}.get(platform.system())
     arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "amd64", "AMD64": "amd64"}.get(platform.machine())
     binary = f"ocean-watch_{system}_{arch}" + (".exe" if system == "windows" else "")
@@ -94,6 +119,20 @@ def install(root, host, state_home):
     servers = config.setdefault("mcpServers", {})
     if not isinstance(servers, dict):
         raise ValueError("mcpServers must be an object")
+    service = servers.get("ocean-watch", {})
+    if not isinstance(service, dict) or not isinstance(service.get("env", {}), dict):
+        raise ValueError("ocean-watch and its env must be objects")
+    env = dict(service.get("env", {}))
+    if state_home is None:
+        # A plain upgrade must stay on the state root selected at the last install.
+        state_home = (env.get("OCEAN_WATCH_HOME") or env.get("CODEX_HOME")
+                      or os.environ.get("OCEAN_WATCH_HOME") or os.environ.get("CODEX_HOME")
+                      or Path.home() / ".codex")
+    state_home = Path(state_home).expanduser().absolute()
+    env.setdefault("HOME", str(Path.home()))
+    env.setdefault("PATH", os.environ.get("PATH", os.defpath))
+    env.update(OCEAN_WATCH_HOME=str(state_home), CODEX_HOME=str(state_home),
+               OCEAN_WATCH_MANAGED_RUNTIME="1")
     version = manifest["version"]
     if not re.fullmatch(r"[A-Za-z0-9.+_-]+", version):
         raise ValueError("invalid runtime version")
@@ -140,10 +179,8 @@ def install(root, host, state_home):
                 os.unlink(temporary)
     servers.pop("ocean-watch-preview", None)
     servers["ocean-watch"] = {
-        "type": "stdio", "command": str(destination / ".codex-plugin/bin" / binary),
-        "args": ["mcp", "serve", "--stdio"], "cwd": str(destination),
-        "env": {"HOME": str(Path.home()), "OCEAN_WATCH_HOME": str(state_home), "CODEX_HOME": str(state_home),
-                "OCEAN_WATCH_MANAGED_RUNTIME": "1", "PATH": os.environ.get("PATH", os.defpath)},
+        **service, "type": "stdio", "command": str(destination / ".codex-plugin/bin" / binary),
+        "args": ["mcp", "serve", "--stdio"], "cwd": str(destination), "env": env,
     }
     write_json(config_path, config)
     preview = host / "skills/ocean-watch-preview"
@@ -158,9 +195,9 @@ def install(root, host, state_home):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbuddy-home", type=Path, default=Path.home() / ".workbuddy")
-    parser.add_argument("--state-home", type=Path, default=Path(os.environ.get("OCEAN_WATCH_HOME") or os.environ.get("CODEX_HOME") or Path.home() / ".codex"))
+    parser.add_argument("--state-home", type=Path, help="override the shared state root (upgrades reuse the installed root)")
     args = parser.parse_args()
-    print(json.dumps(install(Path(__file__).resolve().parents[1], args.workbuddy_home.expanduser().resolve(), args.state_home.expanduser().resolve()), ensure_ascii=False))
+    print(json.dumps(install(Path(__file__).resolve().parents[1], args.workbuddy_home.expanduser().resolve(), args.state_home), ensure_ascii=False))
 
 
 if __name__ == "__main__":

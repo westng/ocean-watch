@@ -1,91 +1,121 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ocean Watch Doubao Work Skills 安装脚本
-# 自动配置 Skills 的 MCP 依赖路径
+repo_root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+skills_dir=${DOUBAO_USER_SKILLS:-"$HOME/Library/Application Support/DoubaoWork/Default/.doubaowork/agent_mode/workspace/.user_skills"}
 
-DOUBAO_USER_SKILLS="$HOME/Library/Application Support/DoubaoWork/Default/.doubaowork/agent_mode/workspace/.user_skills"
+# macOS ships Ruby with Psych. Edit the YAML nodes in place so unrelated
+# dependencies, comments, quoting and custom Skill settings survive upgrades.
+exec ruby - "$repo_root" "$skills_dir" <<'RUBY'
+require 'yaml'
+require 'json'
+require 'fileutils'
+require 'tempfile'
+require 'shellwords'
 
-# 检测 Ocean Watch 安装位置
-detect_ocean_watch() {
-  local repo_root
-  repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+root, skills = ARGV
+binary = File.join(root, '.codex-plugin/bin/ocean-watch_darwin_arm64')
+launcher = File.join(root, 'bin/ocean-watch-launcher')
+abort '缺少可执行的 Ocean Watch arm64 Runtime 或启动器' unless [binary, launcher].all? { |p| File.file?(p) && File.executable?(p) }
+abort "找不到已导入的用户 Skills 目录: #{skills}" unless File.directory?(skills)
 
-  local binary="$repo_root/.codex-plugin/bin/ocean-watch_darwin_arm64"
+def field(mapping, key)
+  return unless mapping.is_a?(Psych::Nodes::Mapping)
+  pairs = mapping.children.each_slice(2).select { |k, _| k.is_a?(Psych::Nodes::Scalar) && k.value == key }
+  raise "重复的 YAML 字段 #{key}" if pairs.size > 1
+  pairs.first&.last
+end
 
-  if [[ ! -f "$binary" ]]; then
-    echo "错误：未找到 Ocean Watch 二进制文件: $binary"
-    echo "请先运行 'make build' 构建 Ocean Watch"
-    exit 1
-  fi
+# Block collections end at the next sibling's indentation. Replace only up
+# to the last actual value, retaining the newline and surrounding whitespace.
+def last_value(node)
+  while (node.is_a?(Psych::Nodes::Sequence) || node.is_a?(Psych::Nodes::Mapping)) && node.style == 1
+    node = node.children.last
+  end
+  node
+end
 
-  echo "$repo_root"
-}
+def configure(text, settings)
+  doc = Psych.parse_stream(text)
+  raise '需要单个 YAML 文档' unless doc.children.size == 1
+  tools = field(field(doc.children.first.root, 'dependencies'), 'tools')
+  raise '缺少 dependencies.tools' unless tools.is_a?(Psych::Nodes::Sequence)
+  entries = tools.children.select { |node| field(node, 'type')&.value == 'mcp' && field(node, 'value')&.value == 'ocean-watch' }
+  raise '需要唯一的 ocean-watch stdio MCP 依赖' unless entries.size == 1 && field(entries.first, 'transport')&.value == 'stdio'
+  entry = entries.first
+  offsets = [0]
+  text.each_line { |line| offsets << offsets.last + line.length }
+  edits = []
+  missing = []
+  settings.each do |key, value|
+    encoded = JSON.generate(value)
+    node = field(entry, key)
+    if node
+      tail = last_value(node)
+      edits << [offsets[node.start_line] + node.start_column, offsets[tail.end_line] + tail.end_column, encoded]
+    else
+      missing << "#{key}: #{encoded}"
+    end
+  end
+  unless missing.empty?
+    first = entry.children.first
+    pos = offsets[first.start_line] + first.start_column
+    separator = entry.style == Psych::Nodes::Mapping::FLOW ? ', ' : "#{text.include?("\r\n") ? "\r\n" : "\n"}#{' ' * first.start_column}"
+    edits << [pos, pos, missing.join(separator) + separator]
+  end
+  result = text.dup
+  edits.sort_by(&:first).reverse_each { |start, finish, value| result[start...finish] = value }
+  # Verify the exact semantic delta before writing any of the imported Skills.
+  expected = YAML.safe_load(text, aliases: true)
+  index = tools.children.index(entry)
+  expected.fetch('dependencies').fetch('tools')[index] = expected['dependencies']['tools'][index].merge(settings)
+  raise '配置格式无法安全更新' unless YAML.safe_load(result, aliases: true) == expected
+  result
+end
 
-# 更新 Skill 的 agents/openai.yaml
-update_skill_config() {
-  local skill_name="$1"
-  local ocean_watch_root="$2"
-  local skill_dir="$DOUBAO_USER_SKILLS/$skill_name"
-  local config_file="$skill_dir/agents/openai.yaml"
+def atomic_write(path, content, mode)
+  Tempfile.create(['.ocean-watch-', '.tmp'], File.dirname(path)) do |file|
+    file.write(content)
+    file.chmod(mode)
+    file.close
+    File.rename(file.path, path)
+  end
+end
 
-  if [[ ! -f "$config_file" ]]; then
-    echo "跳过 $skill_name: 配置文件不存在"
-    return
-  fi
+settings = { 'command' => binary, 'args' => ['mcp', 'proxy', '--stdio', '--plugin-root', root] }
+updates = {}
+%w[qc-plan-monitor ads-plan-monitor xt-plan-monitor].each do |name|
+  path = File.join(skills, name, 'agents/openai.yaml')
+  next unless File.file?(path)
+  abort "请先确认配置文件链接: #{path}" if File.symlink?(path)
+  begin
+    original = File.read(path, encoding: 'UTF-8')
+    updates[path] = [original, configure(original, settings)]
+  rescue StandardError => e
+    abort "#{path}: 无法安全更新 MCP 配置 (#{e.class})"
+  end
+end
+abort '请先在豆包工作中导入 Ocean Watch Skill' if updates.empty?
 
-  local binary="$ocean_watch_root/.codex-plugin/bin/ocean-watch_darwin_arm64"
-
-  echo "配置 $skill_name..."
-
-  # 备份原文件
-  cp "$config_file" "$config_file.bak"
-
-  # 使用 awk 在 transport: "stdio" 后添加 command 和 args
-  awk -v bin="$binary" -v root="$ocean_watch_root" '
-    /transport: "stdio"/ {
-      print $0
-      print "      command: \"" bin "\""
-      print "      args: [\"mcp\", \"proxy\", \"--stdio\", \"--plugin-root\", \"" root "\"]"
-      next
-    }
-    # 跳过已存在的 command 和 args 行
-    /^      command:/ || /^      args:/ { next }
-    { print }
-  ' "$config_file.bak" > "$config_file"
-
-  echo "✓ 已更新 $skill_name"
-}
-
-# 主流程
-main() {
-  echo "开始配置 Ocean Watch Doubao Work Skills..."
-  echo ""
-
-  # 检测 Ocean Watch 安装位置
-  OCEAN_WATCH_ROOT=$(detect_ocean_watch)
-  echo "检测到 Ocean Watch 安装位置: $OCEAN_WATCH_ROOT"
-  echo ""
-
-  # 检查豆包工作用户 Skills 目录是否存在
-  if [[ ! -d "$DOUBAO_USER_SKILLS" ]]; then
-    echo "错误：豆包工作用户 Skills 目录不存在"
-    echo "路径: $DOUBAO_USER_SKILLS"
-    exit 1
-  fi
-
-  # 更新已导入的三个渠道 Skills
-  update_skill_config "qc-plan-monitor" "$OCEAN_WATCH_ROOT"
-  update_skill_config "ads-plan-monitor" "$OCEAN_WATCH_ROOT"
-  update_skill_config "xt-plan-monitor" "$OCEAN_WATCH_ROOT"
-
-  echo ""
-  echo "✓ 配置完成！"
-  echo ""
-  echo "下一步："
-  echo "1. 完全退出豆包工作 (Command+Q)"
-  echo "2. 重新打开豆包工作"
-  echo "3. 在对话中测试 Skills (例如：@巨量千川计划助手 帮我列出本地有哪些千川模板)"
-}
-
-main
+# Imported run scripts resolve ../../bin/ocean-watch-launcher. A wrapper
+# (not a symlink) invokes the real launcher with its repository path as $0.
+workspace_bin = File.expand_path('../bin', skills)
+wrapper = File.join(workspace_bin, 'ocean-watch-launcher')
+header = "#!/bin/sh\n# Generated by Ocean Watch install-doubao.sh\n"
+content = header + "exec #{launcher.shellescape} \"$@\"\n"
+abort "工作区启动器路径冲突: #{wrapper}" if File.symlink?(wrapper) || (File.exist?(wrapper) && !(File.file?(wrapper) && File.read(wrapper).start_with?(header)))
+FileUtils.mkdir_p(workspace_bin)
+atomic_write(wrapper, content, 0o755) unless File.file?(wrapper) && File.read(wrapper) == content && File.executable?(wrapper)
+updates.each do |path, (original, updated)|
+  next if updated == original
+  backup = "#{path}.bak"
+  # Preserve the first pre-install backup on subsequent upgrades.
+  begin
+    File.open(backup, File::WRONLY | File::CREAT | File::EXCL, 0o600) { |file| file.write(original) }
+  rescue Errno::EEXIST
+    # This may be a backup from an earlier installer version.
+  end
+  atomic_write(path, updated, File.stat(path).mode & 0o777)
+end
+puts "已配置 #{updates.size} 个豆包工作 Skill 的 MCP 和工作区启动器。请完全退出并重启豆包工作。"
+RUBY

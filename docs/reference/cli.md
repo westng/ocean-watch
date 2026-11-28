@@ -108,7 +108,7 @@ F2 失败时，可在结构化行中补充准确 `creator_douyin_id` 和命名 `
 
 ## 结构化模板创建
 
-`templates create --input-json JSON` 或 `templates create --input-file -` 接收一个严格 JSON 对象，后者从标准输入读取。业务字段全部放在对象中，不与旧 `--channel`、`--template-type` 等向导参数混用。
+`templates create` 接收一个严格 JSON 对象。用 `--input-json JSON` 传入内容，或用 `--input-file PATH` 读取文件。`PATH` 相对于运行命令的工作目录解析，传 `-` 则从标准输入读取。业务字段全部放在对象中，不与旧 `--channel`、`--template-type` 等向导参数混用。
 
 ```bash
 skills/ads-plan-monitor/run templates create --input-json '{}'

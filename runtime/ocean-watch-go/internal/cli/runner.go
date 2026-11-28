@@ -123,6 +123,9 @@ func (runner Runner) Execute(ctx context.Context, args []string) int {
 	if cwd == "" {
 		cwd, _ = os.Getwd()
 	}
+	if runner.PluginRoot == "" {
+		runner.PluginRoot = filesystem.ResolvePluginRoot(cwd)
+	}
 	userHome := runner.UserHome
 	if userHome == "" {
 		userHome, _ = os.UserHomeDir()
@@ -313,7 +316,7 @@ func (runner Runner) runSetup(
 	doctor := onboarding.Doctor{Probe: probe, RuntimeVersion: runner.RuntimeVersion, StateInspector: runner.StateInspector}
 	if runner.RuntimeVersion != "" {
 		doctor.RuntimeCheck = func(ctx context.Context) onboarding.Check {
-			manager := runtimeupdate.NewManager(codexRoot, filesystem.ResolvePluginRoot(cwd))
+			manager := runtimeupdate.NewManager(codexRoot, runner.PluginRoot)
 			diagnostic := manager.Diagnose(ctx)
 			count := 0
 			for _, spec := range contracts.DefaultCapabilityRegistry.All() {
@@ -375,8 +378,7 @@ func (runner Runner) runSetup(
 			WriteDomainError(stdout, domain.NewError("configuration_error", err.Error(), 2, nil))
 			return 2
 		}
-		pluginRoot := filesystem.ResolvePluginRoot(cwd)
-		skillRoot := resolveSkillRoot(pluginRoot)
+		skillRoot := resolveSkillRoot(runner.PluginRoot)
 		initializer := onboarding.Initializer{
 			Store: filesystem.ConfigStore{Path: configPath}, State: state,
 			Doctor: doctor, ConfigPath: configPath,

@@ -34,7 +34,7 @@ macOS Apple Silicon 使用原生 arm64 Python，避免 Rosetta 解释器误选 I
 /usr/bin/arch -arm64 /usr/bin/python3 scripts/install-workbuddy.py
 ```
 
-安装器校验清单并备份旧配置和 Skill，保留其他 MCP 服务与原生信任设置。安装后重新加载 MCP / 新建会话，必要时重启 WorkBuddy。2026-10-30 已在 WorkBuddy `5.9.3`、macOS arm64 验证本机安装、三项 Skill 原生展示及重启后连接成功，26/26 个工具已启用，包含星图授权查询及 F2 配置工具；安装产物的隔离 MCP 协议探测也通过。完整业务验收仍待完成。详见 [WorkBuddy 本机接入](../../hosts/workbuddy/README.md)。
+安装器校验清单并备份旧配置和 Skill，保留其他 MCP 服务与原生信任设置。升级默认沿用已安装的状态根和自定义环境变量，切换状态根时传 `--state-home <目录>`。安装后重新加载 MCP / 新建会话，必要时重启 WorkBuddy。2026-10-30 已在 WorkBuddy `5.9.3`、macOS arm64 验证本机安装、三项 Skill 原生展示及重启后连接成功，26/26 个工具已启用，包含星图授权查询及 F2 配置工具；安装产物的隔离 MCP 协议探测也通过。完整业务验收仍待完成。详见 [WorkBuddy 本机接入](../../hosts/workbuddy/README.md)。
 
 豆包工作（macOS Apple Silicon）：先在豆包工作中导入 `skills/` 下的三个 Skill，再从保留于本机的仓库根目录运行：
 
@@ -42,7 +42,7 @@ macOS Apple Silicon 使用原生 arm64 Python，避免 Rosetta 解释器误选 I
 bash scripts/install-doubao.sh
 ```
 
-脚本只更新已有用户 Skill 的 MCP 路径，使用仓库内的 arm64 Runtime，不负责安装 Skill。完成后完全退出并重启豆包工作；当前 V3 的实际发现和业务验收待完成。
+脚本使用 macOS 自带的 Ruby 解析 Skill 配置，只更新 `ocean-watch` 的 stdio 命令和参数。它还会在豆包工作区生成 `bin/ocean-watch-launcher`，让已导入 Skill 的 `run` 使用同一份仓库 Runtime。若工作区已有用户自建的同名启动器，安装器会报告冲突并保留它。保留本机仓库，移动仓库或重新导入 Skill 后重跑脚本。完成后完全退出并重启豆包工作。当前 V3 的实际发现与业务验收待完成。
 
 所有宿主应使用同一份本地状态，同一渠道的有效授权可复用，营销与千川仍需分别授权。
 

@@ -22,8 +22,10 @@ description: {{DESCRIPTION}}
 
 `ACCOUNT_SYNC_REQUIRED` 时从当前渠道授权检查工具取得待同步的精确 authorization_id，调用 `start_account_sync`。会话 `sync_required=true` 时使用会话返回的 authorization_id，保留 advertiser_id；不要重复 OAuth。账户冲突默认失败，只有用户明确要求改变归属时才传 `rebind_existing=true`。`failed`、`cancelled`、`expired` 或账户范围不符时如实报告，停止自动重试。`AUTHORIZATION_BUSY` 表示已有流程或回调端口占用，不重装、不杀其他进程。
 
-账户清单和模板来自本地配置；`enabled` 不代表官方已授权。只有本次工具返回 `source=official_api` 才称为官方数据，保留日期、范围、分页、截断及部分失败。不得用合成账户或历史聊天结果替代真实查询。
+账户清单和模板来自本地配置；`enabled` 不代表官方已授权。本次工具返回 `source=official_api`、`official_sdk` 或 `official_mcp` 且对应查询成功时，可按返回的来源说明官方数据，并保留日期、范围、分页、截断及部分失败。`local_contract` 表示本地接口合同。不得用合成账户或历史聊天结果替代真实查询。
 
-所有业务调用使用此连接器的 MCP；能力目录中的 CLI 命令不等于已提供的工具，不切换到 Shell/CLI/其他连接器执行。缺少工具、Host 信任或连接不可用时报告真实阻塞。创建计划、提交预检、预算/ROI/状态及删除不在此接入支持范围内；不能借授权恢复绕过投放审批。
+所有业务调用使用此连接器的 MCP；能力目录中的 CLI 命令不等于已提供的工具，不切换到 Shell/CLI/其他连接器执行。缺少工具、Host 信任或连接不可用时报告真实阻塞。投放写入仅使用本 Skill 明确列出的可信操作确认流程。营销写入、独立预算/ROI/状态更新及删除入口在当前预发布中不可执行；授权恢复不能代替投放审批。
+
+{{OPERATION_GUIDANCE}}
 
 千川作品预检会查询官方并保存本地短期快照，不创建或修改投放计划。`presentation.required=true` 时原样展示 `presentation.rendered_markdown`；千川批量结果保留 `计划ID｜达人昵称｜商品ID｜素材ID｜素材标题` 顺序并说明跳过与失败。仅追问真正缺失的业务参数；回复不展示秘密、内部路径或原始响应。

@@ -569,7 +569,7 @@ func (runner Runner) qianchuanCommandService(
 		CredentialStore: credentialsStore, Links: runtime.Links, OwnerHints: runtime.OwnerHints,
 		Authorizations: runtime.Authorizations, RefreshLocker: runtime.RefreshLocker, OAuth: runtime.OAuth,
 		ClientFactory: runtime.ClientFactory, HTTPClient: runtime.HTTPClient,
-		PythonResolver: runner.PythonResolver, PluginRoot: filesystem.ResolvePluginRoot(runner.Cwd),
+		PythonResolver: runner.PythonResolver, PluginRoot: runner.PluginRoot,
 		Reader: runtime.Reader, Writer: runtime.Writer, Credentials: runtime.Credentials,
 		Locker: runtime.Locker, Tokens: runtime.Tokens, Retry: runtime.Retry, Now: runtime.Now,
 		Journals:       runtime.Journals,

@@ -99,6 +99,40 @@ func TestPruneRetainsIdleRuntimeReferencesAcrossHostContracts(t *testing.T) {
 	}
 }
 
+func TestPruneKeepsPendingRollbackAcrossContractsAndStaleCallers(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	old := writeCandidate(t, root, "old", "1.0.8+codex.old", "old")
+	next := writeCandidate(t, root, "next", "1.0.9+codex.next", "next")
+	other := writeCandidate(t, root, "other", "1.0.10+codex.other", "other")
+	owner := testManager(root, old.PluginRoot, next)
+	cleaner := testManager(root, other.PluginRoot, other).ForHostContract([]byte("other"))
+	candidate, lease, err := owner.ResolveLeased(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	state, err := owner.Status()
+	if err != nil || state.Previous == nil {
+		t.Fatalf("expected pending rollback: %+v, %v", state, err)
+	}
+	current, err := cleaner.Resolve(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both calls fall between selection and the owner's failed handshake.
+	if err := cleaner.PruneObsoleteRuntimes(ctx, current); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.PruneObsoleteRuntimes(ctx, *state.Previous); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := owner.Reject(ctx, candidate)
+	if err != nil || restored.SHA256 != old.SHA256 {
+		t.Fatalf("rollback after cleanup: %+v, %v", restored, err)
+	}
+}
+
 func TestPruneStopsBeforeDeletingWhenForeignContractStateIsUnsafe(t *testing.T) {
 	for _, kind := range []string{"malformed-state", "symlink-contract"} {
 		t.Run(kind, func(t *testing.T) {

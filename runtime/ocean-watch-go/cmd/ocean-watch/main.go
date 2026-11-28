@@ -71,7 +71,9 @@ func main() {
 		return
 	}
 	userHome, _ := os.UserHomeDir()
+	executable, _ := os.Executable()
 	runner := cli.Runner{
+		PluginRoot:     filesystem.ResolvePluginRoot(filepath.Dir(executable)),
 		Routes:         application.DefaultRouteManifest(),
 		RuntimeVersion: effectiveRuntimeVersion(),
 		StateInspector: sqlite.Inspector{Path: filepath.Join(filesystem.StateHome(os.Getenv, userHome), "ads-plan-monitor", "state", "ocean-watch.db")},
@@ -90,6 +92,10 @@ func runRuntimeCommand(ctx context.Context, arguments []string) int {
 	pluginRoot := ""
 	filtered := make([]string, 0, len(arguments))
 	for index := 0; index < len(arguments); index++ {
+		if arguments[index] == "--" {
+			filtered = append(filtered, arguments[index:]...)
+			break
+		}
 		if arguments[index] == "--plugin-root" {
 			if index+1 >= len(arguments) {
 				fmt.Fprintln(os.Stderr, "runtime --plugin-root requires a path")
@@ -151,7 +157,6 @@ func runRuntimeCommand(ctx context.Context, arguments []string) int {
 		}
 		defer lease.Release()
 		command := exec.CommandContext(ctx, candidate.BinaryPath, arguments[2:]...)
-		command.Dir = candidate.PluginRoot
 		command.Env = runtimeChildEnvironment(os.Environ())
 		command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
 		if err := command.Run(); err != nil {

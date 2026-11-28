@@ -111,7 +111,7 @@ Doubao Work (macOS Apple Silicon): first import all three Skills from `skills/` 
 bash scripts/install-doubao.sh
 ```
 
-The script only updates existing Skills' MCP paths and requires the repository's arm64 Runtime. Fully quit and restart Doubao Work afterward.
+The script updates the Ocean Watch MCP paths in imported Skills and creates a workspace CLI launcher pointing to the local checkout. Rerun it after moving the checkout or reimporting the Skills, then fully quit and restart Doubao Work.
 
 All hosts should use the same state root, resolved in priority order: `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex`. A valid authorization for a channel can be reused across hosts; Marketing and Qianchuan still require separate authorizations. After initial installation, start a new task, describe your goal, and follow the official OAuth flow. See [Getting started](docs/guides/getting-started.md) and [Configuration](docs/guides/configuration.md).
 

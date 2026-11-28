@@ -19,8 +19,7 @@ if [ "${1:-}" = "mcp" ] && [ "${2:-}" = "proxy" ]; then
   exec "$fallback_path" mcp proxy --stdio --plugin-root "$plugin_root"
 fi
 if [ "${1:-}" = "runtime" ]; then
-  cd "$plugin_root"
-  exec "$fallback_path" "$@" --plugin-root "$plugin_root"
+  shift
+  exec "$fallback_path" runtime --plugin-root "$plugin_root" "$@"
 fi
-cd "$plugin_root"
 exec "$fallback_path" runtime --plugin-root "$plugin_root" exec -- "$@"

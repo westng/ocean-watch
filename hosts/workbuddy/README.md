@@ -1,6 +1,6 @@
 # WorkBuddy 本机接入
 
-WorkBuddy 通过本地 stdio MCP 和三个生成的 Skill 接入共享 Go Runtime，复用本机状态和系统凭据库。当前支持查询、报表、千川作品预检及授权管理；计划、素材和模板写入等 CLI 能力不通过 Shell 补执行。此入口为本机安装，尚未发布连接器 Marketplace 包。
+WorkBuddy 通过本地 stdio MCP 和三个生成的 Skill 接入共享 Go Runtime，复用本机状态和系统凭据库。当前支持查询、报表、千川作品预检、授权管理和千川作品新建/续投的可信操作流程。后者要求实例已配置 execute 模式，每次操作经本机 Broker 人工批准，真实 WorkBuddy 业务闭环仍待验收。CLI 能力不通过 Shell 补执行。此入口为本机安装，尚未发布连接器 Marketplace 包。
 
 ## 安装与更新
 
@@ -18,7 +18,7 @@ macOS Apple Silicon 使用原生 arm64 Python。安装器按解释器的 `platfo
 
 安装器校验当前平台二进制、插件身份和 Skill/F2 资源的清单哈希，把 Runtime 放入 `~/.workbuddy/binaries/ocean-watch/` 下按版本和清单指纹固定的目录，并备份旧 MCP 配置和 Skill 到 `~/.workbuddy/backups/ocean-watch/`。它保留其他 MCP 服务，不写入 Token，也不修改 WorkBuddy 原生信任设置；存在旧 `ocean-watch-preview` 入口时会先备份再移出活动配置。
 
-`OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex` 决定共享状态根，也可显式指定 `--state-home`；`--workbuddy-home` 可覆盖宿主安装目录。默认与其他宿主共用真实状态，不另建预览状态副本。
+首次安装按 `OCEAN_WATCH_HOME` → `CODEX_HOME` → `~/.codex` 选择共享状态根。重跑安装器时优先沿用 `mcp.json` 中 `ocean-watch.env` 的已配置状态根。若要切换状态根，显式传入 `--state-home <目录>`。`--workbuddy-home` 可覆盖宿主安装目录。升级会更新 Runtime 的启动命令、参数、工作目录和托管标记，保留已有的服务选项和其他环境变量，例如自定义 `PATH` 和指定 F2 解释器的 `OCEAN_WATCH_PYTHON`。
 
 安装或更新后，重新加载 MCP 并新建会话，必要时重启 WorkBuddy；宿主要求信任时由用户在原生界面确认。更新源码和 Runtime 后重跑同一安装命令，已安装的固定目录不会自动跟随源码变化。
 

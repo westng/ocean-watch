@@ -12,6 +12,22 @@ from pathlib import Path
 
 @unittest.skipIf(os.name == "nt", "POSIX Skill launcher; Windows has its own CI entry")
 class SkillLauncherTests(unittest.TestCase):
+    def test_packaged_cli_preserves_caller_directory_for_relative_input(self):
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="caller with spaces ") as directory:
+            project = Path(directory)
+            request = project / "template request.json"
+            request.write_text("{}", encoding="utf-8")
+            env = dict(os.environ, OCEAN_WATCH_HOME=str(project / "isolated state"))
+            for arguments in (["templates", "create"], ["runtime", "exec", "--", "templates", "create"]):
+                with self.subTest(arguments=arguments):
+                    result = subprocess.run(
+                        [str(source / "skills/ads-plan-monitor/run"), *arguments, "--input-file", request.name],
+                        cwd=project, env=env, capture_output=True, text=True, timeout=45,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(json.loads(result.stdout)["status"], "needs_input")
+
     def test_loaded_skill_location_routes_all_arguments_from_a_foreign_project(self):
         source = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="skill launcher fixture ") as directory:
